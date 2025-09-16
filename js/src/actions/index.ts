@@ -132,3 +132,23 @@ export {
   type GetKmsListReturnType,
   GetKmsListSchema,
 } from "./get_kms_list";
+
+export {
+  listWorkspaces,
+  safeListWorkspaces,
+  type ListWorkspacesParameters,
+  type ListWorkspacesReturnType,
+  WorkspaceResponseSchema,
+  ListWorkspacesSchema,
+  PaginationMetadataSchema,
+  type WorkspaceResponse,
+  type ListWorkspaces,
+  type PaginationMetadata,
+} from "./workspaces/list_workspaces";
+
+export {
+  getWorkspace,
+  safeGetWorkspace,
+  type GetWorkspaceParameters,
+  type GetWorkspaceReturnType,
+} from "./workspaces/get_workspace";
