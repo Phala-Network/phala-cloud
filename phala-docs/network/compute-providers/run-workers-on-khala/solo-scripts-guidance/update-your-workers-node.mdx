@@ -1,0 +1,29 @@
+---
+description: Deploy and manage worker nodes to provide computing power on Phala Network.
+title: Update your Worker's Node
+---
+
+
+To upgrade your worker requires it to stop first.
+
+```
+sudo phala stop
+```
+
+The worker node can be updated in a clean way which removes all the saved data
+
+```
+sudo phala update clean
+```
+
+or with the data preserved
+
+```
+sudo phala update
+```
+
+Finally, restart your worker with:
+
+```
+sudo phala start
+```

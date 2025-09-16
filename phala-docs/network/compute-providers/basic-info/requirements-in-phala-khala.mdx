@@ -1,0 +1,53 @@
+---
+description: Essential information for becoming a compute provider on Phala Network.
+title: Requirements in Phala/Khala
+---
+
+
+## Basic Requirements
+
+Whether in Phala or Khala, the following requirements for workers are the same.
+
+## SGX Function
+
+Running a worker requires SGX-capable CPU. Please choose a device that supports SGX and enable SGX in the BIOS. For more information, refer to:
+
+## Stable Network
+
+The network of the worker should be as stable as possible with more than 1GB bandwidth. and it's best to have a public IP address.
+
+## OS Requirements
+
+We strongly recommend that you use Ubuntu 22.04.2 LTS, download [link](https://ubuntu.com/download/server).
+
+> The desktop version of the OS is less stable than Server version, so we strongly recommend using the server version.
+
+> **NOTE**
+>
+> Make sure that the kernel version is **5.13** or above.
+
+## Device Hardware Specifications
+
+There are 2 forms of worker operation, including solo-worker operation and batches of worker management which is called PRB. The requirements of them are different.
+
+The following describes the device requirements for a solo-worker, and different network requirements also vary.
+
+### For Phala Workers
+
+| Types           | Requirements |
+| --------------- | ------------ |
+| RAM Space       | 8 GB+        |
+| Hard Disk Space | 2 TB+        |
+| Cores           | 4 Cores+     |
+
+> If you have a batch of workers that need to run on Phala, please visit here for more [information](/network/compute-providers/run-workers-on-phala/prbv3-deployment).
+
+### For Khala Workers
+
+| Types           | Requirements |
+| --------------- | ------------ |
+| RAM Space       | 8 GB+        |
+| Hard Disk Space | 2 TB+        |
+| Cores           | 4 Cores+     |
+
+> If you have a batch of workers that need to run on Khala, please visit here for more information.

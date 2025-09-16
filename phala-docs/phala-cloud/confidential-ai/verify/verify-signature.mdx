@@ -1,0 +1,70 @@
+---
+description: Learn how to verify the integrity of your Confidential AI API requests.
+title: Integrity Proof
+---
+
+## Why verify Integrity Proof?
+
+Integrity proof verification, also signature, proves your AI responses came from verified TEE hardware. This prevents tampering and ensures response authenticity. Every Confidential AI API response includes a cryptographic signature you can verify.
+
+The signature proves two things:
+
+1. **Request integrity**: The `text` field contains hashes of both your request and the AI's response
+2. **Hardware authenticity**: The signature comes from the TEE's `signing_address` you verified earlier
+
+When you verify the signature, you confirm:
+- The response matches what the TEE generated
+- No one tampered with the data in transit
+- The response came from genuine TEE hardware
+
+Here we provide a [Full Signature Verification Example](https://github.com/Phala-Network/confidential-ai-verifier/blob/f606cf8675b6d920cdec49f46c5624cbcd7f2f16/examples/signature_verifier.py#L221) to help you understand how to verify the signature of the response from [Confidential AI API](/phala-cloud/confidential-ai/confidential-model/confidential-ai-api).
+
+Here we explain the key processes of verifying.
+
+## Get the signature
+
+When you finish the request, parse `chat_id` from the response and then get the signature:
+
+```python Python
+...
+# Parse `chat_id` from the response result
+chat_id = result["chat_id"]
+response_hash = result["response_hash"]
+...
+# Retrieve the signature
+sig_response = requests.get(
+    f"{BASE_URL}/v1/signature/{chat_id}?model={MODEL}",
+    headers={"Authorization": f"Bearer {API_KEY}"},
+)
+```
+
+The key fields in the signature response are:
+
+- `text`: It contains the request body hash and response body hash separated by `:`.
+- `signature`: The cryptographic signature of the `text` signed by the `signing_address` account in TEE.
+- `signing_address`: The public key of the account generated in TEE that signed the signature.
+- `signing_algo`: The signature algorithm used.
+
+## Verify signature
+
+The verification process involves the following steps:
+
+```python Python
+message = encode_defunct(text=text)
+recovered_address = Account.recover_message(message, signature=signature)
+return recovered_address.lower() == signing_address.lower()
+# True means the signature is valid
+```
+
+Once you run the verification code, if it returns `True`, it means the signature is valid. This confirms that the response is authentic and untampered.
+
+## Verify using Etherscan (optional)
+
+If you prefer a visual tool, you can also verify signatures on [Etherscan Tool](https://etherscan.io/verifiedSignatures):
+
+1. Enter the `signing_address` from your attestation report
+2. Paste the `text` field from the signature response  
+3. Enter the `signature` value
+4. Click verify to see the confirmation
+
+This gives you a visual confirmation that everything matches correctly.

@@ -1,0 +1,54 @@
+# Markdownlint configuration for Mintlify MDX files
+# https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+
+# Default state for all rules
+default: true
+
+# Disable rules that conflict with MDX or Mintlify conventions
+MD013: false  # Line length - MDX can have long lines for components
+MD033: false  # Inline HTML - MDX uses HTML/JSX components
+MD041: false  # First line in file should be a top level header - not required in MDX
+MD046: false  # Code block style - MDX supports various styles
+MD024: false  # Multiple headers with same content - common in docs
+MD025: false  # Multiple top level headers - frontmatter title conflicts
+MD036: false  # Emphasis used instead of header - common pattern in docs
+
+# Configure specific rules
+MD007:
+  # Unordered list indentation
+  indent: 2
+
+MD009:
+  # Trailing spaces
+  br_spaces: 2
+
+MD012:
+  # Multiple consecutive blank lines
+  maximum: 2
+
+MD022:
+  # Headers should be surrounded by blank lines
+  lines_above: 1
+  lines_below: 1
+
+MD026:
+  # Trailing punctuation in header
+  punctuation: ".,;:!?"
+
+MD029:
+  # Ordered list item prefix
+  style: "ordered"
+
+MD030:
+  # Spaces after list markers
+  ul_single: 1
+  ol_single: 1
+  ul_multi: 1
+  ol_multi: 1
+
+# Custom heading levels for documentation
+MD003:
+  style: "atx"
+
+# File types to check
+extends: null

@@ -1,0 +1,1309 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "colors": {
+    "dark": "#9FDC00",
+    "light": "#E8FF7A",
+    "primary": "#93c606"
+  },
+  "contextual": {
+    "options": ["copy", "view", "chatgpt", "claude"]
+  },
+  "errors": {
+    "404": {
+      "redirect": false
+    }
+  },
+  "favicon": "/favicon.ico",
+  "footer": {
+    "links": [
+      {
+        "header": "Phala Cloud",
+        "items": [
+          {
+            "href": "https://docs.phala.network/phala-cloud/getting-started/overview",
+            "label": "Getting Started"
+          },
+          {
+            "href": "https://docs.phala.network/phala-cloud/attestation/overview",
+            "label": "TEEs, Attestation & Zero Trust Security"
+          },
+          {
+            "href": "https://docs.phala.network/phala-cloud/phala-cloud-user-guides/create-cvm/overview",
+            "label": "Phala Cloud User Guides"
+          },
+          {
+            "href": "https://docs.phala.network/phala-cloud/be-production-ready/overview",
+            "label": "Be Production Ready"
+          },
+          {
+            "href": "https://docs.phala.network/phala-cloud/use-cases/overview",
+            "label": "Use Cases"
+          },
+          {
+            "href": "https://docs.phala.network/phala-cloud/references/overview",
+            "label": "References"
+          },
+          {
+            "href": "https://docs.phala.network/phala-cloud/gpu-tee/llm-in-tee",
+            "label": "Confidential AI"
+          },
+          {
+            "href": "https://docs.phala.network/phala-cloud/faqs",
+            "label": "FAQs"
+          }
+        ]
+      },
+      {
+        "header": "Dstack",
+        "items": [
+          {
+            "href": "https://docs.phala.network/dstack/overview",
+            "label": "Overview"
+          },
+          {
+            "href": "https://docs.phala.network/dstack/local-development",
+            "label": "Local Development"
+          },
+          {
+            "href": "https://docs.phala.network/dstack/getting-started",
+            "label": "Getting Started"
+          },
+          {
+            "href": "https://docs.phala.network/dstack/hardware-requirements",
+            "label": "Hardware Requirements"
+          },
+          {
+            "href": "https://docs.phala.network/dstack/acknowledgement",
+            "label": "Acknowledgement"
+          },
+          {
+            "href": "https://docs.phala.network/dstack/faqs",
+            "label": "FAQs"
+          },
+          {
+            "href": "https://docs.phala.network/dstack/design-documents",
+            "label": "Design Documents"
+          }
+        ]
+      },
+      {
+        "header": "Confidential AI",
+        "items": [
+          {
+            "href": "https://docs.phala.network/phala-cloud/confidential-ai/overview",
+            "label": "LLM in GPU TEE"
+          },
+          {
+            "href": "https://docs.phala.network/phala-cloud/confidential-ai/confidential-model/confidential-ai-api",
+            "label": "GPU TEE Inference API"
+          },
+          {
+            "href": "https://docs.phala.network/phala-cloud/confidential-ai/benchmark",
+            "label": "Benchmark"
+          },
+          {
+            "href": "https://docs.phala.network/phala-cloud/confidential-ai/faqs",
+            "label": "FAQs"
+          }
+        ]
+      },
+      {
+        "header": "Network",
+        "items": [
+          {
+            "href": "https://docs.phala.network/network/tech-specs",
+            "label": "Tech Specs"
+          },
+          {
+            "href": "https://docs.phala.network/network/references",
+            "label": "References"
+          },
+          {
+            "href": "https://docs.phala.network/network/compute-providers",
+            "label": "Compute Providers"
+          }
+        ]
+      }
+    ],
+    "socials": {
+      "discord": "https://discord.gg/phala-network",
+      "github": "https://github.com/Phala-Network",
+      "linkedin": "https://linkedin.com/company/phala-network",
+      "x": "https://x.com/PhalaNetwork"
+    }
+  },
+  "icons": {
+    "library": "lucide"
+  },
+  "integrations": {
+    "ga4": {
+      "measurementId": "G-RHRW9RL5LG"
+    }
+  },
+  "logo": {
+    "dark": "/images/phala-dark.png",
+    "light": "/images/phala-light.png"
+  },
+  "name": "Phala",
+  "navbar": {
+    "primary": {
+      "href": "https://cloud.phala.network",
+      "label": "Phala Cloud",
+      "type": "button"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "icon": "cloud",
+        "pages": [
+          {
+            "group": "Phala Cloud",
+            "pages": [
+              "/phala-cloud/what-is/what-is-phala-cloud",
+              {
+                "group": "Getting Started",
+                "icon": "book-open",
+                "pages": [
+                  "/phala-cloud/getting-started/overview",
+                  "/phala-cloud/getting-started/sign-up-for-cloud-account",
+                  "/phala-cloud/getting-started/start-from-cloud-ui",
+                  {
+                    "group": "CVM Templates",
+                    "pages": [
+                      "/phala-cloud/getting-started/explore-templates/overview",
+                      "/phala-cloud/getting-started/explore-templates/launch-an-eliza-agent",
+                      "/phala-cloud/getting-started/explore-templates/start-from-template"
+                    ]
+                  },
+                  "/phala-cloud/getting-started/attestation"
+                ]
+              },
+              {
+                "group": "CVM",
+                "icon": "play",
+                "pages": [
+                  "/phala-cloud/cvm/overview",
+                  "/phala-cloud/cvm/create-with-docker-compose",
+                  "/phala-cloud/cvm/set-secure-environment-variables",
+                  "/phala-cloud/cvm/create-with-private-docker-image",
+                  "/phala-cloud/cvm/deployment-cheat-sheet",
+                  "/phala-cloud/cvm/image/overview"
+                ]
+              },
+              {
+                "group": "Phala Cloud CLI",
+                "icon": "terminal",
+                "pages": [
+                  "/phala-cloud/phala-cloud-cli/overview",
+                  "/phala-cloud/phala-cloud-cli/start-from-cloud-cli",
+                  {
+                    "group": "CI/CD Automation",
+                    "pages": [
+                      "/phala-cloud/phala-cloud-cli/ci-cd-automation/setup-a-ci-cd-pipeline"
+                    ]
+                  }
+                ]
+              },
+              {
+                "group": "Confidential AI",
+                "icon": "microchip",
+                "pages": [
+                  "/phala-cloud/confidential-ai/overview",
+                  {
+                    "group": "API and Models",
+                    "pages": [
+                      "/phala-cloud/confidential-ai/confidential-model/confidential-ai-api",
+                      "/phala-cloud/confidential-ai/confidential-model/tool-calling"
+                    ]
+                  },
+                  {
+                    "group": "GPU",
+                    "pages": [
+                      "/phala-cloud/confidential-ai/confidential-gpu/model-template",
+                      "/phala-cloud/confidential-ai/confidential-gpu/gpu-tee"
+                    ]
+                  },
+                  {
+                    "group": "Verify",
+                    "pages": [
+                      "/phala-cloud/confidential-ai/verify/overview",
+                      "/phala-cloud/confidential-ai/verify/verify-attestation",
+                      "/phala-cloud/confidential-ai/verify/verify-signature"
+                    ]
+                  },
+                  "/phala-cloud/confidential-ai/benchmark",
+                  "/phala-cloud/confidential-ai/faqs"
+                ]
+              },
+              {
+                "group": "Key Management",
+                "icon": "key",
+                "pages": [
+                  "/phala-cloud/key-management/key-management-protocol",
+                  "/phala-cloud/key-management/cloud-vs-onchain-kms",
+                  "/phala-cloud/key-management/generate-and-persist-key",
+                  "/phala-cloud/key-management/create-crypto-wallet"
+                ]
+              },
+              {
+                "group": "Attestation",
+                "icon": "shield",
+                "pages": [
+                  "/phala-cloud/attestation/overview",
+                  "/phala-cloud/attestation/get-attestation",
+                  "/phala-cloud/attestation/verifying-attestation",
+                  "/phala-cloud/attestation/api-quickstart"
+                ]
+              },
+              {
+                "group": "Networking",
+                "icon": "network",
+                "pages": [
+                  "/phala-cloud/networking/overview",
+                  "/phala-cloud/networking/expose-service-port",
+                  "/phala-cloud/networking/setting-up-custom-domain"
+                ]
+              },
+              {
+                "group": "Storage",
+                "icon": "database",
+                "pages": ["/phala-cloud/storage/access-database"]
+              },
+              {
+                "group": "Code Updates",
+                "icon": "git-branch",
+                "pages": [
+                  "/phala-cloud/update/upgrade-application",
+                  "/phala-cloud/update/resize-resource"
+                ]
+              },
+              {
+                "group": "Security and Privacy",
+                "icon": "shield",
+                "pages": [
+                  "/phala-cloud/security-and-privacy/security-audit",
+                  "/phala-cloud/security-and-privacy/security-architecture",
+                  "/phala-cloud/security-and-privacy/set-secure-environment-variables",
+                  "/phala-cloud/security-and-privacy/privacy"
+                ]
+              },
+              {
+                "group": "Troubleshooting",
+                "icon": "bug",
+                "pages": [
+                  "/phala-cloud/troubleshooting/troubleshooting",
+                  "/phala-cloud/troubleshooting/private-log-viewer",
+                  "/phala-cloud/troubleshooting/debug-your-application"
+                ]
+              },
+              {
+                "group": "Logging & Monitoring",
+                "icon": "chart-line",
+                "pages": [
+                  "/phala-cloud/monitoring/public-logs",
+                  "/phala-cloud/monitoring/serials-logs",
+                  "/phala-cloud/monitoring/private-log-viewer"
+                ]
+              },
+              "/phala-cloud/production-checklist",
+              {
+                "group": "References",
+                "icon": "book",
+                "pages": [
+                  "/phala-cloud/references/overview",
+                  "/phala-cloud/references/performance-report",
+                  {
+                    "group": "Phala Cloud API",
+                    "pages": [
+                      "/phala-cloud/phala-cloud-api/overview",
+                      "/phala-cloud/phala-cloud-api/attestations"
+                    ]
+                  },
+                  {
+                    "group": "CLI Reference",
+                    "pages": [
+                      "/phala-cloud/references/phala-cloud-cli/phala/overview",
+                      "/phala-cloud/references/phala-cloud-cli/phala/auth",
+                      "/phala-cloud/references/phala-cloud-cli/phala/cvms",
+                      "/phala-cloud/references/phala-cloud-cli/phala/docker",
+                      "/phala-cloud/references/phala-cloud-cli/phala/simulator"
+                    ]
+                  }
+                ]
+              },
+              {
+                "group": "Successful Cases",
+                "icon": "star",
+                "pages": [
+                  "/phala-cloud/cases/overview",
+                  "/phala-cloud/cases/tee_with_ai",
+                  "/phala-cloud/cases/tee_with_fhe_and_mpc",
+                  "/phala-cloud/cases/tee_with_zk_and_zkrollup",
+                  "/phala-cloud/cases/best-practices-and-successful-case"
+                ]
+              },
+              "/phala-cloud/faqs",
+              "/phala-cloud/changelog",
+              "/phala-cloud/support"
+            ]
+          }
+        ],
+        "tab": "Phala Cloud"
+      },
+      {
+        "icon": "terminal",
+        "pages": [
+          "/dstack/overview",
+          "/dstack/getting-started",
+          "/dstack/security-audit",
+          "/dstack/local-development",
+          "/dstack/hardware-requirements",
+          {
+            "group": "Design Documents",
+            "pages": [
+              "/dstack/design-documents/whitepaper",
+              "/dstack/design-documents/decentralized-root-of-trust",
+              "/dstack/design-documents/key-management-protocol",
+              "/dstack/design-documents/tee-controlled-domain-certificates"
+            ]
+          },
+          "/dstack/acknowledgement",
+          "/dstack/media-kit",
+          "/dstack/faqs"
+        ],
+        "tab": "Dstack"
+      },
+      {
+        "icon": "network",
+        "pages": [
+          "/network/index",
+          {
+            "group": "Overview",
+            "pages": [
+              "/overview/phala-network",
+              {
+                "group": "Phala Token",
+                "pages": [
+                  "/overview/pha-token/introduction",
+                  {
+                    "group": "Delegation",
+                    "pages": [
+                      "/overview/pha-token/delegation/overview",
+                      "/overview/pha-token/delegation/delegate-to-stakepool",
+                      "/overview/pha-token/delegation/whats-vault",
+                      "/overview/pha-token/delegation/whats-share",
+                      "/overview/pha-token/delegation/wrappedbalances-and-w-pha",
+                      "/overview/pha-token/delegation/examples-of-delegation",
+                      "/overview/pha-token/delegation/use-phala-app-to-delegate",
+                      "/overview/pha-token/delegation/estimate-your-reward"
+                    ]
+                  },
+                  {
+                    "group": "Governance",
+                    "pages": [
+                      "/overview/pha-token/governance/overview",
+                      "/overview/pha-token/governance/governance-mechanism",
+                      "/overview/pha-token/governance/join-the-council",
+                      "/overview/pha-token/governance/voting-for-councillors",
+                      "/overview/pha-token/governance/apply-for-project-funding",
+                      "/overview/pha-token/governance/khala-governance",
+                      "/overview/pha-token/governance/khala-treasury",
+                      "/overview/pha-token/governance/setup-account-identity"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Tech Specs",
+            "pages": [
+              "/network/tech-specs/blockchain/overview",
+              "/network/tech-specs/blockchain/blockchain-entities",
+              "/network/tech-specs/blockchain/cluster-of-workers",
+              "/network/tech-specs/blockchain/secret-key-hierarchy"
+            ]
+          },
+          {
+            "group": "References",
+            "pages": [
+              {
+                "group": "Setting Up a Wallet on Phala",
+                "pages": [
+                  "/network/references/basic-guidance/overview",
+                  "/network/references/basic-guidance/get-pha-and-transfer"
+                ]
+              },
+              {
+                "group": "SubBridge",
+                "pages": [
+                  "/network/references/subbridge/overview",
+                  "/network/references/subbridge/cross-chain-transfer",
+                  "/network/references/subbridge/supported-assets",
+                  "/network/references/subbridge/asset-integration-guide",
+                  "/network/references/subbridge/technical-details"
+                ]
+              },
+              "/network/references/community-builders",
+              {
+                "group": "Hackathon Guides",
+                "pages": [
+                  "/network/references/hackathon-guides/ethglobal-singapore",
+                  "/network/references/hackathon-guides/ethglobal-san-francisco",
+                  "/network/references/hackathon-guides/ethglobal-bangkok"
+                ]
+              },
+              {
+                "group": "Advanced Topics",
+                "pages": [
+                  "/network/references/advanced-topics/cross-chain-solutions",
+                  "/network/references/advanced-topics/system-contract-and-drivers",
+                  "/network/references/advanced-topics/run-local-testnet",
+                  "/network/references/advanced-topics/sidevm"
+                ]
+              },
+              {
+                "group": "Support",
+                "pages": [
+                  "/network/references/support/overview",
+                  "/network/references/support/endpoints",
+                  "/network/references/support/resource-limits",
+                  "/network/references/support/transaction-costs",
+                  "/network/references/support/compatibility-matrix",
+                  "/network/references/support/block-explorers",
+                  "/network/references/support/faucet"
+                ]
+              },
+              "/network/references/archived-projects",
+              "/network/references/faq"
+            ]
+          },
+          {
+            "group": "Compute Providers",
+            "pages": [
+              {
+                "group": "Basic Info",
+                "pages": [
+                  "/network/compute-providers/basic-info/introduction",
+                  "/network/compute-providers/basic-info/worker-rewards",
+                  "/network/compute-providers/basic-info/budget-balancer",
+                  "/network/compute-providers/basic-info/staking-mechanism",
+                  "/network/compute-providers/basic-info/requirements-in-phala-khala",
+                  "/network/compute-providers/basic-info/confidence-level-and-sgx-function",
+                  "/network/compute-providers/basic-info/rent-hardware",
+                  "/network/compute-providers/basic-info/error-summary"
+                ]
+              },
+              {
+                "group": "Run Workers on Phala",
+                "pages": [
+                  "/network/compute-providers/run-workers-on-phala/solo-worker-deployment",
+                  "/network/compute-providers/run-workers-on-phala/prbv3-deployment",
+                  "/network/compute-providers/run-workers-on-phala/using-prbv3-ui",
+                  "/network/compute-providers/run-workers-on-phala/prb-worker-deployment",
+                  "/network/compute-providers/run-workers-on-phala/switch-workers-from-solo-to-prb-mode",
+                  "/network/compute-providers/run-workers-on-phala/headers-cache-deployment",
+                  "/network/compute-providers/run-workers-on-phala/archive-node-deployment"
+                ]
+              },
+              {
+                "group": "Run Workers on Khala - Archived",
+                "pages": [
+                  {
+                    "group": "Solo Scripts Guidance - Archived",
+                    "pages": [
+                      "/network/compute-providers/run-workers-on-khala/solo-scripts-guidance/installing-phala-mining-tools",
+                      "/network/compute-providers/run-workers-on-khala/solo-scripts-guidance/worker-confidence-level",
+                      "/network/compute-providers/run-workers-on-khala/solo-scripts-guidance/configure-the-worker",
+                      "/network/compute-providers/run-workers-on-khala/solo-scripts-guidance/deploy-the-worker",
+                      "/network/compute-providers/run-workers-on-khala/solo-scripts-guidance/monitor-workers-status",
+                      "/network/compute-providers/run-workers-on-khala/solo-scripts-guidance/accelerate-khala-syncing",
+                      "/network/compute-providers/run-workers-on-khala/solo-scripts-guidance/update-your-workers-node"
+                    ]
+                  },
+                  "/network/compute-providers/run-workers-on-khala/prbv3-deployment",
+                  "/network/compute-providers/run-workers-on-khala/using-prbv3-ui",
+                  "/network/compute-providers/run-workers-on-khala/migration-from-prbv2-to-v3",
+                  "/network/compute-providers/run-workers-on-khala/headers-cache-deployment",
+                  "/network/compute-providers/run-workers-on-khala/archive-node-deployment",
+                  "/network/compute-providers/run-workers-on-khala/deployment-guide-for-prbv2",
+                  "/network/compute-providers/run-workers-on-khala/prb-worker-deployment",
+                  "/network/compute-providers/run-workers-on-khala/how-to-switch-from-solo-mining-to-prb-mining",
+                  "/network/compute-providers/run-workers-on-khala/khala-worker-rewards",
+                  "/network/compute-providers/run-workers-on-khala/troubleshooting"
+                ]
+              },
+              {
+                "group": "Gatekeeper",
+                "pages": [
+                  "/network/compute-providers/gatekeeper/overview",
+                  "/network/compute-providers/gatekeeper/collator"
+                ]
+              }
+            ]
+          }
+        ],
+        "tab": "Network"
+      }
+    ]
+  },
+  "redirects": [
+    {
+      "destination": "/phala-cloud/phala-cloud-cli/ci-cd-automation/setup-a-ci-cd-pipeline",
+      "source": "/phala-cloud/be-production-ready/ci-cd-automation/ci-cd-integration-best-practices"
+    },
+    {
+      "destination": "/phala-cloud/networking/overview",
+      "source": "/phala-cloud/phala-cloud-user-guides/building-with-tee/access-your-applications"
+    },
+    {
+      "destination": "/phala-cloud/networking/expose-service-port",
+      "source": "/phala-cloud/phala-cloud-user-guides/building-with-tee/expose-service-port"
+    },
+    {
+      "destination": "/phala-cloud/networking/overview",
+      "source": "/phala-cloud/phala-cloud-user-guides/building-with-tee"
+    },
+    {
+      "destination": "/phala-cloud/attestation/get-attestation",
+      "source": "/phala-cloud/phala-cloud-user-guides/building-with-tee/generate-ra-report"
+    },
+    {
+      "destination": "/phala-cloud/cvm/create-with-docker-compose",
+      "source": "/phala-cloud/phala-cloud-user-guides/create-cvm/create-with-docker-compose"
+    },
+    {
+      "destination": "/phala-cloud/monitoring/public-logs",
+      "source": "/phala-cloud/phala-cloud-user-guides/create-cvm/debugging-and-analyzing-logs/check-logs"
+    },
+    {
+      "destination": "/phala-cloud/cvm/overview",
+      "source": "/phala-cloud/phala-cloud-user-guides/create-cvm/overview"
+    },
+    {
+      "destination": "/phala-cloud/phala-cloud-api/overview",
+      "source": "/phala-cloud/references/cloud-api-beta/overview"
+    },
+    {
+      "destination": "/phala-cloud/cvm/overview",
+      "source": "/phala-cloud/references/overview"
+    },
+    {
+      "destination": "/phala-cloud/phala-cloud-cli/overview",
+      "source": "/phala-cloud/references/tee-cloud-cli/overview"
+    },
+    {
+      "destination": "/phala-cloud/phala-cloud-cli/overview",
+      "source": "/phala-cloud/references/tee-cloud-cli/phala/overview"
+    },
+    {
+      "destination": "/phala-cloud/attestation/overview",
+      "source": "/phala-cloud/tees-attestation-and-zero-trust-security/attestation"
+    },
+    {
+      "destination": "/phala-cloud/cases/overview",
+      "source": "/phala-cloud/use-cases/overview"
+    },
+    {
+      "destination": "/phala-cloud/cases/tee_with_zk_and_zkrollup",
+      "source": "/phala-cloud/use-cases/tee_with_zk_and_zkrollup"
+    },
+    {
+      "destination": "/phala-cloud/getting-started/overview",
+      "source": "/phala-cloud/phala-cloud-user-guides"
+    },
+    {
+      "destination": "/phala-cloud/phala-cloud-cli/start-from-cloud-cli",
+      "source": "/phala-cloud/phala-cloud-user-guides/advanced-deployment-options/start-from-cloud-cli"
+    },
+    {
+      "destination": "/phala-cloud/networking/setting-up-custom-domain",
+      "source": "/phala-cloud/phala-cloud-user-guides/building-with-tee/setting-up-custom-domain"
+    },
+    {
+      "destination": "/phala-cloud/cvm/create-with-private-docker-image",
+      "source": "/phala-cloud/phala-cloud-user-guides/create-cvm/create-with-private-docker-image"
+    },
+    {
+      "destination": "/phala-cloud/references/phala-cloud-cli/phala/docker",
+      "source": "/phala-cloud/references/tee-cloud-cli/phala/docker"
+    },
+    {
+      "destination": "/phala-cloud/cases/overview",
+      "source": "/phala-cloud/use-cases"
+    },
+    {
+      "destination": "/phala-cloud/phala-cloud-cli/start-from-cloud-cli",
+      "source": "/phala-cloud/phala-cloud-user-guides/advanced-deployment-options"
+    },
+    {
+      "destination": "/phala-cloud/references/phala-cloud-cli/phala/docker",
+      "source": "/phala-cloud/references/tee-cloud-cli"
+    },
+    {
+      "destination": "/dstack/overview",
+      "source": "/overview/phala-network/dstack"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/overview",
+      "source": "/overview/phala-network/gpu-tee"
+    },
+    {
+      "destination": "/phala-cloud/getting-started/overview",
+      "source": "/overview/phala-network/phala-cloud"
+    },
+    {
+      "destination": "/phala-cloud/getting-started/overview",
+      "source": "/phala-cloud/getting-started/getting-started"
+    },
+    {
+      "destination": "/phala-cloud/getting-started/overview",
+      "source": "/cloud/getting-started/getting-started"
+    },
+    {
+      "destination": "/phala-cloud/cases/overview",
+      "source": "/cloud/use-cases/use-cases"
+    },
+    {
+      "destination": "/network/compute-providers/gatekeeper/overview",
+      "source": "/compute-providers/gatekeeper/gatekeeper"
+    },
+    {
+      "destination": "/network/compute-providers/basic-info/introduction",
+      "source": "/compute-providers/basic-info/index"
+    },
+    {
+      "destination": "/network/compute-providers/gatekeeper/overview",
+      "source": "/compute-providers/gatekeeper/index"
+    },
+    {
+      "destination": "/network/compute-providers/run-workers-on-khala/solo-scripts-guidance/installing-phala-mining-tools",
+      "source": "/compute-providers/run-workers-on-khala/index"
+    },
+    {
+      "destination": "/network/compute-providers/run-workers-on-khala/solo-scripts-guidance/installing-phala-mining-tools",
+      "source": "/compute-providers/run-workers-on-khala/solo-scripts-guidance/index"
+    },
+    {
+      "destination": "/network/compute-providers/run-workers-on-phala/solo-worker-deployment",
+      "source": "/compute-providers/run-workers-on-phala/index"
+    },
+    {
+      "destination": "/dstack/design-documents/whitepaper",
+      "source": "/dstack/design-documents/index"
+    },
+    {
+      "destination": "/overview/pha-token/delegation/overview",
+      "source": "/overview/pha-token/delegation/index"
+    },
+    {
+      "destination": "/overview/pha-token/governance/overview",
+      "source": "/overview/pha-token/governance/index"
+    },
+    {
+      "destination": "/overview/pha-token/introduction",
+      "source": "/overview/pha-token/index"
+    },
+    {
+      "destination": "/overview/pha-token/introduction",
+      "source": "/overview/pha-token"
+    },
+    {
+      "destination": "/phala-cloud/phala-cloud-cli/overview",
+      "source": "/phala-cloud/be-production-ready/ci-cd-automation/index"
+    },
+    {
+      "destination": "/phala-cloud/phala-cloud-cli/overview",
+      "source": "/phala-cloud/be-production-ready/index"
+    },
+    {
+      "destination": "/phala-cloud/getting-started/explore-templates/overview",
+      "source": "/phala-cloud/getting-started/explore-templates/index"
+    },
+    {
+      "destination": "/phala-cloud/phala-cloud-cli/start-from-cloud-cli",
+      "source": "/phala-cloud/phala-cloud-user-guides/advanced-deployment-options/index"
+    },
+    {
+      "destination": "/phala-cloud/networking/overview",
+      "source": "/phala-cloud/phala-cloud-user-guides/building-with-tee/index"
+    },
+    {
+      "destination": "/phala-cloud/monitoring/public-logs",
+      "source": "/phala-cloud/phala-cloud-user-guides/create-cvm/debugging-and-analyzing-logs/index"
+    },
+    {
+      "destination": "/phala-cloud/cvm/overview",
+      "source": "/phala-cloud/phala-cloud-user-guides/create-cvm/index"
+    },
+    {
+      "destination": "/phala-cloud/cvm/overview",
+      "source": "/phala-cloud/phala-cloud-user-guides/index"
+    },
+    {
+      "destination": "/phala-cloud/phala-cloud-api/overview",
+      "source": "/phala-cloud/references/cloud-api-beta/index"
+    },
+    {
+      "destination": "/phala-cloud/cvm/overview",
+      "source": "/phala-cloud/references/index"
+    },
+    {
+      "destination": "/phala-cloud/phala-cloud-cli/overview",
+      "source": "/phala-cloud/references/tee-cloud-cli/index"
+    },
+    {
+      "destination": "/phala-cloud/phala-cloud-cli/overview",
+      "source": "/phala-cloud/references/tee-cloud-cli/phala/index"
+    },
+    {
+      "destination": "/phala-cloud/attestation/overview",
+      "source": "/phala-cloud/tees-attestation-and-zero-trust-security/index"
+    },
+    {
+      "destination": "/network/references/advanced-topics/cross-chain-solutions",
+      "source": "/references/advanced-topics/index"
+    },
+    {
+      "destination": "/network/references/basic-guidance/overview",
+      "source": "/references/basic-guidance/index"
+    },
+    {
+      "destination": "/network/references/hackathon-guides/ethglobal-singapore",
+      "source": "/references/hackathon-guides/index"
+    },
+    {
+      "destination": "/network/references/subbridge/overview",
+      "source": "/references/subbridge/index"
+    },
+    {
+      "destination": "/network/references/support/overview",
+      "source": "/references/support/index"
+    },
+    {
+      "destination": "/network/tech-specs/blockchain/overview",
+      "source": "/tech-specs/blockchain/index"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/overview",
+      "source": "/overview/phala-network/confidential-ai-inference"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/overview",
+      "source": "/confidential-ai-inference/getting-started"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/overview",
+      "source": "/confidential-ai-inference/confidential-ai-api"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/overview",
+      "source": "/confidential-ai-inference/host-llm-in-tee"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/overview",
+      "source": "/confidential-ai-inference/implementation"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/benchmark",
+      "source": "/confidential-ai-inference/benchmark"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/benchmark",
+      "source": "/confidential-ai/gpu-tee/benchmark"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/benchmark",
+      "source": "/phala-cloud/confidential-ai-inference/benchmark"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/benchmark",
+      "source": "/phala-cloud/confidential-ai/gpu-tee/benchmark"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/overview",
+      "source": "/confidential-ai/gpu-tee/llm-in-tee"
+    },
+    {
+      "destination": "/phala-cloud/phala-cloud-cli/start-from-cloud-cli",
+      "source": "/cloud/getting-started/start-from-cloud-cli"
+    },
+    {
+      "destination": "/phala-cloud/getting-started/overview",
+      "source": "/cloud/getting-started/start-from-scratch"
+    },
+    {
+      "destination": "/phala-cloud/getting-started/explore-templates/start-from-template",
+      "source": "/cloud/getting-started/start-from-template"
+    },
+    {
+      "destination": "/phala-cloud/getting-started/overview",
+      "source": "/ai-agent-contract/getting-started"
+    },
+    {
+      "destination": "/phala-cloud/cvm/overview",
+      "source": "/management"
+    },
+    {
+      "destination": "/phala-cloud/cvm/overview",
+      "source": "/phala-cloud/management"
+    },
+    {
+      "destination": "/phala-cloud/update/upgrade-application",
+      "source": "/migration"
+    },
+    {
+      "destination": "/phala-cloud/update/upgrade-application",
+      "source": "/phala-cloud/migration"
+    },
+    {
+      "destination": "/phala-cloud/attestation/get-attestation",
+      "source": "/phala-cloud/migration/generate-ra-report"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/agent-wars-legacy"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/agent-wars-legacy/:slug*"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/agent-wars"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/agent-wars/:slug*"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/product-agent-wars"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/ai-agent-contract-legacy"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/ai-agent-contract-legacy/:slug*"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/ai-agent-contract"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/ai-agent-contract/:slug*"
+    },
+    {
+      "destination": "/network/compute-providers/basic-info/introduction",
+      "source": "/compute-providers/basic-info"
+    },
+    {
+      "destination": "/network/compute-providers/basic-info/introduction",
+      "source": "/compute-providers/basic-info/:slug*"
+    },
+    {
+      "destination": "/network/compute-providers/run-workers-on-phala/solo-worker-deployment",
+      "source": "/compute-providers/run-workers-on-phala"
+    },
+    {
+      "destination": "/network/compute-providers/run-workers-on-phala/solo-worker-deployment",
+      "source": "/compute-providers/run-workers-on-phala/:slug*"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/legacy/builders-program"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/references/builders-program"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/legacy/phala-sdk"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/confidential-model/confidential-ai-api",
+      "source": "/llm-in-gpu-tee/inference-api"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/confidential-model/confidential-ai-api",
+      "source": "/phala-cloud/confidential-ai/gpu-tee/inference-api"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/overview",
+      "source": "/llm-in-gpu-tee/llm-in-tee"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/overview",
+      "source": "/phala-cloud/confidential-ai/gpu-tee/llm-in-tee"
+    },
+    {
+      "destination": "/phala-cloud/phala-cloud-cli/overview",
+      "source": "/phala-cloud/tee-cloud-cli"
+    },
+    {
+      "destination": "/network/references/advanced-topics/run-local-testnet",
+      "source": "/references/advanced-topics/run-local-testnet"
+    },
+    {
+      "destination": "/network/references/basic-guidance/overview",
+      "source": "/references/basic-guidance"
+    },
+    {
+      "destination": "/network/references/basic-guidance/get-pha-and-transfer",
+      "source": "/references/basic-guidance/get-pha-and-transfer"
+    },
+    {
+      "destination": "/network/references/subbridge/overview",
+      "source": "/references/subbridge"
+    },
+    {
+      "destination": "/network/references/subbridge/cross-chain-transfer",
+      "source": "/references/subbridge/cross-chain-transfer"
+    },
+    {
+      "destination": "/network/references/support/endpoints",
+      "source": "/references/support/endpoints"
+    },
+    {
+      "destination": "/network/tech-specs/blockchain/blockchain-entities",
+      "source": "/tech-specs/blockchain/blockchain-entities"
+    },
+    {
+      "destination": "/network/tech-specs/blockchain/secret-key-hierarchy",
+      "source": "/tech-specs/blockchain/secret-key-hierarchy"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/v1/developers/phat-contract/features"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/legacy/framehub"
+    },
+    {
+      "destination": "/phala-cloud/networking/expose-service-port",
+      "source": "/cloud/migration/expose-service-port"
+    },
+    {
+      "destination": "/phala-cloud/phala-cloud-api/overview",
+      "source": "/phala-cloud/references/phala-cloud-api-and-sdks"
+    },
+    {
+      "destination": "/phala-cloud/monitoring/public-logs",
+      "source": "/cloud/management/check-logs"
+    },
+    {
+      "destination": "/phala-cloud/attestation/overview",
+      "source": "/tech-specs/multi-proof-and-verifiable-compute/trusted-execution-environments-tee-and-compute-verifiability"
+    },
+    {
+      "destination": "/network/compute-providers",
+      "source": "/en-us/mine/:slug*"
+    },
+    {
+      "destination": "/network/compute-providers",
+      "source": "/en-us/mine"
+    },
+    {
+      "destination": "/network/compute-providers/gatekeeper",
+      "source": "/en-us/maintain/gatekeeper/:slug*"
+    },
+    {
+      "destination": "/network/compute-providers/gatekeeper",
+      "source": "/en-us/maintain/gatekeeper"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/legacy"
+    },
+    {
+      "destination": "/network/compute-providers/basic-info/budget-balancer",
+      "source": "/v1/compute-providers/basic-info/budget-balancer"
+    },
+    {
+      "destination": "/phala-cloud/faqs",
+      "source": "/cloud/faqs"
+    },
+    {
+      "destination": "/phala-cloud/getting-started/overview",
+      "source": "/cloud/getting-started"
+    },
+    {
+      "destination": "/phala-cloud/cases/tee_with_fhe_and_mpc",
+      "source": "/cloud/use-cases/tee_with_fhe_and_mpc"
+    },
+    {
+      "destination": "/phala-cloud/cases/tee_with_zk_and_zkrollup",
+      "source": "/cloud/use-cases/tee_with_zk_and_zkrollup"
+    },
+    {
+      "destination": "/network/references/subbridge/overview",
+      "source": "/en-us/general/subbridge/:slug*"
+    },
+    {
+      "destination": "/network/references/subbridge/overview",
+      "source": "/other-products/subbridge/:slug*"
+    },
+    {
+      "destination": "/network/references/subbridge/overview",
+      "source": "/other-products/subbridge"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/product-agent-wars/:slug*"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/references/phala-sdk"
+    },
+    {
+      "destination": "/network",
+      "source": "/en-us/general/:slug*"
+    },
+    {
+      "destination": "/network",
+      "source": "/en-us/general"
+    },
+    {
+      "destination": "/dstack/overview",
+      "source": "/dstack-a-flashbots-x-project/:slug*"
+    },
+    {
+      "destination": "/dstack/overview",
+      "source": "/dstack-a-flashbots-x-project"
+    },
+    {
+      "destination": "/phala-cloud",
+      "source": "/developer-guides/:slug*"
+    },
+    {
+      "destination": "/phala-cloud/getting-started/overview",
+      "source": "/developer-guides"
+    },
+    {
+      "destination": "/dstack/overview",
+      "source": "/overview/phala-network/dstack-a-flashbots-x-project"
+    },
+    {
+      "destination": "/phala-cloud",
+      "source": "/overview/scale-blockchains-with-ai-coprocessor"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/tech-specs/ai-agent-contract"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/tech-specs/ai-agent-contract/:slug*"
+    },
+    {
+      "destination": "/overview/pha-token",
+      "source": "/tech-specs/pha-token"
+    },
+    {
+      "destination": "/overview/pha-token",
+      "source": "/tech-specs/pha-token/:slug*"
+    },
+    {
+      "destination": "/network/compute-providers",
+      "source": "/compute-providers"
+    },
+    {
+      "destination": "/network/references/basic-guidance/overview",
+      "source": "/introduction/basic-guidance"
+    },
+    {
+      "destination": "/network/references/basic-guidance/get-pha-and-transfer",
+      "source": "/introduction/basic-guidance/get-pha-and-transfer"
+    },
+    {
+      "destination": "/network/references/hackathon-guides/ethglobal-bangkok",
+      "source": "/references/hackathon-guides/ethglobal-hackathon-guide"
+    },
+    {
+      "destination": "/network/references/hackathon-guides/ethglobal-san-francisco",
+      "source": "/references/hackathon-guides/ethglobal-sf-hackathon-guide"
+    },
+    {
+      "destination": "/network/references/hackathon-guides/ethglobal-singapore",
+      "source": "/references/hackathon-guides/ethglobal-sg-hackathon-guide"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/overview",
+      "source": "/llm-in-gpu-tee"
+    },
+    {
+      "destination": "/phala-cloud/getting-started/start-from-cloud-ui",
+      "source": "/phala-cloud/create-cvm"
+    },
+    {
+      "destination": "/phala-cloud/cvm/create-with-docker-compose",
+      "source": "/phala-cloud/create-cvm/create-with-docker-compose"
+    },
+    {
+      "destination": "/phala-cloud/phala-cloud-cli/start-from-cloud-cli",
+      "source": "/phala-cloud/getting-started/start-from-cloud-cli"
+    },
+    {
+      "destination": "/phala-cloud/getting-started/explore-templates/launch-an-eliza-agent",
+      "source": "/phala-cloud/launch-an-eliza-agent"
+    },
+    {
+      "destination": "/phala-cloud/phala-cloud-cli/ci-cd-automation/setup-a-ci-cd-pipeline",
+      "source": "/phala-cloud/setup-a-ci-cd-pipeline"
+    },
+    {
+      "destination": "/phala-cloud/phala-cloud-cli/ci-cd-automation/setup-a-ci-cd-pipeline",
+      "source": "/phala-cloud/be-production-ready/ci-cd-automation/setup-a-ci-cd-pipeline"
+    },
+    {
+      "destination": "/phala-cloud/cvm/overview",
+      "source": "/references"
+    },
+    {
+      "destination": "/phala-cloud/cvm/overview",
+      "source": "/tech-specs"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/faqs",
+      "source": "/llm-in-gpu-tee/faqs"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/faqs",
+      "source": "/phala-cloud/confidential-ai/gpu-tee/faqs"
+    },
+    {
+      "destination": "/phala-cloud/support",
+      "source": "/references/support"
+    },
+    {
+      "destination": "/network/references/support/compatibility-matrix",
+      "source": "/references/support/compatibility-matrix"
+    },
+    {
+      "destination": "/phala-cloud/references/overview",
+      "source": "/phala-cloud/references"
+    },
+    {
+      "destination": "/phala-cloud/cases/tee_with_fhe_and_mpc",
+      "source": "/phala-cloud/use-cases/tee_with_fhe_and_mpc"
+    },
+    {
+      "destination": "/overview/pha-token/introduction",
+      "source": "/developers/phat-contract/pay-for-cloud-service"
+    },
+    {
+      "destination": "/phala-cloud/troubleshooting/debug-your-application",
+      "source": "/test"
+    },
+    {
+      "destination": "/phala-cloud/phala-cloud-api/overview",
+      "source": "/phala-cloud/references/cloud-api-beta/cvm"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/benchmark",
+      "source": "/llm-in-gpu-tee/benchmark"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/legacy/information"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/legacy/ai-agent-contract/phala-agent-gateway"
+    },
+    {
+      "destination": "/network/references/subbridge/technical-details",
+      "source": "/references/subbridge/technical-details"
+    },
+    {
+      "destination": "/network/references/hackathon-guides/ethglobal-bangkok",
+      "source": "/references/hackathon-guides"
+    },
+    {
+      "destination": "/network/references/hackathon-guides/ethglobal-singapore",
+      "source": "/references/hackathon-guides/ethglobal-singapore"
+    },
+    {
+      "destination": "/phala-cloud/faqs",
+      "source": "/references/faq"
+    },
+    {
+      "destination": "/phala-cloud/phala-cloud-cli/overview",
+      "source": "/dstack/tee-cloud-cli"
+    },
+    {
+      "destination": "/network/references/advanced-topics/run-local-testnet",
+      "source": "/references/advanced-topics/scripts/run/pruntime.sh"
+    },
+    {
+      "destination": "/phala-cloud/production-checklist",
+      "source": "/phala-cloud/be-production-ready"
+    },
+    {
+      "destination": "/phala-cloud/what-is/what-is-phala-cloud",
+      "source": "/phala-cloud/references/phala-cloud-pricing"
+    },
+    {
+      "destination": "/phala-cloud/networking/expose-service-port",
+      "source": "/phala-cloud/migration/expose-service-port"
+    },
+    {
+      "destination": "/phala-cloud/phala-cloud-cli/overview",
+      "source": "/phala-cloud/phala-cloud-cli/.env"
+    },
+    {
+      "destination": "/phala-cloud/references/performance-report",
+      "source": "/phala-cloud/cvm/performance-report"
+    },
+    {
+      "destination": "/network/references/support/faucet",
+      "source": "/references/support/faucet"
+    },
+    {
+      "destination": "/phala-cloud/storage/access-database",
+      "source": "/phala-cloud/migration/access-database"
+    },
+    {
+      "destination": "/phala-cloud/references/phala-cloud-cli/phala/simulator",
+      "source": "/phala-cloud/tee-cloud-cli/phala/simulator"
+    },
+    {
+      "destination": "/phala-cloud/what-is/what-is-phala-cloud",
+      "source": "/phala-cloud/glossary"
+    },
+    {
+      "destination": "/phala-cloud/cvm/set-secure-environment-variables",
+      "source": "/phala-cloud/phala-cloud-user-guides/create-cvm/set-secure-environment-variables"
+    },
+    {
+      "destination": "/network/compute-providers/basic-info/introduction",
+      "source": "/compute-providers/basic-info/introduction"
+    },
+    {
+      "destination": "/network/references/archived-projects",
+      "source": "/agent-wars-legacy/getting-started/create-and-play-with-social-agents"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/overview",
+      "source": "/phala-cloud/gpu/confidential-ai/gpu-tee/inference-api"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/confidential-gpu/model-template",
+      "source": "/phala-cloud/confidential-ai/confidential-gpu/confidential-ai-models"
+    },
+    {
+      "destination": "/phala-cloud/confidential-ai/confidential-gpu/gpu-tee",
+      "source": "/phala-cloud/confidential-ai/confidential-gpu/overview"
+    }
+  ],
+  "styling": {
+    "codeblocks": "system"
+  },
+  "theme": "maple"
+}

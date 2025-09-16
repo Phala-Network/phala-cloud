@@ -1,0 +1,87 @@
+---
+description: This overview introduces Confidential AI, running AI models with hardware-level privacy in GPU TEEs. Explain how to use Confidential AI to inference LLMs, deploy custom models, and run AI workloads with verifiable attestation and near-native performance.
+title: Overview
+---
+
+<img
+  src="/images/confidential-ai/confidential-ai-overview.jpeg"
+/>
+
+## Why Confidential AI?
+
+Traditional cloud AI deployments expose your models and data to the cloud provider. Confidential AI addresses this by running everything inside hardware-protected TEE. Your models stay private, your data stays secure, and you get cryptographic proof that execution happened in a trusted environment.
+
+Confidential AI has these essential features of inferencing pre-deployed LLMs, deploying custom models, or using entire GPU infrastructures with TEE to protect your models and data.
+
+<Columns cols={2}>
+  <Card
+    icon="webhook"
+    href="https://cloud.phala.network/dashboard/confidential-ai-api"
+    title="Confidential AI API"
+    arrow="true"
+  >
+    **Try LLM inference API now**
+
+    Pre-deployed LLM inference API with OpenAI-compatible interface
+  </Card>
+
+  <Card
+    icon="workflow"
+    href="https://cloud.phala.network/dashboard/confidential-ai-models"
+    title="Confidential AI Models"
+    arrow="true"
+  >
+    **Try inference your own AI models**
+    <i class="fa-solid fa-hexagon-nodes"></i>
+    Deploy and manage AI models in a secure, confidential computing environment
+  </Card>
+
+  <Card
+    icon="microchip"
+    title="Confidential GPU"
+    href="https://cloud.phala.network/dashboard/gpu-tee"
+    arrow="true"
+  >
+    **Try to deploy your own models on GPU TEE**
+
+    Rent dedicated GPU TEE servers for custom model deployment
+  </Card>
+</Columns>
+
+## Quick Tour of Confidential AI
+
+### API and Models
+
+[Use API](/phala-cloud/confidential-ai/confidential-model/confidential-ai-api) introduces pre-deployed LLMs with OpenAI-compatible APIs for quick integration.
+
+For advanced use cases, [Tool Calling](/phala-cloud/confidential-ai/confidential-model/tool-calling) enables LLMs to interact with external tools and APIs securely within TEE.
+
+### Confidential GPU
+
+[Model Template](/phala-cloud/confidential-ai/confidential-gpu/model-template) lets you deploy and manage custom AI models in GPU TEE if current models in API do not meet your needs.
+
+For complete infrastructure control, you can use [Confidential GPU](/phala-cloud/confidential-ai/confidential-gpu/gpu-tee) to deploy custom models for inference or training/fine-tuning. Configure GPU, CPU, RAM, and storage to match your exact workload needs.
+
+
+### Verify Attestation and Signature
+To ensure your workloads run securely in TEE, you can [Verify Attestation](./verify-attestation) to check the TEE hardware, operating system, source code, and distributed root-of-trust attestations. 
+
+Then you can [Verify Signature](./verify-signature) to confirm the integrity of your Confidential AI API requests and responses.
+
+### Benchmark
+
+Our performance [benchmark](/phala-cloud/confidential-ai/benchmark) shows TEE mode on H100/H200 GPUs runs up to 99% efficiency, nearly matching native performance. This means you get confidential computing with minimal performance penalty.
+
+### FAQs
+
+Check [FAQs](/phala-cloud/confidential-ai/faqs) for frequently asked questions about Confidential AI.
+
+## What makes Phala Cloud Confidential AI Different?
+
+- **Seamless integration**: Drop-in OpenAI API compatibility with popular models (DeepSeek, Llama, GPT-OSS, Qwen) ready for immediate use
+- **Verifiable security**: Hardware-enforced privacy with cryptographic attestation proving execution in genuine TEE environments
+- **Flexible deployment**: Choose from pre-deployed APIs, custom model hosting, or dedicated GPU infrastructure with full configuration control
+
+## Open Source Foundation
+
+Our underlying technology is open source. Check out the [dstack](https://github.com/Dstack-TEE/dstack) repository to see how LLMs run securely in GPU TEEs.

@@ -1,0 +1,39 @@
+---
+title: Get Attestation and Verifying
+description: This guide walks you through how to get an attestation and verify it, step by step.
+---
+
+
+## Introduction
+
+Remote Attestation (RA) is a critical security mechanism in Trusted Execution Environments (TEEs) like Intel TDX. It allows a remote verifier to confirm that an application is running inside a genuine, secure TEE with the expected configuration and code. This guide explains the key fields in TEE attestation reports, with a specific focus on Intel TDX attestation as used by Phala Cloud.
+
+Let’s get into it!
+
+### How to get Attestation Report
+
+You can get full attestation report at the **CVM Dashboard→Attestation** page.
+
+<Frame caption="Attestation Report">
+    <img src="/images/getting-started/attestation-01.png" alt="" />
+</Frame>
+
+
+## How to verify attestation?
+
+Scroll down and click the button of `Check Attestation` in section of `Certificate Chain → App Cert`.
+
+<Frame caption="Check Attestation">
+    <img src="/images/getting-started/attestation-02.png" alt="" />
+</Frame>
+
+It will navigate to **TEE Attestation Explorer** to get the verification report of the attestation.
+
+<Frame caption="Attestation Verification Report">
+    <img src="/images/getting-started/attestation-03.png" alt="" />
+</Frame>
+
+This attestation verification report confirms that the attestation is **VERIFIED**. All relevant details are displayed in the image above.
+
+Check more instructions [here](https://github.com/Dstack-TEE/dstack/blob/master/attestation.md) on how Dstack attestation work.
+

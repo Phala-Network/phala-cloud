@@ -1,0 +1,757 @@
+---
+description: Phala Cloud's Remote Attestation service provides a complete solution for Intel SGX and TDX attestation quotes, offering secure storage, easy sharing, and cryptographic verification in one integrated platform. All endpoints are prefixed with `/attestations`.
+title: Attestation API
+---
+
+## Endpoints
+
+### POST /attestations/verify
+
+Upload an SGX or TDX attestation quote to Phala Cloud for secure storage and cryptographic verification.
+
+**Request Options:**
+
+The endpoint supports three input formats:
+
+1. **File Upload** (multipart/form-data)
+2. **Hex String JSON** (application/json)  
+3. **Hex String Form Data** (application/x-www-form-urlencoded)
+
+**Quote Requirements:**
+- Must be a valid Intel SGX DCAP or TDX quote (4-6KB for TDX, 2-8KB for SGX)
+- Must contain complete certificate chains for verification
+- Supported signature types: ECDSA-P256
+- Quote must be generated from a genuine Intel SGX/TDX platform
+
+#### Option 1: File Upload
+
+**Request:**
+- **Method**: `POST`
+- **Content-Type**: `multipart/form-data`
+- **Body**: Binary quote file in the `file` field
+
+#### Option 2: Hex String JSON
+
+**Request:**
+- **Method**: `POST`
+- **Content-Type**: `application/json`
+- **Body**: JSON object with `hex` field containing quote data as hexadecimal string
+
+#### Option 3: Hex String Form Data
+
+**Request:**
+- **Method**: `POST`
+- **Content-Type**: `application/x-www-form-urlencoded`
+- **Body**: Form data with `hex` field containing quote data as hexadecimal string
+
+**Hex String Format:**
+- Supports both with and without `0x` prefix (e.g., `0x48656c6c6f` or `48656c6c6f`)
+- Case insensitive (both uppercase and lowercase hex digits accepted)
+- Whitespace is automatically trimmed
+
+<Tabs>
+  <Tab title="File Upload - cURL">
+    ```bash
+    curl -X POST "https://cloud-api.phala.network/api/v1/attestations/verify" \
+      -H "Content-Type: multipart/form-data" \
+      -F "file=@quote.bin"
+    ```
+  </Tab>
+  <Tab title="Hex JSON - cURL">
+    ```bash
+    curl -X POST "https://cloud-api.phala.network/api/v1/attestations/verify" \
+      -H "Content-Type: application/json" \
+      -d '{"hex": "0x48656c6c6f20576f726c64..."}'
+    ```
+  </Tab>
+  <Tab title="Hex Form - cURL">
+    ```bash
+    curl -X POST "https://cloud-api.phala.network/api/v1/attestations/verify" \
+      -H "Content-Type: application/x-www-form-urlencoded" \
+      -d "hex=48656c6c6f20576f726c64..."
+    ```
+  </Tab>
+  <Tab title="File Upload - JavaScript">
+    ```javascript
+    // Upload binary file
+    const fileInput = document.querySelector('input[type="file"]');
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+
+    const response = await fetch('https://cloud-api.phala.network/api/v1/attestations/verify', {
+      method: 'POST',
+      body: formData
+    });
+
+    const verification = await response.json();
+    if (verification.success) {
+      console.log('Quote verified:', verification.quote.verified);
+      console.log('Checksum:', verification.checksum);
+    }
+    ```
+  </Tab>
+  <Tab title="Hex JSON - JavaScript">
+    ```javascript
+    // Send hex string as JSON
+    const hexData = "0x48656c6c6f20576f726c64..."; // Your quote as hex
+    
+    const response = await fetch('https://cloud-api.phala.network/api/v1/attestations/verify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ hex: hexData })
+    });
+
+    const verification = await response.json();
+    if (verification.success) {
+      console.log('Quote verified:', verification.quote.verified);
+      console.log('Checksum:', verification.checksum);
+    }
+    ```
+  </Tab>
+  <Tab title="File Upload - Python">
+    ```python
+    import requests
+
+    # Upload and verify a quote file
+    with open('quote.bin', 'rb') as f:
+        files = {'file': f}
+        response = requests.post(
+            'https://cloud-api.phala.network/api/v1/attestations/verify',
+            files=files
+        )
+    
+    verification = response.json()
+    if verification['success']:
+        print(f"Quote verified: {verification['quote']['verified']}")
+        print(f"Checksum: {verification['checksum']}")
+    ```
+  </Tab>
+  <Tab title="Hex JSON - Python">
+    ```python
+    import requests
+
+    # Send quote as hex string
+    hex_data = "0x48656c6c6f20576f726c64..."  # Your quote as hex
+    
+    response = requests.post(
+        'https://cloud-api.phala.network/api/v1/attestations/verify',
+        json={'hex': hex_data}
+    )
+    
+    verification = response.json()
+    if verification['success']:
+        print(f"Quote verified: {verification['quote']['verified']}")
+        print(f"Checksum: {verification['checksum']}")
+    ```
+  </Tab>
+  <Tab title="Hex Form - Python">
+    ```python
+    import requests
+
+    # Send quote as hex form data
+    hex_data = "48656c6c6f20576f726c64..."  # Your quote as hex (no 0x prefix needed)
+    
+    response = requests.post(
+        'https://cloud-api.phala.network/api/v1/attestations/verify',
+        data={'hex': hex_data}
+    )
+    
+    verification = response.json()
+    if verification['success']:
+        print(f"Quote verified: {verification['quote']['verified']}")
+        print(f"Checksum: {verification['checksum']}")
+    ```
+  </Tab>
+</Tabs>
+
+**Response Schema: VerificationResponse**
+
+```json
+{
+  "success": boolean,
+  "quote": Quote | null,
+  "checksum": string | null,
+  "can_download": boolean | null,
+  "uploaded_at": string | null,
+  "quote_collateral": QuoteCollateralV3 | null
+}
+```
+
+**Response Fields:**
+
+- **`success`** (boolean): Indicates if the verification process completed successfully
+- **`quote`** (Quote, optional): The parsed quote object containing header and body
+- **`checksum`** (string, optional): SHA256 hash of the quote data, used as unique identifier
+- **`can_download`** (boolean, optional): Whether the raw quote data can be downloaded
+- **`uploaded_at`** (string, optional): ISO timestamp when the quote was first uploaded
+- **`quote_collateral`** (QuoteCollateralV3, optional): Cryptographic collateral used for verification
+
+**Error Responses:**
+
+- **400 Bad Request**: Input validation errors
+  ```json
+  {
+    "detail": "Either 'file' or 'hex' must be provided"
+  }
+  ```
+  ```json
+  {
+    "detail": "Only one of 'file' or 'hex' should be provided"
+  }
+  ```
+  ```json
+  {
+    "detail": "Invalid JSON hex: Invalid hex string: non-hexadecimal number found in fromhex() arg at position 0"
+  }
+  ```
+  ```json
+  {
+    "detail": "Invalid form hex: Invalid hex string: non-hexadecimal number found in fromhex() arg at position 0"
+  }
+  ```
+  *Common causes: Missing input, providing both file and hex, invalid hex characters, empty hex string*
+
+- **422 Unprocessable Entity**: Quote data cannot be parsed
+  ```json
+  {
+    "detail": "Invalid quote: malformed quote structure"
+  }
+  ```
+  *Common causes: Wrong file type, corrupted data, incomplete quote, missing certificates*
+
+- **400 Bad Request**: Quote is valid but verification failed
+  ```json
+  {
+    "detail": "Quote verification failed"
+  }
+  ```
+  *Common causes: Platform not genuine, revoked certificates, outdated TCB, invalid signatures*
+
+- **500 Internal Server Error**: Server-side verification errors
+  ```json
+  {
+    "detail": "Internal server error during verification"
+  }
+  ```
+  *Causes: Service unavailable, Intel PCS connection issues, system errors*
+
+---
+
+### GET /attestations/view/{checksum}
+
+Retrieve detailed information about a quote stored in Phala Cloud.
+
+**Request:**
+- **Method**: `GET`
+- **Path Parameters**:
+  - `checksum` (string): The quote's unique checksum identifier
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl "https://cloud-api.phala.network/api/v1/attestations/view/9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139"
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const checksum = '9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139';
+    const response = await fetch(`https://cloud-api.phala.network/api/v1/attestations/view/${checksum}`);
+    
+    if (response.ok) {
+      const quote = await response.json();
+      console.log('TEE Type:', quote.header.tee_type);
+      console.log('MRTD:', quote.body.mrtd);
+      console.log('Verified:', quote.verified);
+    } else {
+      console.error('Quote not found');
+    }
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    checksum = '9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139'
+    response = requests.get(f'https://cloud-api.phala.network/api/v1/attestations/view/{checksum}')
+    
+    if response.status_code == 200:
+        quote = response.json()
+        print(f"TEE Type: {quote['header']['tee_type']}")
+        print(f"MRTD: {quote['body']['mrtd']}")
+        print(f"Verified: {quote['verified']}")
+        print(f"Uploaded: {quote['uploaded_at']}")
+    else:
+        print('Quote not found')
+    ```
+  </Tab>
+</Tabs>
+
+**Response:** Full Quote object with additional metadata
+
+```json
+{
+  "header": {
+    "version": 4,
+    "ak_type": "ECDSA_P256",
+    "tee_type": "TEE_TDX",
+    "qe_vendor": "0x939a7233f79c4ca9940a0db3957f0607",
+    "user_data": "0x65004f4410967df7fc6a1faf0d9b6fc000000000"
+  },
+  "body": {
+    "tee_tcb_svn": "06010300000000000000000000000000",
+    "mrtd": "0xc68518a0ebb42136c12b2275164f8c72f25fa9a34392228687ed6e9caeb9c0f1dbd895e9cf475121c029dc47e70e91fd",
+    "rtmr0": "0x0bb3d6375f94482cdd24b767e4a0d720348527c4f2ab433d77f842b9394fa1638bb6df83fb0a1301f29c71bf60da48bb",
+    "rtmr1": "0x154e08f5c1f7b1fce4cbfe1c14f3ba67b70044ede2751487279cd1f2e4239dee99a6d45e24ebde6b6a6f5ae49878e0e6",
+    "reportdata": "0x00000000000000000000000000000000000000000000000000000000000000001d7ce0146d345b6e3e28b5605db5bbd7502507092f8f1e8f48c5e8f2d0e750f3"
+  },
+  "cert_data": "-----BEGIN CERTIFICATE-----\\nMIIE8TCCBJegAwIBAgIVANOAucofjgQfe1LTb4vrnuUCYTTrMAoGCCqGSM49BAMC\\nMHAxIjAgBgNVBAMMGUludGVsIFNHWCBQQ0sgUGxhdGZvcm0gQ0ExGjAYBgNVBAoM\\nEUludGVsIENvcnBvcmF0aW9uMRQwEgYDVQQHDAtTYW50YSBDbGFyYTELMAkGA1UE\\nCAwCQ0ExCzAJBgNVBAYTAlVTMB4XDTI1MDEwNDAxMDQwNloXDTMyMDEwNDAxMDQw\\nNlowcDEiMCAGA1UEAwwZSW50ZWwgU0dYIFBDSyBDZXJ0aWZpY2F0ZTEaMBgGA1UE\\n...",
+  "verified": true,
+  "uploaded_at": "2025-08-15T16:01:28+00:00",
+  "checksum": "9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139",
+  "can_download": true
+}
+```
+
+**Error Responses:**
+- **404 Not Found**: Quote with specified checksum doesn't exist
+
+---
+
+### GET /attestations/collateral/{checksum}
+
+Retrieve the cryptographic collateral that Phala Cloud uses for quote verification.
+
+**Request:**
+- **Method**: `GET`
+- **Path Parameters**:
+  - `checksum` (string): The quote's unique checksum identifier
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl "https://cloud-api.phala.network/api/v1/attestations/collateral/9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139"
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const checksum = '9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139';
+    const response = await fetch(`https://cloud-api.phala.network/api/v1/attestations/collateral/${checksum}`);
+    const collateral = await response.json();
+    
+    // Parse the JSON strings inside the collateral
+    const tcbInfo = JSON.parse(collateral.tcb_info);
+    const qeIdentity = JSON.parse(collateral.qe_identity);
+    
+    console.log('Platform FMSPC:', tcbInfo.fmspc);
+    console.log('TCB Issue Date:', tcbInfo.issueDate);
+    console.log('QE Identity Version:', qeIdentity.version);
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+    import json
+
+    checksum = '9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139'
+    response = requests.get(f'https://cloud-api.phala.network/api/v1/attestations/collateral/{checksum}')
+    collateral = response.json()
+    
+    # Parse the JSON strings inside the collateral
+    tcb_info = json.loads(collateral['tcb_info'])
+    qe_identity = json.loads(collateral['qe_identity'])
+    
+    print(f"Platform FMSPC: {tcb_info['fmspc']}")
+    print(f"TCB Issue Date: {tcb_info['issueDate']}")
+    print(f"QE Identity Version: {qe_identity['version']}")
+    ```
+  </Tab>
+</Tabs>
+
+**Response:** QuoteCollateralV3 object
+
+**Headers:**
+- `Cache-Control: public, max-age=86400`
+- `CDN-Cache-Control: public, max-age=86400`
+- `Vary: Accept-Encoding`
+- `ETag: "9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139"`
+
+**Error Responses:**
+- **404 Not Found**: Quote with specified checksum doesn't exist
+- **400 Bad Request**: Unable to retrieve collateral data
+
+---
+
+### GET /attestations/raw/{checksum}
+
+Download the original binary quote data stored in Phala Cloud.
+
+**Request:**
+- **Method**: `GET`
+- **Path Parameters**:
+  - `checksum` (string): The quote's unique checksum identifier
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl "https://cloud-api.phala.network/api/v1/attestations/raw/9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139" \
+      --output quote.bin
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const checksum = '9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139';
+    const response = await fetch(`https://cloud-api.phala.network/api/v1/attestations/raw/${checksum}`);
+    
+    if (response.ok) {
+      const blob = await response.blob();
+      
+      // Save to file in browser
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${checksum}.bin`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      console.log(`Downloaded ${blob.size} bytes`);
+    }
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    checksum = '9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139'
+    response = requests.get(f'https://cloud-api.phala.network/api/v1/attestations/raw/{checksum}')
+    
+    if response.status_code == 200:
+        with open(f'{checksum}.bin', 'wb') as f:
+            f.write(response.content)
+        print(f'Downloaded {len(response.content)} bytes to {checksum}.bin')
+    else:
+        print('Quote not found')
+    ```
+  </Tab>
+</Tabs>
+
+**Response:**
+- **Content-Type**: `application/octet-stream`
+- **Headers**:
+  - `Content-Disposition: attachment; filename={checksum}.bin`
+  - `Content-Length: {size}` (e.g., 5006 bytes for TDX quotes)
+
+**Error Responses:**
+- **404 Not Found**: Quote with specified checksum doesn't exist
+
+---
+
+### HEAD /attestations/raw/{checksum}
+
+Check if raw quote data exists in Phala Cloud storage without downloading it.
+
+**Request:**
+- **Method**: `HEAD`
+- **Path Parameters**:
+  - `checksum` (string): The quote's unique checksum identifier
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -I "https://cloud-api.phala.network/api/v1/attestations/raw/9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139"
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const checksum = '9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139';
+    const response = await fetch(
+      `https://cloud-api.phala.network/api/v1/attestations/raw/${checksum}`,
+      { method: 'HEAD' }
+    );
+    
+    if (response.ok) {
+      const contentLength = response.headers.get('Content-Length');
+      console.log(`Quote exists, size: ${contentLength} bytes`);
+    } else {
+      console.log('Quote not found');
+    }
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    checksum = '9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139'
+    response = requests.head(f'https://cloud-api.phala.network/api/v1/attestations/raw/{checksum}')
+    
+    if response.status_code == 200:
+        content_length = response.headers.get('Content-Length')
+        print(f'Quote exists, size: {content_length} bytes')
+    else:
+        print('Quote not found')
+    ```
+  </Tab>
+</Tabs>
+
+**Response:**
+- **Headers only** (no body)
+- **Content-Type**: `application/octet-stream`
+- **Content-Length**: Size of the binary data (e.g., 5006 bytes for TDX quotes)
+
+**Error Responses:**
+- **404 Not Found**: Quote with specified checksum doesn't exist
+
+---
+
+### GET /attestations/recent
+
+Retrieve a list of quotes recently stored in Phala Cloud.
+
+**Request:**
+- **Method**: `GET`
+- **Query Parameters**:
+  - `skip` (integer, default: 0): Number of records to skip for pagination
+  - `limit` (integer, default: 20): Maximum number of records to return
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl "https://cloud-api.phala.network/api/v1/attestations/recent?skip=0&limit=10"
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const response = await fetch('https://cloud-api.phala.network/api/v1/attestations/recent?skip=0&limit=10');
+    const quotes = await response.json();
+    
+    quotes.forEach(quote => {
+      const status = quote.verified === 1 ? 'verified' : 'unverified';
+      console.log(`${quote.checksum}: ${status} at ${quote.created_at}`);
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    params = {'skip': 0, 'limit': 10}
+    response = requests.get(
+        'https://cloud-api.phala.network/api/v1/attestations/recent',
+        params=params
+    )
+    
+    quotes = response.json()
+    for quote in quotes:
+        status = 'verified' if quote['verified'] == 1 else 'unverified'
+        print(f"{quote['checksum']}: {status} at {quote['created_at']}")
+    ```
+  </Tab>
+</Tabs>
+
+**Response:**
+
+```json
+[
+  {
+    "checksum": "9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139",
+    "verified": 1,
+    "created_at": "2025-08-15T16:01:28+00:00"
+  },
+  {
+    "checksum": "985f3d117d92b6a0a084e377205a890a4b36e1906edab1197463cd7d17d06bcf",
+    "verified": 1,
+    "created_at": "2025-08-15T16:00:31+00:00"
+  }
+]
+```
+
+**Response Fields:**
+
+- **`checksum`** (string): Unique identifier for the quote (SHA256 hash)
+- **`verified`** (integer): Whether the quote passed cryptographic verification (1 = verified, 0 = not verified)
+- **`created_at`** (string): ISO timestamp when the quote was first uploaded (UTC with timezone offset)
+
+---
+
+## Data Models
+
+### Quote
+
+Represents a parsed SGX or TDX attestation quote.
+
+```json
+{
+  "header": QuoteHeader,
+  "body": QuoteBody,
+  "cert_data": string | null,
+  "verified": boolean
+}
+```
+
+**Fields:**
+
+- **`header`** (QuoteHeader): Quote header containing version and platform information
+- **`body`** (QuoteBody): Quote body containing measurements and attestation data
+- **`cert_data`** (string, optional): PEM-encoded certificate chain for quote verification
+- **`verified`** (boolean): Whether the quote passed cryptographic verification
+
+### QuoteHeader
+
+Contains metadata about the quote and platform.
+
+```json
+{
+  "version": 4,
+  "ak_type": "ECDSA_P256",
+  "tee_type": "TEE_TDX",
+  "qe_vendor": "0x939a7233f79c4ca9940a0db3957f0607",
+  "user_data": "0x65004f4410967df7fc6a1faf0d9b6fc000000000"
+}
+```
+
+**Fields:**
+
+- **`version`** (integer): Quote format version (typically 4 for DCAP quotes)
+- **`ak_type`** (string): Attestation key type, typically "ECDSA_P256"
+- **`tee_type`** (string): Trusted execution environment type:
+  - `"TEE_SGX"`: Intel Software Guard Extensions
+  - `"TEE_TDX"`: Intel Trust Domain Extensions
+- **`qe_vendor`** (string): Quoting Enclave vendor identifier (hex-encoded)
+- **`user_data`** (string): User-defined data included in the quote (hex-encoded, 20 bytes)
+
+### QuoteBody
+
+Contains the core attestation measurements and data.
+
+```json
+{
+  "tee_tcb_svn": "06010300000000000000000000000000",
+  "mrseam": "0x5b38e33a6487958b72c3c12a938eaa5e3fd4510c51aeeab58c7d5ecee41d7c436489d6c8e4f92f160b7cad34207b00c1",
+  "mrsignerseam": "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+  "seamattributes": "0x0000000000000000",
+  "tdattributes": "0x0000001000000000",
+  "xfam": "0xe702060000000000",
+  "mrtd": "0xc68518a0ebb42136c12b2275164f8c72f25fa9a34392228687ed6e9caeb9c0f1dbd895e9cf475121c029dc47e70e91fd",
+  "mrconfig": "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+  "mrowner": "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+  "mrownerconfig": "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+  "rtmr0": "0x0bb3d6375f94482cdd24b767e4a0d720348527c4f2ab433d77f842b9394fa1638bb6df83fb0a1301f29c71bf60da48bb",
+  "rtmr1": "0x154e08f5c1f7b1fce4cbfe1c14f3ba67b70044ede2751487279cd1f2e4239dee99a6d45e24ebde6b6a6f5ae49878e0e6",
+  "rtmr2": "0x9edcd363660e85b71c318324996dda756c372d9f6960edbfa863b1e684822eb48dd95e218ae2b78e51ef97f3b8f5c9dc",
+  "rtmr3": "0x6485726f70094502412a81dc0097b3bd67181f6eb8c647fe6ddb47c8efa38e6f35b88bd99a4ece93c9f3d44be45c58a0",
+  "reportdata": "0x00000000000000000000000000000000000000000000000000000000000000001d7ce0146d345b6e3e28b5605db5bbd7502507092f8f1e8f48c5e8f2d0e750f3"
+}
+```
+
+**Critical Fields:**
+
+- **`mrtd`** (string): **Measurement Root of Trust Domain** - SHA384 hash of the initial TD contents. This is like a fingerprint of your trusted domain and is crucial for verification. Example: `0xc68518a0ebb42136c12b2275164f8c72f25fa9a34392228687ed6e9caeb9c0f1dbd895e9cf475121c029dc47e70e91fd`
+
+- **`rtmr0-rtmr3`** (string): **Runtime Measurement Registers** - SHA384 values tracking software loaded into the TD:
+  - `rtmr0`: Typically measures the boot loader and kernel (e.g., `0x0bb3d6375f94482cdd24b767e4a0d720...`)
+  - `rtmr1`: Measures the OS and system software (e.g., `0x154e08f5c1f7b1fce4cbfe1c14f3ba67...`)
+  - `rtmr2`: Measures applications and workloads (e.g., `0x9edcd363660e85b71c318324996dda75...`)
+  - `rtmr3`: Usually reserved for specific use cases (e.g., `0x6485726f70094502412a81dc0097b3bd...`)
+
+- **`reportdata`** (string): **Report Data** - 64 bytes of user-defined data. Often contains nonces, challenge values, or hashes to prevent replay attacks. Example: `0x00000000000000000000000000000000000000000000000000000000000000001d7ce0146d345b6e3e28b5605db5bbd7502507092f8f1e8f48c5e8f2d0e750f3`
+
+**Platform Fields:**
+
+- **`tee_tcb_svn`** (string): **TCB Security Version Number** - Version of the platform's Trusted Computing Base, used to check if platform firmware is up-to-date.
+
+- **`mrseam`** (string): **Measurement of SEAM module** - Hash of the Secure Arbitration Mode module (Intel TDX hypervisor component).
+
+- **`mrsignerseam`** (string): **SEAM Signer Measurement** - Hash of the entity that signed the SEAM module.
+
+**Attributes and Configuration:**
+
+- **`seamattributes`** (string): SEAM module attributes and capabilities
+- **`tdattributes`** (string): Trust Domain attributes and configuration flags
+- **`xfam`** (string): Extended Features Available Mask - CPU feature set available to the TD
+- **`mrconfig`** (string): Configuration measurement
+- **`mrowner`** (string): TD owner measurement  
+- **`mrownerconfig`** (string): Owner configuration measurement
+
+### QuoteCollateralV3
+
+Cryptographic collateral required for quote verification.
+
+```json
+{
+  "pck_crl_issuer_chain": "-----BEGIN CERTIFICATE-----...",
+  "root_ca_crl": "deadbeef1234...",
+  "pck_crl": "cafebabe5678...",
+  "tcb_info_issuer_chain": "-----BEGIN CERTIFICATE-----...",
+  "tcb_info": "{\"version\":3,\"issueDate\":\"2025-01-01T00:00:00Z\",...}",
+  "tcb_info_signature": "3045022100abc123...",
+  "qe_identity_issuer_chain": "-----BEGIN CERTIFICATE-----...",
+  "qe_identity": "{\"version\":2,\"issueDate\":\"2025-01-01T00:00:00Z\",...}",
+  "qe_identity_signature": "3046022100def456..."
+}
+```
+
+**Fields:**
+
+- **`pck_crl_issuer_chain`** (string): PEM certificate chain for PCK Certificate Revocation List
+- **`root_ca_crl`** (string, optional): Root CA Certificate Revocation List (hex-encoded)
+- **`pck_crl`** (string): Platform Certification Key Certificate Revocation List (hex-encoded)
+- **`tcb_info_issuer_chain`** (string): Certificate chain for TCB info verification
+- **`tcb_info`** (string): JSON string containing Trusted Computing Base information
+- **`tcb_info_signature`** (string): Signature over the TCB info (hex-encoded)
+- **`qe_identity_issuer_chain`** (string): Certificate chain for Quoting Enclave identity
+- **`qe_identity`** (string): JSON string containing QE identity information
+- **`qe_identity_signature`** (string): Signature over the QE identity (hex-encoded)
+
+## Verification Process
+
+Phala Cloud's remote attestation service performs these verification steps:
+
+1. **Parse Quote**: Extract header, body, and certificate data from binary quote
+2. **Check Platform**: Verify the quote comes from a genuine Intel SGX/TDX platform
+3. **Validate TCB**: Check that platform firmware (TCB) is up-to-date and not revoked
+4. **Verify Signatures**: Validate cryptographic signatures using Intel-provided certificates
+5. **Cache Results**: Store verification results and collateral for future reference
+
+## Error Codes
+
+### Upload/Verification Errors
+
+- **422 Unprocessable Entity**: Most common error - quote file cannot be processed
+  - Wrong file format (uploaded text/JSON instead of binary)
+  - Corrupted or truncated quote data
+  - Missing required certificate chains
+  - Invalid quote structure
+
+- **400 Bad Request**: Quote is parseable but verification failed
+  - Quote from non-genuine Intel platform
+  - Revoked or invalid certificates
+  - Outdated platform firmware (TCB)
+  - Cryptographic signature verification failed
+
+### Retrieval Errors
+
+- **404 Not Found**: Requested quote checksum doesn't exist in Phala Cloud storage
+
+### System Errors
+
+- **500 Internal Server Error**: Server-side verification errors
+  - Intel PCS service unavailable
+  - DCAP verification library errors
+  - Database or storage system issues
+
+## Caching
+
+- Quote collateral is cached for 24 hours to improve performance
+- Raw quote data and verification results are stored permanently
+- ETags are provided for efficient client-side caching
+
+## Security Considerations
+
+- Phala Cloud stores all quotes permanently and makes them publicly accessible by checksum
+- Verification relies on Intel's Provisioning Certification Service (PCS)
+- Users should validate `reportdata` contains expected nonces/challenges
+- Always check the `verified` field before trusting quote contents
+- Quote data and verification results can be shared securely through web reports

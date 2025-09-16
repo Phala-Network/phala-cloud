@@ -66,7 +66,10 @@ export const AvailableOSImageSchema = z
   .object({
     name: z.string(),
     is_dev: z.boolean(),
-    version: z.tuple([z.number(), z.number(), z.number()]),
+    version: z.union([
+      z.tuple([z.number(), z.number(), z.number()]),
+      z.tuple([z.number(), z.number(), z.number(), z.number()]),
+    ]),
     os_image_hash: z.string().nullable().optional(),
   })
   .passthrough();

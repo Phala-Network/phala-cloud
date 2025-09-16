@@ -1,0 +1,606 @@
+---
+description: A simple guide to get you started with Phala Cloud's remote attestation service - a comprehensive solution for storing, sharing, and verifying Intel SGX and TDX attestation quotes.
+title: API Quickstart Guide
+---
+
+## Quick Start
+
+### 1. Upload and Verify a Quote
+
+Upload your attestation quote to Phala Cloud for secure storage and cryptographic verification.
+
+**Requirements:**
+- Quote data must be a valid SGX DCAP or TDX quote (typically 4-6KB for TDX, varies for SGX)
+- Supported formats: SGX DCAP quotes, TDX quotes with ECDSA-256 signatures
+- Quote must contain valid certificate chains for verification
+
+**Input Options:**
+- **File Upload**: Binary quote file via multipart/form-data
+- **Hex String**: Quote data as hexadecimal string (JSON or form data)
+
+#### File Upload Example
+
+<Tabs>
+  <Tab title="File Upload - cURL">
+    ```bash
+    curl -X POST "https://cloud-api.phala.network/api/v1/attestations/verify" \
+      -H "Content-Type: multipart/form-data" \
+      -F "file=@quote.bin"
+    ```
+  </Tab>
+  <Tab title="File Upload - JavaScript">
+    ```javascript
+    // Upload binary file
+    const fileInput = document.querySelector('input[type="file"]');
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+
+    const response = await fetch('https://cloud-api.phala.network/api/v1/attestations/verify', {
+      method: 'POST',
+      body: formData
+    });
+
+    const result = await response.json();
+    console.log('Verification result:', result);
+    ```
+  </Tab>
+  <Tab title="File Upload - Python">
+    ```python
+    import requests
+
+    # Upload and verify a quote file
+    with open('quote.bin', 'rb') as f:
+        files = {'file': f}
+        response = requests.post(
+            'https://cloud-api.phala.network/api/v1/attestations/verify',
+            files=files
+        )
+    
+    result = response.json()
+    print(f"Success: {result['success']}")
+    print(f"Verified: {result['quote']['verified']}")
+    print(f"Checksum: {result['checksum']}")
+    ```
+  </Tab>
+</Tabs>
+
+#### Hex JSON Example
+
+<Tabs>
+  <Tab title="Hex JSON - cURL">
+    ```bash
+    curl -X POST "https://cloud-api.phala.network/api/v1/attestations/verify" \
+      -H "Content-Type: application/json" \
+      -d '{"hex": "0x48656c6c6f20576f726c64..."}'
+    ```
+  </Tab>
+  <Tab title="Hex JSON - JavaScript">
+    ```javascript
+    // Send hex string as JSON
+    const hexData = "0x48656c6c6f20576f726c64..."; // Your quote as hex
+    
+    const response = await fetch('https://cloud-api.phala.network/api/v1/attestations/verify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ hex: hexData })
+    });
+
+    const result = await response.json();
+    console.log('Verification result:', result);
+    ```
+  </Tab>
+  <Tab title="Hex JSON - Python">
+    ```python
+    import requests
+
+    # Send quote as hex string
+    hex_data = "0x48656c6c6f20576f726c64..."  # Your quote as hex
+    
+    response = requests.post(
+        'https://cloud-api.phala.network/api/v1/attestations/verify',
+        json={'hex': hex_data}
+    )
+    
+    result = response.json()
+    print(f"Success: {result['success']}")
+    print(f"Verified: {result['quote']['verified']}")
+    print(f"Checksum: {result['checksum']}")
+    ```
+  </Tab>
+</Tabs>
+
+#### Hex Form Example
+
+<Tabs>
+
+  <Tab title="Hex Form - cURL">
+    ```bash
+    curl -X POST "https://cloud-api.phala.network/api/v1/attestations/verify" \
+      -H "Content-Type: application/x-www-form-urlencoded" \
+      -d "hex=48656c6c6f20576f726c64..."
+    ```
+  </Tab>
+  <Tab title="Hex JSON - JavaScript">
+    ```javascript
+    // Send hex string as JSON
+    const hexData = "0x48656c6c6f20576f726c64..."; // Your quote as hex
+    
+    const response = await fetch('https://cloud-api.phala.network/api/v1/attestations/verify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ hex: hexData })
+    });
+
+    const result = await response.json();
+    console.log('Verification result:', result);
+    ```
+  </Tab>
+  <Tab title="Hex Form - Python">
+    ```python
+    import requests
+
+    # Send quote as hex form data
+    hex_data = "48656c6c6f20576f726c64..."  # Your quote as hex (no 0x prefix needed)
+    
+    response = requests.post(
+        'https://cloud-api.phala.network/api/v1/attestations/verify',
+        data={'hex': hex_data}
+    )
+    
+    result = response.json()
+    print(f"Success: {result['success']}")
+    print(f"Verified: {result['quote']['verified']}")
+    print(f"Checksum: {result['checksum']}")
+    ```
+  </Tab>
+</Tabs>
+
+**Response:**
+```json
+{
+  "success": true,
+  "quote": {
+    "header": {
+      "version": 4,
+      "ak_type": "ECDSA_P256",
+      "tee_type": "TEE_TDX",
+      "qe_vendor": "0x939a7233f79c4ca9940a0db3957f0607",
+      "user_data": "0x65004f4410967df7fc6a1faf0d9b6fc000000000"
+    },
+    "cert_data": "-----BEGIN CERTIFICATE-----\nMIIE8TCCBJegAwIBAgIVANOAucofjgQfe1LTb4vrnuUCYTTrMAoGCCqGSM49BAMC\nMHAxIjAgBgNVBAMMGUludGVsIFNHWCBQQ0sgUGxhdGZvcm0gQ0ExGjAYBgNVBAoM\nEUludGVsIENvcnBvcmF0aW9uMRQwEgYDVQQHDAtTYW50YSBDbGFyYTELMAkGA1UE\nCAwCQ0ExCzAJBgNVBAYTAlVTMB4XDTI1MDEwNDAxMDQwNloXDTMyMDEwNDAxMDQw\nNlowcDEiMCAGA1UEAwwZSW50ZWwgU0dYIFBDSyBDZXJ0aWZpY2F0ZTEaMBgGA1UE\nCgwRSW50ZWwgQ29ycG9yYXRpb24xFDASBgNVBAcMC1NhbnRhIENsYXJhMQswCQYD\nVQQIDAJDQTELMAkGA1UEBhMCVVMwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAQh\nzb0MhtAQmD4O3sLxNkPJYijdNvJRKoN7rl9/oBFc/gQrcChQa3plEQld7DKDqxHS\nPCeAVF4nOdoeZ88nTgQjo4IDDDCCAwgwHwYDVR0jBBgwFoAUlW9dzb0b4elAScnU\n9DPOAVcL3lQwawYDVR0fBGQwYjBgoF6gXIZaaHR0cHM6Ly9hcGkudHJ1c3RlZHNl\ncnZpY2VzLmludGVsLmNvbS9zZ3gvY2VydGlmaWNhdGlvbi92NC9wY2tjcmw/Y2E9\ncGxhdGZvcm0mZW5jb2Rpbmc9ZGVyMB0GA1UdDgQWBBTx+fZxDa+CBdFKSd2gZMTO\nJgnX3zAOBgNVHQ8BAf8EBAMCBsAwDAYDVR0TAQH/BAIwADCCAjkGCSqGSIb4TQEN\nAQSCAiowggImMB4GCiqGSIb4TQENAQEEEHjIYbILXHY4xsloSIVc2FUwggFjBgoq\nhkiG+E0BDQECMIIBUzAQBgsqhkiG+E0BDQECAQIBAzAQBgsqhkiG+E0BDQECAgIB\nAzAQBgsqhkiG+E0BDQECAwIBAjAQBgsqhkiG+E0BDQECBAIBAjAQBgsqhkiG+E0B\nDQECBQIBBDAQBgsqhkiG+E0BDQECBgIBATAQBgsqhkiG+E0BDQECBwIBADAQBgsq\nhkiG+E0BDQECCAIBBTAQBgsqhkiG+E0BDQECCQIBADAQBgsqhkiG+E0BDQECCgIB\nADAQBgsqhkiG+E0BDQECCwIBADAQBgsqhkiG+E0BDQECDAIBADAQBgsqhkiG+E0B\nDQECDQIBADAQBgsqhkiG+E0BDQECDgIBADAQBgsqhkiG+E0BDQECDwIBADAQBgsq\nhkiG+E0BDQECEAIBADAQBgsqhkiG+E0BDQECEQIBDTAfBgsqhkiG+E0BDQECEgQQ\nAwMCAgQBAAUAAAAAAAAAADAQBgoqhkiG+E0BDQEDBAIAADAUBgoqhkiG+E0BDQEE\nBAaQwG8AAAAwDwYKKoZIhvhNAQ0BBQoBATAeBgoqhkiG+E0BDQEGBBATiP2nPR/E\nZab66IzfjXVbMEQGCiqGSIb4TQENAQcwNjAQBgsqhkiG+E0BDQEHAQEB/zAQBgsq\nhkiG+E0BDQEHAgEB/zAQBgsqhkiG+E0BDQEHAwEB/zAKBggqhkjOPQQDAgNIADBF\nAiEAhSI/7k9hTUGC5oMjYMFbL2s6ZEdJhqVCan2aN9X1KPkCIC6BSUPfe3iutlwa\n08ZeOF2S73JHVhH2b8aJOcN6eUji\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nMIICljCCAj2gAwIBAgIVAJVvXc29G+HpQEnJ1PQzzgFXC95UMAoGCCqGSM49BAMC\nMGgxGjAYBgNVBAMMEUludGVsIFNHWCBSb290IENBMRowGAYDVQQKDBFJbnRlbCBD\nb3Jwb3JhdGlvbjEUMBIGA1UEBwwLU2FudGEgQ2xhcmExCzAJBgNVBAgMAkNBMQsw\nCQYDVQQGEwJVUzAeFw0xODA1MjExMDUwMTBaFw0zMzA1MjExMDUwMTBaMHAxIjAg\nBgNVBAMMGUludGVsIFNHWCBQQ0sgUGxhdGZvcm0gQ0ExGjAYBgNVBAoMEUludGVs\nIENvcnBvcmF0aW9uMRQwEgYDVQQHDAtTYW50YSBDbGFyYTELMAkGA1UECAwCQ0Ex\nCzAJBgNVBAYTAlVTMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAENSB/7t21lXSO\n2Cuzpxw74eJB72EyDGgW5rXCtx2tVTLq6hKk6z+UiRZCnqR7psOvgqFeSxlmTlJl\neTmi2WYz3qOBuzCBuDAfBgNVHSMEGDAWgBQiZQzWWp00ifODtJVSv1AbOScGrDBS\nBgNVHR8ESzBJMEegRaBDhkFodHRwczovL2NlcnRpZmljYXRlcy50cnVzdGVkc2Vy\ndmljZXMuaW50ZWwuY29tL0ludGVsU0dYUm9vdENBLmRlcjAdBgNVHQ4EFgQUlW9d\nzb0b4elAScnU9DPOAVcL3lQwDgYDVR0PAQH/BAQDAgEGMBIGA1UdEwEB/wQIMAYB\nAf8CAQAwCgYIKoZIzj0EAwIDRwAwRAIgXsVki0w+i6VYGW3UF/22uaXe0YJDj1Ue\nnA+TjD1ai5cCICYb1SAmD5xkfTVpvo4UoyiSYxrDWLmUR4CI9NKyfPN+\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nMIICjzCCAjSgAwIBAgIUImUM1lqdNInzg7SVUr9QGzknBqwwCgYIKoZIzj0EAwIw\naDEaMBgGA1UEAwwRSW50ZWwgU0dYIFJvb3QgQ0ExGjAYBgNVBAoMEUludGVsIENv\ncnBvcmF0aW9uMRQwEgYDVQQHDAtTYW50YSBDbGFyYTELMAkGA1UECAwCQ0ExCzAJ\nBgNVBAYTAlVTMB4XDTE4MDUyMTEwNDUxMFoXDTQ5MTIzMTIzNTk1OVowaDEaMBgG\nA1UEAwwRSW50ZWwgU0dYIFJvb3QgQ0ExGjAYBgNVBAoMEUludGVsIENvcnBvcmF0\naW9uMRQwEgYDVQQHDAtTYW50YSBDbGFyYTELMAkGA1UECAwCQ0ExCzAJBgNVBAYT\nAlVTMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEC6nEwMDIYZOj/iPWsCzaEKi7\n1OiOSLRFhWGjbnBVJfVnkY4u3IjkDYYL0MxO4mqsyYjlBalTVYxFP2sJBK5zlKOB\nuzCBuDAfBgNVHSMEGDAWgBQiZQzWWp00ifODtJVSv1AbOScGrDBSBgNVHR8ESzBJ\nMEegRaBDhkFodHRwczovL2NlcnRpZmljYXRlcy50cnVzdGVkc2VydmljZXMuaW50\nZWwuY29tL0ludGVsU0dYUm9vdENBLmRlcjAdBgNVHQ4EFgQUImUM1lqdNInzg7SV\nUr9QGzknBqwwDgYDVR0PAQH/BAQDAgEGMBIGA1UdEwEB/wQIMAYBAf8CAQEwCgYI\nKoZIzj0EAwIDSQAwRgIhAOW/5QkR+S9CiSDcNoowLuPRLsWGf/Yi7GSX94BgwTwg\nAiEA4J0lrHoMs+Xo5o/sX6O9QWxHRAvZUGOdRQ7cvqRXaqI=\n-----END CERTIFICATE-----\n",
+    "body": {
+      "tee_tcb_svn": "06010300000000000000000000000000",
+      "mrseam": "0x5b38e33a6487958b72c3c12a938eaa5e3fd4510c51aeeab58c7d5ecee41d7c436489d6c8e4f92f160b7cad34207b00c1",
+      "mrsignerseam": "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "seamattributes": "0x0000000000000000",
+      "tdattributes": "0x0000001000000000",
+      "xfam": "0xe702060000000000",
+      "mrtd": "0xc68518a0ebb42136c12b2275164f8c72f25fa9a34392228687ed6e9caeb9c0f1dbd895e9cf475121c029dc47e70e91fd",
+      "mrconfig": "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "mrowner": "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "mrownerconfig": "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "rtmr0": "0x0bb3d6375f94482cdd24b767e4a0d720348527c4f2ab433d77f842b9394fa1638bb6df83fb0a1301f29c71bf60da48bb",
+      "rtmr1": "0x154e08f5c1f7b1fce4cbfe1c14f3ba67b70044ede2751487279cd1f2e4239dee99a6d45e24ebde6b6a6f5ae49878e0e6",
+      "rtmr2": "0x9edcd363660e85b71c318324996dda756c372d9f6960edbfa863b1e684822eb48dd95e218ae2b78e51ef97f3b8f5c9dc",
+      "rtmr3": "0x56491496510e698faad85d0dc444636174789195f272899ab5b1fc8f83531375fb9077cb32e7dac16667470f854ba5d0",
+      "reportdata": "0x00000000000000000000000000000000000000000000000000000000000000006ab141daaabe33787711861c8aa66ad3c95c49cebfd9525c85911b90233408ed"
+    },
+    "verified": true
+  },
+  "checksum": "9aa049fb9049d4f582ca316206f7cf34ee185c2b5b63370a518921432385b81a",
+  "can_download": null,
+  "uploaded_at": null,
+  "quote_collateral": {
+    "pck_crl_issuer_chain": "-----BEGIN CERTIFICATE-----\nMIICljCCAj2gAwIBAgIVAJVvXc29G+HpQEnJ1PQzzgFXC95UMAoGCCqGSM49BAMC\nMGgxGjAYBgNVBAMMEUludGVsIFNHWCBSb290IENBMRowGAYDVQQKDBFJbnRlbCBD\nb3Jwb3JhdGlvbjEUMBIGA1UEBwwLU2FudGEgQ2xhcmExCzAJBgNVBAgMAkNBMQsw\nCQYDVQQGEwJVUzAeFw0xODA1MjExMDUwMTBaFw0zMzA1MjExMDUwMTBaMHAxIjAg\nBgNVBAMMGUludGVsIFNHWCBQQ0sgUGxhdGZvcm0gQ0ExGjAYBgNVBAoMEUludGVs\nIENvcnBvcmF0aW9uMRQwEgYDVQQHDAtTYW50YSBDbGFyYTELMAkGA1UECAwCQ0Ex\nCzAJBgNVBAYTAlVTMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAENSB/7t21lXSO\n2Cuzpxw74eJB72EyDGgW5rXCtx2tVTLq6hKk6z+UiRZCnqR7psOvgqFeSxlmTlJl\neTmi2WYz3qOBuzCBuDAfBgNVHSMEGDAWgBQiZQzWWp00ifODtJVSv1AbOScGrDBS\nBgNVHR8ESzBJMEegRaBDhkFodHRwczovL2NlcnRpZmljYXRlcy50cnVzdGVkc2Vy\ndmljZXMuaW50ZWwuY29tL0ludGVsU0dYUm9vdENBLmRlcjAdBgNVHQ4EFgQUlW9d\nzb0b4elAScnU9DPOAVcL3lQwDgYDVR0PAQH/BAQDAgEGMBIGA1UdEwEB/wQIMAYB\nAf8CAQAwCgYIKoZIzj0EAwIDRwAwRAIgXsVki0w+i6VYGW3UF/22uaXe0YJDj1Ue\nnA+TjD1ai5cCICYb1SAmD5xkfTVpvo4UoyiSYxrDWLmUR4CI9NKyfPN+\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nMIICjzCCAjSgAwIBAgIUImUM1lqdNInzg7SVUr9QGzknBqwwCgYIKoZIzj0EAwIw\naDEaMBgGA1UEAwwRSW50ZWwgU0dYIFJvb3QgQ0ExGjAYBgNVBAoMEUludGVsIENv\ncnBvcmF0aW9uMRQwEgYDVQQHDAtTYW50YSBDbGFyYTELMAkGA1UECAwCQ0ExCzAJ\nBgNVBAYTAlVTMB4XDTE4MDUyMTEwNDUxMFoXDTQ5MTIzMTIzNTk1OVowaDEaMBgG\nA1UEAwwRSW50ZWwgU0dYIFJvb3QgQ0ExGjAYBgNVBAoMEUludGVsIENvcnBvcmF0\naW9uMRQwEgYDVQQHDAtTYW50YSBDbGFyYTELMAkGA1UECAwCQ0ExCzAJBgNVBAYT\nAlVTMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEC6nEwMDIYZOj/iPWsCzaEKi7\n1OiOSLRFhWGjbnBVJfVnkY4u3IjkDYYL0MxO4mqsyYjlBalTVYxFP2sJBK5zlKOB\nuzCBuDAfBgNVHSMEGDAWgBQiZQzWWp00ifODtJVSv1AbOScGrDBSBgNVHR8ESzBJ\nMEegRaBDhkFodHRwczovL2NlcnRpZmljYXRlcy50cnVzdGVkc2VydmljZXMuaW50\nZWwuY29tL0ludGVsU0dYUm9vdENBLmRlcjAdBgNVHQ4EFgQUImUM1lqdNInzg7SV\nUr9QGzknBqwwDgYDVR0PAQH/BAQDAgEGMBIGA1UdEwEB/wQIMAYBAf8CAQEwCgYI\nKoZIzj0EAwIDSQAwRgIhAOW/5QkR+S9CiSDcNoowLuPRLsWGf/Yi7GSX94BgwTwg\nAiEA4J0lrHoMs+Xo5o/sX6O9QWxHRAvZUGOdRQ7cvqRXaqI=\n-----END CERTIFICATE-----\n",
+    "root_ca_crl": "308201203081c8020101300a06082a8648ce3d0403023068311a301806035504030c11496e74656c2053475820526f6f74204341311a3018060355040a0c11496e74656c20436f72706f726174696f6e3114301206035504070c0b53616e746120436c617261310b300906035504080c024341310b3009060355040613025553170d3235303332303131323135375a170d3236303430333131323135375aa02f302d300a0603551d140403020101301f0603551d2304183016801422650cd65a9d3489f383b49552bf501b392706ac300a06082a8648ce3d0403020347003044022030c9fce1438da0a94e4fffdd46c9650e393be6e5a7862d4e4e73527932d04af302206539efe3f734c3d7df20d9dfc4630e1c7ff0439a0f8ece101f15b5eaff9b4f33",
+    "pck_crl": "30820a6230820a08020101300a06082a8648ce3d04030230703122302006035504030c19496e74656c205347582050434b20506c6174666f726d204341311a3018060355040a0c11496e74656c20436f72706f726174696f6e3114301206035504070c0b53616e746120436c617261310b300906035504080c024341310b3009060355040613025553170d3235303831393037313331355a170d3235303931383037313331355a30820934303302146fc34e5023e728923435d61aa4b83c618166ad35170d3235303831393037313331355a300c300a0603551d1504030a01013034021500efae6e9715fca13b87e333e8261ed6d990a926ad170d3235303831393037313331355a300c300a0603551d1504030a01013034021500fd608648629cba73078b4d492f4b3ea741ad08cd170d3235303831393037313331355a300c300a0603551d1504030a010130340215008af924184e1d5afddd73c3d63a12f5e8b5737e56170d3235303831393037313331355a300c300a0603551d1504030a01013034021500b1257978cfa9ccdd0759abf8c5ca72fae3a78a9b170d3235303831393037313331355a300c300a0603551d1504030a01013033021474fea614a972be0e2843f2059835811ed872f9b3170d3235303831393037313331355a300c300a0603551d1504030a01013034021500f9c4ef56b3ab48d577e108baedf4bf88014214b9170d3235303831393037313331355a300c300a0603551d1504030a010130330214071de0778f9e5fc4f2878f30d6b07c9a30e6b30b170d3235303831393037313331355a300c300a0603551d1504030a01013034021500cde2424f972cea94ff239937f4d80c25029dd60b170d3235303831393037313331355a300c300a0603551d1504030a0101303302146c3319e5109b64507d3cf1132ce00349ef527319170d3235303831393037313331355a300c300a0603551d1504030a01013034021500df08d756b66a7497f43b5bb58ada04d3f4f7a937170d3235303831393037313331355a300c300a0603551d1504030a01013033021428af485b6cf67e409a39d5cb5aee4598f7a8fa7b170d3235303831393037313331355a300c300a0603551d1504030a01013034021500fb8b2daec092cada8aa9bc4ff2f1c20d0346668c170d3235303831393037313331355a300c300a0603551d1504030a01013034021500cd4850ac52bdcc69a6a6f058c8bc57bbd0b5f864170d3235303831393037313331355a300c300a0603551d1504030a01013034021500994dd3666f5275fb805f95dd02bd50cb2679d8ad170d3235303831393037313331355a300c300a0603551d1504030a0101303302140702136900252274d9035eedf5457462fad0ef4c170d3235303831393037313331355a300c300a0603551d1504030a01013033021461f2bf73e39b4e04aa27d801bd73d24319b5bf80170d3235303831393037313331355a300c300a0603551d1504030a0101303302143992be851b96902eff38959e6c2eff1b0651a4b5170d3235303831393037313331355a300c300a0603551d1504030a0101303302140fda43a00b68ea79b7c2deaeac0b498bdfb2af90170d3235303831393037313331355a300c300a0603551d1504030a010130330214639f139a5040fdcff191e8a4fb1bf086ed603971170d3235303831393037313331355a300c300a0603551d1504030a01013034021500959d533f9249dc1e513544cdc830bf19b7f1f301170d3235303831393037313331355a300c300a0603551d1504030a0101303302147ae37748a9f912f4c63ba7ab07c593ce1d1d1181170d3235303831393037313331355a300c300a0603551d1504030a01013033021413884b33269938c195aa170fca75da177538df0b170d3235303831393037313331355a300c300a0603551d1504030a0101303402150085d3c9381b77a7e04d119c9e5ad6749ff3ffab87170d3235303831393037313331355a300c300a0603551d1504030a0101303402150093887ca4411e7a923bd1fed2819b2949f201b5b4170d3235303831393037313331355a300c300a0603551d1504030a0101303302142498dc6283930996fd8bf23a37acbe26a3bed457170d3235303831393037313331355a300c300a0603551d1504030a010130340215008a66f1a749488667689cc3903ac54c662b712e73170d3235303831393037313331355a300c300a0603551d1504030a01013034021500afc13610bdd36cb7985d106481a880d3a01fda07170d3235303831393037313331355a300c300a0603551d1504030a01013034021500efe04b2c33d036aac96ca673bf1e9a47b64d5cbb170d3235303831393037313331355a300c300a0603551d1504030a0101303402150083d9ac8d8bb509d1c6c809ad712e8430559ed7f3170d3235303831393037313331355a300c300a0603551d1504030a0101303302147931fd50b5071c1bbfc5b7b6ded8b45b9d8b8529170d3235303831393037313331355a300c300a0603551d1504030a0101303302141fa20e2970bde5d57f7b8ddf8339484e1f1d0823170d3235303831393037313331355a300c300a0603551d1504030a0101303302141e87b2c3b32d8d23e411cef34197b95af0c8adf5170d3235303831393037313331355a300c300a0603551d1504030a010130340215009afd2ee90a473550a167d996911437c7502d1f09170d3235303831393037313331355a300c300a0603551d1504030a0101303302144481b0f11728a13b696d3ea9c770a0b15ec58dda170d3235303831393037313331355a300c300a0603551d1504030a01013034021500a7859f57982ef0e67d37bc8ef2ef5ac835ff1aa9170d3235303831393037313331355a300c300a0603551d1504030a010130340215009d67753b81e47090aea763fbec4c4549bcdb9933170d3235303831393037313331355a300c300a0603551d1504030a01013033021434bfbb7a1d9c568147e118b614f7b76ed3ef68df170d3235303831393037313331355a300c300a0603551d1504030a0101303302142c3cc6fe9279db1516d5ce39f2a898cda5a175e1170d3235303831393037313331355a300c300a0603551d1504030a010130330214717948687509234be979e4b7dce6f31bef64b68c170d3235303831393037313331355a300c300a0603551d1504030a010130340215009d76ef2c39c136e8658b6e7396b1d7445a27631f170d3235303831393037313331355a300c300a0603551d1504030a01013034021500c3e025fca995f36f59b48467939e3e34e6361a6f170d3235303831393037313331355a300c300a0603551d1504030a010130340215008c5f6b3257da05b17429e2e61ba965d67330606a170d3235303831393037313331355a300c300a0603551d1504030a01013034021500a17c51722ec1e0c3278fe8bdf052059cbec4e648170d3235303831393037313331355a300c300a0603551d1504030a0101a02f302d300a0603551d140403020101301f0603551d23041830168014956f5dcdbd1be1e94049c9d4f433ce01570bde54300a06082a8648ce3d040302034800304502205f7a10f276d931497045a4315ab6062720cae9584ed49452b008e1fd9b468b2a02210082dce3199a8903bbee8b005dc1e0e21e82a86633fae9f67bd343075b120f6a0e",
+    "tcb_info_issuer_chain": "-----BEGIN CERTIFICATE-----\nMIICjTCCAjKgAwIBAgIUfjiC1ftVKUpASY5FhAPpFJG99FUwCgYIKoZIzj0EAwIw\naDEaMBgGA1UEAwwRSW50ZWwgU0dYIFJvb3QgQ0ExGjAYBgNVBAoMEUludGVsIENv\ncnBvcmF0aW9uMRQwEgYDVQQHDAtTYW50YSBDbGFyYTELMAkGA1UECAwCQ0ExCzAJ\nBgNVBAYTAlVTMB4XDTI1MDUwNjA5MjUwMFoXDTMyMDUwNjA5MjUwMFowbDEeMBwG\nA1UEAwwVSW50ZWwgU0dYIFRDQiBTaWduaW5nMRowGAYDVQQKDBFJbnRlbCBDb3Jw\nb3JhdGlvbjEUMBIGA1UEBwwLU2FudGEgQ2xhcmExCzAJBgNVBAgMAkNBMQswCQYD\nVQQGEwJVUzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABENFG8xzydWRfK92bmGv\nP+mAh91PEyV7Jh6FGJd5ndE9aBH7R3E4A7ubrlh/zN3C4xvpoouGlirMba+W2lju\nypajgbUwgbIwHwYDVR0jBBgwFoAUImUM1lqdNInzg7SVUr9QGzknBqwwUgYDVR0f\nBEswSTBHoEWgQ4ZBaHR0cHM6Ly9jZXJ0aWZpY2F0ZXMudHJ1c3RlZHNlcnZpY2Vz\nLmludGVsLmNvbS9JbnRlbFNHWFJvb3RDQS5kZXIwHQYDVR0OBBYEFH44gtX7VSlK\nQEmORYQD6RSRvfRVMA4GA1UdDwEB/wQEAwIGwDAMBgNVHRMBAf8EAjAAMAoGCCqG\nSM49BAMCA0kAMEYCIQDdmmRuAo3qCO8TC1IoJMITAoOEw4dlgEBHzSz1TuMSTAIh\nAKVTqOkt59+co0O3m3hC+v5Fb00FjYWcgeu3EijOULo5\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nMIICjzCCAjSgAwIBAgIUImUM1lqdNInzg7SVUr9QGzknBqwwCgYIKoZIzj0EAwIw\naDEaMBgGA1UEAwwRSW50ZWwgU0dYIFJvb3QgQ0ExGjAYBgNVBAoMEUludGVsIENv\ncnBvcmF0aW9uMRQwEgYDVQQHDAtTYW50YSBDbGFyYTELMAkGA1UECAwCQ0ExCzAJ\nBgNVBAYTAlVTMB4XDTE4MDUyMTEwNDUxMFoXDTQ5MTIzMTIzNTk1OVowaDEaMBgG\nA1UEAwwRSW50ZWwgU0dYIFJvb3QgQ0ExGjAYBgNVBAoMEUludGVsIENvcnBvcmF0\naW9uMRQwEgYDVQQHDAtTYW50YSBDbGFyYTELMAkGA1UECAwCQ0ExCzAJBgNVBAYT\nAlVTMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEC6nEwMDIYZOj/iPWsCzaEKi7\n1OiOSLRFhWGjbnBVJfVnkY4u3IjkDYYL0MxO4mqsyYjlBalTVYxFP2sJBK5zlKOB\nuzCBuDAfBgNVHSMEGDAWgBQiZQzWWp00ifODtJVSv1AbOScGrDBSBgNVHR8ESzBJ\nMEegRaBDhkFodHRwczovL2NlcnRpZmljYXRlcy50cnVzdGVkc2VydmljZXMuaW50\nZWwuY29tL0ludGVsU0dYUm9vdENBLmRlcjAdBgNVHQ4EFgQUImUM1lqdNInzg7SV\nUr9QGzknBqwwDgYDVR0PAQH/BAQDAgEGMBIGA1UdEwEB/wQIMAYBAf8CAQEwCgYI\nKoZIzj0EAwIDSQAwRgIhAOW/5QkR+S9CiSDcNoowLuPRLsWGf/Yi7GSX94BgwTwg\nAiEA4J0lrHoMs+Xo5o/sX6O9QWxHRAvZUGOdRQ7cvqRXaqI=\n-----END CERTIFICATE-----\n",
+    "tcb_info": "{\"id\":\"TDX\",\"version\":3,\"issueDate\":\"2025-08-19T07:09:52Z\",\"nextUpdate\":\"2025-09-18T07:09:52Z\",\"fmspc\":\"90c06f000000\",\"pceId\":\"0000\",\"tcbType\":0,\"tcbEvaluationDataNumber\":17,\"tdxModule\":{\"mrsigner\":\"000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\",\"attributes\":\"0000000000000000\",\"attributesMask\":\"FFFFFFFFFFFFFFFF\"},\"tdxModuleIdentities\":[{\"id\":\"TDX_03\",\"mrsigner\":\"000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\",\"attributes\":\"0000000000000000\",\"attributesMask\":\"FFFFFFFFFFFFFFFF\",\"tcbLevels\":[{\"tcb\":{\"isvsvn\":3},\"tcbDate\":\"2024-03-13T00:00:00Z\",\"tcbStatus\":\"UpToDate\"}]},{\"id\":\"TDX_01\",\"mrsigner\":\"000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\",\"attributes\":\"0000000000000000\",\"attributesMask\":\"FFFFFFFFFFFFFFFF\",\"tcbLevels\":[{\"tcb\":{\"isvsvn\":4},\"tcbDate\":\"2024-03-13T00:00:00Z\",\"tcbStatus\":\"UpToDate\"},{\"tcb\":{\"isvsvn\":2},\"tcbDate\":\"2023-08-09T00:00:00Z\",\"tcbStatus\":\"OutOfDate\"}]}],\"tcbLevels\":[{\"tcb\":{\"sgxtcbcomponents\":[{\"svn\":2,\"category\":\"BIOS\",\"type\":\"Early Microcode Update\"},{\"svn\":2,\"category\":\"OS/VMM\",\"type\":\"SGX Late Microcode Update\"},{\"svn\":2,\"category\":\"OS/VMM\",\"type\":\"TXT SINIT\"},{\"svn\":2,\"category\":\"BIOS\"},{\"svn\":3,\"category\":\"BIOS\"},{\"svn\":1,\"category\":\"BIOS\"},{\"svn\":0},{\"svn\":5,\"category\":\"OS/VMM\",\"type\":\"SEAMLDR ACM\"},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0}],\"pcesvn\":13,\"tdxtcbcomponents\":[{\"svn\":5,\"category\":\"OS/VMM\",\"type\":\"TDX Module\"},{\"svn\":0,\"category\":\"OS/VMM\",\"type\":\"TDX Module\"},{\"svn\":2,\"category\":\"OS/VMM\",\"type\":\"TDX Late Microcode Update\"},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0}]},\"tcbDate\":\"2024-03-13T00:00:00Z\",\"tcbStatus\":\"UpToDate\"},{\"tcb\":{\"sgxtcbcomponents\":[{\"svn\":2,\"category\":\"BIOS\",\"type\":\"Early Microcode Update\"},{\"svn\":2,\"category\":\"OS/VMM\",\"type\":\"SGX Late Microcode Update\"},{\"svn\":2,\"category\":\"OS/VMM\",\"type\":\"TXT SINIT\"},{\"svn\":2,\"category\":\"BIOS\"},{\"svn\":3,\"category\":\"BIOS\"},{\"svn\":1,\"category\":\"BIOS\"},{\"svn\":0},{\"svn\":5,\"category\":\"OS/VMM\",\"type\":\"SEAMLDR ACM\"},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0}],\"pcesvn\":5,\"tdxtcbcomponents\":[{\"svn\":5,\"category\":\"OS/VMM\",\"type\":\"TDX Module\"},{\"svn\":0,\"category\":\"OS/VMM\",\"type\":\"TDX Module\"},{\"svn\":2,\"category\":\"OS/VMM\",\"type\":\"TDX Late Microcode Update\"},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0},{\"svn\":0}]},\"tcbDate\":\"2018-01-04T00:00:00Z\",\"tcbStatus\":\"OutOfDate\",\"advisoryIDs\":[\"INTEL-SA-00106\",\"INTEL-SA-00115\",\"INTEL-SA-00135\",\"INTEL-SA-00203\",\"INTEL-SA-00220\",\"INTEL-SA-00233\",\"INTEL-SA-00270\",\"INTEL-SA-00293\",\"INTEL-SA-00320\",\"INTEL-SA-00329\",\"INTEL-SA-00381\",\"INTEL-SA-00389\",\"INTEL-SA-00477\",\"INTEL-SA-00837\"]}]}",
+    "tcb_info_signature": "a63e2d7c90bfa4b491b0812597dd9ed39fa3eec26e9541be479e10a922c17f8f79a3a89eb63200ffc911b37a535d534f6e93fe03d6b846b69e605496803c6867",
+    "qe_identity_issuer_chain": "-----BEGIN CERTIFICATE-----\nMIICjTCCAjKgAwIBAgIUfjiC1ftVKUpASY5FhAPpFJG99FUwCgYIKoZIzj0EAwIw\naDEaMBgGA1UEAwwRSW50ZWwgU0dYIFJvb3QgQ0ExGjAYBgNVBAoMEUludGVsIENv\ncnBvcmF0aW9uMRQwEgYDVQQHDAtTYW50YSBDbGFyYTELMAkGA1UECAwCQ0ExCzAJ\nBgNVBAYTAlVTMB4XDTI1MDUwNjA5MjUwMFoXDTMyMDUwNjA5MjUwMFowbDEeMBwG\nA1UEAwwVSW50ZWwgU0dYIFRDQiBTaWduaW5nMRowGAYDVQQKDBFJbnRlbCBDb3Jw\nb3JhdGlvbjEUMBIGA1UEBwwLU2FudGEgQ2xhcmExCzAJBgNVBAgMAkNBMQswCQYD\nVQQGEwJVUzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABENFG8xzydWRfK92bmGv\nP+mAh91PEyV7Jh6FGJd5ndE9aBH7R3E4A7ubrlh/zN3C4xvpoouGlirMba+W2lju\nypajgbUwgbIwHwYDVR0jBBgwFoAUImUM1lqdNInzg7SVUr9QGzknBqwwUgYDVR0f\nBEswSTBHoEWgQ4ZBaHR0cHM6Ly9jZXJ0aWZpY2F0ZXMudHJ1c3RlZHNlcnZpY2Vz\nLmludGVsLmNvbS9JbnRlbFNHWFJvb3RDQS5kZXIwHQYDVR0OBBYEFH44gtX7VSlK\nQEmORYQD6RSRvfRVMA4GA1UdDwEB/wQEAwIGwDAMBgNVHRMBAf8EAjAAMAoGCCqG\nSM49BAMCA0kAMEYCIQDdmmRuAo3qCO8TC1IoJMITAoOEw4dlgEBHzSz1TuMSTAIh\nAKVTqOkt59+co0O3m3hC+v5Fb00FjYWcgeu3EijOULo5\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nMIICjzCCAjSgAwIBAgIUImUM1lqdNInzg7SVUr9QGzknBqwwCgYIKoZIzj0EAwIw\naDEaMBgGA1UEAwwRSW50ZWwgU0dYIFJvb3QgQ0ExGjAYBgNVBAoMEUludGVsIENv\ncnBvcmF0aW9uMRQwEgYDVQQHDAtTYW50YSBDbGFyYTELMAkGA1UECAwCQ0ExCzAJ\nBgNVBAYTAlVTMB4XDTE4MDUyMTEwNDUxMFoXDTQ5MTIzMTIzNTk1OVowaDEaMBgG\nA1UEAwwRSW50ZWwgU0dYIFJvb3QgQ0ExGjAYBgNVBAoMEUludGVsIENvcnBvcmF0\naW9uMRQwEgYDVQQHDAtTYW50YSBDbGFyYTELMAkGA1UECAwCQ0ExCzAJBgNVBAYT\nAlVTMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEC6nEwMDIYZOj/iPWsCzaEKi7\n1OiOSLRFhWGjbnBVJfVnkY4u3IjkDYYL0MxO4mqsyYjlBalTVYxFP2sJBK5zlKOB\nuzCBuDAfBgNVHSMEGDAWgBQiZQzWWp00ifODtJVSv1AbOScGrDBSBgNVHR8ESzBJ\nMEegRaBDhkFodHRwczovL2NlcnRpZmljYXRlcy50cnVzdGVkc2VydmljZXMuaW50\nZWwuY29tL0ludGVsU0dYUm9vdENBLmRlcjAdBgNVHQ4EFgQUImUM1lqdNInzg7SV\nUr9QGzknBqwwDgYDVR0PAQH/BAQDAgEGMBIGA1UdEwEB/wQIMAYBAf8CAQEwCgYI\nKoZIzj0EAwIDSQAwRgIhAOW/5QkR+S9CiSDcNoowLuPRLsWGf/Yi7GSX94BgwTwg\nAiEA4J0lrHoMs+Xo5o/sX6O9QWxHRAvZUGOdRQ7cvqRXaqI=\n-----END CERTIFICATE-----\n",
+    "qe_identity": "{\"id\":\"TD_QE\",\"version\":2,\"issueDate\":\"2025-08-19T06:34:15Z\",\"nextUpdate\":\"2025-09-18T06:34:15Z\",\"tcbEvaluationDataNumber\":17,\"miscselect\":\"00000000\",\"miscselectMask\":\"FFFFFFFF\",\"attributes\":\"11000000000000000000000000000000\",\"attributesMask\":\"FBFFFFFFFFFFFFFF0000000000000000\",\"mrsigner\":\"DC9E2A7C6F948F17474E34A7FC43ED030F7C1563F1BABDDF6340C82E0E54A8C5\",\"isvprodid\":2,\"tcbLevels\":[{\"tcb\":{\"isvsvn\":4},\"tcbDate\":\"2024-03-13T00:00:00Z\",\"tcbStatus\":\"UpToDate\"}]}",
+    "qe_identity_signature": "2f071aa0617b9f525884bb5cac0b03f923c6ff449d7e7679c78520b0ca178e7237589f7476fd5d9f75c744fdc5fa363ce85ccb8abbd101ade83fe35e8a116112"
+  }
+}
+```
+
+**Important:** Save the `checksum` from the response - this unique identifier is used to:
+- Retrieve detailed quote information
+- Get verification collateral data  
+- Download the raw quote file
+- View a shareable web report at `http://proof.t16z.com/reports/{checksum}`
+
+### 2. Get Stored Quote Details
+
+Retrieve full details about any quote stored in Phala Cloud using its checksum:
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl "https://cloud-api.phala.network/api/v1/attestations/view/9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139"
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const checksum = '9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139';
+    const response = await fetch(`https://cloud-api.phala.network/api/v1/attestations/view/${checksum}`);
+    
+    if (response.ok) {
+      const quote = await response.json();
+      console.log('TEE Type:', quote.header.tee_type);
+      console.log('MRTD:', quote.body.mrtd);
+      console.log('Verified:', quote.verified);
+    } else {
+      console.error('Quote not found');
+    }
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    checksum = '9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139'
+    response = requests.get(f'https://cloud-api.phala.network/api/v1/attestations/view/{checksum}')
+    
+    if response.status_code == 200:
+        quote = response.json()
+        print(f"TEE Type: {quote['header']['tee_type']}")
+        print(f"MRTD: {quote['body']['mrtd']}")
+        print(f"Verified: {quote['verified']}")
+        print(f"Uploaded: {quote['uploaded_at']}")
+    else:
+        print('Quote not found')
+    ```
+  </Tab>
+</Tabs>
+
+**Response Example:**
+```json
+{
+  "header": {
+    "version": 4,
+    "ak_type": "ECDSA_P256",
+    "tee_type": "TEE_TDX",
+    "qe_vendor": "0x939a7233f79c4ca9940a0db3957f0607",
+    "user_data": "0x65004f4410967df7fc6a1faf0d9b6fc000000000"
+  },
+  "body": {
+    "mrtd": "0xc68518a0ebb42136c12b2275164f8c72f25fa9a34392228687ed6e9caeb9c0f1dbd895e9cf475121c029dc47e70e91fd",
+    "rtmr0": "0x0bb3d6375f94482cdd24b767e4a0d720348527c4f2ab433d77f842b9394fa1638bb6df83fb0a1301f29c71bf60da48bb",
+    "rtmr1": "0x154e08f5c1f7b1fce4cbfe1c14f3ba67b70044ede2751487279cd1f2e4239dee99a6d45e24ebde6b6a6f5ae49878e0e6",
+    "rtmr2": "0x9edcd363660e85b71c318324996dda756c372d9f6960edbfa863b1e684822eb48dd95e218ae2b78e51ef97f3b8f5c9dc",
+    "rtmr3": "0x6485726f70094502412a81dc0097b3bd67181f6eb8c647fe6ddb47c8efa38e6f35b88bd99a4ece93c9f3d44be45c58a0",
+    "reportdata": "0x00000000000000000000000000000000000000000000000000000000000000001d7ce0146d345b6e3e28b5605db5bbd7502507092f8f1e8f48c5e8f2d0e750f3"
+  },
+  "verified": true,
+  "uploaded_at": "2025-08-15T16:01:28+00:00",
+  "checksum": "9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139"
+}
+```
+
+### 3. Download Original Quote Data
+
+Download the original binary quote data stored in Phala Cloud (5,006 bytes for this example):
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl "https://cloud-api.phala.network/api/v1/attestations/raw/9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139" \
+      --output quote.bin
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const checksum = '9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139';
+    const response = await fetch(`https://cloud-api.phala.network/api/v1/attestations/raw/${checksum}`);
+    
+    if (response.ok) {
+      const blob = await response.blob();
+      
+      // Save to file in browser
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${checksum}.bin`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      console.log(`Downloaded ${blob.size} bytes`);
+    }
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    checksum = '9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139'
+    response = requests.get(f'https://cloud-api.phala.network/api/v1/attestations/raw/{checksum}')
+    
+    if response.status_code == 200:
+        with open(f'{checksum}.bin', 'wb') as f:
+            f.write(response.content)
+        print(f'Downloaded {len(response.content)} bytes to {checksum}.bin')
+    else:
+        print('Quote not found')
+    ```
+  </Tab>
+</Tabs>
+
+### 4. Get Verification Collateral
+
+Retrieve the cryptographic collateral that Phala Cloud uses for quote verification:
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl "https://cloud-api.phala.network/api/v1/attestations/collateral/9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139"
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const checksum = '9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139';
+    const response = await fetch(`https://cloud-api.phala.network/api/v1/attestations/collateral/${checksum}`);
+    const collateral = await response.json();
+    
+    // Parse the JSON strings inside the collateral
+    const tcbInfo = JSON.parse(collateral.tcb_info);
+    const qeIdentity = JSON.parse(collateral.qe_identity);
+    
+    console.log('Platform FMSPC:', tcbInfo.fmspc);
+    console.log('TCB Issue Date:', tcbInfo.issueDate);
+    console.log('QE Identity Version:', qeIdentity.version);
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+    import json
+
+    checksum = '9540fda5e6416c9d02bae726b146be58bee3caccfe7f874dbc68c808a13b1139'
+    response = requests.get(f'https://cloud-api.phala.network/api/v1/attestations/collateral/{checksum}')
+    collateral = response.json()
+    
+    # Parse the JSON strings inside the collateral
+    tcb_info = json.loads(collateral['tcb_info'])
+    qe_identity = json.loads(collateral['qe_identity'])
+    
+    print(f"Platform FMSPC: {tcb_info['fmspc']}")
+    print(f"TCB Issue Date: {tcb_info['issueDate']}")
+    print(f"QE Identity Version: {qe_identity['version']}")
+    ```
+  </Tab>
+</Tabs>
+
+## Understanding the Response
+
+When Phala Cloud verifies your quote, here's what the key fields mean:
+
+- **`success`**: Whether verification completed successfully
+- **`verified`**: Whether the quote passed cryptographic verification (1 = true, 0 = false)
+- **`checksum`**: Unique identifier for this quote (SHA256 hash)
+- **`quote.header.tee_type`**: Either "TEE_SGX" or "TEE_TDX" 
+- **`quote.body.mrtd`**: Measurement of the trusted domain (like a fingerprint of your TD)
+- **`quote.body.rtmr0-3`**: Runtime measurements tracking what's loaded in the TD
+- **`quote.body.reportdata`**: Custom data you can include in the quote (64 bytes)
+- **`quote.header.user_data`**: Additional user data (20 bytes)
+
+## Common Use Cases
+
+### Securing Your Application
+
+1. Generate a quote in your SGX/TDX application
+2. Upload it to Phala Cloud for verification and storage
+3. Check that `verified: true` in the response
+4. Share the `checksum` or web report URL with others
+
+### Building Trust with Remote Parties
+
+1. Store and verify quotes from remote parties using Phala Cloud
+2. Check the `mrtd` value matches expected measurements
+3. Validate `reportdata` contains expected challenge/nonce
+4. Share verification results through web reports
+
+## Error Handling
+
+If Phala Cloud's verification fails, you'll receive different HTTP status codes depending on the issue:
+
+### HTTP 400 Bad Request (Input Validation)
+
+This occurs when there are problems with the request format or hex string validation:
+
+```json
+{
+  "detail": "Either 'file' or 'hex' must be provided"
+}
+```
+
+```json
+{
+  "detail": "Invalid JSON hex: Invalid hex string: non-hexadecimal number found in fromhex() arg at position 0"
+}
+```
+
+**Common causes:**
+- **Missing input**: No file or hex data provided
+- **Invalid hex format**: Hex string contains non-hexadecimal characters
+- **Empty hex string**: Hex field is empty or only contains whitespace
+- **Both inputs provided**: Both file and hex data sent in same request
+
+### HTTP 422 Unprocessable Entity (Most Common)
+
+This usually means the quote data cannot be processed as a valid attestation quote:
+
+```json
+{
+  "detail": "Invalid quote: malformed quote structure"
+}
+```
+
+**Common causes:**
+- **Wrong file type**: Uploaded a text file, JSON, or other non-binary format instead of raw quote binary
+- **Invalid hex data**: Hex string doesn't represent valid quote data
+- **Incomplete quote**: File was truncated during generation or transfer
+- **Invalid quote format**: Quote doesn't follow Intel SGX/TDX DCAP specification
+- **Missing certificate data**: Quote lacks required certificate chains for verification
+- **Corrupted data**: Binary data was modified or corrupted during transfer
+
+### HTTP 400 Bad Request (Verification Failed)
+
+This occurs when the quote is parseable but fails cryptographic verification:
+
+```json
+{
+  "detail": "Quote verification failed"
+}
+```
+
+**Common causes:**
+- **Platform not genuine**: Quote didn't come from a real Intel SGX/TDX platform
+- **Revoked certificates**: Platform certificates have been revoked by Intel
+- **Outdated TCB**: Platform firmware (TCB) is out of date
+- **Invalid signatures**: Cryptographic signatures don't match
+
+## Troubleshooting Guide
+
+### 1. Verify Your Quote Data
+
+**For File Uploads:**
+```bash
+# TDX quotes are typically 4-6KB
+# SGX quotes vary but usually 2-8KB
+ls -la quote.bin
+
+# Should start with binary data, not text
+hexdump -C quote.bin | head -5
+```
+
+**For Hex Strings:**
+```bash
+# Convert file to hex string for testing
+cat quote.bin | hexdump -v -e '/1 "%02x"' > quote.hex
+echo "Quote size: $(wc -c < quote.hex) hex characters"
+
+# Test hex format
+echo "0x$(cat quote.hex)"  # With 0x prefix
+cat quote.hex             # Without prefix
+```
+
+**Validate Hex String:**
+```python
+# Python validation
+import binascii
+
+def validate_hex(hex_str):
+    try:
+        # Remove 0x prefix if present
+        if hex_str.startswith('0x'):
+            hex_str = hex_str[2:]
+        
+        # Convert to bytes
+        data = bytes.fromhex(hex_str)
+        print(f"Valid hex: {len(data)} bytes")
+        return True
+    except ValueError as e:
+        print(f"Invalid hex: {e}")
+        return False
+
+validate_hex("0x48656c6c6f")  # Valid
+validate_hex("invalid_hex")   # Invalid
+```
+
+### 2. Input Format Issues
+
+**Common hex string problems:**
+
+- **Invalid characters**: Only `0-9`, `a-f`, `A-F` allowed
+  ```bash
+  # Good: 48656c6c6f
+  # Bad:  48g56c6c6f (contains 'g')
+  ```
+
+- **Odd length**: Hex strings must have even number of characters
+  ```bash
+  # Good: 48656c6c6f20 (12 chars = 6 bytes)
+  # Bad:  48656c6c6f2   (11 chars = invalid)
+  ```
+
+- **Wrong Content-Type**: Make sure headers match your input format
+  ```bash
+  # For JSON hex
+  curl -H "Content-Type: application/json" -d '{"hex":"..."}'
+  
+  # For form hex
+  curl -H "Content-Type: application/x-www-form-urlencoded" -d "hex=..."
+  
+  # For file upload  
+  curl -H "Content-Type: multipart/form-data" -F "file=@quote.bin"
+  ```
+
+### 3. Test Quote Generation
+
+If you're getting consistent 422 errors:
+
+1. **Verify your quote generation code** produces valid DCAP quotes
+2. **Check certificate inclusion** - quotes must contain certificate chains
+3. **Test with known-good quotes** from Intel samples first
+4. **Validate hex conversion** - ensure binary-to-hex conversion is correct
+
+### 4. Platform Issues
+
+For 400 errors after successful upload:
+
+1. **Update platform firmware** to latest TCB version
+2. **Check platform registration** with Intel PCS
+3. **Verify SGX/TDX is properly enabled** in BIOS
+4. **Test quote generation** in a controlled environment
+
+### 5. Network/Transfer Issues
+
+```bash
+# Verify file wasn't corrupted during transfer
+md5sum quote.bin  # Should match source file hash
+
+# Test with curl verbose output
+curl -v -X POST "https://cloud-api.phala.network/api/v1/attestations/verify" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@quote.bin"
+```
+
+### 6. Getting Help
+
+If problems persist:
+
+1. **Check quote size**: `stat quote.bin` (should be reasonable size, not 0 bytes)
+2. **Verify binary format**: Quote should start with version bytes, not ASCII text
+3. **Test minimal example**: Try with Intel's sample quotes first
+4. **Share error details**: Include the exact error message and file size when reporting issues
+
+## Best Practices
+
+### File Handling
+- Always transfer quote files in **binary mode**
+- Verify file integrity with checksums after transfer
+- Test quote generation with Intel's development tools first
+
+### Error Recovery
+- Implement retry logic for network timeouts
+- Cache verification results to avoid repeated uploads
+- Log detailed error information for debugging
+
+### Development Workflow
+1. **Test locally** with Intel's DCAP verification tools first
+2. **Verify quote format** before uploading to Phala Cloud
+3. **Use staging environment** to test integration
+4. **Monitor verification results** and handle failures gracefully
+
+## Next Steps
+
+- Read the [Detailed API Reference](/phala-cloud/phala-cloud-api/attestations) for complete field descriptions
+- Check out examples for your specific SGX/TDX platform
+- Learn about integrating Phala Cloud's remote attestation service into your application workflow

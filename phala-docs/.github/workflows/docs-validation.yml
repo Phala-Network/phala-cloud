@@ -1,0 +1,104 @@
+name: 📚 Documentation Validation
+
+on:
+  push:
+    branches: [ main, mintlify ]
+  pull_request:
+    branches: [ main, mintlify ]
+  workflow_dispatch:
+
+jobs:
+  validate-docs:
+    name: 🔍 Validate Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml requests
+
+      - name: 🔧 Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: 📦 Install Node dependencies
+        run: |
+          npm install -g markdownlint-cli2
+
+
+      - name: 🏗️ Validate docs.json structure
+        run: |
+          echo "::group::🔍 Validating docs.json and redirects"
+          python3 .scripts/validate-redirects.py
+          echo "::endgroup::"
+
+
+      - name: 🔗 Check internal links
+        run: |
+          echo "::group::🔗 Checking internal links"
+          mkdir -p tmp
+          python3 .scripts/extract_links.py
+          python3 .scripts/check_links.py
+          echo "::endgroup::"
+
+      - name: ✨ Lint Markdown files
+        run: |
+          echo "::group::✨ Linting Markdown files"
+          markdownlint-cli2 --config .markdownlint.yaml "**/*.{md,mdx}" || true
+          echo "::endgroup::"
+
+      - name: 📊 Generate validation report
+        if: always()
+        run: |
+          echo "## 📚 Documentation Validation Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Validation Steps Completed:" >> $GITHUB_STEP_SUMMARY
+          echo "- docs.json structure and redirects" >> $GITHUB_STEP_SUMMARY
+          echo "- Internal links verification" >> $GITHUB_STEP_SUMMARY
+          echo "- Markdown linting" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📈 Statistics:" >> $GITHUB_STEP_SUMMARY
+          echo "- **MDX Files**: $(find . -name '*.mdx' | wc -l)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Navigation Pages**: $(python3 -c 'import json; config=json.load(open("docs.json")); print("N/A - see logs for count")')" >> $GITHUB_STEP_SUMMARY
+          echo "- **Redirects**: $(python3 -c 'import json; config=json.load(open("docs.json")); print(len(config.get("redirects", [])))')" >> $GITHUB_STEP_SUMMARY
+
+  # Optional: Test production redirects (only on main branch)
+  test-production-redirects:
+    name: 🌐 Test Production Redirects
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: validate-docs
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: 🧪 Test redirects against production
+        run: |
+          echo "::group::🌐 Testing production redirects"
+          if [ -f .scripts/test-redirects.py ]; then
+            python3 .scripts/test-redirects.py || true
+          else
+            echo "Production redirect test script not found, skipping..."
+          fi
+          echo "::endgroup::"

@@ -1,0 +1,41 @@
+---
+description: This guide will help you deploy or fine-tune AI models with hardware-level security using TEE-protected GPUs on Phala Cloud.
+title: GPU TEE
+---
+
+## Overview
+
+If the [Confidential AI API](/phala-cloud/confidential-ai/confidential-model/confidential-ai-api) and [Model Template](/phala-cloud/confidential-ai/confidential-gpu/model-template) do not meet your needs, you can use GPU TEE to rent dedicated GPU servers with TEE protection for custom model deployment, inference, or fine-tuning.
+
+GPU TEE provides you GPU hardware with `H100/H200/B200` series, NVIDIA Driver `570.133.20` and CUDA `12.8` installed.
+
+Go to the [GPU TEE](https://cloud.phala.network/dashboard/gpu-tee) tab in your Phala Cloud dashboard to get started.
+
+## Available hardware specifications
+
+Firstly, choose GPU types from these TEE-enabled GPUs.
+
+<Frame caption="GPU Device Selection">
+  <img src="/images/confidential-ai/confidential-gpu/gpu-tee-01.png" />
+</Frame>
+
+Customize your setup with:
+
+- **Cores and RAM**: CPU cores and RAM allocation
+- **Storage**: SSD storage for datasets and models
+- **Location**: Choose from available data center regions
+- **Scaling**: Deploy 1, or up to 8 GPUs per instance
+
+Once you select the GPU type, you can choose the GPU Count, usually between 1 to 8 GPUs, depending on your workload needs.
+
+Next, choose commitment period option from options, usually from 6 months, 3 months, 1 month, or on-demand based on your project duration.
+
+## Review & submit order
+
+Check the Price Summary section to confirm your hardware specs and cost and Click **Submit Order**.
+
+<Frame caption="Order Review">
+  <img src="/images/confidential-ai/confidential-gpu/gpu-tee-02.png" />
+</Frame>
+
+After submitting, our team will contact you soon to confirm your setup and provide access credentials.

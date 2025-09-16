@@ -1,0 +1,15 @@
+---
+description: Cross-chain bridge for transferring assets between Phala and other blockchains.
+title: Supported Assets
+---
+
+
+An asset id of type _uint32_ is allocated for each registered asset. Each asset except PHA on Khala/Phala will have an unique asset id. You can use [pallet-assets](https://github.com/paritytech/substrate/tree/master/frame/assets) to transfer asset to any accounts within Khala and Phala Network.
+
+* Assets on the Khala network
+
+Foreign assets are managed by pallet-assets, supported assets can be found at [here](https://polkadot.js.org/apps/?rpc=wss%3A%2F%2Fkhala-api.phala.network%2Fws#/assets). On the Khala network, PHA can be transferred between parachain and Ethereum, and ZLK can be transferred to Moonriver and vice versa.
+
+* Assets on the Phala network
+
+Foreign assets are managed by pallet-assets, supported assets can be found at [here](https://polkadot.js.org/apps/?rpc=wss%3A%2F%2Fapi.phala.network%2Fws#/assets). On the Phala network, only PHA can be transferred between parachain and Ethereum.

@@ -1,0 +1,49 @@
+---
+description: Cross-chain bridge for transferring assets between Phala and other blockchains.
+title: Overview
+---
+
+
+## What is SubBridge? <a href="#what-is-subbridge" id="what-is-subbridge"></a>
+
+SubBridge is the cross-chain router of the parachains, bridging Dotsama and Ethereum and assets in other ecosystems.
+
+SubBridge is based on the “XCM + EVM-Bridges cross-chain protocol” to realize cross-chain transmission of assets and information. Currently, ChainBridge and SygmaBridge are integrated as our EVM-Bridge solution.
+
+In August 2021, Phala launched the first parachain-Ethereum smart contract bridge on Substrate, which can support the mutual transfer of parachain assets between Ethereum and parachain. In the future, parachains in the Substrate ecosystem can integrate and use SubBridge to achieve asset transaction and messages migration with other ecosystems (e.g., EVM) , and promote the prosperity of the Polkadot’s ecosystem.
+
+## SygmaBridge has been integrated into SubBridge <a href="#sygma-launch" id="sygma-launch"></a>
+
+### About Sygma protocol
+
+[Sygma](https://buildwithsygma.com) is a multi-purpose interoperability layer that supports developers in building cross-chain dApps. Sygma now has supported both EVM chains and Substrate chains. [The Substrate pallet](https://github.com/sygmaprotocol/sygma-substrate-pallets) is developed by the Sygma team and Phala team together, which is fully compatible with XCM protocol, bringing the maximum flexibility for the Substrate parachains.
+
+### What are the differences between SygmaBridge and ChainBridge?
+
+SygmaBridge is the updated version of ChainBridge, which use an MPC-based relayer forward messages between chains, while ChainBridge is based on multiple voters confirming crosschain transaction on destchain. Compared with ChainBridge, SygmaBridge distinctly decreased the fee cost, because now we only need to send one transaction to destchain to complete the whole operation.
+
+**Destination of using SygmaBridge**
+
+Since currently both SygmaBridge and ChainBridge exist, users can choose which bridge to use, even SubBridge UI always uses SygmaBridge for PHA transfer. The difference between using ChainBridge and SygmaBridge only detdetermd by the way we construct the `MultiLocation` of the destination.
+
+* For using SygmaBridge
+
+```rust
+MultiLocation::new(1, X4(Parachain(2035), GeneralKey('sygma'), GeneralIndex(ethereumChainId), GeneralKey(recipientAddress))
+```
+
+* For using ChainBridge
+
+```rust
+MultiLocation::new(1, X4(Parachain(2035), GeneralKey('cb'), GeneralIndex(ethereumChainId), GeneralKey(recipientAddress))
+```
+
+## Security Concern <a href="#security-concern" id="security-concern"></a>
+
+The security of the SubBridge is of prior concern. In terms of EVM compatibility, SubBridge has its own solution with the following security advantages:
+
+* SubBridge has passed an audit by Certik, a top blockchain security company (Per the audit report, there are no critical or major errors or known vulnerabilities; some minor concerns have been solved or addressed);
+* Admin takes multi-signature management to guarantee asset security;
+* SubBridge consists of several relayers, the operation is guaranteed when there is a single node out of service.
+
+Read the [following section](/network/references/subbridge/technical-details#code-auditing) for more details on code auditing.

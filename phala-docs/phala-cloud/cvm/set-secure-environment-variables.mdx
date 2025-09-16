@@ -1,0 +1,50 @@
+---
+description: Create and manage Confidential Virtual Machines (CVMs) on Phala Cloud.
+title: Secure Environment Variables
+---
+
+When your application requires environment variables, **never set them directly in the Docker Compose file**. Instead, use the **Encrypted Secrets** section to ensure your sensitive data remains secure.
+
+Encrypted secrets are a list of key-value pairs that are passed into the docker compose file in the
+same way as the variables defined in `.env` files. You should first define the encrypted secrets in
+the Phala Cloud UI (or CLI), and then reference them in the docker compose file using the `${KEY}`
+syntax.
+
+A typical use case is pass secrets to your containers via environment variables, using the
+`environment:` docker compose directive.
+
+1.  **Declare Environment Variables in Docker Compose**
+
+    Define your environment variables in the Docker Compose file using variable substitution:
+
+    ```yaml
+    services:
+      your-service:
+        environment:
+          - OPENAI_API_KEY=${OPENAI_API_KEY}
+          - TWITTER_API_KEY=${TWITTER_API_KEY}
+    ```
+
+    > **Important:** Do not use double quotation marks around variables:\
+    > ❌ `OPENAI_API_KEY="${OPENAI_API_KEY_IN_ENV}"`
+2.  **Set Values in Encrypted Secrets**
+
+    Configure the actual values in the **Encrypted Secrets** section of the Phala Cloud UI.
+
+<Frame caption="Encrypted Secrets configuration interface">
+    <img src="/images/cloud-set-env.png" alt="Setting environment variables in Encrypted Secrets" />
+</Frame>
+
+<Note>
+The encrypted secrets don't have to be defined in the same name as the environment variables in the
+docker compose file. You can define them in the UI with any name you want, and then reference them
+in the docker compose file using the `${KEY}` syntax.
+
+Besides the environment variables, you can also reference the encrypted secrets in any other place
+like the `command:` docker compose directive. However, you should be careful to not leak the secret
+values in the logs or other places.
+
+Learn more about Docker .env files [here](https://docs.docker.com/compose/how-tos/environment-variables/set-environment-variables/).
+</Note>
+
+We recommend using **Text** type for environment variables if you have many variables to set.

@@ -1,0 +1,113 @@
+---
+description: This guide will walk you through deploying a TEE app step by step.
+title: CVM Deployment
+---
+
+
+<Note type="warning">
+Make sure you have gone through the [Sign-up for Cloud Account](/phala-cloud/getting-started/sign-up-for-cloud-account) section before continuing.
+</Note>
+
+## Step 1 - Create a CVM
+
+<Frame caption="Create CVM">
+    <img src="/images/create-cvm-01.png" alt="" />
+</Frame>
+
+Click the **Deploy** -> **docker-compose.yml** in the top-right corner of the cloud [dashboard](https://cloud.phala.network/dashboard). Once there, you need to:
+
+1. Set your application **Name** (e.g., "hello-world")
+2. Paste the config file to describe your service in docker compose format as docker compose file. In this tutorial, we deploy a basic jupyter-notebook without any code change.
+
+    <Frame caption="Docker Compose File">
+        <img src="/images/create-cvm-02.png" alt="" />
+    </Frame>
+ 
+    ```yaml
+    services:
+      jupyter:
+        image: quay.io/jupyter/base-notebook
+        ports:
+          - 8080:8888
+        volumes:
+          - /var/run/tappd.sock:/var/run/tappd.sock
+        environment:
+          - GRANT_SUDO=yes
+        user: root
+        command: "start-notebook.sh --NotebookApp.token=${TOKEN}"
+    ```
+
+3.  Choose the **Computing Resources** plan. There are some preset plans available, or you can customize them for more flexibility. In **Node & Image** section, we recommend choosing **dstack-dev-** as guest image if you are deploying for testing. It will enable the debug feature that you can login to the virtual machine in the future.
+
+
+    <Frame caption="Compute Resources">
+        <img src="/images/create-cvm-03.png" alt="" />
+    </Frame>
+
+4.  (Optional) Set **Encrypted Secrets**. Encrypted Secrets are variables that can be referenced in your docker compose file. It's end-to-end encrypted between you and the app you deployed. In this guide, we set the environment variable **`TOKEN`** to **`phala`** for testing. Later you will use this token to login to the notebook. Note that `TOKEN` is referenced in the `command` field in the compose file.
+
+    <Frame caption="Encrypted Secrets">
+        <img src="/images/create-cvm-04.png" alt="" />
+    </Frame>
+
+5.  Click the **Deploy** button to start the deployment process. You will need to wait for a few minutes as the cloud sets everything up. In the meantime, you can enter the CVM details page by clicking the CVM card, and choose **Logs** > **serial** to view the OS log outputs. Note this is the logs of CVM, not your application logs.
+
+    <div align="center"><Frame caption="The CVM is starting">
+        <img src="/images/create-cvm-05.png" alt="" />
+    </Frame></div>
+
+    <Frame caption="View CVM serial logs while booting">
+        <img src="/images/create-cvm-06.png" alt="" />
+    </Frame>
+
+6.  After the deployment is complete, navigate through **CVM Details → Network** to see the public endpoint of your application.
+
+
+    <Frame caption="App Endpoints">
+        <img src="/images/create-cvm-07.png" alt="" />
+    </Frame>
+
+7. You can use these endpoints to access the application if you have service serve on. You will find the endpoint is composed of **App ID** and **Port**. In this example:
+   * Endpoint: `https://170416fadd627b0d6bc742df4c8494958bfdfed6-8090.dstack-prod7.phala.network`
+   * It contains the following components:
+     * `App ID`: `170416fadd627b0d6bc742df4c8494958bfdfed6`
+     * `Port`: `8080`
+     * `Gateway Domain`: `dstack-prod7.phala.network`
+   * The reason why we have a port number **8080** here is that the default port of jupyter notebook is 8888, but we configure the port mapping to 8080 in the docker compose file. You can check the docker compose file in **Compose File** tab and you will find **8080:8888** in the Compose File content.
+8.  Access the endpoint. You will see the jupyter notebook interface. Type the token you set in the previous step and you will be able to access the jupyter notebook.
+
+    <Frame caption="Access your app">
+        <img src="/images/create-cvm-08.png" alt="jupyter-notebook" />
+    </Frame>
+
+9.  View the logs of your application. You can switch to **Containers** tab and click **View Logs** to view container logs.
+
+    <Frame>
+        <img src="/images/create-cvm-09.png" />
+    </Frame>
+
+The logs of the container **jupyter** also can be found in above image.
+
+## Step2 - Verify TEE Proof
+
+1.  Check the default RA Report. We provide a default [Remote Attestation Report](https://sgx101.gitbook.io/sgx101/sgx-bootstrap/attestation#remote-attestation-primitives) (also known as TEE Proof), which is displayed in the CVM detailed page. To view the entire report, click **View Details → Attestations**.\
+
+    <Frame caption="Attestations">
+        <img src="/images/create-cvm-10.png" alt="" />
+    </Frame>
+
+2.  By clicking the **Check Attestation** button in the certificate chain section, you will be redirected to the [TEE Proof Explorer](https://proof.t16z.com/), where you can verify the quote. You can share this quote with anyone, as it serves as proof that your program is running inside a genuine TEE.\
+
+    <Frame caption="Check Attestation">
+        <img src="/images/create-cvm-11.png" alt="" />
+    </Frame>
+
+    You can also request customized Remote Attestation reports programmably via API here: [Generate Remote Attestation](/phala-cloud/networking/generate-ra-report).
+
+## Next Steps
+
+Now that you've deployed your first confidential application, you can:
+
+1. **Deploy your existing Docker applications** to TEE - check out Phala Cloud [User Guides](/phala-cloud/getting-started/overview)
+2. **Build an AI agent** in minutes and deploy in one-click with the [Eliza Agent Builder](https://cloud.phala.network/eliza) - check out the [tutorial](https://phala.network/posts/guide-to-exploring-the-phala-cloud-agent-builder) to get started
+3. **Explore advanced features** like debugging, log management, and scaling your applications

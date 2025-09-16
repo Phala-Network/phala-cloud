@@ -1,0 +1,41 @@
+---
+description: Deploy confidential applications with Dstack - a TEE-based infrastructure
+  platform.
+icon: book-open
+title: Overview
+---
+
+> [Phala Cloud](/) is the managed version of dstack deployment that enables developers to deploy programs to CVM (Confidential VM), and to follow the security best practices by default.
+
+The Dstack SDK is designed to simplify the steps for developers to deploy programs to CVM (Confidential VM), and to follow the security best practices by default. The main features include:
+
+* Convert any docker container to a CVM image to deploy on supported TEEs
+* Remote Attestation API and a chain-of-trust visualization on Web UI
+* Automatic RA-HTTPS wrapping with content addressing domain on `0xABCD.dstack.host`
+* Decouple the app execution and state persistent from specific hardware with decentralized Root-of-Trust
+
+Now we use an example to show how dstack works. We assume user application constitutes multiple docker container services, and is configured with tools like docker compose.
+
+<Frame>
+    <img src="/images/dstack-cvm (1).png" alt="" width="362" />
+</Frame>
+
+As the architecture shown below, multiple docker containers can run inside one single CVM. The underlying infrastructure we provide is to make sure the application is secure and verifiable.
+
+The container uses `dstack` to communicate with the underlying `tappd`. `dstack` is the component that is responsible to setup the CVM environment, do remote attestation, and manage the whole lifecycle of docker containers, running inside CVM.
+
+`tappd` communicates with a decentralized Key Management Service (KMS), that derives deterministic encryption keys for the application. The keys will be utilized to encrypt storage specific to the application and to protect the its data integrity. With KMS operating independently from any specific TEE instance, your applications avoid vendor lock-in and can be securely migrated between different hardware environments without any data loss.
+
+<Frame>
+    <img src="/images/dstack-cvm-arch.png" />
+</Frame>
+
+## Verify If An Application is Running Inside a TEE
+
+When the application launched successfully, the RA Report can be exported with specific interfaces provide `dstack`. The RA Report is bound with the application runtime information, such as the docker image hash, the initial arguments passed to the container, and the environment variables. In addition to signature signed by the key hardcoded in the TEE hardware, the RA report will also be signed with a specific key that bond to the application. Anyone can verify the report with tools supports TEE RA report verification. For applications deployed on Phala Intel TDX workers, their RA report will default be exported and verified, a [TEE Attestation Explorer](https://ra-quote-explorer.vercel.app/) is provided for people to check.
+
+## Conclusion
+
+Now that there is an introduction to the Dstack, we can begin the fun part of building on the SDK. There are a few ways to get started depending on your starting point. Let's take a look at the options in [Getting Started](/phala-cloud/getting-started/overview).
+
+Or if you are interested in building on Phala Cloud without runing Dstack at your own hardware, you can check out the [Phala Cloud](/) page.

@@ -152,3 +152,15 @@ export {
   type GetWorkspaceParameters,
   type GetWorkspaceReturnType,
 } from "./workspaces/get_workspace";
+
+export {
+  listInstanceTypes,
+  safeListInstanceTypes,
+  type ListInstanceTypesParameters,
+  type ListInstanceTypesReturnType,
+  PaginatedInstanceTypesSchema,
+  InstanceTypeSchema,
+  type PaginatedInstanceTypes,
+  type InstanceType,
+  type ListInstanceTypesRequest,
+} from "./list-instance-types";

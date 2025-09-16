@@ -1,0 +1,44 @@
+repos:
+  # Built-in hooks for basic file validation
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^.*\.(md|mdx)$
+      - id: end-of-file-fixer
+        exclude: ^.*\.(md|mdx)$
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-json
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # JSON formatting and validation
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: pretty-format-json
+        args: [--autofix, --indent=2]
+        files: ^docs\.json$
+
+  # Local hooks for Mintlify-specific validation
+  - repo: local
+    hooks:
+      # Validate docs.json structure and redirects
+      - id: validate-mintlify-config
+        name: Validate Mintlify docs.json
+        entry: python3
+        args: [.scripts/validate-redirects.py]
+        language: system
+        files: ^docs\.json$
+        always_run: false
+        pass_filenames: false
+
+
+  # Markdown linting (using markdownlint-cli2)
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.10.0
+    hooks:
+      - id: markdownlint-cli2
+        args: [--config, .markdownlint.yaml]
+        files: \.mdx?$

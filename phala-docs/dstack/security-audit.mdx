@@ -1,0 +1,99 @@
+---
+title: "Dstack Security Audit"
+description: "Third-party security audit of dstack by zkSecurity covering system architecture, TEE integration, and production hardening"
+icon: "shield-check"
+---
+
+# Dstack Security Audit
+
+Phala Network engaged zkSecurity to conduct a comprehensive security audit of the dstack project in May 2025. This audit provides an independent assessment of dstack's security architecture, implementation quality, and production readiness.
+
+## Audit Overview
+
+**Auditor:** zkSecurity
+**Engagement Period:** May 26 - June 13, 2025
+**Audit Team:** Two security consultants
+**Report Date:** May 26, 2025
+
+### Scope
+
+The audit covered two primary areas:
+
+#### Low-Level Libraries and Tooling
+- **ra-tls and ra-rpc**: Remote attestation TLS implementation
+- **guest-agent**: In-CVM service for key derivation and attestation
+- **dstack-util**: CLI tools including full-disk encryption functionality
+
+#### Image-Related Files
+- **Yocto BitBake recipes**: Production image build configurations
+- **Base initialization scripts**: System setup and hardening
+- **Production vs development images**: Security difference analysis
+
+### Methodology
+
+The audit followed a two-phase approach:
+
+**Phase 1: Core Security Analysis**
+- Understanding attacker models and trust boundaries
+- Reviewing RATLS (Remote Attestation TLS) protocol implementation
+- Analyzing CVM interfaces and access controls
+- Evaluating privilege escalation strategies
+
+**Phase 2: System Image Analysis**
+- Reviewing build reproducibility
+- Validating measurement integrity
+- Analyzing production image hardening
+- Assessing dm-verity integration
+- Evaluating host operator attack vectors
+
+## Key Findings Summary
+
+The audit identified **12 findings** across different risk levels:
+
+| Risk Level | Count | Examples |
+|------------|-------|----------|
+| **High** | 1 | VMM currently trusted in OVMF build |
+| **Medium** | 6 | Terminal binaries in production, symbolic link vulnerabilities |
+| **Low** | 3 | Incomplete measurement checks, documentation gaps |
+| **Informational** | 2 | Production deployment guidance, design documentation |
+
+### Critical Finding: OVMF Configuration
+
+The highest-severity finding identified that dstack was using OVMF Configuration A, which trusts the Virtual Machine Manager (VMM). The audit recommended moving to Configuration B, which places the VMM outside the Trusted Computing Base (TCB).
+
+**Impact:** This configuration choice affects the fundamental trust model of the TEE environment.
+
+**Status:** ✅ **Addressed** - Dstack team implemented the recommended OVMF Configuration B.
+
+## Implementation Status
+
+The dstack team has been proactive in addressing audit findings:
+
+✅ **Fixed**: OVMF configuration upgraded to secure mode
+✅ **Fixed**: Production image hardening improvements
+✅ **Fixed**: Symbolic link vulnerability patched
+✅ **Fixed**: Terminal binary removal from production
+✅ **Enhanced**: Documentation and security guides added
+
+## Access Full Report
+
+<Card title="Download Complete Audit Report" icon="shield-check" href="/images/audits/dstack-audit.pdf">
+  Access the complete 39-page security audit report with detailed technical findings, recommendations, and implementation guidance.
+</Card>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Dstack Overview" href="/dstack/overview">
+    Learn about dstack's architecture and core concepts
+  </Card>
+  <Card title="Security Architecture" href="/phala-cloud/security-and-privacy/security-architecture">
+    Understand Phala Cloud's security model
+  </Card>
+  <Card title="Attestation Guide" href="/phala-cloud/attestation/overview">
+    Deep dive into TEE attestation mechanisms
+  </Card>
+  <Card title="Production Checklist" href="/phala-cloud/production-checklist">
+    Security checklist for production deployments
+  </Card>
+</CardGroup>
