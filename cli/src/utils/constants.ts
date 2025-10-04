@@ -1,14 +1,14 @@
 // API URLs, CLOUD_API_URL now deprecated, use sdk instead
-export const CLOUD_URL = process.env.CLOUD_URL || "https://cloud.phala.network";
+export const CLOUD_URL = process.env.CLOUD_URL || 'https://cloud.phala.network';
 
 // CLI Version
-export const CLI_VERSION = "0.0.1";
+export const CLI_VERSION = '0.0.1';
 
 // Docker Hub API
-export const DOCKER_HUB_API_URL = "https://hub.docker.com/v2";
+export const DOCKER_HUB_API_URL = 'https://hub.docker.com/v2';
 
 // TEE Simulator
-export const TEE_SIMULATOR = "phalanetwork/tappd-simulator:latest";
+export const TEE_SIMULATOR = 'phalanetwork/tappd-simulator:latest';
 
 // Default resource configurations
 export const DEFAULT_VCPU = 1;
@@ -16,7 +16,7 @@ export const DEFAULT_MEMORY = 2048; // MB
 export const DEFAULT_DISK_SIZE = 40; // GB
 
 // Default TEEPod Image
-export const DEFAULT_IMAGE = "dstack-0.3.6";
+export const DEFAULT_IMAGE = 'dstack-0.3.6';
 
 export const DOCKER_COMPOSE_ELIZA_V2_TEMPLATE = `version: '3.8'
 services:
@@ -76,4 +76,4 @@ services:
 {{#each envVars}}      - {{{this}}}
 {{/each}}
     restart: always
-`;
+`
