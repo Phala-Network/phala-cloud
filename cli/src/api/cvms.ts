@@ -31,14 +31,10 @@ import { getApiKey } from '@/src/utils/credentials';
  * @returns List of CVMs
  */
 export async function getCvms(): Promise<CvmInstance[]> {
-  try {
-    const apiKey = getApiKey();
-    const apiClient = createClient({ apiKey: apiKey });
-    const response = await apiClient.get<CvmInstance[]>('cvms?user_id=0');
-    return z.array(cvmInstanceSchema).parse(response);
-  } catch (error) {
-    throw new Error(`Failed to get CVMs: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  const apiKey = getApiKey();
+  const apiClient = createClient({ apiKey: apiKey });
+  const response = await apiClient.get<CvmInstance[]>('cvms?user_id=0');
+  return z.array(cvmInstanceSchema).parse(response);
 }
 
 /**
@@ -80,14 +76,10 @@ export async function checkCvmExists(appId: string): Promise<string> {
  * @returns CVM details
  */
 export async function getCvmByAppId(appId: string): Promise<GetCvmByAppIdResponse> {
-  try {
-    const apiKey = getApiKey();
-    const apiClient = createClient({ apiKey: apiKey });
-    const response = await apiClient.get<GetCvmByAppIdResponse>(`cvms/app_${appId}`);
-    return getCvmByAppIdResponseSchema.parse(response);
-  } catch (error) {
-    throw new Error(`Failed to get CVM by App ID: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  const apiKey = getApiKey();
+  const apiClient = createClient({ apiKey: apiKey });
+  const response = await apiClient.get<GetCvmByAppIdResponse>(`cvms/app_${appId}`);
+  return getCvmByAppIdResponseSchema.parse(response);
 }
 
 /**
@@ -108,14 +100,10 @@ export async function getPubkeyFromCvm(vmConfig: VMConfig): Promise<GetPubkeyFro
  * @returns Network information
  */
 export async function getCvmNetwork(appId: string): Promise<GetCvmNetworkResponse> {
-  try {
-    const apiKey = getApiKey();
-    const apiClient = createClient({ apiKey: apiKey });
-    const response = await apiClient.get<GetCvmNetworkResponse>(`cvms/app_${appId}/network`);
-    return getCvmNetworkResponseSchema.parse(response);
-  } catch (error) {
-    throw new Error(`Failed to get network information for CVM: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  const apiKey = getApiKey();
+  const apiClient = createClient({ apiKey: apiKey });
+  const response = await apiClient.get<GetCvmNetworkResponse>(`cvms/app_${appId}/network`);
+  return getCvmNetworkResponseSchema.parse(response);
 }
 
 /**
@@ -135,7 +123,7 @@ export async function createCvm(vmConfig: VMConfig): Promise<PostCvmResponse> {
       logger.error('API response:', JSON.stringify(error.format(), null, 2));
       throw new Error(`Response validation failed: ${JSON.stringify(error.errors)}`);
     }
-    throw new Error(`Failed to create CVM: ${error instanceof Error ? error.message : String(error)}`);
+    throw error;
   }
 }
 
@@ -145,14 +133,10 @@ export async function createCvm(vmConfig: VMConfig): Promise<PostCvmResponse> {
  * @returns Success status
  */
 export async function startCvm(appId: string): Promise<PostCvmResponse> {
-  try {
-    const apiKey = getApiKey();
-    const apiClient = createClient({ apiKey: apiKey });
-    const response = await apiClient.post<PostCvmResponse>(`cvms/app_${appId}/start`);
-    return postCvmResponseSchema.parse(response);
-  } catch (error) {
-    throw new Error(`Failed to start CVM: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  const apiKey = getApiKey();
+  const apiClient = createClient({ apiKey: apiKey });
+  const response = await apiClient.post<PostCvmResponse>(`cvms/app_${appId}/start`);
+  return postCvmResponseSchema.parse(response);
 }
 
 /**
@@ -161,14 +145,10 @@ export async function startCvm(appId: string): Promise<PostCvmResponse> {
  * @returns Success status
  */
 export async function stopCvm(appId: string): Promise<PostCvmResponse> {
-  try {
-    const apiKey = getApiKey();
-    const apiClient = createClient({ apiKey: apiKey });
-    const response = await apiClient.post<PostCvmResponse>(`cvms/app_${appId}/stop`);
-    return postCvmResponseSchema.parse(response);
-  } catch (error) {
-    throw new Error(`Failed to stop CVM: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  const apiKey = getApiKey();
+  const apiClient = createClient({ apiKey: apiKey });
+  const response = await apiClient.post<PostCvmResponse>(`cvms/app_${appId}/stop`);
+  return postCvmResponseSchema.parse(response);
 }
 
 /**
@@ -177,14 +157,10 @@ export async function stopCvm(appId: string): Promise<PostCvmResponse> {
  * @returns Success status
  */
 export async function restartCvm(appId: string): Promise<PostCvmResponse> {
-  try {
-    const apiKey = getApiKey();
-    const apiClient = createClient({ apiKey: apiKey });
-    const response = await apiClient.post<PostCvmResponse>(`cvms/app_${appId}/restart`);
-    return postCvmResponseSchema.parse(response);
-  } catch (error) {
-    throw new Error(`Failed to restart CVM: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  const apiKey = getApiKey();
+  const apiClient = createClient({ apiKey: apiKey });
+  const response = await apiClient.post<PostCvmResponse>(`cvms/app_${appId}/restart`);
+  return postCvmResponseSchema.parse(response);
 }
 
 /**
@@ -206,14 +182,10 @@ export async function upgradeCvm(appId: string, vmConfig: VMConfig): Promise<Upg
  * @returns Success status
  */
 export async function deleteCvm(appId: string): Promise<boolean> {
-  try {
-    const apiKey = getApiKey();
-    const apiClient = createClient({ apiKey: apiKey });
-    await apiClient.delete(`cvms/app_${appId}`);
-    return true;
-  } catch (error) {
-    throw new Error(`Failed to delete CVM: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  const apiKey = getApiKey();
+  const apiClient = createClient({ apiKey: apiKey });
+  await apiClient.delete(`cvms/app_${appId}`);
+  return true;
 }
 
 /**
@@ -222,14 +194,10 @@ export async function deleteCvm(appId: string): Promise<boolean> {
  * @returns Updated CVM details
  */
 export async function updateCvm(updatePayload: UpdateCvmPayload): Promise<unknown> {
-  try {
-    const apiKey = getApiKey();
-    const apiClient = createClient({ apiKey: apiKey });
-    const response = await apiClient.put(`cvms/app_${updatePayload.app_id}`, updatePayload);
-    return response;
-  } catch (error) {
-    throw new Error(`Failed to update CVM: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  const apiKey = getApiKey();
+  const apiClient = createClient({ apiKey: apiKey });
+  const response = await apiClient.put(`cvms/app_${updatePayload.app_id}`, updatePayload);
+  return response;
 }
 
 /**
@@ -277,31 +245,27 @@ export async function selectCvm(): Promise<string | undefined> {
  * @returns Attestation information
  */
 export async function getCvmAttestation(appId: string): Promise<CvmAttestationResponse> {
+  const apiKey = getApiKey();
+  const apiClient = createClient({ apiKey: apiKey });
+  const response = await apiClient.get<CvmAttestationResponse>(`cvms/app_${appId}/attestation`);
+
+  // Attempt to validate and return the response
   try {
-    const apiKey = getApiKey();
-    const apiClient = createClient({ apiKey: apiKey });
-    const response = await apiClient.get<CvmAttestationResponse>(`cvms/app_${appId}/attestation`);
-    
-    // Attempt to validate and return the response
-    try {
-      return cvmAttestationResponseSchema.parse(response);
-    } catch (validationError) {
-      logger.debug(`Validation error: ${validationError instanceof Error ? validationError.message : String(validationError)}`);
-      
-      // If validation fails, create a normalized response object
-      const normalizedResponse: CvmAttestationResponse = {
-        is_online: Boolean(response?.is_online),
-        is_public: Boolean(response?.is_public),
-        error: typeof response?.error === 'string' ? response.error : null,
-        app_certificates: Array.isArray(response?.app_certificates) ? response.app_certificates : null,
-        tcb_info: response?.tcb_info || null,
-        compose_file: typeof response?.compose_file === 'string' ? response.compose_file : null
-      };
-      
-      return normalizedResponse;
-    }
-  } catch (error) {
-    throw new Error(`Failed to get attestation information: ${error instanceof Error ? error.message : String(error)}`);
+    return cvmAttestationResponseSchema.parse(response);
+  } catch (validationError) {
+    logger.debug(`Validation error: ${validationError instanceof Error ? validationError.message : String(validationError)}`);
+
+    // If validation fails, create a normalized response object
+    const normalizedResponse: CvmAttestationResponse = {
+      is_online: Boolean(response?.is_online),
+      is_public: Boolean(response?.is_public),
+      error: typeof response?.error === 'string' ? response.error : null,
+      app_certificates: Array.isArray(response?.app_certificates) ? response.app_certificates : null,
+      tcb_info: response?.tcb_info || null,
+      compose_file: typeof response?.compose_file === 'string' ? response.compose_file : null
+    };
+
+    return normalizedResponse;
   }
 }
 
@@ -334,18 +298,12 @@ export interface ResizeCvmPayload {
  * Get CVM compose configuration
  */
 export async function getCvmComposeConfig(cvmId: string): Promise<CvmComposeConfig> {
-  try {
-    const apiKey = getApiKey();
-    const apiClient = createClient({ apiKey: apiKey });
-    const response = await apiClient.get<CvmComposeConfig>(
-      `cvms/${cvmId}/compose`
-    );
-    return cvmComposeConfigSchema.parse(response);
-  } catch (error) {
-    throw new Error(
-      `Failed to get CVM compose config: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
+  const apiKey = getApiKey();
+  const apiClient = createClient({ apiKey: apiKey });
+  const response = await apiClient.get<CvmComposeConfig>(
+    `cvms/${cvmId}/compose`
+  );
+  return cvmComposeConfigSchema.parse(response);
 }
 
 /**
@@ -358,47 +316,37 @@ export async function replicateCvm(
     encrypted_env?: string;
   }
 ): Promise<ReplicateCvmResponse> {
-  try {
-    const apiKey = getApiKey();
-    const apiClient = createClient({ apiKey: apiKey });
-    const response = await apiClient.post<ReplicateCvmResponse>(
-      `cvms/${appId}/replicas`,
-      payload
-    );
-    return replicateCvmResponseSchema.parse(response);
-  } catch (error) {
-    throw new Error(
-      `Failed to replicate CVM: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
+  const apiKey = getApiKey();
+  const apiClient = createClient({ apiKey: apiKey });
+  const response = await apiClient.post<ReplicateCvmResponse>(
+    `cvms/${appId}/replicas`,
+    payload
+  );
+  return replicateCvmResponseSchema.parse(response);
 }
 
 export async function resizeCvm(
-  appId: string, 
-  vcpu?: number, 
-  memory?: number, 
-  diskSize?: number, 
+  appId: string,
+  vcpu?: number,
+  memory?: number,
+  diskSize?: number,
   allowRestart?: number
 ): Promise<boolean> {
-  try {
-    const apiKey = getApiKey();
-    const apiClient = createClient({ apiKey: apiKey });
-    // Only include defined parameters in the payload
-    const resizePayload: Record<string, unknown> = {};
-    
-    if (vcpu !== undefined) resizePayload.vcpu = vcpu;
-    if (memory !== undefined) resizePayload.memory = memory;
-    if (diskSize !== undefined) resizePayload.disk_size = diskSize;
-    if (allowRestart !== undefined) resizePayload.allow_restart = allowRestart;
-    
-    // Check if any parameters were provided
-    if (Object.keys(resizePayload).length === 0) {
-      throw new Error('At least one resource parameter must be provided');
-    }
+  const apiKey = getApiKey();
+  const apiClient = createClient({ apiKey: apiKey });
+  // Only include defined parameters in the payload
+  const resizePayload: Record<string, unknown> = {};
 
-    await apiClient.patch(`cvms/app_${appId}/resources`, resizePayload);
-    return true;
-  } catch (error) {
-    throw new Error(`Failed to resize CVM: ${error instanceof Error ? error.message : String(error)}`);
+  if (vcpu !== undefined) resizePayload.vcpu = vcpu;
+  if (memory !== undefined) resizePayload.memory = memory;
+  if (diskSize !== undefined) resizePayload.disk_size = diskSize;
+  if (allowRestart !== undefined) resizePayload.allow_restart = allowRestart;
+
+  // Check if any parameters were provided
+  if (Object.keys(resizePayload).length === 0) {
+    throw new Error('At least one resource parameter must be provided');
   }
+
+  await apiClient.patch(`cvms/app_${appId}/resources`, resizePayload);
+  return true;
 } 
