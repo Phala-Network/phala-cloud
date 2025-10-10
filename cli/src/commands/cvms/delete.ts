@@ -12,12 +12,13 @@ export const deleteCommand = new Command()
 		"App ID of the CVM to delete (if not provided, a selection prompt will appear)",
 	)
 	.option("-f, --force", "Skip confirmation prompt", false)
+	.option("-y, --yes", "Alias for --force (skip confirmation prompt)", false)
 	.action(async (appId, options) => {
 		try {
 			const resolvedAppId = await resolveCvmAppId(appId);
 
-			// Confirm deletion unless force option is used
-			if (!options.force) {
+			// Confirm deletion unless force or yes option is used
+			if (!options.force && !options.yes) {
 				const { confirm } = await inquirer.prompt([
 					{
 						type: "confirm",

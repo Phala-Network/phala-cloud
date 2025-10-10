@@ -26,6 +26,7 @@ export const resizeCommand = new Command()
 		"Allow restart of the CVM if needed for resizing",
 	)
 	.option("-y, --yes", "Automatically confirm the resize operation")
+	.option("--json", "Output result in JSON format")
 	.action(async (appId, options) => {
 		try {
 			const resolvedAppId = await resolveCvmAppId(appId);
@@ -151,20 +152,32 @@ export const resizeCommand = new Command()
 				}
 			}
 
-			const spinner = logger.startSpinner(
-				`Resizing CVM with App ID app_${resolvedAppId}`,
-			);
-
 			// Convert boolean to number (0 or 1) as expected by the API
 			const allowRestartValue = allowRestart ? 1 : 0;
 
-			await resizeCvm(resolvedAppId, vcpu, memory, diskSize, allowRestartValue);
-
-			spinner.stop(true);
-			logger.break();
-			logger.success(
-				`Your CVM is being resized. You can check the dashboard for more details:\n${CLOUD_URL}/dashboard/cvms/app_${resolvedAppId}`,
-			);
+			if (!options.json) {
+				const spinner = logger.startSpinner(
+					`Resizing CVM with App ID app_${resolvedAppId}`,
+				);
+				await resizeCvm(resolvedAppId, vcpu, memory, diskSize, allowRestartValue);
+				spinner.stop(true);
+				logger.break();
+				logger.success(
+					`Your CVM is being resized. You can check the dashboard for more details:\n${CLOUD_URL}/dashboard/cvms/app_${resolvedAppId}`,
+				);
+			} else {
+				await resizeCvm(resolvedAppId, vcpu, memory, diskSize, allowRestartValue);
+				console.log(
+					JSON.stringify({
+						success: true,
+						app_id: resolvedAppId,
+						vcpu,
+						memory,
+						disk_size: diskSize,
+						allow_restart: allowRestart,
+					}),
+				);
+			}
 		} catch (error) {
 			logger.error(
 				`Failed to resize CVM: ${error instanceof Error ? error.message : String(error)}`,

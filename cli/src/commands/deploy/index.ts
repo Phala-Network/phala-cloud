@@ -629,7 +629,9 @@ const updateCvm = async (
 		app_compose.allowed_envs = envs.map((env) => env.key);
 	}
 
-	console.log(`Preparing update for CVM ${validatedOptions.uuid}...`);
+	if (!validatedOptions.json) {
+		console.log(`Preparing update for CVM ${validatedOptions.uuid}...`);
+	}
 	const provision_result = await safeProvisionCvmComposeFileUpdate(client, {
 		uuid: validatedOptions.uuid,
 		app_compose:

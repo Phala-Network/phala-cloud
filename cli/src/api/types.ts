@@ -47,7 +47,7 @@ export const postCvmResponseSchema = z.object({
 	memory: z.number(),
 	disk_size: z.number(),
 	manifest_version: z.number(),
-	version: z.string(),
+	version: z.string().nullable(),
 	runner: z.string(),
 	docker_compose_file: z.string(),
 	features: z.array(z.string()).nullable(),
