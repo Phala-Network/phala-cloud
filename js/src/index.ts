@@ -9,6 +9,7 @@ export * from "./actions";
 
 // Utils
 export * from "./utils";
+export { defineAction, defineSimpleAction } from "./utils/define-action";
 
 // Dotenv parsing
 export { parseEnv, parseEnvVars } from "./parse_dotenv";
