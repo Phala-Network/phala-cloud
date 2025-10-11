@@ -103,126 +103,126 @@ async function readDockerComposeFile({
 }): Promise<string> {
 	// 1. If path is not provided and we're in interactive mode, try to detect it
 	if (!dockerComposePath) {
-		if (interactive) {
-			const possibleFiles = ["docker-compose.yml", "docker-compose.yaml"];
-			const composeFileName = detectFileInCurrentDir(
-				possibleFiles,
-				"Detected docker compose file: {path}",
-			);
-			dockerComposePath = await promptForFile(
-				"Enter the path to your Docker Compose file:",
-				composeFileName,
-				"file",
-			);
-		} else {
-			throw new Error(
-				dedent(`
-        Docker Compose file is required.
+        if (interactive) {
+            const possibleFiles = ["docker-compose.yml", "docker-compose.yaml"];
+            const composeFileName = detectFileInCurrentDir(
+                possibleFiles,
+                "Detected docker compose file: {path}",
+            );
+            dockerComposePath = await promptForFile(
+                "Enter the path to your Docker Compose file:",
+                composeFileName,
+                "file",
+            );
+        } else {
+            throw new Error(
+                dedent(`
+                       Docker Compose file is required.
 
-        Usage examples:
-          phala deploy --node-id 1 docker-compose.yml
-          phala deploy --node-id 6 --kms-id t16z-dev --private-key <your-private-key> --rpc-url <rpc-url> docker-compose.yml
+                           Usage examples:
+                           phala deploy --node-id 1 docker-compose.yml
+                       phala deploy --node-id 6 --kms-id t16z-dev --private-key <your-private-key> --rpc-url <rpc-url> docker-compose.yml
 
-        Minimal required parameters:
-          --compose <path>    Path to docker-compose.yml
+                       Minimal required parameters:
+                           --compose <path>    Path to docker-compose.yml
 
-        For on-chain KMS, also provide:
-          --kms-id <id>       KMS ID
-          --private-key <key> Private key for deployment
+                       For on-chain KMS, also provide:
+                               --kms-id <id>       KMS ID
+                           --private-key <key> Private key for deployment
 
-        Run with --interactive for guided setup
-      `),
-			);
-		}
-	}
+                               Run with --interactive for guided setup
+                                   `),
+            );
+        }
+    }
 
-	// 2. Validate the file exists
-	if (!fs.existsSync(dockerComposePath)) {
-		throw new Error(`Docker compose file not found: ${dockerComposePath}`);
-	}
+    // 2. Validate the file exists
+    if (!fs.existsSync(dockerComposePath)) {
+        throw new Error(`Docker compose file not found: ${dockerComposePath}`);
+    }
 
-	// 3. Read and return the file content
-	return fs.readFileSync(dockerComposePath, "utf8");
+    // 3. Read and return the file content
+    return fs.readFileSync(dockerComposePath, "utf8");
 }
 
 const validatePrivateKey = async (
-	options: Options,
-	chainId: string | number | undefined,
+    options: Options,
+    chainId: string | number | undefined,
 ): Promise<string | undefined> => {
-	// 1. Get private key from options or environment
-	let privateKey = options.privateKey || process.env.PRIVATE_KEY;
+    // 1. Get private key from options or environment
+    let privateKey = options.privateKey || process.env.PRIVATE_KEY;
 
-	// 2. Handle KMS related validations
-	if (options.kmsId && chainId) {
-		if (!options.privateKey) {
-			if (options.interactive) {
-				const result = await inquirer.prompt([
-					{
-						type: "password",
-						name: "privateKey",
-						message: "Enter your private key:",
-						validate: (input: string) =>
-							input.trim() ? true : "Private key is required",
-					},
-				]);
-				privateKey = result.privateKey;
-			} else {
-				throw new Error(
-					"When using on-chain KMS, either --private-key (or PRIVATE_KEY env) must be provided",
-				);
-			}
-		}
-	}
-	return privateKey;
+    // 2. Handle KMS related validations
+    if (options.kmsId && chainId) {
+        if (!options.privateKey) {
+            if (options.interactive) {
+                const result = await inquirer.prompt([
+                    {
+                        type: "password",
+                        name: "privateKey",
+                        message: "Enter your private key:",
+                        validate: (input: string) =>
+                        input.trim() ? true : "Private key is required",
+                    },
+                ]);
+                privateKey = result.privateKey;
+            } else {
+                throw new Error(
+                    "When using on-chain KMS, either --private-key (or PRIVATE_KEY env) must be provided",
+                );
+            }
+        }
+    }
+    return privateKey;
 };
 
 const validateName = async (options: Options): Promise<string | undefined> => {
-	let name = options.name;
-	if (!options.name) {
-		let folderName = path
-			.basename(process.cwd())
-			.toLowerCase()
-			.replace(/[^a-z0-9_-]/g, "-");
-		// Ensure folder name is at least 3 characters by appending 'cvm' if needed
-		if (folderName.length < 3) {
-			folderName = `${folderName}-cvm`;
-		}
-		const validFolderName = folderName.slice(0, 20); // Ensure max length of 20
+    let name = options.name;
+    if (!options.name) {
+        let folderName = path
+        .basename(process.cwd())
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, "-");
+        // Ensure folder name is at least 3 characters by appending 'cvm' if needed
+        if (folderName.length < 3) {
+            folderName = `${folderName}-cvm`;
+        }
+        const validFolderName = folderName.slice(0, 20); // Ensure max length of 20
 
-		if (!options.interactive) {
-			name = validFolderName;
-		} else {
-			const result = await inquirer.prompt([
-				{
-					type: "input",
-					name: "name",
-					message: "Enter a name for the CVM:",
-					default: validFolderName,
-					validate: (input) => {
-						if (!input.trim()) return "CVM name is required";
-						if (input.trim().length > 20)
-							return "CVM name must be less than 20 characters";
-						if (input.trim().length < 3)
-							return "CVM name must be at least 3 characters";
-						if (!/^[a-zA-Z0-9_-]+$/.test(input))
-							return "CVM name must contain only letters, numbers, underscores, and hyphens";
-						return true;
-					},
-				},
-			]);
-			name = result.name;
-		}
-	}
-	return name;
+        if (!options.interactive) {
+            name = validFolderName;
+        } else {
+            const result = await inquirer.prompt([
+                {
+                    type: "input",
+                    name: "name",
+                    message: "Enter a name for the CVM:",
+                    default: validFolderName,
+                    validate: (input) => {
+                        if (!input.trim()) return "CVM name is required";
+                        if (input.trim().length > 20)
+                            return "CVM name must be less than 20 characters";
+                        if (input.trim().length < 3)
+                            return "CVM name must be at least 3 characters";
+                        if (!/^[a-zA-Z0-9_-]+$/.test(input))
+                            return "CVM name must contain only letters, numbers, underscores, and hyphens";
+                        return true;
+                    },
+                },
+            ]);
+            name = result.name;
+        }
+    }
+    return name;
 };
 
 const validateEnvFile = async (options: Options) => {
-	// Handle environment variables
-	let envs: EnvVar[] | undefined = undefined;
-	let envFilePath = options.envFile;
+    // Handle environment variables
+    let envs: EnvVar[] | undefined = undefined;
+    let envFilePath = options.envFile;
 
-	// Handle environment file path resolution
-	if (options.interactive && (!options.envFile || envFilePath === true)) {
+    // Handle environment file path resolution
+    if (options.interactive && (!options.envFile || envFilePath === true)) {
 		envFilePath = await promptForFile(
 			"Enter the path to your environment file:",
 			".env",
