@@ -1,7 +1,6 @@
 import { z } from "zod";
-import { type Client, type SafeResult } from "../client";
-import { ActionParameters, ActionReturnType } from "../types/common";
-import { validateActionParameters, safeValidateActionParameters } from "../utils";
+import { type Client } from "../client";
+import { defineAction } from "../utils/define-action";
 
 /**
  * Provision a CVM (Confidential Virtual Machine)
@@ -68,10 +67,19 @@ export const ProvisionCvmSchema = z
     fmspc: z.string().nullable().optional(),
     device_id: z.string().nullable().optional(),
     os_image_hash: z.string().nullable().optional(),
-    node_id: z.number().nullable().optional(), // Transformed from teepod_id in response
+    teepod_id: z.number().nullable().optional(), // Will be transformed to node_id
+    node_id: z.number().nullable().optional(),
     kms_id: z.string().nullable().optional(),
   })
-  .passthrough();
+  .passthrough()
+  .transform((data) => {
+    // Transform teepod_id to node_id (only when using this schema)
+    if ("teepod_id" in data && data.teepod_id !== undefined) {
+      const { teepod_id, ...rest } = data;
+      return { ...rest, node_id: teepod_id };
+    }
+    return data;
+  });
 
 export type ProvisionCvm = z.infer<typeof ProvisionCvmSchema>;
 
@@ -113,10 +121,7 @@ export type ProvisionCvmRequest = z.infer<typeof ProvisionCvmRequestSchema> & {
   };
 };
 
-export type ProvisionCvmParameters<T = undefined> = ActionParameters<T>;
-
-export type ProvisionCvmReturnType<T = undefined> = ActionReturnType<ProvisionCvm, T>;
-
+// Helper functions remain the same
 function autofillComposeFileName(appCompose: ProvisionCvmRequest): ProvisionCvmRequest {
   if (appCompose.compose_file && !appCompose.compose_file.name) {
     return {
@@ -164,26 +169,12 @@ function handleGatewayCompatibility(appCompose: ProvisionCvmRequest): ProvisionC
   };
 }
 
-function transformResponse(data: unknown, isDefaultSchema: boolean): unknown {
-  if (!isDefaultSchema || !data || typeof data !== "object") {
-    return data;
-  }
-
-  if (data && typeof data === "object" && "teepod_id" in data) {
-    const { teepod_id, ...rest } = data as Record<string, unknown> & { teepod_id: unknown };
-    return { ...rest, node_id: teepod_id };
-  }
-
-  return data;
-}
-
-export async function provisionCvm<T extends z.ZodSchema | false | undefined = undefined>(
-  client: Client,
-  appCompose: ProvisionCvmRequest,
-  parameters?: ProvisionCvmParameters<T>,
-): Promise<ProvisionCvmReturnType<T>> {
-  validateActionParameters(parameters);
-
+// The teepod_id -> node_id transformation is now handled by the schema's .transform()
+// This way, when users specify { schema: false }, they get the raw response
+const { action: provisionCvm, safeAction: safeProvisionCvm } = defineAction<
+  ProvisionCvmRequest,
+  typeof ProvisionCvmSchema
+>(ProvisionCvmSchema, async (client, appCompose) => {
   const body = handleGatewayCompatibility(autofillComposeFileName(appCompose));
   let requestBody = { ...body };
   if (typeof body.node_id === "number") {
@@ -193,50 +184,7 @@ export async function provisionCvm<T extends z.ZodSchema | false | undefined = u
     console.warn("[phala/cloud] teepod_id is deprecated, please use node_id instead.");
   }
 
-  const response = await client.post("/cvms/provision", requestBody);
+  return await client.post("/cvms/provision", requestBody);
+});
 
-  const isDefaultSchema = parameters?.schema === undefined;
-  const transformedData = transformResponse(response, isDefaultSchema);
-
-  if (parameters?.schema === false) {
-    return transformedData as ProvisionCvmReturnType<T>;
-  }
-
-  const usedSchema = (parameters?.schema || ProvisionCvmSchema) as z.ZodSchema;
-  return usedSchema.parse(transformedData) as ProvisionCvmReturnType<T>;
-}
-
-// Safe version (returns SafeResult)
-export async function safeProvisionCvm<T extends z.ZodSchema | false | undefined = undefined>(
-  client: Client,
-  appCompose: ProvisionCvmRequest,
-  parameters?: ProvisionCvmParameters<T>,
-): Promise<SafeResult<ProvisionCvmReturnType<T>>> {
-  const parameterValidationError = safeValidateActionParameters(parameters);
-  if (parameterValidationError) {
-    return parameterValidationError as SafeResult<ProvisionCvmReturnType<T>>;
-  }
-
-  const schema: z.ZodSchema | false | undefined = parameters?.schema;
-  const body = handleGatewayCompatibility(autofillComposeFileName(appCompose));
-  let requestBody = { ...body };
-  if (typeof body.node_id === "number") {
-    requestBody = { ...body, teepod_id: body.node_id };
-    delete requestBody.node_id;
-  } else if (typeof body.teepod_id === "number") {
-    console.warn("[phala/cloud] teepod_id is deprecated, please use node_id instead.");
-  }
-  const httpResult = await client.safePost("/cvms/provision", requestBody);
-  if (!httpResult.success) {
-    return httpResult as SafeResult<ProvisionCvmReturnType<T>>;
-  }
-
-  if (schema === false) {
-    return { success: true, data: httpResult.data } as SafeResult<ProvisionCvmReturnType<T>>;
-  }
-
-  const isDefaultSchema = !schema;
-  const usedSchema = (schema || ProvisionCvmSchema) as z.ZodSchema;
-  const transformResult = usedSchema.safeParse(transformResponse(httpResult.data, isDefaultSchema));
-  return transformResult as SafeResult<ProvisionCvmReturnType<T>>;
-}
+export { provisionCvm, safeProvisionCvm };

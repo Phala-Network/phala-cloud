@@ -1,7 +1,6 @@
 import { z } from "zod";
-import { type Client, type SafeResult } from "../../client";
-import { ActionParameters, ActionReturnType } from "../../types/common";
-import { validateActionParameters, safeValidateActionParameters } from "../../utils";
+import { type Client } from "../../client";
+import { defineAction } from "../../utils/define-action";
 
 /**
  * List workspaces accessible by the current user
@@ -95,59 +94,22 @@ export type WorkspaceResponse = z.infer<typeof WorkspaceResponseSchema>;
 export type PaginationMetadata = z.infer<typeof PaginationMetadataSchema>;
 export type ListWorkspaces = z.infer<typeof ListWorkspacesSchema>;
 
-export type ListWorkspacesParameters<T = undefined> = ActionParameters<T> & {
+export type ListWorkspacesRequest = {
   cursor?: string;
   limit?: number;
 };
 
-export type ListWorkspacesReturnType<T = undefined> = ActionReturnType<ListWorkspaces, T>;
-
-export async function listWorkspaces<T extends z.ZodSchema | false | undefined = undefined>(
-  client: Client,
-  parameters?: ListWorkspacesParameters<T>,
-): Promise<ListWorkspacesReturnType<T>> {
-  validateActionParameters(parameters);
-
+const { action: listWorkspaces, safeAction: safeListWorkspaces } = defineAction<
+  ListWorkspacesRequest | undefined,
+  typeof ListWorkspacesSchema
+>(ListWorkspacesSchema, async (client, request) => {
   const queryParams = new URLSearchParams();
-  if (parameters?.cursor) queryParams.append("cursor", parameters.cursor);
-  if (parameters?.limit) queryParams.append("limit", parameters.limit.toString());
+  if (request?.cursor) queryParams.append("cursor", request.cursor);
+  if (request?.limit) queryParams.append("limit", request.limit.toString());
 
   const url = queryParams.toString() ? `/workspaces?${queryParams.toString()}` : "/workspaces";
 
-  const response = await client.get(url);
+  return await client.get(url);
+});
 
-  if (parameters?.schema === false) {
-    return response as ListWorkspacesReturnType<T>;
-  }
-
-  const schema = (parameters?.schema || ListWorkspacesSchema) as z.ZodSchema;
-  return schema.parse(response) as ListWorkspacesReturnType<T>;
-}
-
-export async function safeListWorkspaces<T extends z.ZodSchema | false | undefined = undefined>(
-  client: Client,
-  parameters?: ListWorkspacesParameters<T>,
-): Promise<SafeResult<ListWorkspacesReturnType<T>>> {
-  const parameterValidationError = safeValidateActionParameters(parameters);
-  if (parameterValidationError) {
-    return parameterValidationError as SafeResult<ListWorkspacesReturnType<T>>;
-  }
-
-  const queryParams = new URLSearchParams();
-  if (parameters?.cursor) queryParams.append("cursor", parameters.cursor);
-  if (parameters?.limit) queryParams.append("limit", parameters.limit.toString());
-
-  const url = queryParams.toString() ? `/workspaces?${queryParams.toString()}` : "/workspaces";
-
-  const httpResult = await client.safeGet(url);
-  if (!httpResult.success) {
-    return httpResult as SafeResult<ListWorkspacesReturnType<T>>;
-  }
-
-  if (parameters?.schema === false) {
-    return { success: true, data: httpResult.data } as SafeResult<ListWorkspacesReturnType<T>>;
-  }
-
-  const schema = (parameters?.schema || ListWorkspacesSchema) as z.ZodSchema;
-  return schema.safeParse(httpResult.data) as SafeResult<ListWorkspacesReturnType<T>>;
-}
+export { listWorkspaces, safeListWorkspaces };

@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { type Client, type SafeResult } from "../client";
-import { ActionParameters, ActionReturnType } from "../types/common";
+import { type Client } from "../client";
+import { defineAction } from "../utils/define-action";
 
 /**
  * Commit CVM compose file update
@@ -127,63 +127,18 @@ export type CommitCvmComposeFileUpdateRequest = Omit<
 };
 export type CommitCvmComposeFileUpdate = undefined;
 
-export type CommitCvmComposeFileUpdateParameters<T = undefined> = ActionParameters<T>;
+const { action: commitCvmComposeFileUpdate, safeAction: safeCommitCvmComposeFileUpdate } =
+  defineAction<CommitCvmComposeFileUpdateRequest, typeof CommitCvmComposeFileUpdateSchema>(
+    CommitCvmComposeFileUpdateSchema,
+    async (client, request) => {
+      const validatedRequest = CommitCvmComposeFileUpdateRequestSchema.parse(request);
 
-export type CommitCvmComposeFileUpdateReturnType<T = undefined> = ActionReturnType<
-  CommitCvmComposeFileUpdate,
-  T
->;
+      return await client.patch(`/cvms/${validatedRequest.cvmId}/compose_file`, {
+        compose_hash: validatedRequest.compose_hash,
+        encrypted_env: validatedRequest.encrypted_env,
+        env_keys: validatedRequest.env_keys,
+      });
+    },
+  );
 
-export async function commitCvmComposeFileUpdate<
-  T extends z.ZodSchema | false | undefined = undefined,
->(
-  client: Client,
-  request: CommitCvmComposeFileUpdateRequest,
-  parameters?: CommitCvmComposeFileUpdateParameters<T>,
-): Promise<CommitCvmComposeFileUpdateReturnType<T>> {
-  const validatedRequest = CommitCvmComposeFileUpdateRequestSchema.parse(request);
-
-  const response = await client.patch(`/cvms/${validatedRequest.cvmId}/compose_file`, {
-    compose_hash: validatedRequest.compose_hash,
-    encrypted_env: validatedRequest.encrypted_env,
-    env_keys: validatedRequest.env_keys,
-  });
-
-  if (parameters?.schema === false) {
-    return response as CommitCvmComposeFileUpdateReturnType<T>;
-  }
-
-  const schema = (parameters?.schema || CommitCvmComposeFileUpdateSchema) as z.ZodSchema;
-  return schema.parse(response) as CommitCvmComposeFileUpdateReturnType<T>;
-}
-
-export async function safeCommitCvmComposeFileUpdate<
-  T extends z.ZodSchema | false | undefined = undefined,
->(
-  client: Client,
-  request: CommitCvmComposeFileUpdateRequest,
-  parameters?: CommitCvmComposeFileUpdateParameters<T>,
-): Promise<SafeResult<CommitCvmComposeFileUpdateReturnType<T>>> {
-  const requestValidation = CommitCvmComposeFileUpdateRequestSchema.safeParse(request);
-  if (!requestValidation.success) {
-    return requestValidation as SafeResult<CommitCvmComposeFileUpdateReturnType<T>>;
-  }
-
-  const httpResult = await client.safePatch(`/cvms/${requestValidation.data.cvmId}/compose_file`, {
-    compose_hash: requestValidation.data.compose_hash,
-    encrypted_env: requestValidation.data.encrypted_env,
-    env_keys: requestValidation.data.env_keys,
-  });
-  if (!httpResult.success) {
-    return httpResult as SafeResult<CommitCvmComposeFileUpdateReturnType<T>>;
-  }
-
-  if (parameters?.schema === false) {
-    return { success: true, data: httpResult.data } as SafeResult<
-      CommitCvmComposeFileUpdateReturnType<T>
-    >;
-  }
-
-  const schema = (parameters?.schema || CommitCvmComposeFileUpdateSchema) as z.ZodSchema;
-  return schema.safeParse(httpResult.data) as SafeResult<CommitCvmComposeFileUpdateReturnType<T>>;
-}
+export { commitCvmComposeFileUpdate, safeCommitCvmComposeFileUpdate };

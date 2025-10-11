@@ -364,13 +364,13 @@ export const DeployAppAuthSchema = z
 export type DeployAppAuth = z.infer<typeof DeployAppAuthSchema>;
 
 // Parameters type for optional configuration
-export type DeployAppAuthParameters<T = undefined> = T extends z.ZodSchema
+export type DeployAppAuthParameters<T = undefined> = T extends z.ZodTypeAny
   ? { schema: T }
   : T extends false
     ? { schema: false }
-    : { schema?: z.ZodSchema | false };
+    : { schema?: z.ZodTypeAny | false };
 
-export type DeployAppAuthReturnType<T = undefined> = T extends z.ZodSchema
+export type DeployAppAuthReturnType<T = undefined> = T extends z.ZodTypeAny
   ? z.infer<T>
   : T extends false
     ? unknown
@@ -430,7 +430,7 @@ function parseDeploymentResult(
 }
 
 // Standard version (throws on error)
-export async function deployAppAuth<T extends z.ZodSchema | false | undefined = undefined>(
+export async function deployAppAuth<T extends z.ZodTypeAny | false | undefined = undefined>(
   request: DeployAppAuthRequest,
   parameters?: DeployAppAuthParameters<T>,
 ): Promise<DeployAppAuthReturnType<T>> {
@@ -668,7 +668,7 @@ export async function deployAppAuth<T extends z.ZodSchema | false | undefined = 
     return result as DeployAppAuthReturnType<T>;
   }
 
-  const schema = (parameters?.schema || DeployAppAuthSchema) as z.ZodSchema;
+  const schema = (parameters?.schema || DeployAppAuthSchema) as z.ZodTypeAny;
   return schema.parse(result) as DeployAppAuthReturnType<T>;
 }
 
@@ -686,7 +686,7 @@ export type SafeDeployAppAuthResult<T = undefined> =
     };
 
 // Safe version (returns SafeResult with optional transaction tracker)
-export async function safeDeployAppAuth<T extends z.ZodSchema | false | undefined = undefined>(
+export async function safeDeployAppAuth<T extends z.ZodTypeAny | false | undefined = undefined>(
   request: DeployAppAuthRequest,
   parameters?: DeployAppAuthParameters<T>,
 ): Promise<SafeDeployAppAuthResult<T>> {

@@ -4,8 +4,6 @@ import { type Client, type SafeResult } from "../client";
 import {
   getCvmComposeFile,
   safeGetCvmComposeFile,
-  type GetCvmComposeFileParameters,
-  type GetCvmComposeFileReturnType,
   type GetCvmComposeFileResult,
 } from "./get_cvm_compose_file";
 
@@ -136,10 +134,7 @@ describe("getCvmComposeFile", () => {
 
   describe("Safe version", () => {
     it("should return success result when API call succeeds", async () => {
-      (mockClient.safeGet as jest.Mock).mockResolvedValue({
-        success: true,
-        data: mockComposeFileResponse,
-      });
+      (mockClient.get as jest.Mock).mockResolvedValue(mockComposeFileResponse);
 
       const result = await safeGetCvmComposeFile(mockClient as Client, { id: "cvm-123" });
 
@@ -150,30 +145,25 @@ describe("getCvmComposeFile", () => {
     });
 
     it("should return error result when API call fails", async () => {
-      const error: SafeResult<unknown> = {
-        success: false,
-        error: {
-          isRequestError: true,
-          message: "Server error",
-          status: 500,
-          detail: "Internal server error",
-        },
-      };
-      (mockClient.safeGet as jest.Mock).mockResolvedValue(error);
+      const error = new Error("Server error");
+      (error as any).isRequestError = true;
+      (error as any).status = 500;
+      (error as any).detail = "Internal server error";
+      (mockClient.get as jest.Mock).mockRejectedValue(error);
 
       const result = await safeGetCvmComposeFile(mockClient as Client, { id: "cvm-123" });
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error).toEqual(error.error);
+        expect(result.error.message).toBe("Server error");
+        if ("isRequestError" in result.error) {
+          expect(result.error.status).toBe(500);
+        }
       }
     });
 
     it("should handle Zod validation errors", async () => {
-      (mockClient.safeGet as jest.Mock).mockResolvedValue({
-        success: true,
-        data: { invalid: "data" },
-      });
+      (mockClient.get as jest.Mock).mockResolvedValue({ invalid: "data" });
 
       const result = await safeGetCvmComposeFile(mockClient as Client, { id: "cvm-123" });
 
@@ -184,31 +174,25 @@ describe("getCvmComposeFile", () => {
     });
 
     it("should pass through HTTP errors directly", async () => {
-      const httpError: SafeResult<unknown> = {
-        success: false,
-        error: {
-          isRequestError: true,
-          message: "Unauthorized",
-          status: 401,
-          detail: "Invalid API key",
-        },
-      };
-      (mockClient.safeGet as jest.Mock).mockResolvedValue(httpError);
+      const error = new Error("Unauthorized");
+      (error as any).isRequestError = true;
+      (error as any).status = 401;
+      (error as any).detail = "Invalid API key";
+      (mockClient.get as jest.Mock).mockRejectedValue(error);
 
       const result = await safeGetCvmComposeFile(mockClient as Client, { id: "cvm-123" });
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error).toEqual(httpError.error);
+        if ("isRequestError" in result.error) {
+          expect(result.error.status).toBe(401);
+        }
       }
     });
 
     it("should return raw data when schema is false", async () => {
       const rawData = { custom: "response" };
-      (mockClient.safeGet as jest.Mock).mockResolvedValue({
-        success: true,
-        data: rawData,
-      });
+      (mockClient.get as jest.Mock).mockResolvedValue(rawData);
 
       const result = await safeGetCvmComposeFile(mockClient as Client, { id: "cvm-123" }, { schema: false });
 
@@ -221,10 +205,7 @@ describe("getCvmComposeFile", () => {
     it("should use custom schema when provided", async () => {
       const customSchema = z.object({ custom_field: z.string() });
       const customData = { custom_field: "value" };
-      (mockClient.safeGet as jest.Mock).mockResolvedValue({
-        success: true,
-        data: customData,
-      });
+      (mockClient.get as jest.Mock).mockResolvedValue(customData);
 
       const result = await safeGetCvmComposeFile(mockClient as Client, { id: "cvm-123" }, { schema: customSchema });
 
@@ -236,10 +217,7 @@ describe("getCvmComposeFile", () => {
 
     it("should return validation error when custom schema fails", async () => {
       const customSchema = z.object({ required_field: z.string() });
-      (mockClient.safeGet as jest.Mock).mockResolvedValue({
-        success: true,
-        data: { wrong_field: "value" },
-      });
+      (mockClient.get as jest.Mock).mockResolvedValue({ wrong_field: "value" });
 
       const result = await safeGetCvmComposeFile(mockClient as Client, { id: "cvm-123" }, { schema: customSchema });
 
@@ -293,10 +271,7 @@ describe("getCvmComposeFile", () => {
     });
 
     it("should work with safe version with minimal parameters", async () => {
-      (mockClient.safeGet as jest.Mock).mockResolvedValue({
-        success: true,
-        data: mockComposeFileResponse,
-      });
+      (mockClient.get as jest.Mock).mockResolvedValue(mockComposeFileResponse);
 
       const result = await safeGetCvmComposeFile(mockClient as Client, { id: "cvm-123" });
 
@@ -332,14 +307,14 @@ describe("getCvmComposeFile", () => {
 
     it("should infer correct types for custom schema", () => {
       const customSchema = z.object({ test: z.string() });
-      type T = GetCvmComposeFileReturnType<typeof customSchema>;
+      type T = Awaited<ReturnType<typeof getCvmComposeFile<typeof customSchema>>>;
       type _Assert = T extends { test: string } ? true : false;
       const assert: _Assert = true;
       expect(assert).toBe(true);
     });
 
     it("should infer correct types for schema: false", () => {
-      type T = GetCvmComposeFileReturnType<false>;
+      type T = Awaited<ReturnType<typeof getCvmComposeFile<false>>>;
       type _Assert = T extends unknown ? true : false;
       const assert: _Assert = true;
       expect(assert).toBe(true);

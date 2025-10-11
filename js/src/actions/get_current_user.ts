@@ -80,23 +80,38 @@ export type GetCurrentUserParameters<T = undefined> = ActionParameters<T>;
 
 export type GetCurrentUserReturnType<T = undefined> = ActionReturnType<CurrentUser, T>;
 
-export async function getCurrentUser<T extends z.ZodSchema | false | undefined = undefined>(
+// Overload without parameters
+export function getCurrentUser(client: Client): Promise<CurrentUser>;
+// Overload with custom schema
+export function getCurrentUser<TSchema extends z.ZodTypeAny>(
   client: Client,
-  parameters?: GetCurrentUserParameters<T>,
-): Promise<GetCurrentUserReturnType<T>> {
+  parameters: { schema: TSchema },
+): Promise<z.infer<TSchema>>;
+// Overload with schema = false
+export function getCurrentUser(client: Client, parameters: { schema: false }): Promise<unknown>;
+// Implementation signature
+export function getCurrentUser(
+  client: Client,
+  parameters?: { schema?: z.ZodTypeAny | false },
+): Promise<CurrentUser | unknown>;
+// Implementation
+export async function getCurrentUser(
+  client: Client,
+  parameters?: { schema?: z.ZodTypeAny | false },
+): Promise<CurrentUser | unknown> {
   validateActionParameters(parameters);
 
   const response = await client.get("/auth/me");
 
   if (parameters?.schema === false) {
-    return response as GetCurrentUserReturnType<T>;
+    return response;
   }
 
-  const schema = (parameters?.schema || CurrentUserSchema) as z.ZodSchema;
-  return schema.parse(response) as GetCurrentUserReturnType<T>;
+  const schema = (parameters?.schema || CurrentUserSchema) as z.ZodTypeAny;
+  return schema.parse(response);
 }
 
-export async function safeGetCurrentUser<T extends z.ZodSchema | false | undefined = undefined>(
+export async function safeGetCurrentUser<T extends z.ZodTypeAny | false | undefined = undefined>(
   client: Client,
   parameters?: GetCurrentUserParameters<T>,
 ): Promise<SafeResult<GetCurrentUserReturnType<T>>> {
@@ -114,6 +129,6 @@ export async function safeGetCurrentUser<T extends z.ZodSchema | false | undefin
     return { success: true, data: httpResult.data } as SafeResult<GetCurrentUserReturnType<T>>;
   }
 
-  const schema = (parameters?.schema || CurrentUserSchema) as z.ZodSchema;
+  const schema = (parameters?.schema || CurrentUserSchema) as z.ZodTypeAny;
   return schema.safeParse(httpResult.data) as SafeResult<GetCurrentUserReturnType<T>>;
 }

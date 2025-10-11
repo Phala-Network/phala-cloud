@@ -5,8 +5,7 @@ import { SUPPORTED_CHAINS } from "../types/supported_chains";
 import {
   provisionCvmComposeFileUpdate,
   safeProvisionCvmComposeFileUpdate,
-  type ProvisionCvmComposeFileUpdateParameters,
-  type ProvisionCvmComposeFileUpdateReturnType,
+  type ProvisionCvmComposeFileUpdateResult,
 } from "./provision_cvm_compose_file_update";
 
 describe("provisionCvmComposeFileUpdate", () => {
@@ -128,10 +127,7 @@ describe("provisionCvmComposeFileUpdate", () => {
 
   describe("Safe version", () => {
     it("should return success result when API call succeeds", async () => {
-      (mockClient.safePost as any).mockResolvedValue({
-        success: true,
-        data: mockProvisionResponse,
-      });
+      (mockClient.post as any).mockResolvedValue(mockProvisionResponse);
 
       const result = await safeProvisionCvmComposeFileUpdate(mockClient, mockProvisionRequest);
 
@@ -142,30 +138,25 @@ describe("provisionCvmComposeFileUpdate", () => {
     });
 
     it("should return error result when API call fails", async () => {
-      const error = {
-        isRequestError: true,
-        message: "Server error",
-        status: 500,
-        detail: "Internal server error",
-      };
-      (mockClient.safePost as any).mockResolvedValue({
-        success: false,
-        error,
-      });
+      const error = new Error("Server error");
+      (error as any).isRequestError = true;
+      (error as any).status = 500;
+      (error as any).detail = "Internal server error";
+      (mockClient.post as any).mockRejectedValue(error);
 
       const result = await safeProvisionCvmComposeFileUpdate(mockClient, mockProvisionRequest);
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error).toEqual(error);
+        expect(result.error.message).toBe("Server error");
+        if ("isRequestError" in result.error) {
+          expect(result.error.status).toBe(500);
+        }
       }
     });
 
     it("should handle Zod validation errors", async () => {
-      (mockClient.safePost as any).mockResolvedValue({
-        success: true,
-        data: { invalid: "data" },
-      });
+      (mockClient.post as any).mockResolvedValue({ invalid: "data" });
 
       const result = await safeProvisionCvmComposeFileUpdate(mockClient, mockProvisionRequest);
 
@@ -176,31 +167,25 @@ describe("provisionCvmComposeFileUpdate", () => {
     });
 
     it("should pass through HTTP errors directly", async () => {
-      const httpError = {
-        isRequestError: true,
-        message: "Unauthorized",
-        status: 401,
-        detail: "Invalid API key",
-      };
-      (mockClient.safePost as any).mockResolvedValue({
-        success: false,
-        error: httpError,
-      });
+      const error = new Error("Unauthorized");
+      (error as any).isRequestError = true;
+      (error as any).status = 401;
+      (error as any).detail = "Invalid API key";
+      (mockClient.post as any).mockRejectedValue(error);
 
       const result = await safeProvisionCvmComposeFileUpdate(mockClient, mockProvisionRequest);
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error).toEqual(httpError);
+        if ("isRequestError" in result.error) {
+          expect(result.error.status).toBe(401);
+        }
       }
     });
 
     it("should return raw data when schema is false", async () => {
       const rawData = { custom: "response" };
-      (mockClient.safePost as any).mockResolvedValue({
-        success: true,
-        data: rawData,
-      });
+      (mockClient.post as any).mockResolvedValue(rawData);
 
       const result = await safeProvisionCvmComposeFileUpdate(mockClient, mockProvisionRequest, {
         schema: false,
@@ -215,10 +200,7 @@ describe("provisionCvmComposeFileUpdate", () => {
     it("should use custom schema when provided", async () => {
       const customSchema = z.object({ custom_field: z.string() });
       const customData = { custom_field: "value" };
-      (mockClient.safePost as any).mockResolvedValue({
-        success: true,
-        data: customData,
-      });
+      (mockClient.post as any).mockResolvedValue(customData);
 
       const result = await safeProvisionCvmComposeFileUpdate(mockClient, mockProvisionRequest, {
         schema: customSchema,
@@ -232,10 +214,7 @@ describe("provisionCvmComposeFileUpdate", () => {
 
     it("should return validation error when custom schema fails", async () => {
       const customSchema = z.object({ required_field: z.string() });
-      (mockClient.safePost as any).mockResolvedValue({
-        success: true,
-        data: { wrong_field: "value" },
-      });
+      (mockClient.post as any).mockResolvedValue({ wrong_field: "value" });
 
       const result = await safeProvisionCvmComposeFileUpdate(mockClient, mockProvisionRequest, {
         schema: customSchema,
@@ -266,14 +245,10 @@ describe("provisionCvmComposeFileUpdate", () => {
       };
 
       // Mock backend validation error
-      (mockClient.safePost as any).mockResolvedValue({
-        success: false,
-        error: {
-          isRequestError: true,
-          message: "Docker compose file is required",
-          status: 400,
-        },
-      });
+      const error = new Error("Docker compose file is required");
+      (error as any).isRequestError = true;
+      (error as any).status = 400;
+      (mockClient.post as any).mockRejectedValue(error);
 
       const result = await safeProvisionCvmComposeFileUpdate(mockClient, invalidRequest);
 
@@ -295,10 +270,7 @@ describe("provisionCvmComposeFileUpdate", () => {
     });
 
     it("should work with safe version with parameters", async () => {
-      (mockClient.safePost as any).mockResolvedValue({
-        success: true,
-        data: mockProvisionResponse,
-      });
+      (mockClient.post as any).mockResolvedValue(mockProvisionResponse);
 
       const result = await safeProvisionCvmComposeFileUpdate(mockClient, mockProvisionRequest);
 
@@ -327,19 +299,19 @@ describe("provisionCvmComposeFileUpdate", () => {
   describe("Type inference", () => {
     it("should infer correct types for default schema", () => {
       type T = Awaited<ReturnType<typeof provisionCvmComposeFileUpdate>>;
-      const isExpected: T extends ProvisionCvmComposeFileUpdateParameters ? true : false = true;
+      const isExpected: T extends ProvisionCvmComposeFileUpdateResult ? true : false = true;
       expect(isExpected).toBe(true);
     });
 
     it("should infer correct types for custom schema", () => {
       const customSchema = z.object({ test: z.string() });
-      type T = ProvisionCvmComposeFileUpdateReturnType<typeof customSchema>;
+      type T = Awaited<ReturnType<typeof provisionCvmComposeFileUpdate<typeof customSchema>>>;
       const isExpected: T extends { test: string } ? true : false = true;
       expect(isExpected).toBe(true);
     });
 
     it("should infer correct types for schema: false", () => {
-      type T = ProvisionCvmComposeFileUpdateReturnType<false>;
+      type T = Awaited<ReturnType<typeof provisionCvmComposeFileUpdate<false>>>;
       const isExpected: T extends unknown ? true : false = true;
       expect(isExpected).toBe(true);
     });

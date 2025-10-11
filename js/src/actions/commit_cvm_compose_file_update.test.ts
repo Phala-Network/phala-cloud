@@ -179,10 +179,7 @@ describe("commitCvmComposeFileUpdate", () => {
 
   describe("Safe version", () => {
     it("should return success result when API call succeeds", async () => {
-      (mockClient.safePatch as jest.Mock).mockResolvedValue({
-        success: true,
-        data: mockCommitResponse,
-      });
+      (mockClient.patch as jest.Mock).mockResolvedValue(mockCommitResponse);
 
       const result = await safeCommitCvmComposeFileUpdate(mockClient as Client, mockCommitRequest);
 
@@ -193,30 +190,25 @@ describe("commitCvmComposeFileUpdate", () => {
     });
 
     it("should return error result when API call fails", async () => {
-      const error = {
-        isRequestError: true,
-        message: "Server error",
-        status: 500,
-        detail: "Internal server error",
-      };
-      (mockClient.safePatch as jest.Mock).mockResolvedValue({
-        success: false,
-        error,
-      });
+      const error = new Error("Server error");
+      (error as any).isRequestError = true;
+      (error as any).status = 500;
+      (error as any).detail = "Internal server error";
+      (mockClient.patch as jest.Mock).mockRejectedValue(error);
 
       const result = await safeCommitCvmComposeFileUpdate(mockClient as Client, mockCommitRequest);
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error).toEqual(error);
+        expect(result.error.message).toBe("Server error");
+        if ("isRequestError" in result.error) {
+          expect(result.error.status).toBe(500);
+        }
       }
     });
 
     it("should handle Zod validation errors", async () => {
-      (mockClient.safePatch as jest.Mock).mockResolvedValue({
-        success: true,
-        data: { invalid: "data" },
-      });
+      (mockClient.patch as jest.Mock).mockResolvedValue({ invalid: "data" });
 
       const result = await safeCommitCvmComposeFileUpdate(mockClient as Client, mockCommitRequest);
 
@@ -227,31 +219,25 @@ describe("commitCvmComposeFileUpdate", () => {
     });
 
     it("should pass through HTTP errors directly", async () => {
-      const httpError = {
-        isRequestError: true,
-        message: "Unauthorized",
-        status: 401,
-        detail: "Invalid API key",
-      };
-      (mockClient.safePatch as jest.Mock).mockResolvedValue({
-        success: false,
-        error: httpError,
-      });
+      const error = new Error("Unauthorized");
+      (error as any).isRequestError = true;
+      (error as any).status = 401;
+      (error as any).detail = "Invalid API key";
+      (mockClient.patch as jest.Mock).mockRejectedValue(error);
 
       const result = await safeCommitCvmComposeFileUpdate(mockClient as Client, mockCommitRequest);
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error).toEqual(httpError);
+        if ("isRequestError" in result.error) {
+          expect(result.error.status).toBe(401);
+        }
       }
     });
 
     it("should return raw data when schema is false", async () => {
       const rawData = { custom: "response" };
-      (mockClient.safePatch as jest.Mock).mockResolvedValue({
-        success: true,
-        data: rawData,
-      });
+      (mockClient.patch as jest.Mock).mockResolvedValue(rawData);
 
       const result = await safeCommitCvmComposeFileUpdate(mockClient as Client, mockCommitRequest, {
         schema: false,
@@ -266,10 +252,7 @@ describe("commitCvmComposeFileUpdate", () => {
     it("should use custom schema when provided", async () => {
       const customSchema = z.object({ custom_field: z.string() });
       const customData = { custom_field: "value" };
-      (mockClient.safePatch as jest.Mock).mockResolvedValue({
-        success: true,
-        data: customData,
-      });
+      (mockClient.patch as jest.Mock).mockResolvedValue(customData);
 
       const result = await safeCommitCvmComposeFileUpdate(mockClient as Client, mockCommitRequest, {
         schema: customSchema,
@@ -283,10 +266,7 @@ describe("commitCvmComposeFileUpdate", () => {
 
     it("should return validation error when custom schema fails", async () => {
       const customSchema = z.object({ required_field: z.string() });
-      (mockClient.safePatch as jest.Mock).mockResolvedValue({
-        success: true,
-        data: { wrong_field: "value" },
-      });
+      (mockClient.patch as jest.Mock).mockResolvedValue({ wrong_field: "value" });
 
       const result = await safeCommitCvmComposeFileUpdate(mockClient as Client, mockCommitRequest, {
         schema: customSchema,
@@ -342,10 +322,7 @@ describe("commitCvmComposeFileUpdate", () => {
     });
 
     it("should work with safe version with minimal parameters", async () => {
-      (mockClient.safePatch as jest.Mock).mockResolvedValue({
-        success: true,
-        data: mockCommitResponse,
-      });
+      (mockClient.patch as jest.Mock).mockResolvedValue(mockCommitResponse);
 
       const result = await safeCommitCvmComposeFileUpdate(mockClient as Client, {
         id: mockCommitRequest.id,

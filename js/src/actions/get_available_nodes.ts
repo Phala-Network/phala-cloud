@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { type Client, type SafeResult } from "../client";
+import { type Client } from "../client";
 import { KmsInfoSchema } from "../types/kms_info";
-import { ActionParameters, ActionReturnType } from "../types/common";
+import { defineSimpleAction } from "../utils/define-action";
 
 /**
  * Get available teepods and their capacity information
@@ -116,38 +116,11 @@ export type TeepodCapacity = z.infer<typeof TeepodCapacitySchema>;
 export type ResourceThreshold = z.infer<typeof ResourceThresholdSchema>;
 export type AvailableNodes = z.infer<typeof AvailableNodesSchema>;
 
-export type GetAvailableNodesParameters<T = undefined> = ActionParameters<T>;
+const { action: getAvailableNodes, safeAction: safeGetAvailableNodes } = defineSimpleAction(
+  AvailableNodesSchema,
+  async (client: Client) => {
+    return await client.get("/teepods/available");
+  },
+);
 
-export type GetAvailableNodesReturnType<T = undefined> = ActionReturnType<AvailableNodes, T>;
-
-export async function getAvailableNodes<T extends z.ZodSchema | false | undefined = undefined>(
-  client: Client,
-  parameters?: GetAvailableNodesParameters<T>,
-): Promise<GetAvailableNodesReturnType<T>> {
-  const response = await client.get("/teepods/available");
-
-  if (parameters?.schema === false) {
-    return response as GetAvailableNodesReturnType<T>;
-  }
-
-  const schema = (parameters?.schema || AvailableNodesSchema) as z.ZodSchema;
-  return schema.parse(response) as GetAvailableNodesReturnType<T>;
-}
-
-export async function safeGetAvailableNodes<T extends z.ZodSchema | false | undefined = undefined>(
-  client: Client,
-  parameters?: GetAvailableNodesParameters<T>,
-): Promise<SafeResult<GetAvailableNodesReturnType<T>>> {
-  const httpResult = await client.safeGet("/teepods/available");
-
-  if (!httpResult.success) {
-    return httpResult as SafeResult<GetAvailableNodesReturnType<T>>;
-  }
-
-  if (parameters?.schema === false) {
-    return { success: true, data: httpResult.data } as SafeResult<GetAvailableNodesReturnType<T>>;
-  }
-
-  const schema = (parameters?.schema || AvailableNodesSchema) as z.ZodSchema;
-  return schema.safeParse(httpResult.data) as SafeResult<GetAvailableNodesReturnType<T>>;
-}
+export { getAvailableNodes, safeGetAvailableNodes };

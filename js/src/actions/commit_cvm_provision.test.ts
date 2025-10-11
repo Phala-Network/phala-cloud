@@ -109,8 +109,8 @@ describe("commitCvmProvision", () => {
 
   describe("safeCommitCvmProvision", () => {
     it("should return success result when API call succeeds", async () => {
-      mockSafePost.mockResolvedValueOnce({ success: true, data: mockCvmData });
-      
+      mockPost.mockResolvedValueOnce(mockCvmData);
+
       const result = await safeCommitCvmProvision(client, mockPayload);
       expect(result.success).toBe(true);
       if (result.success) {
@@ -119,11 +119,11 @@ describe("commitCvmProvision", () => {
     });
 
     it("should return error result when API call fails", async () => {
-      mockSafePost.mockResolvedValueOnce({ 
-        success: false, 
-        error: { isRequestError: true, status: 422, message: "Validation error" } 
-      });
-      
+      const error = new Error("Validation error");
+      (error as any).isRequestError = true;
+      (error as any).status = 422;
+      mockPost.mockRejectedValueOnce(error);
+
       const result = await safeCommitCvmProvision(client, mockPayload);
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -135,8 +135,8 @@ describe("commitCvmProvision", () => {
     });
 
     it("should handle Zod validation errors", async () => {
-      mockSafePost.mockResolvedValueOnce({ success: true, data: { invalid: "data" } });
-      
+      mockPost.mockResolvedValueOnce({ invalid: "data" });
+
       const result = await safeCommitCvmProvision(client, mockPayload);
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -147,11 +147,11 @@ describe("commitCvmProvision", () => {
     });
 
     it("should pass through HTTP errors directly", async () => {
-      mockSafePost.mockResolvedValueOnce({ 
-        success: false, 
-        error: { isRequestError: true, status: 400, message: "Bad request" } 
-      });
-      
+      const error = new Error("Bad request");
+      (error as any).isRequestError = true;
+      (error as any).status = 400;
+      mockPost.mockRejectedValueOnce(error);
+
       const result = await safeCommitCvmProvision(client, mockPayload);
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -164,8 +164,8 @@ describe("commitCvmProvision", () => {
 
     it("should return raw data when schema is false", async () => {
       const rawData = { foo: "bar" };
-      mockSafePost.mockResolvedValueOnce({ success: true, data: rawData });
-      
+      mockPost.mockResolvedValueOnce(rawData);
+
       const result = await safeCommitCvmProvision(client, mockPayload, { schema: false });
       expect(result.success).toBe(true);
       if (result.success) {
@@ -176,8 +176,8 @@ describe("commitCvmProvision", () => {
     it("should use custom schema when provided", async () => {
       const customSchema = z.object({ id: z.number(), name: z.string() });
       const customData = { id: 123, name: "test" };
-      mockSafePost.mockResolvedValueOnce({ success: true, data: customData });
-      
+      mockPost.mockResolvedValueOnce(customData);
+
       const result = await safeCommitCvmProvision(client, mockPayload, { schema: customSchema });
       expect(result.success).toBe(true);
       if (result.success) {
@@ -188,8 +188,8 @@ describe("commitCvmProvision", () => {
     it("should return validation error when custom schema fails", async () => {
       const customSchema = z.object({ id: z.number(), name: z.string() });
       const invalidData = { id: "not-a-number", name: "test" };
-      mockSafePost.mockResolvedValueOnce({ success: true, data: invalidData });
-      
+      mockPost.mockResolvedValueOnce(invalidData);
+
       const result = await safeCommitCvmProvision(client, mockPayload, { schema: customSchema });
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -216,15 +216,15 @@ describe("commitCvmProvision", () => {
     });
 
     it("should work with safe version without parameters", async () => {
-      mockSafePost.mockResolvedValueOnce({ success: true, data: mockCvmData });
-      
+      mockPost.mockResolvedValueOnce(mockCvmData);
+
       const result = await safeCommitCvmProvision(client, mockPayload);
       expect(result.success).toBe(true);
     });
 
     it("should work with safe version with empty parameters object", async () => {
-      mockSafePost.mockResolvedValueOnce({ success: true, data: mockCvmData });
-      
+      mockPost.mockResolvedValueOnce(mockCvmData);
+
       const result = await safeCommitCvmProvision(client, mockPayload, {});
       expect(result.success).toBe(true);
     });

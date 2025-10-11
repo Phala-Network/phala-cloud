@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { type Client, type SafeResult } from "../client";
-import { ActionParameters, ActionReturnType } from "../types/common";
+import { type Client } from "../client";
 import { KmsInfoSchema } from "../types/kms_info";
 import { LooseAppComposeSchema } from "../types/app_compose";
+import { defineAction } from "../utils/define-action";
 
 /**
  * Provision CVM compose file update
@@ -135,12 +135,6 @@ export type ProvisionCvmComposeFileUpdateResult = z.infer<
   typeof ProvisionCvmComposeFileUpdateResultSchema
 >;
 
-export type ProvisionCvmComposeFileUpdateParameters<T = undefined> = ActionParameters<T>;
-export type ProvisionCvmComposeFileUpdateReturnType<T = undefined> = ActionReturnType<
-  ProvisionCvmComposeFileUpdateResult,
-  T
->;
-
 /**
  * Provision a CVM compose file update
  *
@@ -149,59 +143,16 @@ export type ProvisionCvmComposeFileUpdateReturnType<T = undefined> = ActionRetur
  * @param parameters - Optional behavior parameters
  * @returns Update provision result
  */
-export async function provisionCvmComposeFileUpdate<
-  T extends z.ZodSchema | false | undefined = undefined,
->(
-  client: Client,
-  request: ProvisionCvmComposeFileUpdateRequest,
-  parameters?: ProvisionCvmComposeFileUpdateParameters<T>,
-): Promise<ProvisionCvmComposeFileUpdateReturnType<T>> {
-  const validatedRequest = ProvisionCvmComposeFileUpdateRequestSchema.parse(request);
+const { action: provisionCvmComposeFileUpdate, safeAction: safeProvisionCvmComposeFileUpdate } =
+  defineAction<
+    ProvisionCvmComposeFileUpdateRequest,
+    typeof ProvisionCvmComposeFileUpdateResultSchema
+  >(ProvisionCvmComposeFileUpdateResultSchema, async (client, request) => {
+    const validatedRequest = ProvisionCvmComposeFileUpdateRequestSchema.parse(request);
+    return await client.post(
+      `/cvms/${validatedRequest.cvmId}/compose_file/provision`,
+      validatedRequest.request,
+    );
+  });
 
-  const response = await client.post(
-    `/cvms/${validatedRequest.cvmId}/compose_file/provision`,
-    validatedRequest.request,
-  );
-
-  if (parameters?.schema === false) {
-    return response as ProvisionCvmComposeFileUpdateReturnType<T>;
-  }
-
-  const schema = (parameters?.schema || ProvisionCvmComposeFileUpdateResultSchema) as z.ZodSchema;
-  return schema.parse(response) as ProvisionCvmComposeFileUpdateReturnType<T>;
-}
-
-/**
- * Safe version of provisionCvmComposeFileUpdate that returns a Result type instead of throwing
- */
-export async function safeProvisionCvmComposeFileUpdate<
-  T extends z.ZodSchema | false | undefined = undefined,
->(
-  client: Client,
-  request: ProvisionCvmComposeFileUpdateRequest,
-  parameters?: ProvisionCvmComposeFileUpdateParameters<T>,
-): Promise<SafeResult<ProvisionCvmComposeFileUpdateReturnType<T>>> {
-  const requestValidation = ProvisionCvmComposeFileUpdateRequestSchema.safeParse(request);
-  if (!requestValidation.success) {
-    return requestValidation as SafeResult<ProvisionCvmComposeFileUpdateReturnType<T>>;
-  }
-
-  const httpResult = await client.safePost(
-    `/cvms/${requestValidation.data.cvmId}/compose_file/provision`,
-    requestValidation.data.request,
-  );
-  if (!httpResult.success) {
-    return httpResult as SafeResult<ProvisionCvmComposeFileUpdateReturnType<T>>;
-  }
-
-  if (parameters?.schema === false) {
-    return { success: true, data: httpResult.data } as SafeResult<
-      ProvisionCvmComposeFileUpdateReturnType<T>
-    >;
-  }
-
-  const schema = (parameters?.schema || ProvisionCvmComposeFileUpdateResultSchema) as z.ZodSchema;
-  return schema.safeParse(httpResult.data) as SafeResult<
-    ProvisionCvmComposeFileUpdateReturnType<T>
-  >;
-}
+export { provisionCvmComposeFileUpdate, safeProvisionCvmComposeFileUpdate };

@@ -1,9 +1,8 @@
 import { z } from "zod";
-import { type Client, type SafeResult } from "../client";
+import { type Client } from "../client";
 import { CvmLegacyDetailSchema } from "../types/cvm_info";
 import { type KmsInfo } from "../types/kms_info";
-import { ActionParameters, ActionReturnType } from "../types/common";
-import { validateActionParameters, safeValidateActionParameters } from "../utils";
+import { defineAction } from "../utils/define-action";
 
 export { CvmLegacyDetailSchema };
 
@@ -49,10 +48,6 @@ export type GetCvmInfoRequest = {
   instance_id?: string;
 };
 
-export type GetCvmInfoParameters<T = undefined> = ActionParameters<T>;
-
-export type GetCvmInfoReturnType<T = undefined> = ActionReturnType<GetCvmInfoResponse, T>;
-
 /**
  * Get information about a specific CVM
  *
@@ -67,53 +62,12 @@ export type GetCvmInfoReturnType<T = undefined> = ActionReturnType<GetCvmInfoRes
  * const info = await getCvmInfo(client, { cvmId: "cvm-123" })
  * ```
  */
-export async function getCvmInfo<T extends z.ZodSchema | false | undefined = undefined>(
-  client: Client,
-  request: GetCvmInfoRequest,
-  parameters?: GetCvmInfoParameters<T>,
-): Promise<GetCvmInfoReturnType<T>> {
+const { action: getCvmInfo, safeAction: safeGetCvmInfo } = defineAction<
+  GetCvmInfoRequest,
+  typeof CvmLegacyDetailSchema
+>(CvmLegacyDetailSchema, async (client, request) => {
   const validatedRequest = GetCvmInfoRequestSchema.parse(request);
+  return await client.get(`/cvms/${validatedRequest.cvmId}`);
+});
 
-  validateActionParameters(parameters);
-
-  const response = await client.get(`/cvms/${validatedRequest.cvmId}`);
-
-  if (parameters?.schema === false) {
-    return response as GetCvmInfoReturnType<T>;
-  }
-  const schema = (parameters?.schema || CvmLegacyDetailSchema) as z.ZodSchema;
-  return schema.parse(response) as GetCvmInfoReturnType<T>;
-}
-
-/**
- * Safe version of getCvmInfo that returns a Result type instead of throwing
- */
-export async function safeGetCvmInfo<T extends z.ZodSchema | false | undefined = undefined>(
-  client: Client,
-  request: GetCvmInfoRequest,
-  parameters?: GetCvmInfoParameters<T>,
-): Promise<SafeResult<GetCvmInfoReturnType<T>>> {
-  const requestValidation = GetCvmInfoRequestSchema.safeParse(request);
-  if (!requestValidation.success) {
-    return requestValidation as SafeResult<GetCvmInfoReturnType<T>>;
-  }
-
-  const parameterValidationError = safeValidateActionParameters(parameters);
-  if (parameterValidationError) {
-    return parameterValidationError as SafeResult<GetCvmInfoReturnType<T>>;
-  }
-
-  const httpResult = await client.safeGet(`/cvms/${requestValidation.data.cvmId}`);
-  if (!httpResult.success) {
-    return httpResult;
-  }
-  if (parameters?.schema === false) {
-    return {
-      success: true,
-      data: httpResult.data,
-    } as SafeResult<GetCvmInfoReturnType<T>>;
-  }
-  const schema = (parameters?.schema || CvmLegacyDetailSchema) as z.ZodSchema;
-  const validationResult = schema.safeParse(httpResult.data);
-  return validationResult as SafeResult<GetCvmInfoReturnType<T>>;
-}
+export { getCvmInfo, safeGetCvmInfo };

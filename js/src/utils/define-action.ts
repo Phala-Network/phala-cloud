@@ -86,6 +86,10 @@ export function defineSimpleAction<TSchema extends z.ZodTypeAny>(
         if (error && typeof error === "object" && "isRequestError" in error) {
           return { success: false, error } as const;
         }
+        // Preserve ZodError structure with issues
+        if (error && typeof error === "object" && "issues" in error) {
+          return { success: false, error } as const;
+        }
         return {
           success: false,
           error: {
@@ -207,6 +211,10 @@ export function defineAction<TParams, TSchema extends z.ZodTypeAny>(
         return { success: true, data } as const;
       } catch (error) {
         if (error && typeof error === "object" && "isRequestError" in error) {
+          return { success: false, error } as const;
+        }
+        // Preserve ZodError structure with issues
+        if (error && typeof error === "object" && "issues" in error) {
           return { success: false, error } as const;
         }
         return {

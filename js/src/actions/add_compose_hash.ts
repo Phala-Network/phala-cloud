@@ -318,13 +318,13 @@ export const AddComposeHashSchema = z
 export type AddComposeHash = z.infer<typeof AddComposeHashSchema>;
 
 // Conditional types for intelligent type inference
-export type AddComposeHashParameters<T = undefined> = T extends z.ZodSchema
+export type AddComposeHashParameters<T = undefined> = T extends z.ZodTypeAny
   ? { schema: T }
   : T extends false
     ? { schema: false }
-    : { schema?: z.ZodSchema | false };
+    : { schema?: z.ZodTypeAny | false };
 
-export type AddComposeHashReturnType<T = undefined> = T extends z.ZodSchema
+export type AddComposeHashReturnType<T = undefined> = T extends z.ZodTypeAny
   ? z.infer<T>
   : T extends false
     ? unknown
@@ -380,7 +380,7 @@ function parseComposeHashResult(
 }
 
 // Standard version (throws on error)
-export async function addComposeHash<T extends z.ZodSchema | false | undefined = undefined>(
+export async function addComposeHash<T extends z.ZodTypeAny | false | undefined = undefined>(
   request: AddComposeHashRequest,
   parameters?: AddComposeHashParameters<T>,
 ): Promise<AddComposeHashReturnType<T>> {
@@ -548,7 +548,7 @@ export async function addComposeHash<T extends z.ZodSchema | false | undefined =
     return result as AddComposeHashReturnType<T>;
   }
 
-  const schema = (parameters?.schema || AddComposeHashSchema) as z.ZodSchema;
+  const schema = (parameters?.schema || AddComposeHashSchema) as z.ZodTypeAny;
   return schema.parse(result) as AddComposeHashReturnType<T>;
 }
 
@@ -564,7 +564,7 @@ export type SafeAddComposeHashResult<T = undefined> =
     };
 
 // Safe version (returns SafeResult)
-export async function safeAddComposeHash<T extends z.ZodSchema | false | undefined = undefined>(
+export async function safeAddComposeHash<T extends z.ZodTypeAny | false | undefined = undefined>(
   request: AddComposeHashRequest,
   parameters?: AddComposeHashParameters<T>,
 ): Promise<SafeAddComposeHashResult<T>> {

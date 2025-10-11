@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { type Client, type SafeResult } from "../client";
-import { ActionParameters, ActionReturnType } from "../types/common";
+import { type Client } from "../client";
 import { LooseAppComposeSchema } from "../types/app_compose";
+import { defineAction } from "../utils/define-action";
 
 /**
  * Get CVM compose file configuration
@@ -118,49 +118,12 @@ export type GetCvmComposeFileRequest = {
   instance_id?: string;
 };
 
-export type GetCvmComposeFileParameters<T = undefined> = ActionParameters<T>;
-
-export type GetCvmComposeFileReturnType<T = undefined> = ActionReturnType<
-  GetCvmComposeFileResult,
-  T
->;
-
-export async function getCvmComposeFile<T extends z.ZodSchema | false | undefined = undefined>(
-  client: Client,
-  request: GetCvmComposeFileRequest,
-  parameters?: GetCvmComposeFileParameters<T>,
-): Promise<GetCvmComposeFileReturnType<T>> {
+const { action: getCvmComposeFile, safeAction: safeGetCvmComposeFile } = defineAction<
+  GetCvmComposeFileRequest,
+  typeof LooseAppComposeSchema
+>(LooseAppComposeSchema, async (client, request) => {
   const validatedRequest = GetCvmComposeFileRequestSchema.parse(request);
+  return await client.get(`/cvms/${validatedRequest.cvmId}/compose_file`);
+});
 
-  const response = await client.get(`/cvms/${validatedRequest.cvmId}/compose_file`);
-
-  if (parameters?.schema === false) {
-    return response as GetCvmComposeFileReturnType<T>;
-  }
-
-  const schema = (parameters?.schema || LooseAppComposeSchema) as z.ZodSchema;
-  return schema.parse(response) as GetCvmComposeFileReturnType<T>;
-}
-
-export async function safeGetCvmComposeFile<T extends z.ZodSchema | false | undefined = undefined>(
-  client: Client,
-  request: GetCvmComposeFileRequest,
-  parameters?: GetCvmComposeFileParameters<T>,
-): Promise<SafeResult<GetCvmComposeFileReturnType<T>>> {
-  const requestValidation = GetCvmComposeFileRequestSchema.safeParse(request);
-  if (!requestValidation.success) {
-    return requestValidation as SafeResult<GetCvmComposeFileReturnType<T>>;
-  }
-
-  const httpResult = await client.safeGet(`/cvms/${requestValidation.data.cvmId}/compose_file`);
-  if (!httpResult.success) {
-    return httpResult as SafeResult<GetCvmComposeFileReturnType<T>>;
-  }
-
-  if (parameters?.schema === false) {
-    return { success: true, data: httpResult.data } as SafeResult<GetCvmComposeFileReturnType<T>>;
-  }
-
-  const schema = (parameters?.schema || LooseAppComposeSchema) as z.ZodSchema;
-  return schema.safeParse(httpResult.data) as SafeResult<GetCvmComposeFileReturnType<T>>;
-}
+export { getCvmComposeFile, safeGetCvmComposeFile };

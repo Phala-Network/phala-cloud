@@ -4,8 +4,6 @@ import { createClient } from "../client";
 import {
   getKmsInfo,
   safeGetKmsInfo,
-  type GetKmsInfoParameters,
-  type GetKmsInfoReturnType,
   type GetKmsInfoRequest,
 } from "./get_kms_info";
 import type { KmsInfo } from "../types/kms_info";
@@ -155,14 +153,11 @@ describe("getKmsInfo", () => {
 
   describe("safeGetKmsInfo", () => {
     it("should return success result when API call succeeds", async () => {
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: mockKmsInfoData,
-      });
+      mockGet.mockResolvedValue(mockKmsInfoData);
 
       const result = await safeGetKmsInfo(client, { kms_id: "test-kms-id" });
 
-      expect(mockSafeGet).toHaveBeenCalledWith("/kms/test-kms-id");
+      expect(mockGet).toHaveBeenCalledWith("/kms/test-kms-id");
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data).toEqual(mockKmsInfoData);
@@ -171,18 +166,10 @@ describe("getKmsInfo", () => {
     });
 
     it("should return error result when API call fails", async () => {
-      const apiError = {
-        success: false,
-        error: {
-          name: "RequestError",
-          message: "KMS not found",
-          detail: "KMS not found",
-          isRequestError: true,
-          status: 404,
-        },
-      } as const;
-
-      mockSafeGet.mockResolvedValue(apiError);
+      const apiError = new Error("KMS not found");
+      (apiError as any).isRequestError = true;
+      (apiError as any).status = 404;
+      mockGet.mockRejectedValue(apiError);
 
       const result = await safeGetKmsInfo(client, { kms_id: "nonexistent-kms" });
 
@@ -202,10 +189,7 @@ describe("getKmsInfo", () => {
         url: null, // should be string
       };
 
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: invalidData,
-      });
+      mockGet.mockResolvedValue(invalidData);
 
       const result = await safeGetKmsInfo(client, { kms_id: "test-kms-id" });
 
@@ -218,14 +202,10 @@ describe("getKmsInfo", () => {
     });
 
     it("should pass through HTTP errors directly", async () => {
-      mockSafeGet.mockResolvedValue({
-        success: false,
-        error: {
-          isRequestError: true,
-          status: 500,
-          message: "internal server error",
-        },
-      });
+      const error = new Error("internal server error");
+      (error as any).isRequestError = true;
+      (error as any).status = 500;
+      mockGet.mockRejectedValue(error);
 
       const result = await safeGetKmsInfo(client, { kms_id: "test-kms-id" });
 
@@ -238,10 +218,7 @@ describe("getKmsInfo", () => {
     });
 
     it("should return raw data when schema is false", async () => {
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: mockKmsInfoData,
-      });
+      mockGet.mockResolvedValue(mockKmsInfoData);
 
       const result = await safeGetKmsInfo(client, { kms_id: "test-kms-id" }, { schema: false });
 
@@ -258,10 +235,7 @@ describe("getKmsInfo", () => {
       });
       const customData = { id: "test-id", custom_field: "test" };
 
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: customData,
-      });
+      mockGet.mockResolvedValue(customData);
 
       const result = await safeGetKmsInfo(client, { kms_id: "test-kms-id" }, { schema: customSchema });
 
@@ -278,10 +252,7 @@ describe("getKmsInfo", () => {
       });
       const invalidData = { id: 123, custom_field: "test" };
 
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: invalidData,
-      });
+      mockGet.mockResolvedValue(invalidData);
 
       const result = await safeGetKmsInfo(client, { kms_id: "test-kms-id" }, { schema: customSchema });
 
@@ -294,14 +265,11 @@ describe("getKmsInfo", () => {
     });
 
     it("should handle different KMS IDs correctly in safe version", async () => {
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: mockKmsInfoData,
-      });
+      mockGet.mockResolvedValue(mockKmsInfoData);
 
       await safeGetKmsInfo(client, { kms_id: "special-kms-456" });
 
-      expect(mockSafeGet).toHaveBeenCalledWith("/kms/special-kms-456");
+      expect(mockGet).toHaveBeenCalledWith("/kms/special-kms-456");
     });
 
     it("should handle KMS with minimal data", async () => {
@@ -317,10 +285,7 @@ describe("getKmsInfo", () => {
         gateway_app_id: null,
       };
 
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: minimalKms,
-      });
+      mockGet.mockResolvedValue(minimalKms);
 
       const result = await safeGetKmsInfo(client, { kms_id: "minimal-kms" });
 
@@ -403,15 +368,13 @@ describe("getKmsInfo", () => {
       
       // Valid parameters should compile
       const request: GetKmsInfoRequest = { kms_id: "test-kms-id" };
-      const params: GetKmsInfoParameters = {};
-      await getKmsInfo(client, request, params);
-      
+      await getKmsInfo(client, request);
+
       // Test with custom schema - use appropriate mock data
       const customSchema = z.object({ id: z.number() });
       const customMockData = { id: 123 };
       mockGet.mockResolvedValueOnce(customMockData);
-      const paramsWithSchema: GetKmsInfoParameters<typeof customSchema> = { schema: customSchema };
-      await getKmsInfo(client, request, paramsWithSchema);
+      await getKmsInfo(client, request, { schema: customSchema });
     });
   });
 
@@ -450,22 +413,19 @@ describe("getKmsInfo", () => {
   describe("client method behavior", () => {
     it("should use client.get in standard version", async () => {
       mockGet.mockResolvedValue(mockKmsInfoData);
-      mockSafeGet.mockResolvedValue({ success: true, data: mockKmsInfoData });
 
       await getKmsInfo(client, { kms_id: "test-kms-id" });
 
       expect(mockGet).toHaveBeenCalledWith("/kms/test-kms-id");
-      expect(mockSafeGet).not.toHaveBeenCalled();
     });
 
-    it("should use client.safeGet in safe version", async () => {
+    it("should use client.get in safe version (wrapped by safeAction)", async () => {
       mockGet.mockResolvedValue(mockKmsInfoData);
-      mockSafeGet.mockResolvedValue({ success: true, data: mockKmsInfoData });
 
-      await safeGetKmsInfo(client, { kms_id: "test-kms-id" });
+      const result = await safeGetKmsInfo(client, { kms_id: "test-kms-id" });
 
-      expect(mockSafeGet).toHaveBeenCalledWith("/kms/test-kms-id");
-      expect(mockGet).not.toHaveBeenCalled();
+      expect(mockGet).toHaveBeenCalledWith("/kms/test-kms-id");
+      expect(result.success).toBe(true);
     });
 
     it("should handle errors from client.get", async () => {

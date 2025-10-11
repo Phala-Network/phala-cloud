@@ -1,8 +1,7 @@
 import { z } from "zod";
-import { type Client, type SafeResult } from "../client";
-import { KmsInfo, KmsInfoSchema } from "../types/kms_info";
-import { ActionParameters, ActionReturnType } from "../types/common";
-import { validateActionParameters, safeValidateActionParameters } from "../utils";
+import { type Client } from "../client";
+import { type KmsInfo, KmsInfoSchema } from "../types/kms_info";
+import { defineAction } from "../utils/define-action";
 
 export const GetKmsListRequestSchema = z
   .object({
@@ -25,56 +24,12 @@ export const GetKmsListSchema = z
 export type GetKmsListRequest = z.infer<typeof GetKmsListRequestSchema>;
 export type GetKmsListResponse = z.infer<typeof GetKmsListSchema> & { items: KmsInfo[] };
 
-export type GetKmsListParameters<T = undefined> = ActionParameters<T>;
-
-export type GetKmsListReturnType<T = undefined> = ActionReturnType<GetKmsListResponse, T>;
-
-export async function getKmsList<T extends z.ZodSchema | false | undefined = undefined>(
-  client: Client,
-  request?: GetKmsListRequest,
-  parameters?: GetKmsListParameters<T>,
-): Promise<GetKmsListReturnType<T>> {
+const { action: getKmsList, safeAction: safeGetKmsList } = defineAction<
+  GetKmsListRequest | undefined,
+  typeof GetKmsListSchema
+>(GetKmsListSchema, async (client, request) => {
   const validatedRequest = GetKmsListRequestSchema.parse(request ?? {});
+  return await client.get("/kms", { params: validatedRequest });
+});
 
-  validateActionParameters(parameters);
-
-  const response = await client.get("/kms", { params: validatedRequest });
-  if (parameters?.schema === false) {
-    return response as GetKmsListReturnType<T>;
-  }
-
-  const schema = (parameters?.schema || GetKmsListSchema) as z.ZodSchema;
-  return schema.parse(response) as GetKmsListReturnType<T>;
-}
-
-export async function safeGetKmsList<T extends z.ZodSchema | false | undefined = undefined>(
-  client: Client,
-  request?: GetKmsListRequest,
-  parameters?: GetKmsListParameters<T>,
-): Promise<SafeResult<GetKmsListReturnType<T>>> {
-  const requestValidation = GetKmsListRequestSchema.safeParse(request ?? {});
-  if (!requestValidation.success) {
-    return requestValidation as SafeResult<GetKmsListReturnType<T>>;
-  }
-
-  const parameterValidationError = safeValidateActionParameters(parameters);
-  if (parameterValidationError) {
-    return parameterValidationError as SafeResult<GetKmsListReturnType<T>>;
-  }
-
-  const httpResult = await client.safeGet("/kms", { params: requestValidation.data });
-  if (!httpResult.success) {
-    return httpResult;
-  }
-
-  if (parameters?.schema === false) {
-    return {
-      success: true,
-      data: httpResult.data,
-    } as SafeResult<GetKmsListReturnType<T>>;
-  }
-
-  const schema = (parameters?.schema || GetKmsListSchema) as z.ZodSchema;
-  const validationResult = schema.safeParse(httpResult.data);
-  return validationResult as SafeResult<GetKmsListReturnType<T>>;
-}
+export { getKmsList, safeGetKmsList };

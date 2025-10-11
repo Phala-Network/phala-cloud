@@ -1,7 +1,6 @@
 import { z } from "zod";
-import { type Client, type SafeResult } from "../client";
-import { ActionParameters, ActionReturnType } from "../types/common";
-import { validateActionParameters, safeValidateActionParameters } from "../utils";
+import { type Client } from "../client";
+import { defineAction } from "../utils/define-action";
 
 // Request Schema
 export const ListInstanceTypesRequestSchema = z
@@ -41,12 +40,6 @@ export type ListInstanceTypesRequest = z.infer<typeof ListInstanceTypesRequestSc
 export type InstanceType = z.infer<typeof InstanceTypeSchema>;
 export type PaginatedInstanceTypes = z.infer<typeof PaginatedInstanceTypesSchema>;
 
-export type ListInstanceTypesParameters<T = undefined> = ActionParameters<T>;
-export type ListInstanceTypesReturnType<T = undefined> = ActionReturnType<
-  PaginatedInstanceTypes,
-  T
->;
-
 /**
  * List available instance types with pagination
  *
@@ -69,63 +62,17 @@ export type ListInstanceTypesReturnType<T = undefined> = ActionReturnType<
  * const types = await listInstanceTypes(client, { page_size: 1000 })
  * ```
  */
-export async function listInstanceTypes<T extends z.ZodSchema | false | undefined = undefined>(
-  client: Client,
-  request?: ListInstanceTypesRequest,
-  parameters?: ListInstanceTypesParameters<T>,
-): Promise<ListInstanceTypesReturnType<T>> {
+const { action: listInstanceTypes, safeAction: safeListInstanceTypes } = defineAction<
+  ListInstanceTypesRequest | undefined,
+  typeof PaginatedInstanceTypesSchema
+>(PaginatedInstanceTypesSchema, async (client, request) => {
   const validatedRequest = ListInstanceTypesRequestSchema.parse(request ?? {});
-  validateActionParameters(parameters);
 
   const queryParams = new URLSearchParams();
   queryParams.append("page", validatedRequest.page.toString());
   queryParams.append("page_size", validatedRequest.page_size.toString());
 
-  const response = await client.get(`/api/instance-types?${queryParams.toString()}`);
+  return await client.get(`/api/instance-types?${queryParams.toString()}`);
+});
 
-  if (parameters?.schema === false) {
-    return response as ListInstanceTypesReturnType<T>;
-  }
-
-  const schema = (parameters?.schema || PaginatedInstanceTypesSchema) as z.ZodSchema;
-  return schema.parse(response) as ListInstanceTypesReturnType<T>;
-}
-
-/**
- * Safe version of listInstanceTypes that returns a Result type instead of throwing
- */
-export async function safeListInstanceTypes<T extends z.ZodSchema | false | undefined = undefined>(
-  client: Client,
-  request?: ListInstanceTypesRequest,
-  parameters?: ListInstanceTypesParameters<T>,
-): Promise<SafeResult<ListInstanceTypesReturnType<T>>> {
-  const requestValidation = ListInstanceTypesRequestSchema.safeParse(request ?? {});
-  if (!requestValidation.success) {
-    return requestValidation as SafeResult<ListInstanceTypesReturnType<T>>;
-  }
-
-  const parameterValidationError = safeValidateActionParameters(parameters);
-  if (parameterValidationError) {
-    return parameterValidationError as SafeResult<ListInstanceTypesReturnType<T>>;
-  }
-
-  const queryParams = new URLSearchParams();
-  queryParams.append("page", requestValidation.data.page.toString());
-  queryParams.append("page_size", requestValidation.data.page_size.toString());
-
-  const httpResult = await client.safeGet(`/api/instance-types?${queryParams.toString()}`);
-  if (!httpResult.success) {
-    return httpResult;
-  }
-
-  if (parameters?.schema === false) {
-    return {
-      success: true,
-      data: httpResult.data,
-    } as SafeResult<ListInstanceTypesReturnType<T>>;
-  }
-
-  const schema = (parameters?.schema || PaginatedInstanceTypesSchema) as z.ZodSchema;
-  const validationResult = schema.safeParse(httpResult.data);
-  return validationResult as SafeResult<ListInstanceTypesReturnType<T>>;
-}
+export { listInstanceTypes, safeListInstanceTypes };

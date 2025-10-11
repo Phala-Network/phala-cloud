@@ -160,14 +160,11 @@ describe("getAppEnvEncryptPubKey", () => {
 
   describe("safeGetAppEnvEncryptPubKey", () => {
     it("should return success result when API call succeeds", async () => {
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: mockAppEnvEncryptPubKeyData,
-      });
+      mockGet.mockResolvedValue(mockAppEnvEncryptPubKeyData);
 
       const result = await safeGetAppEnvEncryptPubKey(client, mockRequest);
 
-      expect(mockSafeGet).toHaveBeenCalledWith(`/kms/${mockRequest.kms}/pubkey/${mockRequest.app_id}`);
+      expect(mockGet).toHaveBeenCalledWith(`/kms/${mockRequest.kms}/pubkey/${mockRequest.app_id}`);
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data).toEqual(mockAppEnvEncryptPubKeyData);
@@ -176,18 +173,11 @@ describe("getAppEnvEncryptPubKey", () => {
     });
 
     it("should return error result when API call fails", async () => {
-      const apiError = {
-        success: false,
-        error: {
-          name: "RequestError",
-          message: "KMS not found",
-          detail: "KMS not found",
-          isRequestError: true,
-          status: 404,
-        },
-      } as const;
-
-      mockSafeGet.mockResolvedValue(apiError);
+      const error = new Error("KMS not found");
+      (error as any).isRequestError = true;
+      (error as any).status = 404;
+      (error as any).detail = "KMS not found";
+      mockGet.mockRejectedValue(error);
 
       const result = await safeGetAppEnvEncryptPubKey(client, mockRequest);
 
@@ -207,10 +197,7 @@ describe("getAppEnvEncryptPubKey", () => {
         signature: null, // should be string
       };
 
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: invalidData,
-      });
+      mockGet.mockResolvedValue(invalidData);
 
       const result = await safeGetAppEnvEncryptPubKey(client, mockRequest);
 
@@ -223,14 +210,10 @@ describe("getAppEnvEncryptPubKey", () => {
     });
 
     it("should pass through HTTP errors directly", async () => {
-      mockSafeGet.mockResolvedValue({
-        success: false,
-        error: {
-          isRequestError: true,
-          status: 403,
-          message: "forbidden",
-        },
-      });
+      const error = new Error("forbidden");
+      (error as any).isRequestError = true;
+      (error as any).status = 403;
+      mockGet.mockRejectedValue(error);
 
       const result = await safeGetAppEnvEncryptPubKey(client, mockRequest);
 
@@ -243,10 +226,7 @@ describe("getAppEnvEncryptPubKey", () => {
     });
 
     it("should return raw data when schema is false", async () => {
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: mockAppEnvEncryptPubKeyData,
-      });
+      mockGet.mockResolvedValue(mockAppEnvEncryptPubKeyData);
 
       const result = await safeGetAppEnvEncryptPubKey(client, mockRequest, { schema: false });
 
@@ -261,15 +241,12 @@ describe("getAppEnvEncryptPubKey", () => {
         custom_key: z.string(),
         custom_signature: z.string(),
       });
-      const customData = { 
+      const customData = {
         custom_key: "custom-key-data",
         custom_signature: "custom-signature-data",
       };
 
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: customData,
-      });
+      mockGet.mockResolvedValue(customData);
 
       const result = await safeGetAppEnvEncryptPubKey(client, mockRequest, { schema: customSchema });
 
@@ -286,10 +263,7 @@ describe("getAppEnvEncryptPubKey", () => {
       });
       const invalidData = { custom_key: 123, custom_signature: "test" };
 
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: invalidData,
-      });
+      mockGet.mockResolvedValue(invalidData);
 
       const result = await safeGetAppEnvEncryptPubKey(client, mockRequest, { schema: customSchema });
 
@@ -302,10 +276,7 @@ describe("getAppEnvEncryptPubKey", () => {
     });
 
     it("should handle different request payloads in safe version", async () => {
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: mockAppEnvEncryptPubKeyData,
-      });
+      mockGet.mockResolvedValue(mockAppEnvEncryptPubKeyData);
 
       const anotherRequest = {
         kms: "production-kms",
@@ -314,7 +285,7 @@ describe("getAppEnvEncryptPubKey", () => {
 
       await safeGetAppEnvEncryptPubKey(client, anotherRequest);
 
-      expect(mockSafeGet).toHaveBeenCalledWith(`/kms/${anotherRequest.kms}/pubkey/${anotherRequest.app_id}`);
+      expect(mockGet).toHaveBeenCalledWith(`/kms/${anotherRequest.kms}/pubkey/${anotherRequest.app_id}`);
     });
 
     it("should handle empty string responses", async () => {
@@ -323,10 +294,7 @@ describe("getAppEnvEncryptPubKey", () => {
         signature: "",
       };
 
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: emptyData,
-      });
+      mockGet.mockResolvedValue(emptyData);
 
       const result = await safeGetAppEnvEncryptPubKey(client, mockRequest);
 

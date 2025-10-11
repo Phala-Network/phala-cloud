@@ -10,17 +10,16 @@ export {
 export {
   getAvailableNodes,
   safeGetAvailableNodes,
-  type GetAvailableNodesParameters,
-  type GetAvailableNodesReturnType,
   AvailableNodesSchema,
   type AvailableNodes,
+  type AvailableOSImage,
+  type TeepodCapacity,
+  type ResourceThreshold,
 } from "./get_available_nodes";
 
 export {
   provisionCvm,
   safeProvisionCvm,
-  type ProvisionCvmParameters,
-  type ProvisionCvmReturnType,
   ProvisionCvmSchema,
   type ProvisionCvm,
   ProvisionCvmRequestSchema,
@@ -30,8 +29,6 @@ export {
 export {
   commitCvmProvision,
   safeCommitCvmProvision,
-  type CommitCvmProvisionParameters,
-  type CommitCvmProvisionReturnType,
   CommitCvmProvisionSchema,
   type CommitCvmProvision,
   CommitCvmProvisionRequestSchema,
@@ -64,16 +61,14 @@ export {
 export {
   getCvmComposeFile,
   safeGetCvmComposeFile,
-  type GetCvmComposeFileParameters,
-  type GetCvmComposeFileReturnType,
   type GetCvmComposeFileResult,
+  GetCvmComposeFileRequestSchema,
+  type GetCvmComposeFileRequest,
 } from "./get_cvm_compose_file";
 
 export {
   provisionCvmComposeFileUpdate,
   safeProvisionCvmComposeFileUpdate,
-  type ProvisionCvmComposeFileUpdateParameters,
-  type ProvisionCvmComposeFileUpdateReturnType,
   ProvisionCvmComposeFileUpdateRequestSchema,
   type ProvisionCvmComposeFileUpdateRequest,
   ProvisionCvmComposeFileUpdateResultSchema,
@@ -83,8 +78,6 @@ export {
 export {
   commitCvmComposeFileUpdate,
   safeCommitCvmComposeFileUpdate,
-  type CommitCvmComposeFileUpdateParameters,
-  type CommitCvmComposeFileUpdateReturnType,
   CommitCvmComposeFileUpdateRequestSchema,
   type CommitCvmComposeFileUpdateRequest,
   CommitCvmComposeFileUpdateSchema,
@@ -94,72 +87,70 @@ export {
 export {
   getAppEnvEncryptPubKey,
   safeGetAppEnvEncryptPubKey,
-  type GetAppEnvEncryptPubKeyParameters,
-  type GetAppEnvEncryptPubKeyReturnType,
   GetAppEnvEncryptPubKeySchema,
   type GetAppEnvEncryptPubKeyRequest,
   type GetAppEnvEncryptPubKey,
+  GetAppEnvEncryptPubKeyRequestSchema,
 } from "./get_app_env_encrypt_pubkey";
 
 export {
   getCvmInfo,
   safeGetCvmInfo,
-  type GetCvmInfoParameters,
-  type GetCvmInfoReturnType,
   CvmLegacyDetailSchema,
+  GetCvmInfoRequestSchema,
+  type GetCvmInfoRequest,
+  type GetCvmInfoResponse,
 } from "./get_cvm_info";
 
 export {
   getCvmList,
   safeGetCvmList,
-  type GetCvmListParameters,
-  type GetCvmListReturnType,
   GetCvmListSchema,
+  GetCvmListRequestSchema,
+  type GetCvmListRequest,
+  type GetCvmListResponse,
 } from "./get_cvm_list";
 
 export {
   getKmsInfo,
   safeGetKmsInfo,
-  type GetKmsInfoParameters,
-  type GetKmsInfoReturnType,
+  GetKmsInfoRequestSchema,
+  type GetKmsInfoRequest,
 } from "./get_kms_info";
 
 export {
   getKmsList,
   safeGetKmsList,
-  type GetKmsListParameters,
-  type GetKmsListReturnType,
   GetKmsListSchema,
+  GetKmsListRequestSchema,
+  type GetKmsListRequest,
+  type GetKmsListResponse,
 } from "./get_kms_list";
 
 export {
   listWorkspaces,
   safeListWorkspaces,
-  type ListWorkspacesParameters,
-  type ListWorkspacesReturnType,
   WorkspaceResponseSchema,
   ListWorkspacesSchema,
   PaginationMetadataSchema,
   type WorkspaceResponse,
   type ListWorkspaces,
   type PaginationMetadata,
+  type ListWorkspacesRequest,
 } from "./workspaces/list_workspaces";
 
 export {
   getWorkspace,
   safeGetWorkspace,
-  type GetWorkspaceParameters,
-  type GetWorkspaceReturnType,
 } from "./workspaces/get_workspace";
 
 export {
   listInstanceTypes,
   safeListInstanceTypes,
-  type ListInstanceTypesParameters,
-  type ListInstanceTypesReturnType,
   PaginatedInstanceTypesSchema,
   InstanceTypeSchema,
   type PaginatedInstanceTypes,
   type InstanceType,
   type ListInstanceTypesRequest,
+  ListInstanceTypesRequestSchema,
 } from "./list-instance-types";

@@ -242,14 +242,11 @@ describe("getCvmInfo", () => {
 
   describe("safeGetCvmInfo", () => {
     it("should return success result when API call succeeds", async () => {
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: mockCvmInfoData,
-      });
+      mockGet.mockResolvedValue(mockCvmInfoData);
 
       const result = await safeGetCvmInfo(client, { id: "test-cvm-id" });
 
-      expect(mockSafeGet).toHaveBeenCalledWith("/cvms/test-cvm-id");
+      expect(mockGet).toHaveBeenCalledWith("/cvms/test-cvm-id");
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data).toEqual(mockCvmInfoData);
@@ -258,18 +255,11 @@ describe("getCvmInfo", () => {
     });
 
     it("should return error result when API call fails", async () => {
-      const apiError = {
-        success: false,
-        error: {
-          name: "RequestError",
-          message: "CVM not found",
-          detail: "CVM not found",
-          isRequestError: true,
-          status: 404,
-        },
-      } as const;
-
-      mockSafeGet.mockResolvedValue(apiError);
+      const error = new Error("CVM not found");
+      (error as any).isRequestError = true;
+      (error as any).status = 404;
+      (error as any).detail = "CVM not found";
+      mockGet.mockRejectedValue(error);
 
       const result = await safeGetCvmInfo(client, { id: "nonexistent-cvm" });
 
@@ -289,10 +279,7 @@ describe("getCvmInfo", () => {
         status: null, // should be string
       };
 
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: invalidData,
-      });
+      mockGet.mockResolvedValue(invalidData);
 
       const result = await safeGetCvmInfo(client, { id: "test-cvm-id" });
 
@@ -305,14 +292,10 @@ describe("getCvmInfo", () => {
     });
 
     it("should pass through HTTP errors directly", async () => {
-      mockSafeGet.mockResolvedValue({
-        success: false,
-        error: {
-          isRequestError: true,
-          status: 500,
-          message: "internal server error",
-        },
-      });
+      const error = new Error("internal server error");
+      (error as any).isRequestError = true;
+      (error as any).status = 500;
+      mockGet.mockRejectedValue(error);
 
       const result = await safeGetCvmInfo(client, { id: "test-cvm-id" });
 
@@ -325,10 +308,7 @@ describe("getCvmInfo", () => {
     });
 
     it("should return raw data when schema is false", async () => {
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: mockCvmInfoData,
-      });
+      mockGet.mockResolvedValue(mockCvmInfoData);
 
       const result = await safeGetCvmInfo(client, { id: "test-cvm-id" }, { schema: false });
 
@@ -345,10 +325,7 @@ describe("getCvmInfo", () => {
       });
       const customData = { id: "test-id", custom: "test" };
 
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: customData,
-      });
+      mockGet.mockResolvedValue(customData);
 
       const result = await safeGetCvmInfo(client, { id: "test-cvm-id" }, { schema: customSchema });
 
@@ -365,10 +342,7 @@ describe("getCvmInfo", () => {
       });
       const invalidData = { id: 123, custom: "test" };
 
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: invalidData,
-      });
+      mockGet.mockResolvedValue(invalidData);
 
       const result = await safeGetCvmInfo(client, { id: "test-cvm-id" }, { schema: customSchema });
 
@@ -381,14 +355,11 @@ describe("getCvmInfo", () => {
     });
 
     it("should handle different CVM IDs correctly in safe version", async () => {
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: mockCvmInfoData,
-      });
+      mockGet.mockResolvedValue(mockCvmInfoData);
 
       await safeGetCvmInfo(client, { id: "special-cvm-123" });
 
-      expect(mockSafeGet).toHaveBeenCalledWith("/cvms/special-cvm-123");
+      expect(mockGet).toHaveBeenCalledWith("/cvms/special-cvm-123");
     });
 
     it("should handle request validation errors in safe version", async () => {

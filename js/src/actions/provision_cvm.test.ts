@@ -142,7 +142,10 @@ describe("provisionCvm", () => {
     });
 
     it("should return error result when API call fails", async () => {
-      mockSafePost.mockResolvedValueOnce({ success: false, error: { isRequestError: true, status: 500, message: "fail" } });
+      const error = new Error("fail");
+      (error as any).isRequestError = true;
+      (error as any).status = 500;
+      mockPost.mockRejectedValueOnce(error);
       const result = await safeProvisionCvm(client, mockAppCompose);
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -153,7 +156,7 @@ describe("provisionCvm", () => {
     });
 
     it("should handle zod validation errors", async () => {
-      mockSafePost.mockResolvedValueOnce({ success: true, data: { foo: "bar" } });
+      mockPost.mockResolvedValueOnce({ foo: "bar" });
       const result = await safeProvisionCvm(client, mockAppCompose);
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -164,7 +167,10 @@ describe("provisionCvm", () => {
     });
 
     it("should pass through HTTP errors directly", async () => {
-      mockSafePost.mockResolvedValueOnce({ success: false, error: { isRequestError: true, status: 400, message: "bad request" } });
+      const error = new Error("bad request");
+      (error as any).isRequestError = true;
+      (error as any).status = 400;
+      mockPost.mockRejectedValueOnce(error);
       const result = await safeProvisionCvm(client, mockAppCompose);
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -197,7 +203,7 @@ describe("provisionCvm", () => {
 
     it("should return validation error when custom schema fails", async () => {
       const customSchema = z.object({ foo: z.string() });
-      mockSafePost.mockResolvedValueOnce({ success: true, data: { foo: 123 } });
+      mockPost.mockResolvedValueOnce({ foo: 123 });
       const result = await safeProvisionCvm(client, mockAppCompose, { schema: customSchema });
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -457,7 +463,7 @@ describe("provisionCvm", () => {
 
       const backendResponse = { ...mockProvisionData, teepod_id: 1 };
       delete (backendResponse as any).node_id;
-      mockSafePost.mockResolvedValueOnce({ success: true, data: backendResponse });
+      mockPost.mockResolvedValueOnce(backendResponse);
 
       const result = await safeProvisionCvm(client, configWithTproxy);
 
@@ -465,7 +471,7 @@ describe("provisionCvm", () => {
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining("tproxy_enabled is deprecated")
       );
-      expect(mockSafePost).toHaveBeenCalledWith(
+      expect(mockPost).toHaveBeenCalledWith(
         "/cvms/provision",
         expect.objectContaining({
           compose_file: expect.objectContaining({

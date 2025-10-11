@@ -1,7 +1,6 @@
 import { z } from "zod";
-import { type Client, type SafeResult } from "../../client";
-import { ActionParameters, ActionReturnType } from "../../types/common";
-import { validateActionParameters, safeValidateActionParameters } from "../../utils";
+import { type Client } from "../../client";
+import { defineAction } from "../../utils/define-action";
 import { WorkspaceResponseSchema, type WorkspaceResponse } from "./list_workspaces";
 
 /**
@@ -68,46 +67,11 @@ import { WorkspaceResponseSchema, type WorkspaceResponse } from "./list_workspac
  * ```
  */
 
-export type GetWorkspaceParameters<T = undefined> = ActionParameters<T>;
+const { action: getWorkspace, safeAction: safeGetWorkspace } = defineAction<
+  string,
+  typeof WorkspaceResponseSchema
+>(WorkspaceResponseSchema, async (client, teamSlug) => {
+  return await client.get(`/workspaces/${teamSlug}`);
+});
 
-export type GetWorkspaceReturnType<T = undefined> = ActionReturnType<WorkspaceResponse, T>;
-
-export async function getWorkspace<T extends z.ZodSchema | false | undefined = undefined>(
-  client: Client,
-  teamSlug: string,
-  parameters?: GetWorkspaceParameters<T>,
-): Promise<GetWorkspaceReturnType<T>> {
-  validateActionParameters(parameters);
-
-  const response = await client.get(`/workspaces/${teamSlug}`);
-
-  if (parameters?.schema === false) {
-    return response as GetWorkspaceReturnType<T>;
-  }
-
-  const schema = (parameters?.schema || WorkspaceResponseSchema) as z.ZodSchema;
-  return schema.parse(response) as GetWorkspaceReturnType<T>;
-}
-
-export async function safeGetWorkspace<T extends z.ZodSchema | false | undefined = undefined>(
-  client: Client,
-  teamSlug: string,
-  parameters?: GetWorkspaceParameters<T>,
-): Promise<SafeResult<GetWorkspaceReturnType<T>>> {
-  const parameterValidationError = safeValidateActionParameters(parameters);
-  if (parameterValidationError) {
-    return parameterValidationError as SafeResult<GetWorkspaceReturnType<T>>;
-  }
-
-  const httpResult = await client.safeGet(`/workspaces/${teamSlug}`);
-  if (!httpResult.success) {
-    return httpResult as SafeResult<GetWorkspaceReturnType<T>>;
-  }
-
-  if (parameters?.schema === false) {
-    return { success: true, data: httpResult.data } as SafeResult<GetWorkspaceReturnType<T>>;
-  }
-
-  const schema = (parameters?.schema || WorkspaceResponseSchema) as z.ZodSchema;
-  return schema.safeParse(httpResult.data) as SafeResult<GetWorkspaceReturnType<T>>;
-}
+export { getWorkspace, safeGetWorkspace };

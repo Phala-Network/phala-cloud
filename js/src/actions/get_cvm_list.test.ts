@@ -216,14 +216,11 @@ describe("getCvmList", () => {
 
   describe("safeGetCvmList", () => {
     it("should return success result when API call succeeds", async () => {
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: mockCvmListData,
-      });
+      mockGet.mockResolvedValue(mockCvmListData);
 
       const result = await safeGetCvmList(client);
 
-      expect(mockSafeGet).toHaveBeenCalledWith("/cvms/paginated", { params: {} });
+      expect(mockGet).toHaveBeenCalledWith("/cvms/paginated", { params: {} });
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data).toEqual(mockCvmListData);
@@ -232,17 +229,9 @@ describe("getCvmList", () => {
     });
 
     it("should return error result when API call fails", async () => {
-      const apiError = {
-        success: false,
-        error: {
-          name: "RequestError",
-          message: "Network Error",
-          detail: "Network Error",
-          isRequestError: true,
-        },
-      } as const;
-
-      mockSafeGet.mockResolvedValue(apiError);
+      const apiError = new Error("Network Error");
+      (apiError as any).isRequestError = true;
+      mockGet.mockRejectedValue(apiError);
 
       const result = await safeGetCvmList(client);
 
@@ -261,10 +250,7 @@ describe("getCvmList", () => {
         total: "invalid", // should be number
       };
 
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: invalidData,
-      });
+      mockGet.mockResolvedValue(invalidData);
 
       const result = await safeGetCvmList(client);
 
@@ -277,14 +263,10 @@ describe("getCvmList", () => {
     });
 
     it("should pass through HTTP errors directly", async () => {
-      mockSafeGet.mockResolvedValue({
-        success: false,
-        error: {
-          isRequestError: true,
-          status: 400,
-          message: "bad request",
-        },
-      });
+      const error = new Error("bad request");
+      (error as any).isRequestError = true;
+      (error as any).status = 400;
+      mockGet.mockRejectedValue(error);
 
       const result = await safeGetCvmList(client);
 
@@ -297,10 +279,7 @@ describe("getCvmList", () => {
     });
 
     it("should return raw data when schema is false", async () => {
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: mockCvmListData,
-      });
+      mockGet.mockResolvedValue(mockCvmListData);
 
       const result = await safeGetCvmList(client, undefined, { schema: false });
 
@@ -316,10 +295,7 @@ describe("getCvmList", () => {
       });
       const customData = { custom: "test" };
 
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: customData,
-      });
+      mockGet.mockResolvedValue(customData);
 
       const result = await safeGetCvmList(client, undefined, { schema: customSchema });
 
@@ -335,10 +311,7 @@ describe("getCvmList", () => {
       });
       const invalidData = { custom: 123 };
 
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: invalidData,
-      });
+      mockGet.mockResolvedValue(invalidData);
 
       const result = await safeGetCvmList(client, { schema: customSchema });
 
@@ -351,10 +324,7 @@ describe("getCvmList", () => {
     });
 
     it("should handle query parameters correctly in safe version", async () => {
-      mockSafeGet.mockResolvedValue({
-        success: true,
-        data: mockCvmListData,
-      });
+      mockGet.mockResolvedValue(mockCvmListData);
 
       await safeGetCvmList(client, {
         page: 2,
@@ -362,7 +332,7 @@ describe("getCvmList", () => {
         node_id: 123,
       });
 
-      expect(mockSafeGet).toHaveBeenCalledWith("/cvms/paginated", {
+      expect(mockGet).toHaveBeenCalledWith("/cvms/paginated", {
         params: {
           page: 2,
           page_size: 20,
