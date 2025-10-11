@@ -1,4 +1,5 @@
 import type { SafeResult } from "../client";
+import type { z } from "zod";
 
 /**
  * Validates action parameters, specifically the schema parameter
@@ -6,7 +7,7 @@ import type { SafeResult } from "../client";
  * @param parameters - The parameters to validate
  * @throws Error if schema parameter is invalid (for non-safe functions)
  */
-export function validateActionParameters<T>(parameters?: { schema?: T }): void {
+export function validateActionParameters(parameters?: { schema?: z.ZodTypeAny | false }): void {
   if (parameters?.schema !== undefined && parameters?.schema !== false) {
     if (
       typeof parameters.schema !== "object" ||
@@ -25,9 +26,9 @@ export function validateActionParameters<T>(parameters?: { schema?: T }): void {
  * @param parameters - The parameters to validate
  * @returns SafeResult with error if validation fails, undefined if validation passes
  */
-export function safeValidateActionParameters<T, ReturnType>(parameters?: { schema?: T }):
-  | SafeResult<ReturnType>
-  | undefined {
+export function safeValidateActionParameters<ReturnType>(parameters?: {
+  schema?: z.ZodTypeAny | false;
+}): SafeResult<ReturnType> | undefined {
   if (parameters?.schema !== undefined && parameters?.schema !== false) {
     if (
       typeof parameters.schema !== "object" ||

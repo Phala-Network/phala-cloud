@@ -18,16 +18,16 @@ export type Prettify<T> = {
 /**
  * Common type for action parameters that control behavior (e.g., schema validation)
  */
-export type ActionParameters<T = undefined> = T extends z.ZodSchema
+export type ActionParameters<T = undefined> = T extends z.ZodTypeAny
   ? { schema: T }
   : T extends false
     ? { schema: false }
-    : { schema?: z.ZodSchema | false };
+    : { schema?: z.ZodTypeAny | false };
 
 /**
  * Common type for action return values with schema validation support
  */
-export type ActionReturnType<DefaultType, T = undefined> = T extends z.ZodSchema
+export type ActionReturnType<DefaultType, T = undefined> = T extends z.ZodTypeAny
   ? z.infer<T>
   : T extends false
     ? unknown

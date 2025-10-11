@@ -10,7 +10,7 @@ import { validateActionParameters, safeValidateActionParameters } from "./valida
  * - action(client, { schema: CustomSchema }) → returns z.infer<CustomSchema>
  * - action(client, { schema: false }) → returns unknown
  */
-export function defineSimpleAction<TSchema extends z.ZodSchema>(
+export function defineSimpleAction<TSchema extends z.ZodTypeAny>(
   schema: TSchema,
   fn: (client: Client) => Promise<unknown>,
 ) {
@@ -18,32 +18,32 @@ export function defineSimpleAction<TSchema extends z.ZodSchema>(
 
   // Overloaded signatures for perfect type inference
   function action(client: Client): Promise<TDefault>;
-  function action<T extends z.ZodSchema>(
+  function action<T extends z.ZodTypeAny>(
     client: Client,
     parameters: { schema: T },
   ): Promise<z.infer<T>>;
   function action(client: Client, parameters: { schema: false }): Promise<unknown>;
-  function action<T extends z.ZodSchema | false | undefined = undefined>(
+  function action<T extends z.ZodTypeAny | false | undefined = undefined>(
     client: Client,
     parameters?: { schema?: T },
-  ): Promise<T extends z.ZodSchema ? z.infer<T> : T extends false ? unknown : TDefault> {
+  ): Promise<T extends z.ZodTypeAny ? z.infer<T> : T extends false ? unknown : TDefault> {
     return _actionImpl(client, parameters);
   }
 
-  async function _actionImpl<T extends z.ZodSchema | false | undefined = undefined>(
+  async function _actionImpl<T extends z.ZodTypeAny | false | undefined = undefined>(
     client: Client,
     parameters?: { schema?: T },
-  ): Promise<T extends z.ZodSchema ? z.infer<T> : T extends false ? unknown : TDefault> {
+  ): Promise<T extends z.ZodTypeAny ? z.infer<T> : T extends false ? unknown : TDefault> {
     validateActionParameters(parameters);
 
     const response = await fn(client);
 
     if (parameters?.schema === false) {
-      return response as T extends z.ZodSchema ? z.infer<T> : T extends false ? unknown : TDefault;
+      return response as T extends z.ZodTypeAny ? z.infer<T> : T extends false ? unknown : TDefault;
     }
 
-    const actualSchema = (parameters?.schema || schema) as z.ZodSchema;
-    return actualSchema.parse(response) as T extends z.ZodSchema
+    const actualSchema = (parameters?.schema || schema) as z.ZodTypeAny;
+    return actualSchema.parse(response) as T extends z.ZodTypeAny
       ? z.infer<T>
       : T extends false
         ? unknown
@@ -52,27 +52,27 @@ export function defineSimpleAction<TSchema extends z.ZodSchema>(
 
   // Safe variant overloads
   function safeAction(client: Client): Promise<SafeResult<TDefault>>;
-  function safeAction<T extends z.ZodSchema>(
+  function safeAction<T extends z.ZodTypeAny>(
     client: Client,
     parameters: { schema: T },
   ): Promise<SafeResult<z.infer<T>>>;
   function safeAction(client: Client, parameters: { schema: false }): Promise<SafeResult<unknown>>;
-  function safeAction<T extends z.ZodSchema | false | undefined = undefined>(
+  function safeAction<T extends z.ZodTypeAny | false | undefined = undefined>(
     client: Client,
     parameters?: { schema?: T },
   ): Promise<
-    SafeResult<T extends z.ZodSchema ? z.infer<T> : T extends false ? unknown : TDefault>
+    SafeResult<T extends z.ZodTypeAny ? z.infer<T> : T extends false ? unknown : TDefault>
   > {
     return _safeActionImpl(client, parameters);
   }
 
-  async function _safeActionImpl<T extends z.ZodSchema | false | undefined = undefined>(
+  async function _safeActionImpl<T extends z.ZodTypeAny | false | undefined = undefined>(
     client: Client,
     parameters?: { schema?: T },
   ): Promise<
-    SafeResult<T extends z.ZodSchema ? z.infer<T> : T extends false ? unknown : TDefault>
+    SafeResult<T extends z.ZodTypeAny ? z.infer<T> : T extends false ? unknown : TDefault>
   > {
-    type ReturnType = T extends z.ZodSchema ? z.infer<T> : T extends false ? unknown : TDefault;
+    type ReturnType = T extends z.ZodTypeAny ? z.infer<T> : T extends false ? unknown : TDefault;
     const parameterValidationError = safeValidateActionParameters<ReturnType>(parameters);
     if (parameterValidationError) {
       return parameterValidationError;
@@ -98,19 +98,19 @@ export function defineSimpleAction<TSchema extends z.ZodSchema>(
 
     if (!httpResult.success) {
       return httpResult as SafeResult<
-        T extends z.ZodSchema ? z.infer<T> : T extends false ? unknown : TDefault
+        T extends z.ZodTypeAny ? z.infer<T> : T extends false ? unknown : TDefault
       >;
     }
 
     if (parameters?.schema === false) {
       return { success: true, data: httpResult.data } as SafeResult<
-        T extends z.ZodSchema ? z.infer<T> : T extends false ? unknown : TDefault
+        T extends z.ZodTypeAny ? z.infer<T> : T extends false ? unknown : TDefault
       >;
     }
 
-    const actualSchema = (parameters?.schema || schema) as z.ZodSchema;
+    const actualSchema = (parameters?.schema || schema) as z.ZodTypeAny;
     return actualSchema.safeParse(httpResult.data) as SafeResult<
-      T extends z.ZodSchema ? z.infer<T> : T extends false ? unknown : TDefault
+      T extends z.ZodTypeAny ? z.infer<T> : T extends false ? unknown : TDefault
     >;
   }
 
@@ -123,7 +123,7 @@ export function defineSimpleAction<TSchema extends z.ZodSchema>(
 /**
  * Defines an action with parameters
  */
-export function defineAction<TParams, TSchema extends z.ZodSchema>(
+export function defineAction<TParams, TSchema extends z.ZodTypeAny>(
   schema: TSchema,
   fn: (client: Client, params: TParams) => Promise<unknown>,
 ) {
@@ -131,35 +131,35 @@ export function defineAction<TParams, TSchema extends z.ZodSchema>(
 
   // Overloaded signatures
   function action(client: Client, params: TParams): Promise<TDefault>;
-  function action<T extends z.ZodSchema>(
+  function action<T extends z.ZodTypeAny>(
     client: Client,
     params: TParams,
     parameters: { schema: T },
   ): Promise<z.infer<T>>;
   function action(client: Client, params: TParams, parameters: { schema: false }): Promise<unknown>;
-  function action<T extends z.ZodSchema | false | undefined = undefined>(
+  function action<T extends z.ZodTypeAny | false | undefined = undefined>(
     client: Client,
     params: TParams,
     parameters?: { schema?: T },
-  ): Promise<T extends z.ZodSchema ? z.infer<T> : T extends false ? unknown : TDefault> {
+  ): Promise<T extends z.ZodTypeAny ? z.infer<T> : T extends false ? unknown : TDefault> {
     return _actionImpl(client, params, parameters);
   }
 
-  async function _actionImpl<T extends z.ZodSchema | false | undefined = undefined>(
+  async function _actionImpl<T extends z.ZodTypeAny | false | undefined = undefined>(
     client: Client,
     params: TParams,
     parameters?: { schema?: T },
-  ): Promise<T extends z.ZodSchema ? z.infer<T> : T extends false ? unknown : TDefault> {
+  ): Promise<T extends z.ZodTypeAny ? z.infer<T> : T extends false ? unknown : TDefault> {
     validateActionParameters(parameters);
 
     const response = await fn(client, params);
 
     if (parameters?.schema === false) {
-      return response as T extends z.ZodSchema ? z.infer<T> : T extends false ? unknown : TDefault;
+      return response as T extends z.ZodTypeAny ? z.infer<T> : T extends false ? unknown : TDefault;
     }
 
-    const actualSchema = (parameters?.schema || schema) as z.ZodSchema;
-    return actualSchema.parse(response) as T extends z.ZodSchema
+    const actualSchema = (parameters?.schema || schema) as z.ZodTypeAny;
+    return actualSchema.parse(response) as T extends z.ZodTypeAny
       ? z.infer<T>
       : T extends false
         ? unknown
@@ -168,7 +168,7 @@ export function defineAction<TParams, TSchema extends z.ZodSchema>(
 
   // Safe variant overloads
   function safeAction(client: Client, params: TParams): Promise<SafeResult<TDefault>>;
-  function safeAction<T extends z.ZodSchema>(
+  function safeAction<T extends z.ZodTypeAny>(
     client: Client,
     params: TParams,
     parameters: { schema: T },
@@ -178,24 +178,24 @@ export function defineAction<TParams, TSchema extends z.ZodSchema>(
     params: TParams,
     parameters: { schema: false },
   ): Promise<SafeResult<unknown>>;
-  function safeAction<T extends z.ZodSchema | false | undefined = undefined>(
+  function safeAction<T extends z.ZodTypeAny | false | undefined = undefined>(
     client: Client,
     params: TParams,
     parameters?: { schema?: T },
   ): Promise<
-    SafeResult<T extends z.ZodSchema ? z.infer<T> : T extends false ? unknown : TDefault>
+    SafeResult<T extends z.ZodTypeAny ? z.infer<T> : T extends false ? unknown : TDefault>
   > {
     return _safeActionImpl(client, params, parameters);
   }
 
-  async function _safeActionImpl<T extends z.ZodSchema | false | undefined = undefined>(
+  async function _safeActionImpl<T extends z.ZodTypeAny | false | undefined = undefined>(
     client: Client,
     params: TParams,
     parameters?: { schema?: T },
   ): Promise<
-    SafeResult<T extends z.ZodSchema ? z.infer<T> : T extends false ? unknown : TDefault>
+    SafeResult<T extends z.ZodTypeAny ? z.infer<T> : T extends false ? unknown : TDefault>
   > {
-    type ReturnType = T extends z.ZodSchema ? z.infer<T> : T extends false ? unknown : TDefault;
+    type ReturnType = T extends z.ZodTypeAny ? z.infer<T> : T extends false ? unknown : TDefault;
     const parameterValidationError = safeValidateActionParameters<ReturnType>(parameters);
     if (parameterValidationError) {
       return parameterValidationError;
@@ -221,19 +221,19 @@ export function defineAction<TParams, TSchema extends z.ZodSchema>(
 
     if (!httpResult.success) {
       return httpResult as SafeResult<
-        T extends z.ZodSchema ? z.infer<T> : T extends false ? unknown : TDefault
+        T extends z.ZodTypeAny ? z.infer<T> : T extends false ? unknown : TDefault
       >;
     }
 
     if (parameters?.schema === false) {
       return { success: true, data: httpResult.data } as SafeResult<
-        T extends z.ZodSchema ? z.infer<T> : T extends false ? unknown : TDefault
+        T extends z.ZodTypeAny ? z.infer<T> : T extends false ? unknown : TDefault
       >;
     }
 
-    const actualSchema = (parameters?.schema || schema) as z.ZodSchema;
+    const actualSchema = (parameters?.schema || schema) as z.ZodTypeAny;
     return actualSchema.safeParse(httpResult.data) as SafeResult<
-      T extends z.ZodSchema ? z.infer<T> : T extends false ? unknown : TDefault
+      T extends z.ZodTypeAny ? z.infer<T> : T extends false ? unknown : TDefault
     >;
   }
 
