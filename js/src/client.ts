@@ -1,6 +1,7 @@
 import { ofetch, type FetchOptions, type FetchRequest, FetchError } from "ofetch";
 import debug from "debug";
 import { type SafeResult, RequestError, type ClientConfig } from "./types/client";
+import type { Prettify } from "./types/common";
 export type { SafeResult } from "./types/client";
 
 const SUPPORTED_API_VERSIONS = ["2025-05-31"];
@@ -344,6 +345,49 @@ export class Client {
     options?: Omit<FetchOptions, "method">,
   ): Promise<SafeResult<T, RequestError>> {
     return this.safeRequest(() => this.delete<T>(request, options));
+  }
+
+  /**
+   * Extend client with additional actions
+   *
+   * @example
+   * ```typescript
+   * const client = createClient({ apiKey: 'xxx' })
+   *   .extend(publicActions)
+   *   .extend(cvmActions)
+   *
+   * await client.getCurrentUser() // Method call instead of function call
+   * ```
+   */
+  extend<TActions extends Record<string, unknown>>(
+    actions: TActions | ((client: Client) => TActions),
+  ): Prettify<
+    this & {
+      [K in keyof TActions]: TActions[K] extends (client: Client) => infer R
+        ? () => R
+        : TActions[K] extends (client: Client, ...args: infer P) => infer R
+          ? (...args: P) => R
+          : never;
+    }
+  > {
+    const actionsObj = (typeof actions === "function" ? actions(this) : actions) as TActions;
+
+    const extended = Object.create(this) as this & {
+      [K in keyof TActions]: TActions[K] extends (client: Client) => infer R
+        ? () => R
+        : TActions[K] extends (client: Client, ...args: infer P) => infer R
+          ? (...args: P) => R
+          : never;
+    };
+
+    // Bind all actions to this client
+    for (const [key, action] of Object.entries(actionsObj)) {
+      if (typeof action === "function") {
+        (extended as Record<string, unknown>)[key] = (...args: unknown[]) => action(this, ...args);
+      }
+    }
+
+    return extended;
   }
 }
 
