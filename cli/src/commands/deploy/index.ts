@@ -7,6 +7,7 @@ import {
 	DEFAULT_VCPU,
 } from "@/src/utils/constants";
 import { getApiKey } from "@/src/utils/credentials";
+import { waitForCvmReady } from "@/src/utils/cvms";
 import { detectFileInCurrentDir, promptForFile } from "@/src/utils/prompts";
 import { parseDiskSizeInput, parseMemoryInput } from "@/src/utils/units";
 import {
@@ -52,6 +53,7 @@ interface Options {
 	json?: boolean;
 	debug?: boolean;
 	apiKey?: string;
+	wait?: boolean;
 	[key: string]: unknown;
 }
 
@@ -717,6 +719,22 @@ const updateCvm = async (
 			`Failed to commit CVM compose file update: ${commitResult.error.message}`,
 		);
 	}
+	// Wait for update to complete if --wait flag is set
+	if (validatedOptions.wait) {
+		if (!validatedOptions.json) {
+			console.log("\nWaiting for update to complete...");
+		}
+		try {
+			await waitForCvmReady(
+				validatedOptions.uuid,
+				300000, // 5 minutes timeout
+				!validatedOptions.json, // show progress if not in JSON mode
+			);
+		} catch (error: any) {
+			throw new Error(`Wait failed: ${error.message}`);
+		}
+	}
+
 	if (validatedOptions?.json !== false) {
 		console.log(
 			JSON.stringify(
@@ -779,6 +797,11 @@ export const deployCommand = new Command()
 	.option("--pre-launch-script <preLaunchScript>", "Path to pre-launch script")
 	.option("--private-key <privateKey>", "Private key for signing transactions.")
 	.option("--rpc-url <rpcUrl>", "RPC URL for the blockchain.")
+	.option(
+		"--wait",
+		"Wait for CVM to complete deployment/update before returning (only applies to updates)",
+		false,
+	)
 	.action(async (composeFile: string | undefined, options: Options) => {
 		try {
 			// Use positional argument if provided, otherwise use the --compose option

@@ -177,3 +177,10 @@ dist
 # TEE files
 .phala-cloud
 .phala
+
+# E2E test artifacts
+test/e2e-full/logs/
+test/e2e-full/fixtures/test-app/node_modules/
+test/e2e-full/fixtures/test-app/.env
+test/e2e-full/fixtures/test-app/.env.v2
+test/e2e-full/fixtures/test-app/docker-compose-v2.yml
