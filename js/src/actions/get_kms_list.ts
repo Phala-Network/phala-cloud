@@ -26,7 +26,8 @@ export type GetKmsListResponse = z.infer<typeof GetKmsListSchema> & { items: Kms
 
 const { action: getKmsList, safeAction: safeGetKmsList } = defineAction<
   GetKmsListRequest | undefined,
-  typeof GetKmsListSchema
+  typeof GetKmsListSchema,
+  GetKmsListResponse
 >(GetKmsListSchema, async (client, request) => {
   const validatedRequest = GetKmsListRequestSchema.parse(request ?? {});
   return await client.get("/kms", { params: validatedRequest });

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Client } from "../client";
-import { type KmsInfo, KmsInfoSchema } from "../types/kms_info";
+import { KmsInfoSchema, KmsInfo } from "../types/kms_info";
 import { defineAction } from "../utils/define-action";
 
 export const GetKmsInfoRequestSchema = z.object({
@@ -25,7 +25,8 @@ export type GetKmsInfoRequest = z.infer<typeof GetKmsInfoRequestSchema>;
  */
 const { action: getKmsInfo, safeAction: safeGetKmsInfo } = defineAction<
   GetKmsInfoRequest,
-  typeof KmsInfoSchema
+  typeof KmsInfoSchema,
+  KmsInfo
 >(KmsInfoSchema, async (client, request) => {
   const validatedRequest = GetKmsInfoRequestSchema.parse(request);
   return await client.get(`/kms/${validatedRequest.kms_id}`);
