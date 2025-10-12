@@ -1,8 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { createClient, type Client } from "./client";
 import { getCurrentUser } from "./actions/get_current_user";
-import { publicActions } from "./decorators/public";
-import { createFullClient, createPublicClient, createCvmClient } from "./create-clients";
+import { getCvmList } from "./actions/get_cvm_list";
 
 describe("Client.extend()", () => {
   it("should extend client with action methods", () => {
@@ -11,11 +10,15 @@ describe("Client.extend()", () => {
       baseURL: "https://api.test.com",
     });
 
-    const extended = client.extend(publicActions);
+    const testActions = {
+      getCurrentUser,
+      getCvmList,
+    };
+
+    const extended = client.extend(testActions);
 
     // Check methods exist
     expect(typeof extended.getCurrentUser).toBe("function");
-    expect(typeof extended.safeGetCurrentUser).toBe("function");
     expect(typeof extended.getCvmList).toBe("function");
   });
 
@@ -53,7 +56,11 @@ describe("Client.extend()", () => {
       team_tier: "free",
     });
 
-    const extended = client.extend(publicActions);
+    const testActions = {
+      getCurrentUser,
+    };
+
+    const extended = client.extend(testActions);
 
     await extended.getCurrentUser();
 
@@ -71,39 +78,23 @@ describe("Client.extend()", () => {
   });
 });
 
-describe("Factory functions", () => {
-  it("createFullClient should have all actions", () => {
-    const client = createFullClient({ apiKey: "test-key" });
+describe("Multiple extensions", () => {
+  it("should support extending with multiple action sets", () => {
+    const actions1 = {
+      getCurrentUser,
+    };
 
-    // Public actions
+    const actions2 = {
+      getCvmList,
+    };
+
+    const client = createClient({ apiKey: "test-key" })
+      .extend(actions1)
+      .extend(actions2);
+
+    // Both action sets should be available
     expect(typeof client.getCurrentUser).toBe("function");
     expect(typeof client.getCvmList).toBe("function");
-
-    // CVM actions
-    expect(typeof client.provisionCvm).toBe("function");
-    expect(typeof client.commitCvmProvision).toBe("function");
-  });
-
-  it("createPublicClient should have only public actions", () => {
-    const client = createPublicClient({ apiKey: "test-key" });
-
-    // Should have public actions
-    expect(typeof client.getCurrentUser).toBe("function");
-    expect(typeof client.getCvmList).toBe("function");
-
-    // Should NOT have CVM actions
-    expect((client as any).provisionCvm).toBeUndefined();
-  });
-
-  it("createCvmClient should have only CVM actions", () => {
-    const client = createCvmClient({ apiKey: "test-key" });
-
-    // Should have CVM actions
-    expect(typeof client.provisionCvm).toBe("function");
-    expect(typeof client.commitCvmProvision).toBe("function");
-
-    // Should NOT have public actions (except base client)
-    expect((client as any).getCurrentUser).toBeUndefined();
   });
 });
 
@@ -126,7 +117,11 @@ describe("Type safety", () => {
 
     vi.spyOn(client, "get").mockResolvedValue(mockResponse);
 
-    const extended = client.extend(publicActions);
+    const testActions = {
+      getCurrentUser,
+    };
+
+    const extended = client.extend(testActions);
 
     const user = await extended.getCurrentUser();
 

@@ -9,12 +9,17 @@ import { describe, it, expectTypeOf } from "vitest";
 import { z } from "zod";
 import { createClient, type Client } from "./client";
 import { defineSimpleAction, defineAction } from "./utils/define-action";
-import { publicActions } from "./decorators/public";
-import type { CurrentUser } from "./actions/get_current_user";
+import { getCurrentUser, type CurrentUser } from "./actions/get_current_user";
+import { getCvmList } from "./actions/get_cvm_list";
 
 describe("client.extend() type inference", () => {
-  it("should correctly infer publicActions types", () => {
-    const client = createClient({ apiKey: "test" }).extend(publicActions);
+  it("should correctly infer action types", () => {
+    const testActions = {
+      getCurrentUser,
+      getCvmList,
+    };
+
+    const client = createClient({ apiKey: "test" }).extend(testActions);
 
     // getCurrentUser should return Promise<CurrentUser>
     expectTypeOf(client.getCurrentUser).toBeFunction();
@@ -144,7 +149,11 @@ describe("client.extend() type inference", () => {
   });
 
   it("should preserve base client methods", () => {
-    const client = createClient({ apiKey: "test" }).extend(publicActions);
+    const testActions = {
+      getCurrentUser,
+    };
+
+    const client = createClient({ apiKey: "test" }).extend(testActions);
 
     // Base client methods should still be available
     expectTypeOf(client.get).toBeFunction();
