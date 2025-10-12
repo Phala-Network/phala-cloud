@@ -132,21 +132,33 @@ export function defineAction<TParams, TSchema extends z.ZodTypeAny>(
   fn: (client: Client, params: TParams) => Promise<unknown>,
 ) {
   type TDefault = z.infer<TSchema>;
+  type IsOptional = undefined extends TParams ? true : false;
 
-  // Overloaded signatures
-  function action(client: Client, params: TParams): Promise<TDefault>;
+  // Overloaded signatures with conditional params
+  function action(
+    client: Client,
+    ...args: IsOptional extends true ? [params?: TParams] : [params: TParams]
+  ): Promise<TDefault>;
   function action<T extends z.ZodTypeAny>(
     client: Client,
-    params: TParams,
-    parameters: { schema: T },
+    ...args: IsOptional extends true
+      ? [params?: TParams, parameters?: { schema: T }]
+      : [params: TParams, parameters: { schema: T }]
   ): Promise<z.infer<T>>;
-  function action(client: Client, params: TParams, parameters: { schema: false }): Promise<unknown>;
+  function action(
+    client: Client,
+    ...args: IsOptional extends true
+      ? [params?: TParams, parameters?: { schema: false }]
+      : [params: TParams, parameters: { schema: false }]
+  ): Promise<unknown>;
   function action<T extends z.ZodTypeAny | false | undefined = undefined>(
     client: Client,
-    params: TParams,
-    parameters?: { schema?: T },
+    ...args: IsOptional extends true
+      ? [params?: TParams, parameters?: { schema?: T }]
+      : [params: TParams, parameters?: { schema?: T }]
   ): Promise<T extends z.ZodTypeAny ? z.infer<T> : T extends false ? unknown : TDefault> {
-    return _actionImpl(client, params, parameters);
+    const [params, parameters] = args;
+    return _actionImpl(client, params as TParams, parameters);
   }
 
   async function _actionImpl<T extends z.ZodTypeAny | false | undefined = undefined>(
@@ -170,26 +182,33 @@ export function defineAction<TParams, TSchema extends z.ZodTypeAny>(
         : TDefault;
   }
 
-  // Safe variant overloads
-  function safeAction(client: Client, params: TParams): Promise<SafeResult<TDefault>>;
+  // Safe variant overloads with conditional params
+  function safeAction(
+    client: Client,
+    ...args: IsOptional extends true ? [params?: TParams] : [params: TParams]
+  ): Promise<SafeResult<TDefault>>;
   function safeAction<T extends z.ZodTypeAny>(
     client: Client,
-    params: TParams,
-    parameters: { schema: T },
+    ...args: IsOptional extends true
+      ? [params?: TParams, parameters?: { schema: T }]
+      : [params: TParams, parameters: { schema: T }]
   ): Promise<SafeResult<z.infer<T>>>;
   function safeAction(
     client: Client,
-    params: TParams,
-    parameters: { schema: false },
+    ...args: IsOptional extends true
+      ? [params?: TParams, parameters?: { schema: false }]
+      : [params: TParams, parameters: { schema: false }]
   ): Promise<SafeResult<unknown>>;
   function safeAction<T extends z.ZodTypeAny | false | undefined = undefined>(
     client: Client,
-    params: TParams,
-    parameters?: { schema?: T },
+    ...args: IsOptional extends true
+      ? [params?: TParams, parameters?: { schema?: T }]
+      : [params: TParams, parameters?: { schema?: T }]
   ): Promise<
     SafeResult<T extends z.ZodTypeAny ? z.infer<T> : T extends false ? unknown : TDefault>
   > {
-    return _safeActionImpl(client, params, parameters);
+    const [params, parameters] = args;
+    return _safeActionImpl(client, params as TParams, parameters);
   }
 
   async function _safeActionImpl<T extends z.ZodTypeAny | false | undefined = undefined>(
