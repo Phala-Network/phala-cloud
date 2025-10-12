@@ -12,7 +12,8 @@ function isRequestError(
 		"isRequestError" in error &&
 		error.isRequestError === true &&
 		"status" in error &&
-		"message" in error
+		"message" in error &&
+		"data" in error
 	);
 }
 
