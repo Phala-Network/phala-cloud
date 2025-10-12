@@ -1,68 +1,58 @@
 {
-	"name": "@phala/cloud",
-	"version": "0.1.0",
-	"description": "TypeScript SDK for Phala Cloud API",
-	"main": "dist/index.js",
-	"types": "dist/index.d.ts",
-	"files": [
-		"dist/**/*",
-		"README.md"
-	],
-	"scripts": {
-		"build": "tsup src/index.ts --format cjs,esm && tsc --emitDeclarationOnly --declaration --outDir dist",
-		"dev": "tsup src/index.ts --format cjs,esm --dts --watch",
-		"fmt": "biome format --write",
-		"test": "vitest --run --exclude '**/*.e2e.test.ts'",
-		"test:e2e": "vitest --run src/**/*.e2e.test.ts",
-		"test:watch": "vitest",
-		"lint": "biome lint .",
-		"lint:fix": "biome lint --write .",
-		"check": "npm run lint && npm run test",
-		"type-check": "tsc --noEmit",
-		"typecheck": "tsc --noEmit",
-		"version:patch": "npm version patch",
-		"version:minor": "npm version minor",
-		"version:major": "npm version major",
-		"prepublish-stable": "npm run build && npm run check",
-		"publish-stable": "npm run prepublish-stable && npm publish --access public",
-		"prepublish-beta": "npm run build && npm run check",
-		"publish-beta": "npm run prepublish-beta && npm publish --access public --tag beta"
-	},
-	"keywords": [
-		"phala",
-		"cloud",
-		"cvm",
-		"tee",
-		"blockchain",
-		"deployment"
-	],
-	"author": "Leechael Yim",
-	"license": "Apache-2.0",
-	"dependencies": {
-		"@phala/dstack-sdk": "0.5.4-beta.6",
-		"debug": "^4.4.1",
-		"ofetch": "^1.3.3",
-		"viem": "^2.7.0",
-		"zod": "^3.22.4"
-	},
-	"devDependencies": {
-		"@biomejs/biome": "^1.9.4",
-		"@types/debug": "^4.1.12",
-		"@types/node": "^20.10.0",
-		"dotenv": "^16.5.0",
-		"tsup": "^8.0.0",
-		"typescript": "^5.3.0",
-		"vitest": "^1.0.0"
-	},
-	"peerDependencies": {
-		"typescript": ">=4.5.0"
-	},
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/Phala-Network/phala-cloud-sdks",
-		"directory": "js"
-	},
-	"engines": {
-		"node": ">=18"
-	}
+  "name": "@phala/cloud",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for Phala Cloud API",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist/**/*", "README.md"],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm && tsc --emitDeclarationOnly --declaration --outDir dist",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "fmt": "biome format --write",
+    "test": "vitest --run --exclude '**/*.e2e.test.ts'",
+    "test:e2e": "vitest --run src/**/*.e2e.test.ts",
+    "test:watch": "vitest",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "check": "npm run lint && npm run test",
+    "type-check": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "version:patch": "npm version patch",
+    "version:minor": "npm version minor",
+    "version:major": "npm version major",
+    "prepublish-stable": "npm run build && npm run check",
+    "publish-stable": "npm run prepublish-stable && npm publish --access public",
+    "prepublish-beta": "npm run build && npm run check",
+    "publish-beta": "npm run prepublish-beta && npm publish --access public --tag beta"
+  },
+  "keywords": ["phala", "cloud", "cvm", "tee", "blockchain", "deployment"],
+  "author": "Leechael Yim",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@phala/dstack-sdk": "0.5.4-beta.6",
+    "debug": "^4.4.1",
+    "ofetch": "^1.3.3",
+    "viem": "^2.7.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/debug": "^4.1.12",
+    "@types/node": "^20.10.0",
+    "dotenv": "^16.5.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "peerDependencies": {
+    "typescript": ">=4.5.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Phala-Network/phala-cloud-sdks",
+    "directory": "js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
 }
