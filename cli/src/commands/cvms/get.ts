@@ -1,3 +1,10 @@
+import {
+	checkCvmExists,
+	getCvmByAppId,
+	getCvms,
+	selectCvm,
+} from "@/src/api/cvms";
+import { logDetailedError } from "@/src/utils/error-handling";
 import { Command } from "commander";
 import { safeGetCvmInfo } from "@phala/cloud";
 import { getClient } from "@/src/lib/client";
@@ -62,9 +69,8 @@ export const getCommand = new Command()
 				"App URL": `${CLOUD_URL}/dashboard/cvms/app_${cvm.app_id}`,
 			});
 		} catch (error) {
-			logger.error(
-				`Failed to get CVM details: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			logger.error("Failed to get CVM details");
+			logDetailedError(error);
 			process.exit(1);
 		}
 	});

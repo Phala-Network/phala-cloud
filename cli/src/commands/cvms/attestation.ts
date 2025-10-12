@@ -1,5 +1,6 @@
 import { checkCvmExists, getCvmAttestation, selectCvm } from "@/src/api/cvms";
 import type { CvmAttestationResponse } from "@/src/api/types";
+import { logDetailedError } from "@/src/utils/error-handling";
 import { logger } from "@/src/utils/logger";
 import chalk from "chalk";
 import { Command } from "commander";
@@ -156,8 +157,7 @@ export const attestationCommand = new Command()
 				throw error;
 			}
 		} catch (error) {
-			logger.error(
-				`Failed to get attestation information: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			logger.error("Failed to get attestation information");
+			logDetailedError(error);
 		}
 	});

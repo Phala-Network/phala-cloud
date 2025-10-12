@@ -1,6 +1,7 @@
 import { checkCvmExists, selectCvm, stopCvm } from "@/src/api/cvms";
 import { CLOUD_URL } from "@/src/utils/constants";
 import { resolveCvmAppId } from "@/src/utils/cvms";
+import { logDetailedError } from "@/src/utils/error-handling";
 import { logger } from "@/src/utils/logger";
 import { Command } from "commander";
 
@@ -39,9 +40,8 @@ export const stopCommand = new Command()
 				`Your CVM is being stopped. You can check the dashboard for more details:\n${CLOUD_URL}/dashboard/cvms/app_${response.app_id}`,
 			);
 		} catch (error) {
-			logger.error(
-				`Failed to stop CVM: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			logger.error("Failed to stop CVM");
+			logDetailedError(error);
 			process.exit(1);
 		}
 	});

@@ -2,6 +2,7 @@ import { createClient } from "@phala/cloud";
 import { safeGetCurrentUser } from "@phala/cloud";
 import { Command } from "commander";
 import { getApiKey } from "../utils/credentials.js";
+import { logDetailedError } from "../utils/error-handling.js";
 import { logger } from "../utils/logger.js";
 
 export async function checkStatus(
@@ -72,9 +73,8 @@ export async function checkStatus(
 			}
 		}
 	} catch (error) {
-		logger.error(
-			`Failed to check authentication status: ${error instanceof Error ? error.message : String(error)}`,
-		);
+		logger.error("Failed to check authentication status");
+		logDetailedError(error);
 		process.exit(1);
 	}
 }

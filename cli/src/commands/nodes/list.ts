@@ -1,5 +1,8 @@
 import { safeGetAvailableNodes } from "@phala/cloud";
 import { getClient } from "@/src/lib/client";
+import { getTeepods } from "@/src/api/teepods";
+import type { KmsListItem, TEEPod } from "@/src/api/types";
+import { logDetailedError } from "@/src/utils/error-handling";
 import { logger } from "@/src/utils/logger";
 import type { AvailableNodesResponse } from "@/src/api/types";
 
@@ -56,9 +59,8 @@ export async function listNodes() {
 			}
 		}
 	} catch (error) {
-		logger.error(
-			`Failed to list available nodes: ${error instanceof Error ? error.message : String(error)}`,
-		);
+		logger.error("Failed to list available nodes");
+		logDetailedError(error);
 		throw error;
 	}
 }

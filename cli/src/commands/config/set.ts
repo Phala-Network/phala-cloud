@@ -1,4 +1,5 @@
 import { setConfigValue } from "@/src/utils/config";
+import { logDetailedError } from "@/src/utils/error-handling";
 import { logger } from "@/src/utils/logger";
 import { Command } from "commander";
 
@@ -28,9 +29,8 @@ export const setCommand = new Command()
 			setConfigValue(key, parsedValue);
 			logger.success(`Configuration value for '${key}' set successfully`);
 		} catch (error) {
-			logger.error(
-				`Failed to set configuration value: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			logger.error("Failed to set configuration value");
+			logDetailedError(error);
 			process.exit(1);
 		}
 	});

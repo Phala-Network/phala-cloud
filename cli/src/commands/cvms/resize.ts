@@ -6,6 +6,7 @@ import {
 } from "@/src/api/cvms";
 import { CLOUD_URL } from "@/src/utils/constants";
 import { resolveCvmAppId } from "@/src/utils/cvms";
+import { logDetailedError } from "@/src/utils/error-handling";
 import { logger } from "@/src/utils/logger";
 import chalk from "chalk";
 import { Command } from "commander";
@@ -179,9 +180,8 @@ export const resizeCommand = new Command()
 				);
 			}
 		} catch (error) {
-			logger.error(
-				`Failed to resize CVM: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			logger.error("Failed to resize CVM");
+			logDetailedError(error);
 			process.exit(1);
 		}
 	});

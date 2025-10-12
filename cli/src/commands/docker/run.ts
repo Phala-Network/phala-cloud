@@ -3,6 +3,7 @@ import path from "node:path";
 import { Command } from "commander";
 import inquirer from "inquirer";
 import { DockerService } from "../../utils/docker";
+import { logDetailedError } from "../../utils/error-handling";
 import { logger } from "../../utils/logger";
 import { validateFileExists } from "../../utils/prompts";
 
@@ -142,9 +143,8 @@ export const runCommand = new Command()
 
 			logger.success("Docker Compose is running");
 		} catch (error) {
-			logger.error(
-				`Failed to run Docker Compose: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			logger.error("Failed to run Docker Compose");
+			logDetailedError(error);
 			process.exit(1);
 		}
 	});

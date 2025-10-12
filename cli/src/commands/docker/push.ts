@@ -1,5 +1,6 @@
 import { getDockerCredentials } from "@/src/utils/credentials";
 import { DockerService } from "@/src/utils/docker";
+import { logDetailedError } from "@/src/utils/error-handling";
 import { logger } from "@/src/utils/logger";
 import { Command } from "commander";
 import inquirer from "inquirer";
@@ -68,9 +69,8 @@ export const pushCommand = new Command()
 
 			logger.success(`Docker image ${imageName} pushed successfully`);
 		} catch (error) {
-			logger.error(
-				`Failed to push Docker image: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			logger.error("Failed to push Docker image");
+			logDetailedError(error);
 			process.exit(1);
 		}
 	});

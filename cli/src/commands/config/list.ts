@@ -1,4 +1,5 @@
 import { listConfigValues } from "@/src/utils/config";
+import { logDetailedError } from "@/src/utils/error-handling";
 import { logger } from "@/src/utils/logger";
 import { Command } from "commander";
 
@@ -21,9 +22,8 @@ export const listCommand = new Command()
 				logger.info(`${key}: ${JSON.stringify(value)}`);
 			}
 		} catch (error) {
-			logger.error(
-				`Failed to list configuration values: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			logger.error("Failed to list configuration values");
+			logDetailedError(error);
 			process.exit(1);
 		}
 	});

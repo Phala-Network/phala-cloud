@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { removeApiKey, saveApiKey } from "@/src/utils/credentials";
+import { logDetailedError } from "@/src/utils/error-handling";
 import { logger } from "@/src/utils/logger";
 import prompts from "prompts";
 import { safeGetCurrentUser } from "@phala/cloud";
@@ -62,9 +63,8 @@ export const loginCommand = new Command()
 			logger.break();
 			logger.info(`Open in Web UI at ${CLOUD_URL}/dashboard/`);
 		} catch (error) {
-			logger.error(
-				`Failed to set API key: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			logger.error("Failed to set API key");
+			logDetailedError(error);
 			process.exit(1);
 		}
 	});

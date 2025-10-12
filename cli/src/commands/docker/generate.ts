@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { getDockerCredentials } from "@/src/utils/credentials";
 import { DockerService } from "@/src/utils/docker";
+import { logDetailedError } from "@/src/utils/error-handling";
 import { logger } from "@/src/utils/logger";
 import { validateFileExists } from "@/src/utils/prompts";
 import { Command } from "commander";
@@ -189,9 +190,8 @@ export const generateCommand = new Command()
 				`Docker Compose file generated successfully: ${outputPath}`,
 			);
 		} catch (error) {
-			logger.error(
-				`Failed to generate Docker Compose file: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			logger.error("Failed to generate Docker Compose file");
+			logDetailedError(error);
 			process.exit(1);
 		}
 	});

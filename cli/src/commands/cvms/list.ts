@@ -1,3 +1,5 @@
+import { getCvms } from "@/src/api/cvms";
+import { logDetailedError } from "@/src/utils/error-handling";
 import { Command } from "commander";
 import { safeGetCvmList } from "@phala/cloud";
 import { getClient } from "@/src/lib/client";
@@ -64,9 +66,8 @@ export const listCommand = new Command()
 			logger.break();
 			logger.info(`Go to ${CLOUD_URL}/dashboard/ to view your CVMs`);
 		} catch (error) {
-			logger.error(
-				`Failed to list CVMs: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			logger.error("Failed to list CVMs");
+			logDetailedError(error);
 			process.exit(1);
 		}
 	});

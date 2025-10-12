@@ -8,6 +8,7 @@ import {
 } from "@/src/utils/constants";
 import { getApiKey } from "@/src/utils/credentials";
 import { waitForCvmReady } from "@/src/utils/cvms";
+import { logDetailedError } from "@/src/utils/error-handling";
 import { detectFileInCurrentDir, promptForFile } from "@/src/utils/prompts";
 import { parseDiskSizeInput, parseMemoryInput } from "@/src/utils/units";
 import {
@@ -613,9 +614,11 @@ const updateCvm = async (
 		}),
 	]);
 	if (!cvm_result.success) {
+		logDetailedError(cvm_result.error, "Get CVM Info");
 		throw new Error(`Failed to get cvm info: ${cvm_result.error.message}`);
 	}
 	if (!app_compose_result.success) {
+		logDetailedError(app_compose_result.error, "Get CVM Compose File");
 		throw new Error(
 			`Failed to get cvm compose file: ${app_compose_result.error.message}`,
 		);
@@ -640,18 +643,7 @@ const updateCvm = async (
 			app_compose as ProvisionCvmComposeFileUpdateRequest["app_compose"],
 	});
 	if (!provision_result.success) {
-		if ("isRequestError" in provision_result.error) {
-			console.error(
-				"HTTP Error:",
-				provision_result.error.status,
-				provision_result.error.statusText,
-			);
-			console.error("Error message:", provision_result.error.message);
-			console.error(
-				"Response body:",
-				JSON.stringify(provision_result.error.data, null, 2),
-			);
-		}
+		logDetailedError(provision_result.error, "Provision CVM Compose File Update");
 		throw new Error(
 			`Failed to provision cvm compose file: ${provision_result.error.message}`,
 		);
@@ -703,18 +695,7 @@ const updateCvm = async (
 	const commitResult = await safeCommitCvmComposeFileUpdate(client, data);
 
 	if (!commitResult.success) {
-		if ("isRequestError" in commitResult.error) {
-			console.error(
-				"HTTP Error:",
-				commitResult.error.status,
-				commitResult.error.statusText,
-			);
-			console.error("Error message:", commitResult.error.message);
-			console.error(
-				"Response body:",
-				JSON.stringify(commitResult.error.data, null, 2),
-			);
-		}
+		logDetailedError(commitResult.error, "Commit CVM Compose File Update");
 		throw new Error(
 			`Failed to commit CVM compose file update: ${commitResult.error.message}`,
 		);

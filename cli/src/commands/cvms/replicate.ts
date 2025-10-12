@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getCvmComposeConfig, replicateCvm } from "@/src/api/cvms";
+import { logDetailedError } from "@/src/utils/error-handling";
 import { logger } from "@/src/utils/logger";
 import { encryptEnvVars } from "@phala/cloud";
 import { Command } from "commander";
@@ -89,10 +90,8 @@ export const replicateCommand = new Command()
 				`Your CVM replica is being created. You can check its status with:\nphala cvms get ${replica.app_id}`,
 			);
 		} catch (error) {
-			logger.error(
-				"Failed to create CVM replica:",
-				error instanceof Error ? error.message : error,
-			);
+			logger.error("Failed to create CVM replica");
+			logDetailedError(error);
 			process.exit(1);
 		}
 	});

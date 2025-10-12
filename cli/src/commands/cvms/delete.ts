@@ -1,5 +1,6 @@
 import { checkCvmExists, deleteCvm, selectCvm } from "@/src/api/cvms";
 import { resolveCvmAppId } from "@/src/utils/cvms";
+import { logDetailedError } from "@/src/utils/error-handling";
 import { logger } from "@/src/utils/logger";
 import { Command } from "commander";
 import inquirer from "inquirer";
@@ -46,9 +47,8 @@ export const deleteCommand = new Command()
 
 			logger.success(`CVM app_${resolvedAppId} deleted successfully`);
 		} catch (error) {
-			logger.error(
-				`Failed to delete CVM: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			logger.error("Failed to delete CVM");
+			logDetailedError(error);
 			process.exit(1);
 		}
 	});

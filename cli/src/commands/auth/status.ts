@@ -1,4 +1,5 @@
 import { getApiKey } from "@/src/utils/credentials";
+import { logDetailedError } from "@/src/utils/error-handling";
 import { logger } from "@/src/utils/logger";
 import { createClient } from "@phala/cloud";
 import { safeGetCurrentUser } from "@phala/cloud";
@@ -80,9 +81,8 @@ export const statusCommand = new Command()
 				}
 			}
 		} catch (error) {
-			logger.error(
-				`Failed to check authentication status: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			logger.error("Failed to check authentication status");
+			logDetailedError(error);
 			process.exit(1);
 		}
 	});

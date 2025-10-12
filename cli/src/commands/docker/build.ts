@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { getDockerCredentials } from "@/src/utils/credentials";
 import { DockerService } from "@/src/utils/docker";
+import { logDetailedError } from "@/src/utils/error-handling";
 import { logger } from "@/src/utils/logger";
 import { promptForFile } from "@/src/utils/prompts";
 import { Command } from "commander";
@@ -98,9 +99,8 @@ export const buildCommand = new Command()
 				`Docker image ${credentials.username}/${options.image}:${options.tag} built successfully`,
 			);
 		} catch (error) {
-			logger.error(
-				`Failed to build Docker image: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			logger.error("Failed to build Docker image");
+			logDetailedError(error);
 			process.exit(1);
 		}
 	});

@@ -1,3 +1,4 @@
+import { logDetailedError } from "@/src/utils/error-handling";
 import { logger } from "@/src/utils/logger";
 import {
 	installSimulator,
@@ -29,9 +30,8 @@ export const startCommand = new Command()
 			});
 			logger.success("TEE simulator started successfully");
 		} catch (error) {
-			logger.error(
-				`Failed to start TEE simulator: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			logger.error("Failed to start TEE simulator");
+			logDetailedError(error);
 			process.exit(1);
 		}
 	});

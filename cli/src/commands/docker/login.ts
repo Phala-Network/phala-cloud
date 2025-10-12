@@ -1,5 +1,6 @@
 import { saveDockerCredentials } from "@/src/utils/credentials";
 import { DockerService } from "@/src/utils/docker";
+import { logDetailedError } from "@/src/utils/error-handling";
 import { logger } from "@/src/utils/logger";
 import { Command } from "commander";
 import prompts from "prompts";
@@ -85,9 +86,8 @@ export const loginCommand = new Command()
 
 			logger.success("Logged in to Docker Hub successfully");
 		} catch (error) {
-			logger.error(
-				`Failed to login to Docker Hub: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			logger.error("Failed to login to Docker Hub");
+			logDetailedError(error);
 			process.exit(1);
 		}
 	});
