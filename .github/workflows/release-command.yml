@@ -24,6 +24,8 @@ jobs:
       should_release: ${{ steps.parse.outputs.should_release }}
       package: ${{ steps.parse.outputs.package }}
       release_type: ${{ steps.parse.outputs.release_type }}
+      prerelease: ${{ steps.parse.outputs.prerelease }}
+      npm_tag: ${{ steps.parse.outputs.npm_tag }}
       ref: ${{ steps.parse.outputs.ref }}
       pr_branch: ${{ steps.parse.outputs.pr_branch }}
       pr_title: ${{ steps.parse.outputs.pr_title }}
@@ -40,9 +42,10 @@ jobs:
           script: |
             const allowedPackages = ['cli', 'js'];
             const allowedBumps = ['patch', 'minor', 'major'];
+            const allowedPrereleaseTags = ['beta', 'alpha', 'rc'];
 
             const body = context.payload.comment.body.trim();
-            const match = body.match(/!release\s+(\S+)\s+(\S+)/i);
+            const match = body.match(/!release\s+(\S+)\s+(\S+)(?:\s+(\S+))?/i);
 
             if (!match) {
               return;
@@ -50,6 +53,7 @@ jobs:
 
             const packageName = match[1].toLowerCase();
             const releaseType = match[2].toLowerCase();
+            const prereleaseTag = match[3] ? match[3].toLowerCase() : '';
 
             const allowedAssociation = ['OWNER', 'MEMBER', 'COLLABORATOR'];
             const association = context.payload.comment.author_association;
@@ -60,12 +64,17 @@ jobs:
 
             const invalidPackage = !allowedPackages.includes(packageName);
             const invalidBump = !allowedBumps.includes(releaseType);
+            const invalidPrerelease = prereleaseTag && !allowedPrereleaseTags.includes(prereleaseTag);
 
-            if (invalidPackage || invalidBump) {
+            if (invalidPackage || invalidBump || invalidPrerelease) {
               const message = [
                 `⚠️ @${actor} I couldn't parse the release command.`,
                 '',
-                'Expected format: `!release <cli|js> <patch|minor|major>`'
+                'Expected format: `!release <cli|js> <patch|minor|major> [beta|alpha|rc]`',
+                '',
+                'Examples:',
+                '- `!release cli patch` - stable release',
+                '- `!release js minor beta` - beta release'
               ];
               await github.rest.issues.createComment({
                 owner,
@@ -124,14 +133,21 @@ jobs:
               prUrl = pr.html_url;
             }
 
+            const npmTag = prereleaseTag || 'latest';
+            const releaseTypeLabel = prereleaseTag ? `${releaseType} (${prereleaseTag})` : releaseType;
+
             const lines = [
-              `🚀 @${actor} release command accepted: \`${packageName}\` \`${releaseType}\`.`,
+              `🚀 @${actor} release command accepted: \`${packageName}\` \`${releaseTypeLabel}\`.`,
               '',
               'The release workflow is queued; results will be posted here.'
             ];
 
             if (prBranch) {
               lines.splice(2, 0, `Target branch: \`${prBranch}\` (open PR). Version commits will be pushed to this branch.`);
+            }
+
+            if (prereleaseTag) {
+              lines.splice(2, 0, `📦 Prerelease tag: \`${prereleaseTag}\` (will publish to npm with tag \`${npmTag}\`)`);
             }
 
             const message = lines.join('\n');
@@ -146,6 +162,8 @@ jobs:
             core.setOutput('should_release', 'true');
             core.setOutput('package', packageName);
             core.setOutput('release_type', releaseType);
+            core.setOutput('prerelease', prereleaseTag);
+            core.setOutput('npm_tag', npmTag);
             core.setOutput('ref', ref);
             core.setOutput('pr_branch', prBranch);
             core.setOutput('pr_title', prTitle);
@@ -164,6 +182,8 @@ jobs:
     env:
       PACKAGE: ${{ needs.parse.outputs.package }}
       RELEASE_TYPE: ${{ needs.parse.outputs.release_type }}
+      PRERELEASE: ${{ needs.parse.outputs.prerelease }}
+      NPM_TAG: ${{ needs.parse.outputs.npm_tag }}
       SOURCE_REF: ${{ needs.parse.outputs.ref }}
       ISSUE_NUMBER: ${{ needs.parse.outputs.issue_number }}
       REQUESTED_BY: ${{ needs.parse.outputs.requested_by }}
@@ -244,7 +264,7 @@ jobs:
 
       - name: Bump package version
         id: bump
-        run: node scripts/bump-version.js "$PACKAGE" "$RELEASE_TYPE"
+        run: node scripts/bump-version.js "$PACKAGE" "$RELEASE_TYPE" "$PRERELEASE"
 
       - name: Format package.json
         working-directory: ${{ env.PACKAGE }}
@@ -344,7 +364,7 @@ jobs:
 
       - name: Publish to npm
         working-directory: ${{ env.PACKAGE }}
-        run: npm publish --access public
+        run: npm publish --access public --tag "$NPM_TAG"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -367,9 +387,10 @@ jobs:
           body: |
             - Package: [${{ steps.pkgmeta.outputs.npm_name }}](${{ steps.pkgmeta.outputs.npm_url }})
             - Version: v${{ env.NEW_VERSION }}
+            - npm tag: ${{ env.NPM_TAG }}
             - Triggered by: ${{ env.REQUESTED_BY || 'workflow_dispatch' }}
           draft: false
-          prerelease: false
+          prerelease: ${{ env.PRERELEASE != '' }}
 
       - name: Comment success
         if: ${{ success() && env.ISSUE_NUMBER != '' }}
