@@ -246,6 +246,10 @@ jobs:
         id: bump
         run: node scripts/bump-version.js "$PACKAGE" "$RELEASE_TYPE"
 
+      - name: Format package.json
+        working-directory: ${{ env.PACKAGE }}
+        run: bun run fmt
+
       - name: Export version metadata
         run: |
           echo "NEW_VERSION=${{ steps.bump.outputs.version }}" >> "$GITHUB_ENV"
