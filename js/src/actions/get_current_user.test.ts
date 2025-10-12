@@ -124,14 +124,11 @@ describe("getCurrentUser", () => {
 
   describe("safeGetCurrentUser", () => {
     it("should return SafeResult on success", async () => {
-      (mockClient.safeGet as jest.Mock).mockResolvedValue({
-        success: true,
-        data: mockUserData,
-      });
+      (mockClient.get as jest.Mock).mockResolvedValue(mockUserData);
 
       const result = await safeGetCurrentUser(mockClient as Client);
 
-      expect(mockClient.safeGet).toHaveBeenCalledWith("/auth/me");
+      expect(mockClient.get).toHaveBeenCalledWith("/auth/me");
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data).toEqual(mockUserData);
@@ -141,17 +138,14 @@ describe("getCurrentUser", () => {
 
     it("should return error result on API failure", async () => {
       const apiError = {
-        success: false,
-        error: {
-          name: "RequestError",
-          message: "Network Error",
-          detail: "Network Error",
-          isRequestError: true,
-          status: 500,
-        },
+        name: "RequestError",
+        message: "Network Error",
+        detail: "Network Error",
+        isRequestError: true,
+        status: 500,
       };
 
-      (mockClient.safeGet as jest.Mock).mockResolvedValue(apiError);
+      (mockClient.get as jest.Mock).mockRejectedValue(apiError);
 
       const result = await safeGetCurrentUser(mockClient as Client);
 
@@ -171,10 +165,7 @@ describe("getCurrentUser", () => {
         email: "testuser@phala.network",
       };
 
-      (mockClient.safeGet as jest.Mock).mockResolvedValue({
-        success: true,
-        data: invalidData,
-      });
+      (mockClient.get as jest.Mock).mockResolvedValue(invalidData);
 
       const result = await safeGetCurrentUser(mockClient as Client);
 

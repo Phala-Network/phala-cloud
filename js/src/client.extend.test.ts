@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { createClient, type Client } from "./client";
-import { getCurrentUser } from "./actions/get_current_user";
+import { getCurrentUser, CurrentUser } from "./actions/get_current_user";
 import { getCvmList } from "./actions/get_cvm_list";
 
 describe("Client.extend()", () => {
@@ -117,7 +117,9 @@ describe("Type safety", () => {
 
     vi.spyOn(client, "get").mockResolvedValue(mockResponse);
 
-    const testActions = {
+    const testActions: {
+      readonly getCurrentUser: (client: Client) => Promise<CurrentUser>;
+    } = {
       getCurrentUser,
     };
 
