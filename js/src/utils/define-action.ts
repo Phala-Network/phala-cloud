@@ -6,15 +6,15 @@ import { validateActionParameters, safeValidateActionParameters } from "./valida
  * Defines an action that takes no additional parameters (only client + optional schema)
  *
  * Usage preserves full type inference:
- * - action(client) → returns TDefault (inferred from schema)
+ * - action(client) → returns TDefault (inferred from schema or override)
  * - action(client, { schema: CustomSchema }) → returns z.infer<CustomSchema>
  * - action(client, { schema: false }) → returns unknown
  */
-export function defineSimpleAction<TSchema extends z.ZodTypeAny>(
+export function defineSimpleAction<TSchema extends z.ZodTypeAny, TReturnOverride = never>(
   schema: TSchema,
   fn: (client: Client) => Promise<unknown>,
 ) {
-  type TDefault = z.infer<TSchema>;
+  type TDefault = [TReturnOverride] extends [never] ? z.infer<TSchema> : TReturnOverride;
 
   // Overloaded signatures for perfect type inference
   function action(client: Client): Promise<TDefault>;
@@ -127,11 +127,11 @@ export function defineSimpleAction<TSchema extends z.ZodTypeAny>(
 /**
  * Defines an action with parameters
  */
-export function defineAction<TParams, TSchema extends z.ZodTypeAny>(
+export function defineAction<TParams, TSchema extends z.ZodTypeAny, TReturnOverride = never>(
   schema: TSchema,
   fn: (client: Client, params: TParams) => Promise<unknown>,
 ) {
-  type TDefault = z.infer<TSchema>;
+  type TDefault = [TReturnOverride] extends [never] ? z.infer<TSchema> : TReturnOverride;
   type IsOptional = undefined extends TParams ? true : false;
 
   // Overloaded signatures with conditional params
