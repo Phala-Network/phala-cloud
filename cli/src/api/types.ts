@@ -272,10 +272,10 @@ export interface TeepodResponse {
 // KMS List Item
 export interface KmsListItem {
 	id?: string;
-	slug?: string;
+	slug?: string | null;
 	url: string;
 	version: string;
-	chain_id?: string | null;
+	chain_id?: number | null;
 	kms_contract_address?: string | null;
 	gateway_app_id?: string | null;
 }
