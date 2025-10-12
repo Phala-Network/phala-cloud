@@ -4,7 +4,7 @@
   "description": "TypeScript SDK for Phala Cloud API",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist/**/*", "README.md"],
+  "files": ["dist/**/*", "!dist/**/*.map", "README.md", "LICENSE"],
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm && tsc --emitDeclarationOnly --declaration --outDir dist",
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch",

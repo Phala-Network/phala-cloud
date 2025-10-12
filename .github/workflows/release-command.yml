@@ -279,6 +279,38 @@ jobs:
         working-directory: ${{ env.PACKAGE }}
         run: bun run build
 
+      - name: Analyze package contents
+        id: pack_info
+        working-directory: ${{ env.PACKAGE }}
+        run: |
+          npm pack --dry-run > pack_output.txt 2>&1
+
+          # Extract package size info
+          package_size=$(grep "package size:" pack_output.txt | awk '{print $4, $5}')
+          unpacked_size=$(grep "unpacked size:" pack_output.txt | awk '{print $4, $5}')
+          total_files=$(grep "total files:" pack_output.txt | awk '{print $4}')
+
+          # Get file list (skip the first few lines and last few lines of npm notice)
+          file_list=$(sed -n '/Tarball Contents/,/Tarball Details/p' pack_output.txt | \
+            grep "npm notice" | \
+            grep -v "Tarball Contents" | \
+            grep -v "Tarball Details" | \
+            sed 's/npm notice //g' | \
+            head -20)
+
+          # Save to GitHub output (escape newlines for multiline output)
+          echo "package_size=${package_size}" >> "$GITHUB_OUTPUT"
+          echo "unpacked_size=${unpacked_size}" >> "$GITHUB_OUTPUT"
+          echo "total_files=${total_files}" >> "$GITHUB_OUTPUT"
+
+          # Save file list with proper multiline format
+          echo "file_list<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$file_list" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+          # Clean up
+          rm pack_output.txt
+
       - name: Generate changelog
         working-directory: ${{ env.PACKAGE }}
         run: |
@@ -346,13 +378,31 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const fileList = `${{ steps.pack_info.outputs.file_list }}`.split('\n').slice(0, 15).join('\n');
+            const totalFiles = Number('${{ steps.pack_info.outputs.total_files }}');
+            const hasMore = totalFiles > 15;
+
             const body = [
               `🎉 Release completed: \`${process.env.PACKAGE}\` v${process.env.NEW_VERSION}`,
               '',
               `- Branch: \`${process.env.SOURCE_REF}\``,
               `- npm: [${{ steps.pkgmeta.outputs.npm_name }}](${{ steps.pkgmeta.outputs.npm_url }})`,
               `- GitHub Release: [link](${{ steps.release.outputs.html_url }})`,
-              `- Workflow logs: ${runUrl}`
+              `- Workflow logs: ${runUrl}`,
+              '',
+              '### 📦 Package Info',
+              `- Package size: **${{ steps.pack_info.outputs.package_size }}**`,
+              `- Unpacked size: **${{ steps.pack_info.outputs.unpacked_size }}**`,
+              `- Total files: **${{ steps.pack_info.outputs.total_files }}**`,
+              '',
+              '<details>',
+              `<summary>📄 Files included${hasMore ? ' (showing first 15)' : ''}</summary>`,
+              '',
+              '```',
+              fileList,
+              hasMore ? `... and ${totalFiles - 15} more files` : '',
+              '```',
+              '</details>'
             ].join('\n');
 
             await github.rest.issues.createComment({

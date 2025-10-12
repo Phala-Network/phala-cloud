@@ -11,7 +11,11 @@
 		"url": "https://github.com/Phala-Network/phala-cloud-cli.git"
 	},
 	"files": [
-		"dist"
+		"dist/**/*.js",
+		"dist/**/*.d.ts",
+		"!dist/**/*.map",
+		"LICENSE",
+		"README.md"
 	],
 	"keywords": [
 		"tee",
