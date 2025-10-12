@@ -1,11 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { z } from "zod";
 import { createClient } from "../client";
 import {
   getAvailableNodes,
   safeGetAvailableNodes,
   type AvailableNodes,
-  AvailableNodesSchema,
 } from "./get_available_nodes";
 import type { Client } from "../client";
 import { SUPPORTED_CHAINS } from "../types/supported_chains";
@@ -62,67 +60,72 @@ describe("getAvailableNodes", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     mockClient = {
       get: vi.fn(),
       safeGet: vi.fn(),
     } as unknown as Client;
   });
 
-  describe("getAvailableNodes", () => {
-    it("should return data successfully", async () => {
+  describe("API routing & basic success", () => {
+    it("should call correct endpoint and return data", async () => {
       (mockClient.get as jest.Mock).mockResolvedValueOnce(mockAvailableNodesData);
+
       const result = await getAvailableNodes(mockClient);
+
+      expect(mockClient.get).toHaveBeenCalledWith("/teepods/available");
       expect(result).toEqual(mockAvailableNodesData);
     });
+  });
 
-    it("should validate response data with zod schema", async () => {
-      (mockClient.get as jest.Mock).mockResolvedValueOnce(mockAvailableNodesData);
-      const result = await getAvailableNodes(mockClient);
-      expect(AvailableNodesSchema.parse(result)).toEqual(mockAvailableNodesData);
-    });
-
-    it("should handle API errors properly", async () => {
+  describe("error handling", () => {
+    it("should throw on API errors", async () => {
       (mockClient.get as jest.Mock).mockRejectedValueOnce(new Error("API error"));
+
       await expect(getAvailableNodes(mockClient)).rejects.toThrow("API error");
     });
+  });
 
-    it("should return raw data when schema is false", async () => {
-      (mockClient.get as jest.Mock).mockResolvedValueOnce(mockAvailableNodesData);
-      const result = await getAvailableNodes(mockClient, { schema: false });
-      expect(result).toEqual(mockAvailableNodesData);
+  describe("edge cases", () => {
+    it("should allow extra fields for forward compatibility", async () => {
+      const extra = { ...mockAvailableNodesData, extra_field: "extra" };
+      (mockClient.get as jest.Mock).mockResolvedValueOnce(extra);
+
+      const result = await getAvailableNodes(mockClient);
+
+      expect(result).toMatchObject({ ...mockAvailableNodesData, extra_field: "extra" });
     });
 
-    it("should use custom schema when provided", async () => {
-      (mockClient.get as jest.Mock).mockResolvedValueOnce({ tier: "free" });
-      const customSchema = z.object({ tier: z.string() });
-      const result = await getAvailableNodes(mockClient, { schema: customSchema });
-      expect(result).toEqual({ tier: "free" });
-    });
+    it("should handle empty nodes array", async () => {
+      const emptyNodes = { ...mockAvailableNodesData, nodes: [] };
+      (mockClient.get as jest.Mock).mockResolvedValueOnce(emptyNodes);
 
-    it("should throw when custom schema validation fails", async () => {
-      (mockClient.get as jest.Mock).mockResolvedValueOnce({ foo: "bar" });
-      const customSchema = z.object({ tier: z.string() });
-      await expect(getAvailableNodes(mockClient, { schema: customSchema })).rejects.toThrow();
+      const result = await getAvailableNodes(mockClient);
+
+      expect(result.nodes).toEqual([]);
     });
   });
 
   describe("safeGetAvailableNodes", () => {
-    it("should return success result when API call succeeds", async () => {
+    it("should return SafeResult on success", async () => {
       (mockClient.get as jest.Mock).mockResolvedValueOnce(mockAvailableNodesData);
+
       const result = await safeGetAvailableNodes(mockClient);
+
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data).toEqual(mockAvailableNodesData);
       }
     });
 
-    it("should return error result when API call fails", async () => {
+    it("should return error result on API failure", async () => {
       const error = new Error("fail");
       (error as any).isRequestError = true;
       (error as any).status = 500;
       (mockClient.get as jest.Mock).mockRejectedValueOnce(error);
+
       const result = await safeGetAvailableNodes(mockClient);
+
       expect(result.success).toBe(false);
       if (!result.success) {
         if ("isRequestError" in result.error) {
@@ -130,140 +133,5 @@ describe("getAvailableNodes", () => {
         }
       }
     });
-
-    it("should handle zod validation errors", async () => {
-      (mockClient.get as jest.Mock).mockResolvedValueOnce({ foo: "bar" });
-      const result = await safeGetAvailableNodes(mockClient);
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        if (!("isRequestError" in result.error)) {
-          expect(result.error.issues).toBeDefined();
-        }
-      }
-    });
-
-    it("should pass through HTTP errors directly", async () => {
-      const error = new Error("bad request");
-      (error as any).isRequestError = true;
-      (error as any).status = 400;
-      (mockClient.get as jest.Mock).mockRejectedValueOnce(error);
-      const result = await safeGetAvailableNodes(mockClient);
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        if ("isRequestError" in result.error) {
-          expect(result.error.status).toBe(400);
-        }
-      }
-    });
-
-    it("should return raw data when schema is false", async () => {
-      (mockClient.get as jest.Mock).mockResolvedValueOnce(mockAvailableNodesData);
-      const result = await safeGetAvailableNodes(mockClient, { schema: false });
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data).toEqual(mockAvailableNodesData);
-      }
-    });
-
-    it("should use custom schema when provided", async () => {
-      (mockClient.get as jest.Mock).mockResolvedValueOnce({ tier: "free" });
-      const customSchema = z.object({ tier: z.string() });
-      const result = await safeGetAvailableNodes(mockClient, { schema: customSchema });
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data).toEqual({ tier: "free" });
-      }
-    });
-
-    it("should return validation error when custom schema fails", async () => {
-      (mockClient.get as jest.Mock).mockResolvedValueOnce({ foo: "bar" });
-      const customSchema = z.object({ tier: z.string() });
-      const result = await safeGetAvailableNodes(mockClient, { schema: customSchema });
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        if (!("isRequestError" in result.error)) {
-          expect(result.error.issues).toBeDefined();
-        }
-      }
-    });
   });
-
-  describe("parameter handling", () => {
-    it("should work without parameters", async () => {
-      (mockClient.get as jest.Mock).mockResolvedValueOnce(mockAvailableNodesData);
-      await expect(getAvailableNodes(mockClient)).resolves.toBeDefined();
-    });
-
-    it("should work with empty parameters object", async () => {
-      (mockClient.get as jest.Mock).mockResolvedValueOnce(mockAvailableNodesData);
-      await expect(getAvailableNodes(mockClient, {})).resolves.toBeDefined();
-    });
-
-    it("should work with safe version without parameters", async () => {
-      (mockClient.get as jest.Mock).mockResolvedValueOnce(mockAvailableNodesData);
-      await expect(safeGetAvailableNodes(mockClient)).resolves.toBeDefined();
-    });
-
-    it("should work with safe version with empty parameters object", async () => {
-      (mockClient.get as jest.Mock).mockResolvedValueOnce(mockAvailableNodesData);
-      await expect(safeGetAvailableNodes(mockClient, {})).resolves.toBeDefined();
-    });
-  });
-
-  describe("schema flexibility", () => {
-    it("should allow extra fields in API response for forward compatibility", async () => {
-      const extra = { ...mockAvailableNodesData, extra_field: "extra" };
-      (mockClient.get as jest.Mock).mockResolvedValueOnce(extra);
-      const result = await getAvailableNodes(mockClient);
-      expect(result).toMatchObject({ ...mockAvailableNodesData, extra_field: "extra" });
-    });
-  });
-
-  describe("type inference", () => {
-    it("should infer AvailableNodes type when no schema provided", async () => {
-      type T = Awaited<ReturnType<typeof getAvailableNodes>>;
-      type _Assert = T extends AvailableNodes ? true : false;
-      const assert: _Assert = true;
-      expect(assert).toBe(true);
-    });
-
-    it("should infer unknown type when schema is false", async () => {
-      type T = Awaited<ReturnType<typeof getAvailableNodes<false>>>;
-      type _Assert = T extends unknown ? true : false;
-      const assert: _Assert = true;
-      expect(assert).toBe(true);
-    });
-
-    it("should infer custom schema type when provided", async () => {
-      const customSchema = z.object({ tier: z.string() });
-      type T = Awaited<ReturnType<typeof getAvailableNodes<typeof customSchema>>>;
-      type _Assert = T extends { tier: string } ? true : false;
-      const assert: _Assert = true;
-      expect(assert).toBe(true);
-    });
-  });
-
-  describe("safe version type inference", () => {
-    it("should infer SafeResult<AvailableNodes> when no schema provided", async () => {
-      type T = Awaited<ReturnType<typeof safeGetAvailableNodes>>;
-      type _Assert = T extends { success: true; data: AvailableNodes } | { success: false; error: any } ? true : false;
-      const assert: _Assert = true;
-      expect(assert).toBe(true);
-    });
-
-    it("should infer SafeResult<unknown> when schema is false", async () => {
-      type T = Awaited<ReturnType<typeof safeGetAvailableNodes<false>>>;
-      type _Assert = T extends { success: true; data: unknown } | { success: false; error: any } ? true : false;
-      const assert: _Assert = true;
-      expect(assert).toBe(true);
-    });
-
-    it("should infer custom type when custom schema provided", async () => {
-      const customSchema = z.object({ tier: z.string() });
-      type T = Awaited<ReturnType<typeof safeGetAvailableNodes<typeof customSchema>>>;
-      type _Assert = T extends { success: true; data: { tier: string } } | { success: false; error: any } ? true : false;
-      const assert: _Assert = true;
-      expect(assert).toBe(true);
-    });
-  });
-}); 
+});

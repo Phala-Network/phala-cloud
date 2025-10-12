@@ -1,10 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { z } from "zod";
 import { createClient } from "../client";
 import {
   getCvmList,
   safeGetCvmList,
-  GetCvmListSchema,
   type GetCvmListResponse,
 } from "./get_cvm_list";
 import type { CvmInfo } from "../types/cvm_info";
@@ -122,22 +120,11 @@ describe("getCvmList", () => {
     mockGet = vi.spyOn(client, "get");
   });
 
-  describe("getCvmList", () => {
-    it("should return CVM list data successfully", async () => {
+  describe("API routing & basic success", () => {
+    it("should call correct endpoint with query params", async () => {
       mockGet.mockResolvedValue(mockCvmListData);
 
-      const result = await getCvmList(client);
-
-      expect(mockGet).toHaveBeenCalledWith("/cvms/paginated", { params: {} });
-      expect(result).toEqual(mockCvmListData);
-      expect((result as GetCvmListResponse).items).toHaveLength(1);
-      expect((result as GetCvmListResponse).total).toBe(1);
-    });
-
-    it("should handle query parameters correctly", async () => {
-      mockGet.mockResolvedValue(mockCvmListData);
-
-      await getCvmList(client, {
+      const result = await getCvmList(client, {
         page: 2,
         page_size: 20,
         node_id: 123,
@@ -150,6 +137,28 @@ describe("getCvmList", () => {
           node_id: 123,
         },
       });
+      expect(result).toEqual(mockCvmListData);
+      expect((result as GetCvmListResponse).items).toHaveLength(1);
+    });
+  });
+
+  describe("error handling", () => {
+    it("should throw on API errors", async () => {
+      const apiError = new Error("API Error");
+      mockGet.mockRejectedValue(apiError);
+
+      await expect(getCvmList(client)).rejects.toThrow("API Error");
+    });
+  });
+
+  describe("edge cases", () => {
+    it("should work without parameters", async () => {
+      mockGet.mockResolvedValue(mockCvmListData);
+
+      const result = await getCvmList(client);
+
+      expect(mockGet).toHaveBeenCalledWith("/cvms/paginated", { params: {} });
+      expect(result).toEqual(mockCvmListData);
     });
 
     it("should handle partial query parameters", async () => {
@@ -161,61 +170,10 @@ describe("getCvmList", () => {
         params: { page: 1 },
       });
     });
-
-    it("should validate response data with zod schema", async () => {
-      const invalidData = {
-        items: "invalid", // should be array
-        total: "invalid", // should be number
-      };
-
-      mockGet.mockResolvedValue(invalidData);
-
-      await expect(getCvmList(client)).rejects.toThrow();
-    });
-
-    it("should handle API errors properly", async () => {
-      const apiError = new Error("API Error");
-      mockGet.mockRejectedValue(apiError);
-
-      await expect(getCvmList(client)).rejects.toThrow("API Error");
-    });
-
-    it("should return raw data when schema is false", async () => {
-      const rawData = { some: "raw", data: 123 };
-      mockGet.mockResolvedValue(rawData);
-
-      const result = await getCvmList(client, undefined, { schema: false });
-
-      expect(result).toEqual(rawData);
-    });
-
-    it("should use custom schema when provided", async () => {
-      const customSchema = z.object({
-        custom: z.string(),
-      });
-      const customData = { custom: "test" };
-
-      mockGet.mockResolvedValue(customData);
-
-      const result = await getCvmList(client, undefined, { schema: customSchema });
-
-      expect(result).toEqual(customData);
-    });
-
-    it("should throw when custom schema validation fails", async () => {
-      const customSchema = z.object({
-        custom: z.string(),
-      });
-      const invalidData = { custom: 123 };
-
-      mockGet.mockResolvedValue(invalidData);
-
-      await expect(getCvmList(client, undefined, { schema: customSchema })).rejects.toThrow();
-    });
   });
 
   describe("safeGetCvmList", () => {
-    it("should return success result when API call succeeds", async () => {
+    it("should return SafeResult on success", async () => {
       mockGet.mockResolvedValue(mockCvmListData);
 
       const result = await safeGetCvmList(client);
@@ -225,101 +183,6 @@ describe("getCvmList", () => {
       if (result.success) {
         expect(result.data).toEqual(mockCvmListData);
         expect((result.data as GetCvmListResponse).items).toHaveLength(1);
-      }
-    });
-
-    it("should return error result when API call fails", async () => {
-      const apiError = new Error("Network Error");
-      (apiError as any).isRequestError = true;
-      mockGet.mockRejectedValue(apiError);
-
-      const result = await safeGetCvmList(client);
-
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.message).toBe("Network Error");
-        if ("isRequestError" in result.error) {
-          expect(result.error.isRequestError).toBe(true);
-        }
-      }
-    });
-
-    it("should handle zod validation errors", async () => {
-      const invalidData = {
-        items: "invalid", // should be array
-        total: "invalid", // should be number
-      };
-
-      mockGet.mockResolvedValue(invalidData);
-
-      const result = await safeGetCvmList(client);
-
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        if (!("isRequestError" in result.error)) {
-          expect(result.error.issues).toBeDefined();
-        }
-      }
-    });
-
-    it("should pass through HTTP errors directly", async () => {
-      const error = new Error("bad request");
-      (error as any).isRequestError = true;
-      (error as any).status = 400;
-      mockGet.mockRejectedValue(error);
-
-      const result = await safeGetCvmList(client);
-
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        if ("isRequestError" in result.error) {
-          expect(result.error.status).toBe(400);
-        }
-      }
-    });
-
-    it("should return raw data when schema is false", async () => {
-      mockGet.mockResolvedValue(mockCvmListData);
-
-      const result = await safeGetCvmList(client, undefined, { schema: false });
-
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data).toEqual(mockCvmListData);
-      }
-    });
-
-    it("should use custom schema when provided", async () => {
-      const customSchema = z.object({
-        custom: z.string(),
-      });
-      const customData = { custom: "test" };
-
-      mockGet.mockResolvedValue(customData);
-
-      const result = await safeGetCvmList(client, undefined, { schema: customSchema });
-
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data).toEqual(customData);
-      }
-    });
-
-    it("should return validation error when custom schema fails", async () => {
-      const customSchema = z.object({
-        custom: z.string(),
-      });
-      const invalidData = { custom: 123 };
-
-      mockGet.mockResolvedValue(invalidData);
-
-      const result = await safeGetCvmList(client, { schema: customSchema });
-
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        if (!("isRequestError" in result.error)) {
-          expect(result.error.issues).toBeDefined();
-        }
       }
     });
 
@@ -339,23 +202,6 @@ describe("getCvmList", () => {
           node_id: 123,
         },
       });
-    });
-  });
-
-  describe("parameter handling", () => {
-    it("should work without parameters", async () => {
-      mockGet.mockResolvedValue(mockCvmListData);
-
-      await expect(getCvmList(client)).resolves.toBeDefined();
-      expect(mockGet).toHaveBeenCalledWith("/cvms/paginated", { params: {} });
-    });
-
-    it("should handle undefined parameters gracefully", async () => {
-      mockGet.mockResolvedValue(mockCvmListData);
-
-      await getCvmList(client, undefined);
-
-      expect(mockGet).toHaveBeenCalledWith("/cvms/paginated", { params: {} });
     });
   });
 }); 

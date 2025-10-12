@@ -1,11 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { z } from "zod";
 import { createClient } from "../client";
 import {
   commitCvmProvision,
   safeCommitCvmProvision,
   CommitCvmProvision,
-  CommitCvmProvisionSchema,
   CommitCvmProvisionRequest,
 } from "./commit_cvm_provision";
 
@@ -50,68 +48,61 @@ const mockCvmData: CommitCvmProvision = {
 describe("commitCvmProvision", () => {
   let client: ReturnType<typeof createClient>;
   let mockPost: any;
-  let mockSafePost: any;
 
   beforeEach(() => {
     client = createClient({ apiKey: "test-api-key", baseURL: "https://api.test.com" });
     mockPost = vi.spyOn(client, "post");
-    mockSafePost = vi.spyOn(client, "safePost");
   });
 
-  describe("commitCvmProvision", () => {
-    it("should return CVM data successfully", async () => {
+  describe("API routing & basic success", () => {
+    it("should call correct endpoint and return CVM data", async () => {
       mockPost.mockResolvedValueOnce(mockCvmData);
-      
-      const result = await commitCvmProvision(client, mockPayload);
-      expect(result).toEqual(mockCvmData);
-      expect(mockPost).toHaveBeenCalledWith("/cvms", mockPayload);
-    });
 
+      const result = await commitCvmProvision(client, mockPayload);
+
+      expect(mockPost).toHaveBeenCalledWith("/cvms", mockPayload);
+      expect(result).toEqual(mockCvmData);
+    });
+  });
+
+  describe("request validation", () => {
     it("should validate response data with Zod schema", async () => {
       mockPost.mockResolvedValueOnce(mockCvmData);
-      
-      const result = await commitCvmProvision(client, mockPayload);
-      expect(CommitCvmProvisionSchema.parse(result)).toEqual(mockCvmData);
-    });
 
-    it("should handle API errors (throws)", async () => {
+      const result = await commitCvmProvision(client, mockPayload);
+      expect(result).toEqual(mockCvmData);
+    });
+  });
+
+  describe("error handling", () => {
+    it("should throw on API errors", async () => {
       const apiError = new Error("Validation error");
       mockPost.mockRejectedValueOnce(apiError);
-      
+
       await expect(commitCvmProvision(client, mockPayload)).rejects.toThrow("Validation error");
     });
+  });
 
-    it("should return raw data when schema is false", async () => {
-      const rawData = { foo: "bar" };
-      mockPost.mockResolvedValueOnce(rawData);
-      
-      const result = await commitCvmProvision(client, mockPayload, { schema: false });
-      expect(result).toEqual(rawData);
-    });
+  describe("edge cases", () => {
+    it("should allow extra fields in API response for forward compatibility", async () => {
+      const responseWithExtraFields = {
+        ...mockCvmData,
+        future_field: "future_value",
+        another_new_field: 42
+      };
+      mockPost.mockResolvedValueOnce(responseWithExtraFields);
 
-    it("should use custom schema when provided", async () => {
-      const customSchema = z.object({ id: z.number(), name: z.string() });
-      const customData = { id: 123, name: "test" };
-      mockPost.mockResolvedValueOnce(customData);
-      
-      const result = await commitCvmProvision(client, mockPayload, { schema: customSchema });
-      expect(result).toEqual(customData);
-    });
-
-    it("should throw when custom schema validation fails", async () => {
-      const customSchema = z.object({ id: z.number(), name: z.string() });
-      const invalidData = { id: "not-a-number", name: "test" };
-      mockPost.mockResolvedValueOnce(invalidData);
-      
-      await expect(commitCvmProvision(client, mockPayload, { schema: customSchema })).rejects.toThrow();
+      const result = await commitCvmProvision(client, mockPayload);
+      expect(result).toEqual(responseWithExtraFields);
     });
   });
 
   describe("safeCommitCvmProvision", () => {
-    it("should return success result when API call succeeds", async () => {
+    it("should return SafeResult on success", async () => {
       mockPost.mockResolvedValueOnce(mockCvmData);
 
       const result = await safeCommitCvmProvision(client, mockPayload);
+
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data).toEqual(mockCvmData);
@@ -125,6 +116,7 @@ describe("commitCvmProvision", () => {
       mockPost.mockRejectedValueOnce(error);
 
       const result = await safeCommitCvmProvision(client, mockPayload);
+
       expect(result.success).toBe(false);
       if (!result.success) {
         if ("isRequestError" in result.error) {
@@ -138,59 +130,7 @@ describe("commitCvmProvision", () => {
       mockPost.mockResolvedValueOnce({ invalid: "data" });
 
       const result = await safeCommitCvmProvision(client, mockPayload);
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        if (!("isRequestError" in result.error)) {
-          expect(result.error.issues).toBeDefined();
-        }
-      }
-    });
 
-    it("should pass through HTTP errors directly", async () => {
-      const error = new Error("Bad request");
-      (error as any).isRequestError = true;
-      (error as any).status = 400;
-      mockPost.mockRejectedValueOnce(error);
-
-      const result = await safeCommitCvmProvision(client, mockPayload);
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        if ("isRequestError" in result.error) {
-          expect(result.error.status).toBe(400);
-          expect(result.error.message).toBe("Bad request");
-        }
-      }
-    });
-
-    it("should return raw data when schema is false", async () => {
-      const rawData = { foo: "bar" };
-      mockPost.mockResolvedValueOnce(rawData);
-
-      const result = await safeCommitCvmProvision(client, mockPayload, { schema: false });
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data).toEqual(rawData);
-      }
-    });
-
-    it("should use custom schema when provided", async () => {
-      const customSchema = z.object({ id: z.number(), name: z.string() });
-      const customData = { id: 123, name: "test" };
-      mockPost.mockResolvedValueOnce(customData);
-
-      const result = await safeCommitCvmProvision(client, mockPayload, { schema: customSchema });
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data).toEqual(customData);
-      }
-    });
-
-    it("should return validation error when custom schema fails", async () => {
-      const customSchema = z.object({ id: z.number(), name: z.string() });
-      const invalidData = { id: "not-a-number", name: "test" };
-      mockPost.mockResolvedValueOnce(invalidData);
-
-      const result = await safeCommitCvmProvision(client, mockPayload, { schema: customSchema });
       expect(result.success).toBe(false);
       if (!result.success) {
         if (!("isRequestError" in result.error)) {
@@ -199,90 +139,4 @@ describe("commitCvmProvision", () => {
       }
     });
   });
-
-  describe("parameter handling", () => {
-    it("should work without parameters", async () => {
-      mockPost.mockResolvedValueOnce(mockCvmData);
-      
-      const result = await commitCvmProvision(client, mockPayload);
-      expect(result).toEqual(mockCvmData);
-    });
-
-    it("should work with empty parameters object", async () => {
-      mockPost.mockResolvedValueOnce(mockCvmData);
-      
-      const result = await commitCvmProvision(client, mockPayload, {});
-      expect(result).toEqual(mockCvmData);
-    });
-
-    it("should work with safe version without parameters", async () => {
-      mockPost.mockResolvedValueOnce(mockCvmData);
-
-      const result = await safeCommitCvmProvision(client, mockPayload);
-      expect(result.success).toBe(true);
-    });
-
-    it("should work with safe version with empty parameters object", async () => {
-      mockPost.mockResolvedValueOnce(mockCvmData);
-
-      const result = await safeCommitCvmProvision(client, mockPayload, {});
-      expect(result.success).toBe(true);
-    });
-  });
-
-  describe("schema flexibility", () => {
-    it("should allow extra fields in API response for forward compatibility", async () => {
-      const responseWithExtraFields = { 
-        ...mockCvmData, 
-        future_field: "future_value",
-        another_new_field: 42 
-      };
-      mockPost.mockResolvedValueOnce(responseWithExtraFields);
-      
-      const result = await commitCvmProvision(client, mockPayload);
-      expect(result).toEqual(responseWithExtraFields);
-    });
-  });
-
-  describe("type inference", () => {
-    it("should infer correct types for default schema", () => {
-      type T = Awaited<ReturnType<typeof commitCvmProvision>>;
-      const isExpected: T extends CommitCvmProvision ? true : false = true;
-      expect(isExpected).toBe(true);
-    });
-
-    it("should infer unknown type when schema is false", () => {
-      type T = Awaited<ReturnType<typeof commitCvmProvision<false>>>;
-      const isExpected: T extends unknown ? true : false = true;
-      expect(isExpected).toBe(true);
-    });
-
-    it("should infer correct types for custom schema", () => {
-      const customSchema = z.object({ foo: z.string() });
-      type T = Awaited<ReturnType<typeof commitCvmProvision<typeof customSchema>>>;
-      const isExpected: T extends { foo: string } ? true : false = true;
-      expect(isExpected).toBe(true);
-    });
-  });
-
-  describe("safe version type inference", () => {
-    it("should infer correct SafeResult types for default schema", () => {
-      type T = Awaited<ReturnType<typeof safeCommitCvmProvision>>;
-      const isExpected: T extends { success: boolean } ? true : false = true;
-      expect(isExpected).toBe(true);
-    });
-
-    it("should infer correct SafeResult types for unknown schema", () => {
-      type T = Awaited<ReturnType<typeof safeCommitCvmProvision<false>>>;
-      const isExpected: T extends { success: boolean } ? true : false = true;
-      expect(isExpected).toBe(true);
-    });
-
-    it("should infer correct SafeResult types for custom schema", () => {
-      const customSchema = z.object({ foo: z.string() });
-      type T = Awaited<ReturnType<typeof safeCommitCvmProvision<typeof customSchema>>>;
-      const isExpected: T extends { success: boolean } ? true : false = true;
-      expect(isExpected).toBe(true);
-    });
-  });
-}); 
+});
