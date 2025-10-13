@@ -184,3 +184,14 @@ test/e2e-full/fixtures/test-app/node_modules/
 test/e2e-full/fixtures/test-app/.env
 test/e2e-full/fixtures/test-app/.env.v2
 test/e2e-full/fixtures/test-app/docker-compose-v2.yml
+
+# Investigation and debugging scripts
+investigate-*.ts
+check-compose.ts
+get-cvm-info.ts
+monitor-update-progress.ts
+test-compose-update.ts
+test-serial-logs.ts
+INVESTIGATION_RESULTS.md
+ISSUES_TO_FIX.md
+openapi.json

@@ -1,0 +1,13 @@
+{
+  "name": "phala-e2e-test-app",
+  "version": "1.0.0",
+  "description": "Simple test application for Phala Cloud CLI E2E tests",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=18"
+  }
+}
