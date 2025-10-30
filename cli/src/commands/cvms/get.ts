@@ -14,11 +14,9 @@ export const getCommand = new Command()
 	.option("-j, --json", "Output in JSON format")
 	.action(async (cvm_id, options) => {
 		try {
-			let spinner
+			let spinner;
 			if (!options.json) {
-				spinner = logger.startSpinner(
-					`Fetching CVM with App ID ${cvm_id}`,
-				);
+				spinner = logger.startSpinner(`Fetching CVM with App ID ${cvm_id}`);
 			}
 
 			const client = await getClient();
