@@ -19,7 +19,7 @@ export const listCommand = new Command()
 			}
 
 			const client = await getClient();
-			const result = await safeGetCvmList(client, { user_id: "0" });
+			const result = await safeGetCvmList(client);
 
 			if (spinner) {
 				spinner.stop(true);
