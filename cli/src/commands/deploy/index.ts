@@ -13,6 +13,8 @@ import {
 	type Client,
 	type EnvVar,
 	type ProvisionCvmComposeFileUpdateRequest,
+	type SafeError,
+	type RequestError,
 	createClient,
 	encryptEnvVars,
 	parseEnvVars,
@@ -32,6 +34,13 @@ import { Command, Option } from "commander";
 import dedent from "dedent";
 import fs from "fs-extra";
 import inquirer from "inquirer";
+
+/**
+ * Type guard to check if error is a RequestError
+ */
+function isRequestError(error: SafeError): error is RequestError {
+	return "isRequestError" in error && error.isRequestError === true;
+}
 
 interface Options {
 	name?: string;
@@ -319,12 +328,12 @@ const validateCpuMemoryDiskSize = async (options: Options) => {
 const validateNodeandKmsandImage = async (options: Options, client: Client) => {
 	const nodes_result = await safeGetAvailableNodes(client);
 	if (!nodes_result.success) {
-		if ("isRequestError" in nodes_result.error) {
+		if (isRequestError(nodes_result.error)) {
 			throw new Error(
 				`HTTP ${nodes_result.error.status}: ${nodes_result.error.message}`,
 			);
 		}
-		throw new Error(`Validation error: ${nodes_result.error.issues}`);
+		throw new Error(`Validation error: ${JSON.stringify(nodes_result.error)}`);
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
 	const nodes = nodes_result.data as any;
@@ -370,12 +379,12 @@ const validateNodeandKmsandImage = async (options: Options, client: Client) => {
 	if (target.support_onchain_kms) {
 		const kms_result = await safeGetKmsList(client);
 		if (!kms_result.success) {
-			if ("isRequestError" in kms_result.error) {
+			if (isRequestError(kms_result.error)) {
 				throw new Error(
 					`HTTP ${kms_result.error.status}: ${kms_result.error.message}`,
 				);
 			}
-			throw new Error(`Validation error: ${kms_result.error.issues}`);
+			throw new Error(`Validation error: ${JSON.stringify(kms_result.error)}`);
 		}
 		// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
 		const kms_list = kms_result.data as any;
@@ -499,8 +508,8 @@ const deployNewCvm = async (
 
 	// For centralized KMS, we can get the AppID & AppEnvEncryptPubkey from provision response.
 	if ((app.app_env_encrypt_pubkey && app.app_id) || !kms?.chain_id) {
-		let encrypted_env_vars = undefined
-		if (envs && envs.length) {
+		let encrypted_env_vars = undefined;
+		if (envs?.length) {
 			encrypted_env_vars = await encryptEnvVars(
 				envs,
 				app.app_env_encrypt_pubkey,
@@ -641,7 +650,7 @@ const updateCvm = async (
 			app_compose as ProvisionCvmComposeFileUpdateRequest["app_compose"],
 	});
 	if (!provision_result.success) {
-		if ("isRequestError" in provision_result.error) {
+		if (isRequestError(provision_result.error)) {
 			console.error(
 				"HTTP Error:",
 				provision_result.error.status,
@@ -652,9 +661,12 @@ const updateCvm = async (
 				"Response body:",
 				JSON.stringify(provision_result.error.data, null, 2),
 			);
+			throw new Error(
+				`Failed to provision cvm compose file: ${provision_result.error.message}`,
+			);
 		}
 		throw new Error(
-			`Failed to provision cvm compose file: ${provision_result.error.message}`,
+			`Failed to provision cvm compose file: ${JSON.stringify(provision_result.error)}`,
 		);
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
@@ -704,7 +716,7 @@ const updateCvm = async (
 	const commitResult = await safeCommitCvmComposeFileUpdate(client, data);
 
 	if (!commitResult.success) {
-		if ("isRequestError" in commitResult.error) {
+		if (isRequestError(commitResult.error)) {
 			console.error(
 				"HTTP Error:",
 				commitResult.error.status,
@@ -715,9 +727,12 @@ const updateCvm = async (
 				"Response body:",
 				JSON.stringify(commitResult.error.data, null, 2),
 			);
+			throw new Error(
+				`Failed to commit cvm compose file: ${commitResult.error.message}`,
+			);
 		}
 		throw new Error(
-			`Failed to commit CVM compose file update: ${commitResult.error.message}`,
+			`Failed to commit CVM compose file update: ${JSON.stringify(commitResult.error)}`,
 		);
 	}
 	if (validatedOptions?.json !== false) {
