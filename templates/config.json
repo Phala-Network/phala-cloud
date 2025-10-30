@@ -139,6 +139,46 @@
     "tags": ["MCP"]
   },
   {
+    "id": "zetachain-mcp-server",
+    "name": "ZetaChain MCP Server",
+    "description": "ZetaChain integration for Phala Cloud's dstack SDK. Enables secure key management and cross-chain operations for ZetaChain blockchain. Build omnichain applications with TEE-secured account creation, cross-chain messaging, and universal app interaction. Supports both Athens testnet (chain_id: 7001) and mainnet (chain_id: 7000). Features include secure wallet generation, multi-chain transaction batching, ZETA token operations, and Gateway contract integration for seamless cross-chain communication.",
+    "repo": "https://github.com/ExpertVagabond/zetachain-mcp-server",
+    "author": "ExpertVagabond",
+    "icon": "zetachain.png",
+    "envs": [
+      {
+        "key": "ZETACHAIN_NETWORK",
+        "required": false,
+        "description": "ZetaChain network to connect to (testnet or mainnet)",
+        "default": "testnet"
+      },
+      {
+        "key": "ZETACHAIN_RPC_URL",
+        "required": false,
+        "description": "Custom RPC endpoint URL (optional, uses default if not set)",
+        "default": "https://zetachain-athens-evm.blockpi.network/v1/rpc/public"
+      },
+      {
+        "key": "ZETACHAIN_CHAIN_ID",
+        "required": false,
+        "description": "Chain ID for ZetaChain network (7001 for testnet, 7000 for mainnet)",
+        "default": "7001"
+      },
+      {
+        "key": "ENABLE_CROSS_CHAIN",
+        "required": false,
+        "description": "Enable cross-chain messaging features",
+        "default": "true"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 10
+    },
+    "tags": ["ZetaChain", "Blockchain", "Cross-Chain", "MCP", "TEE", "Omnichain", "DeFi", "Web3"]
+  },
+  {
     "id": "context7-mcp",
     "name": "Context7 MCP",
     "description": "A Context7 MCP server deployed on Phala Cloud that enables AI agents to fetch real-time Context7 data, including protocol TVL (Total Value Locked), chain metrics, and token prices.",
