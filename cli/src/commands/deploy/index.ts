@@ -474,8 +474,9 @@ const deployNewCvm = async (
 	const app_compose = {
 		name: name,
 		compose_file: {
+			name: "",
 			docker_compose_file: docker_compose_yml,
-			allowed_envs: envs.map((env) => env.key),
+			allowed_envs: (envs || []).map((env) => env.key),
 		},
 		vcpu: vcpu,
 		memory: memoryMB,
@@ -498,10 +499,13 @@ const deployNewCvm = async (
 
 	// For centralized KMS, we can get the AppID & AppEnvEncryptPubkey from provision response.
 	if ((app.app_env_encrypt_pubkey && app.app_id) || !kms?.chain_id) {
-		const encrypted_env_vars = await encryptEnvVars(
-			envs,
-			app.app_env_encrypt_pubkey,
-		);
+		let encrypted_env_vars = undefined
+		if (envs && envs.length) {
+			encrypted_env_vars = await encryptEnvVars(
+				envs,
+				app.app_env_encrypt_pubkey,
+			);
+		}
 		commit_result = await safeCommitCvmProvision(client, {
 			app_id: app.app_id,
 			encrypted_env: encrypted_env_vars,
