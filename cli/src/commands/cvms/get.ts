@@ -10,25 +10,17 @@ import type { CvmInfoResponse } from "@/src/api/types";
 export const getCommand = new Command()
 	.name("get")
 	.description("Get details of a CVM")
-	.argument("[app-id]", "App ID of the CVM (optional)")
+	.argument("[id]", "ID of the CVM (optional)")
 	.option("-j, --json", "Output in JSON format")
-	.action(async (appId, options) => {
+	.action(async (cvm_id, options) => {
 		try {
-			const resolvedAppId = await resolveCvmAppId(appId);
-
-			// Remove app_ prefix if present, SDK will add it back
-			const cleanAppId = resolvedAppId?.replace(/^app_/, "") || "";
-
-
-			let spinner
+			let spinner;
 			if (!options.json) {
-				spinner = logger.startSpinner(
-					`Fetching CVM with App ID app_${cleanAppId}`,
-				);
+				spinner = logger.startSpinner(`Fetching CVM with App ID ${cvm_id}`);
 			}
 
 			const client = await getClient();
-			const result = await safeGetCvmInfo(client, { app_id: cleanAppId });
+			const result = await safeGetCvmInfo(client, { id: cvm_id });
 
 			if (spinner) {
 				spinner.stop(true);
@@ -42,7 +34,7 @@ export const getCommand = new Command()
 			logger.break();
 
 			if (!cvm) {
-				logger.error(`CVM with App ID app_${resolvedAppId} not found`);
+				logger.error(`CVM with App ID app_${cvm_id} not found`);
 				process.exit(1);
 			}
 

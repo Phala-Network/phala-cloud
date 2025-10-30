@@ -13,7 +13,7 @@ export const listCommand = new Command()
 	.option("-j, --json", "Output in JSON format")
 	.action(async (options) => {
 		try {
-			let spinner
+			let spinner;
 			if (!options.json) {
 				spinner = logger.startSpinner("Fetching CVMs");
 			}
