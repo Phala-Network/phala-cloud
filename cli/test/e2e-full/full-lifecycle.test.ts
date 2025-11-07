@@ -10,6 +10,7 @@ import {
 	waitForCvmStatus,
 	waitForCvmNetwork,
 	waitForOperationsComplete,
+	waitForNewEvent,
 	getCvmDetails,
 	cleanupCvm,
 	getCvmSerialLogs,
@@ -419,6 +420,7 @@ describe.skipIf(skipTests)(
 					memory?: number;
 					disk_size?: number;
 					status?: string;
+					gateway_domain?: string;
 				};
 
 				expect(cvm.status).toBe("running");
@@ -433,7 +435,13 @@ describe.skipIf(skipTests)(
 				});
 
 				// Wait for HTTP endpoint to be accessible
-				const publicUrl = await waitForPortExposed(logger, appId, 3000, 120000);
+				const publicUrl = await waitForPortExposed(
+					logger,
+					appId,
+					3000,
+					120000,
+					cvm.gateway_domain,
+				);
 
 				// Test health endpoint
 				const healthData = await testJsonEndpoint<{ status: string }>(
@@ -522,7 +530,11 @@ describe.skipIf(skipTests)(
 				// The old container may still be running until the new one is pulled and started
 				// We need to retry until we get the correct version, not just any response
 				logger.info("Waiting for new container to start (allowing time for Docker image pull)...");
-				const publicUrl = buildPublicUrl(appId, 3000);
+
+				// Get CVM details to fetch the gateway domain
+				const cvmDetails = await getCvmDetails(vmUuid, TEST_API_KEY);
+				const cvm = cvmDetails as { gateway_domain?: string };
+				const publicUrl = buildPublicUrl(appId, 3000, cvm.gateway_domain);
 
 				// Poll until version matches 2.0.0
 				const maxAttempts = 60; // Up to 5 minutes (60 * 5s)
@@ -619,16 +631,29 @@ describe.skipIf(skipTests)(
 					throw error;
 				}
 
-				// Wait for CVM to stabilize after resize
-				// The resize operation may cause the CVM to restart or enter an in_progress state
-				logger.info("Waiting for CVM to stabilize after resize...");
-				await waitForCvmNetwork(logger, vmUuid, 180000, TEST_API_KEY);
+				// Wait for resize operation to complete
+				// Resize automatically triggers a restart, so we need to wait for:
+				// 1. A new instance.restart or instance.power_on event to appear
+				// 2. That event to complete
+				// 3. The CVM to return to running state
+				logger.info("Waiting for resize and automatic restart to complete...");
+				await waitForNewEvent(
+					logger,
+					vmUuid,
+					/instance\.(restart|power_on)/,
+					180000,
+					TEST_API_KEY,
+				);
+
+				// Also ensure CVM is back to running state
+				await waitForCvmNetwork(logger, vmUuid, 120000, TEST_API_KEY);
 
 				// Get updated resources and verify the change
 				const afterResize = (await getCvmDetails(vmUuid, TEST_API_KEY)) as {
 					vcpu?: number;
 					memory?: number;
 					disk_size?: number;
+					gateway_domain?: string;
 				};
 
 				logger.success("Resources after resize:", {
@@ -643,7 +668,13 @@ describe.skipIf(skipTests)(
 
 				// Verify container is accessible after resize
 				logger.info("Verifying container is accessible after resize...");
-				const publicUrl = await waitForPortExposed(logger, appId, 3000, 120000);
+				const publicUrl = await waitForPortExposed(
+					logger,
+					appId,
+					3000,
+					120000,
+					afterResize.gateway_domain,
+				);
 
 				const healthData = await testJsonEndpoint<{ status: string }>(
 					`${publicUrl}/health`,
@@ -711,8 +742,10 @@ describe.skipIf(skipTests)(
 				}
 
 				// Verify app is still accessible
-				const publicUrl = buildPublicUrl(appId, 3000);
-				await waitForPortExposed(logger, appId, 3000, 120000);
+				const cvmDetails = await getCvmDetails(vmUuid, TEST_API_KEY);
+				const cvm = cvmDetails as { gateway_domain?: string };
+				const publicUrl = buildPublicUrl(appId, 3000, cvm.gateway_domain);
+				await waitForPortExposed(logger, appId, 3000, 120000, cvm.gateway_domain);
 
 				const healthData = await testJsonEndpoint<{ status: string }>(
 					`${publicUrl}/health`,
@@ -792,7 +825,9 @@ describe.skipIf(skipTests)(
 				}
 
 				// Final health check
-				const publicUrl = buildPublicUrl(appId, 3000);
+				const cvmDetailsFinal = await getCvmDetails(vmUuid, TEST_API_KEY);
+				const cvmFinal = cvmDetailsFinal as { gateway_domain?: string };
+				const publicUrl = buildPublicUrl(appId, 3000, cvmFinal.gateway_domain);
 				const finalHealth = await testJsonEndpoint<{ status: string }>(
 					`${publicUrl}/health`,
 					["status"],

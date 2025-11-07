@@ -364,10 +364,24 @@ const validateNodeandKmsandImage = async (options: Options, client: Client) => {
 				]);
 				kms = kmsChoice;
 			} else {
-				throw new Error(
-					// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
-					`Node ${target.name} requires a KMS ID for Contract Owned CVM, available kms: ${kms_list.items.map((t: any) => t.slug).join(", ")}`,
-				);
+				// In non-interactive mode, use the node's default KMS if available
+				if (target.default_kms) {
+					kms = kms_list.items.find(
+						// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
+						(k: any) => k.slug === target.default_kms || k.id === target.default_kms,
+					);
+					if (!kms) {
+						throw new Error(
+							// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
+							`Node ${target.name} default KMS ${target.default_kms} not found in available kms: ${kms_list.items.map((t: any) => t.slug).join(", ")}`,
+						);
+					}
+				} else {
+					throw new Error(
+						// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
+						`Node ${target.name} requires a KMS ID for Contract Owned CVM, available kms: ${kms_list.items.map((t: any) => t.slug).join(", ")}`,
+					);
+				}
 			}
 		} else {
 			// Find the specified kms

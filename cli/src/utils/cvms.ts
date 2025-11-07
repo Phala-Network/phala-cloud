@@ -8,10 +8,12 @@ import { logger } from "./logger";
  * or by validating the provided App ID exists.
  *
  * @param appId Optional App ID to resolve
+ * @param silent If true, don't log success/error messages (useful for JSON output mode)
  * @returns The resolved App ID or undefined if none was selected/found
  */
 export async function resolveCvmAppId(
 	appId?: string,
+	silent = false,
 ): Promise<string | undefined> {
 	if (!appId) {
 		// If no app ID is provided, prompt user to select one
@@ -22,7 +24,7 @@ export async function resolveCvmAppId(
 		return selectedCvm;
 	}
 	// Verify the provided App ID exists
-	return await checkCvmExists(appId);
+	return await checkCvmExists(appId, silent);
 }
 
 /**

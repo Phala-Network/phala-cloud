@@ -206,6 +206,112 @@ export async function waitForOperationsComplete(
 }
 
 /**
+ * Wait for a new event of a specific type to appear and complete
+ * This is useful after triggering an operation to ensure it actually starts and finishes
+ */
+export async function waitForNewEvent(
+	logger: TestLogger,
+	vmUuid: string,
+	eventTypePattern: string | RegExp,
+	timeoutMs = 180000, // 3 minutes default
+	apiKey?: string,
+): Promise<void> {
+	const client = createClient(apiKey ? { apiKey } : undefined);
+	const startTime = Date.now();
+	const checkIntervalMs = 2000; // Check every 2 seconds
+
+	// Get initial event logs to establish a baseline
+	const initialEvents = await getCvmEventLogs(logger, vmUuid, apiKey);
+	const initialEventIds = new Set(
+		initialEvents.map((e: any) => e.id || e.timestamp),
+	);
+
+	logger.info(
+		`Waiting for new event matching ${eventTypePattern} (timeout: ${timeoutMs}ms)`,
+	);
+
+	let foundNewEvent = false;
+	let targetEventCompleted = false;
+
+	while (Date.now() - startTime < timeoutMs) {
+		try {
+			// Get current event logs
+			const currentEvents = await getCvmEventLogs(logger, vmUuid, apiKey);
+			const cvmResult = await safeGetCvmInfo(client, { uuid: vmUuid });
+
+			// Check CVM in_progress status
+			let cvmInProgress = false;
+			if (cvmResult.success) {
+				const cvmInfo = cvmResult.data as { in_progress?: boolean };
+				cvmInProgress = cvmInfo.in_progress || false;
+			}
+
+			// Look for new events matching the pattern
+			for (const event of currentEvents) {
+				const evt = event as {
+					id?: string;
+					event_type?: string;
+					status?: string;
+					timestamp?: string;
+				};
+				const eventId = evt.id || evt.timestamp;
+
+				// Skip if this is an old event we've already seen
+				if (initialEventIds.has(eventId)) {
+					continue;
+				}
+
+				// Check if event type matches
+				const matches =
+					typeof eventTypePattern === "string"
+						? evt.event_type?.includes(eventTypePattern)
+						: eventTypePattern.test(evt.event_type || "");
+
+				if (matches) {
+					if (!foundNewEvent) {
+						logger.info(`New event detected: ${evt.event_type} - ${evt.status}`);
+						foundNewEvent = true;
+					}
+
+					// Check if this event is completed and CVM is not in_progress
+					if (evt.status === "completed" && !cvmInProgress) {
+						logger.success(
+							`Event ${evt.event_type} completed (took ${Date.now() - startTime}ms)`,
+						);
+						return;
+					}
+
+					if (evt.status !== "completed") {
+						logger.info(`Event ${evt.event_type} still in progress...`);
+					}
+					targetEventCompleted = evt.status === "completed";
+				}
+			}
+
+			// If we found the event and it's completed, but CVM is still in_progress
+			if (targetEventCompleted && cvmInProgress) {
+				logger.info("Event completed but CVM still in_progress, waiting...");
+			}
+
+			// If we haven't found any new matching event yet
+			if (!foundNewEvent) {
+				logger.info("No new matching event yet, waiting...");
+			}
+		} catch (error) {
+			logger.warn("Error checking event logs:");
+			logger.warn(formatErrorDetails(error));
+		}
+
+		// Wait before next check
+		await new Promise((resolve) => setTimeout(resolve, checkIntervalMs));
+	}
+
+	throw new Error(
+		`Timeout waiting for new event matching ${eventTypePattern} (${timeoutMs}ms)`,
+	);
+}
+
+/**
  * Wait for CVM to reach target status
  */
 export async function waitForCvmStatus(

@@ -71,7 +71,7 @@ async function runCvmsResizeCommand(
 	_context: CommandContext,
 ): Promise<number> {
 	try {
-		const resolvedAppId = await resolveCvmAppId(input.appId);
+		const resolvedAppId = await resolveCvmAppId(input.appId, input.json);
 		const cvm = await getCvmByAppId(resolvedAppId);
 		if (!cvm) {
 			logger.error(`CVM with App ID app_${resolvedAppId} not found`);

@@ -67,11 +67,12 @@ export async function testHttpEndpoint(
 export function buildPublicUrl(
 	appId: string,
 	port: number,
-	baseDomain = "dstack-prod5.phala.network",
+	gatewayDomain?: string,
 ): string {
 	// Remove app_ prefix if present
 	const cleanAppId = appId.replace(/^app_/, "");
-	return `https://${cleanAppId}-${port}.${baseDomain}`;
+	const domain = gatewayDomain || "dstack-prod5.phala.network";
+	return `https://${cleanAppId}-${port}.${domain}`;
 }
 
 /**
@@ -82,8 +83,9 @@ export async function waitForPortExposed(
 	appId: string,
 	port: number,
 	timeoutMs = 120000,
+	gatewayDomain?: string,
 ): Promise<string> {
-	const url = buildPublicUrl(appId, port);
+	const url = buildPublicUrl(appId, port, gatewayDomain);
 	const startTime = Date.now();
 
 	logger.info(`Waiting for port ${port} to be exposed at ${url}`);
