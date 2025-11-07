@@ -1,6 +1,7 @@
 import { defineCommand } from "@/src/core/define-command";
 import { listConfigValues } from "@/src/utils/config";
 import { logDetailedError } from "@/src/utils/error-handling";
+import { setJsonMode } from "@/src/utils/logger";
 import type { CommandContext } from "@/src/core/types";
 import {
 	configListCommandMeta,
@@ -12,11 +13,14 @@ async function runConfigList(
 	input: ConfigListCommandInput,
 	context: CommandContext,
 ): Promise<number> {
+	// Enable JSON mode if --json flag is set
+	setJsonMode(input.json);
+
 	try {
 		const config = listConfigValues();
 
 		if (input.json) {
-			context.stdout.write(`${JSON.stringify(config, null, 2)}\n`);
+			context.success(config);
 			return 0;
 		}
 
@@ -26,8 +30,8 @@ async function runConfigList(
 		}
 		return 0;
 	} catch (error) {
-		context.stderr.write("Failed to list configuration values\n");
 		logDetailedError(error);
+		context.fail("Failed to list configuration values");
 		return 1;
 	}
 }

@@ -62,6 +62,18 @@ export interface CommandContext {
 	readonly stdout: NodeJS.WriteStream;
 	readonly stderr: NodeJS.WriteStream;
 	readonly stdin: NodeJS.ReadStream;
+
+	/**
+	 * Output success result. In JSON mode, outputs {success: true, ...data} to stdout.
+	 * In human mode, outputs success message to stdout.
+	 */
+	success(data: unknown): void;
+
+	/**
+	 * Output failure result and exit. In JSON mode, outputs {success: false, error: ...} to stdout.
+	 * In human mode, outputs error message to stderr.
+	 */
+	fail(message: string, details?: unknown): void;
 }
 
 export interface CommandDefinition<Schema extends ZodTypeAny = ZodTypeAny> {

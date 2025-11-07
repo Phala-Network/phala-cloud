@@ -4,6 +4,7 @@ import {
 	projectConfigExists,
 } from "@/src/utils/project-config";
 import { getApiKey } from "@/src/utils/credentials";
+import { logger, setJsonMode } from "@/src/utils/logger";
 import {
 	CLOUD_URL,
 	DEFAULT_DISK_SIZE,
@@ -474,7 +475,7 @@ const deployNewCvm = async (
 		kms_id: kms?.slug,
 	};
 
-	stdout.write(`Deploying CVM ${name}...\n`);
+	logger.info(`Deploying CVM ${name}...`);
 
 	// Deploy the app with Centralized KMS
 	const provision_result = await safeProvisionCvm(client, app_compose);
@@ -615,7 +616,7 @@ const updateCvm = async (
 		app_compose.allowed_envs = envs.map((env) => env.key);
 	}
 
-	stdout.write(`Preparing update for CVM ${validatedOptions.uuid}...\n`);
+	logger.info(`Preparing update for CVM ${validatedOptions.uuid}...`);
 	const provision_result = await safeProvisionCvmComposeFileUpdate(client, {
 		uuid: validatedOptions.uuid,
 		app_compose:
@@ -677,9 +678,7 @@ const updateCvm = async (
 	}
 	// Wait for update to complete if --wait flag is set
 	if (validatedOptions.wait) {
-		if (!validatedOptions.json) {
-			stdout.write("\nWaiting for update to complete...\n");
-		}
+		logger.info("Waiting for update to complete...");
 		try {
 			await waitForCvmReady(
 				validatedOptions.uuid as string,
@@ -715,6 +714,9 @@ export async function runDeploy(
 	input: DeployCommandInput,
 	context: { stdout: NodeJS.WriteStream; stderr: NodeJS.WriteStream },
 ): Promise<void> {
+	// Enable JSON mode if --json flag is set
+	setJsonMode(input.json || false);
+
 	try {
 		// Use positional argument if provided, otherwise use the --compose option
 		const dockerComposePath = input.compose;

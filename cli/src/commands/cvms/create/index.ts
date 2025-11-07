@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { FetchError } from "ofetch";
 import { encryptEnvVars, type EnvVar } from "@phala/cloud";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
@@ -322,13 +321,7 @@ phala cvms get app_${response.app_id}`,
 		logger.error(
 			`Failed to create CVM: ${error instanceof Error ? error.message : String(error)}`,
 		);
-		if (error instanceof FetchError && input.debug) {
-			logger.error("=== HTTP Error Details ===");
-			logger.error("Status:", error.status);
-			logger.error("Status Text:", error.statusText);
-			logger.error("URL:", error.request);
-			logger.error("Response Body:", JSON.stringify(error.data, null, 2));
-		}
+		// Note: Use logDetailedError for more detailed error info if needed
 		return 1;
 	}
 }

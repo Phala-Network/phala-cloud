@@ -4,7 +4,7 @@ import { getCvmByAppId, resizeCvm } from "@/src/api/cvms";
 import { CLOUD_URL } from "@/src/utils/constants";
 import { resolveCvmAppId } from "@/src/utils/cvms";
 import { logDetailedError } from "@/src/utils/error-handling";
-import { logger } from "@/src/utils/logger";
+import { logger, setJsonMode } from "@/src/utils/logger";
 import { retryOnConflict } from "@/src/utils/retry";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
@@ -68,13 +68,16 @@ async function promptForNumber(
 
 async function runCvmsResizeCommand(
 	input: CvmsResizeCommandInput,
-	_context: CommandContext,
+	context: CommandContext,
 ): Promise<number> {
+	// Enable JSON mode if --json flag is set
+	setJsonMode(input.json);
+
 	try {
 		const resolvedAppId = await resolveCvmAppId(input.appId, input.json);
 		const cvm = await getCvmByAppId(resolvedAppId);
 		if (!cvm) {
-			logger.error(`CVM with App ID app_${resolvedAppId} not found`);
+			context.fail(`CVM with App ID app_${resolvedAppId} not found`);
 			return 1;
 		}
 
@@ -191,21 +194,19 @@ ${CLOUD_URL}/dashboard/cvms/app_${resolvedAppId}`,
 					allowRestart ? 1 : 0,
 				)
 			);
-			console.log(
-				JSON.stringify({
-					success: true,
-					app_id: resolvedAppId,
-					vcpu,
-					memory,
-					disk_size: diskSize,
-					allow_restart: allowRestart,
-				}),
-			);
+			context.success({
+				app_id: resolvedAppId,
+				vcpu,
+				memory,
+				disk_size: diskSize,
+				allow_restart: allowRestart,
+			});
 		}
 		return 0;
 	} catch (error) {
 		logger.error("Failed to resize CVM");
 		logDetailedError(error);
+		context.fail(error instanceof Error ? error.message : String(error));
 		return 1;
 	}
 }

@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import { FetchError } from "ofetch";
 import { encryptEnvVars, type EnvVar } from "@phala/cloud";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
@@ -160,25 +159,8 @@ ${CLOUD_URL}/dashboard/cvms/app_${resolvedAppId}`,
 			`Failed to upgrade CVM: ${error instanceof Error ? error.message : String(error)}`,
 		);
 
-		const isFetchError =
-			error instanceof FetchError ||
-			(error &&
-				typeof error === "object" &&
-				"status" in error &&
-				"statusText" in error &&
-				"data" in error);
-
-		if (isFetchError) {
-			const fetchError = error as FetchError;
-			logger.error("=== HTTP Error Details ===");
-			logger.error("Status:", fetchError.status);
-			logger.error("Status Text:", fetchError.statusText);
-			logger.error("URL:", fetchError.request);
-			logger.error("Response Body:", JSON.stringify(fetchError.data, null, 2));
-			if (input.debug) {
-				logger.error("Full Error Object:", error);
-			}
-		} else if (input.debug) {
+		// Note: Use logDetailedError for more detailed error info if needed
+		if (input.debug) {
 			logger.error("Full Error:", error);
 		}
 

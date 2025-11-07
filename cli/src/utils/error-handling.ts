@@ -1,6 +1,6 @@
 import type { SafeResult } from "@phala/cloud";
-import { FetchError } from "ofetch";
 import type { ZodError } from "zod";
+import { isInJsonMode } from "@/src/core/json-mode";
 
 // Type guard for request errors (RequestError from SDK)
 function isRequestError(
@@ -41,6 +41,9 @@ export function logDetailedError(
 	context?: string,
 	stderr?: NodeJS.WriteStream,
 ): void {
+	// In JSON mode, suppress detailed error logging (final output handles errors)
+	if (isInJsonMode()) return;
+
 	const output = stderr ? stderr.write.bind(stderr) : (msg: string) => console.error(msg);
 	const prefix = context ? `[${context}]` : "";
 
@@ -58,27 +61,6 @@ export function logDetailedError(
 	// Check if it's a validation error (from safe API)
 	if (isValidationError(error)) {
 		output(`${prefix} Validation error: ${JSON.stringify(error.issues)}\n`);
-		return;
-	}
-
-	// Check if it's a FetchError (from throwing API)
-	const errorObj = error as { constructor?: { name?: string } };
-	const isFetchError =
-		error instanceof FetchError ||
-		errorObj.constructor?.name === "FetchError" ||
-		(error &&
-			typeof error === "object" &&
-			"status" in error &&
-			"statusText" in error &&
-			"data" in error);
-
-	if (isFetchError) {
-		const fetchError = error as FetchError;
-		const ctx = prefix ? `${prefix} ` : "";
-		output(`${ctx}HTTP ${fetchError.status}: ${fetchError.message}\n`);
-		if (fetchError.data !== undefined && fetchError.data !== null) {
-			output(`${JSON.stringify(fetchError.data, null, 2)}\n`);
-		}
 		return;
 	}
 

@@ -112,7 +112,6 @@ export async function getCvmEventLogs(
 		const data = await response.json();
 		// API returns {"items": [...], "next_cursor": null, "total": N}
 		const items = data.items || [];
-		logger.info(`Retrieved ${items.length} event logs`);
 		return items;
 	} catch (error) {
 		logger.warn(`Failed to get event logs: ${error}`);

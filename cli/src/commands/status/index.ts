@@ -3,7 +3,7 @@ import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 import { getApiKey } from "@/src/utils/credentials";
 import { logDetailedError } from "@/src/utils/error-handling";
-import { logger } from "@/src/utils/logger";
+import { logger, setJsonMode } from "@/src/utils/logger";
 import { statusCommandMeta, statusCommandSchema } from "./command";
 import type { StatusCommandInput } from "./command";
 
@@ -11,6 +11,9 @@ export async function runStatusCommand(
 	input: StatusCommandInput,
 	context: CommandContext,
 ): Promise<number | undefined> {
+	// Enable JSON mode if --json flag is set
+	setJsonMode(input.json);
+
 	const debug = input.debug || context.env.DEBUG?.toLowerCase() === "true";
 	const apiKey = input.apiToken || getApiKey();
 
@@ -34,6 +37,7 @@ export async function runStatusCommand(
 			if (result.error) {
 				logger.error(`Error: ${result.error.message}`);
 			}
+			context.fail(result.error?.message || "Failed to get user information");
 			return 1;
 		}
 
@@ -43,17 +47,11 @@ export async function runStatusCommand(
 			"https://cloud-api.phala.network/api/v1";
 
 		if (input.json) {
-			context.stdout.write(
-				`${JSON.stringify(
-					{
-						apiUrl,
-						username: userInfo.username,
-						team_name: userInfo.team_name,
-					},
-					null,
-					2,
-				)}\n`,
-			);
+			context.success({
+				apiUrl,
+				username: userInfo.username,
+				team_name: userInfo.team_name,
+			});
 			return 0;
 		}
 
@@ -70,6 +68,7 @@ export async function runStatusCommand(
 		if (debug) {
 			logDetailedError(error);
 		}
+		context.fail("Authentication failed. Your API key may be invalid or expired.");
 		return 1;
 	}
 }

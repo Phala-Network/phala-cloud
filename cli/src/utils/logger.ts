@@ -1,5 +1,9 @@
 import chalk from "chalk";
 import ora, { type Ora } from "ora";
+import { isInJsonMode } from "@/src/core/json-mode";
+
+// Re-export setJsonMode for convenience
+export { setJsonMode } from "@/src/core/json-mode";
 
 /**
  * Wraps text at the specified width by splitting on spaces.
@@ -87,20 +91,45 @@ export function wrapLines(text: string, maxWidth: number): string[] {
 
 export const logger = {
 	error: (message: string, ...args: unknown[]) => {
-		console.error(chalk.red("✗"), chalk.red(message), ...args);
+		if (isInJsonMode()) return;
+		process.stderr.write(`${chalk.red("✗")} ${chalk.red(message)}`);
+		if (args.length > 0) {
+			process.stderr.write(` ${args.map(String).join(" ")}`);
+		}
+		process.stderr.write("\n");
 	},
 	warn: (message: string, ...args: unknown[]) => {
-		console.log(chalk.yellow("⚠"), chalk.yellow(message), ...args);
+		if (isInJsonMode()) return;
+		process.stderr.write(`${chalk.yellow("⚠")} ${chalk.yellow(message)}`);
+		if (args.length > 0) {
+			process.stderr.write(` ${args.map(String).join(" ")}`);
+		}
+		process.stderr.write("\n");
 	},
 	info: (message: string, ...args: unknown[]) => {
-		console.log(chalk.blue("ℹ"), chalk.blue(message), ...args);
+		if (isInJsonMode()) return;
+		process.stderr.write(`${chalk.blue("ℹ")} ${chalk.blue(message)}`);
+		if (args.length > 0) {
+			process.stderr.write(` ${args.map(String).join(" ")}`);
+		}
+		process.stderr.write("\n");
 	},
 	success: (message: string, ...args: unknown[]) => {
-		console.log(chalk.green("✓"), chalk.green(message), ...args);
+		if (isInJsonMode()) return;
+		process.stderr.write(`${chalk.green("✓")} ${chalk.green(message)}`);
+		if (args.length > 0) {
+			process.stderr.write(` ${args.map(String).join(" ")}`);
+		}
+		process.stderr.write("\n");
 	},
 	debug: (message: string, ...args: unknown[]) => {
+		if (isInJsonMode()) return;
 		if (process.env.DEBUG) {
-			console.log(chalk.gray("🔍"), chalk.gray(message), ...args);
+			process.stderr.write(`${chalk.gray("🔍")} ${chalk.gray(message)}`);
+			if (args.length > 0) {
+				process.stderr.write(` ${args.map(String).join(" ")}`);
+			}
+			process.stderr.write("\n");
 		}
 	},
 	table: <T>(
@@ -110,6 +139,7 @@ export const logger = {
 			| Array<{ key: keyof T | string; header?: string }>
 			| Array<{ key: string; header?: string }>,
 	) => {
+		if (isInJsonMode()) return;
 		if (data.length === 0) {
 			console.log(chalk.yellow("No data to display"));
 			return;
@@ -237,6 +267,7 @@ export const logger = {
 			maxWidth?: number;
 		},
 	) => {
+		if (isInJsonMode()) return;
 		const {
 			borderStyle = "single",
 			keyColor = chalk.blue,
@@ -380,12 +411,22 @@ export const logger = {
 	 * Prints a line break (empty line)
 	 */
 	break: () => {
-		console.log();
+		if (isInJsonMode()) return;
+		process.stderr.write("\n");
 	},
 	/**
-	 * Starts a spinner with the given message
+	 * Starts a spinner with the given message.
+	 * In JSON mode, returns a dummy spinner that does nothing.
 	 */
 	startSpinner: (message: string) => {
+		if (isInJsonMode()) {
+			// Return dummy spinner in JSON mode
+			return {
+				stop: () => {
+					// no-op
+				},
+			};
+		}
 		const spinner = ora(message).start();
 		return {
 			stop: (success = true, text?: string) => {

@@ -1,9 +1,11 @@
 import { ZodError } from "zod";
+import chalk from "chalk";
 import { buildCommandSchemaInput } from "./input-builder";
 import { parseCommandArguments } from "./parser";
 import type { CommandRegistry } from "./registry";
 import { formatCommandHelp, formatGlobalHelp, formatGroupHelp } from "./help";
 import type { CommandContext, CommandDefinition } from "./types";
+import { isInJsonMode } from "./json-mode";
 
 export interface DispatchOptions {
 	readonly registry: CommandRegistry;
@@ -129,6 +131,49 @@ export async function dispatchCommand(
 			stdout,
 			stderr,
 			stdin,
+
+			success(data: unknown): void {
+				if (isInJsonMode()) {
+					const output =
+						typeof data === "string"
+							? { success: true, message: data }
+							: {
+									success: true,
+									...(typeof data === "object" && data !== null ? data : { data }),
+								};
+					stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+				} else {
+					// Human-readable to stdout
+					if (typeof data === "string") {
+						stdout.write(`${chalk.green("✓")} ${chalk.green(data)}\n`);
+					} else {
+						stdout.write(`${chalk.green("✓")} Success\n`);
+						stdout.write(`${JSON.stringify(data, null, 2)}\n`);
+					}
+				}
+			},
+
+			fail(message: string, details?: unknown): void {
+				if (isInJsonMode()) {
+					stdout.write(
+						`${JSON.stringify(
+							{
+								success: false,
+								error: message,
+								...(details && { details }),
+							},
+							null,
+							2,
+						)}\n`,
+					);
+				} else {
+					// Human-readable to stderr
+					stderr.write(`${chalk.red("✗")} ${chalk.red(message)}\n`);
+					if (details) {
+						stderr.write(`${JSON.stringify(details, null, 2)}\n`);
+					}
+				}
+			},
 		};
 
 		const parsedInput = definition.schema.parse(mergedInput);
