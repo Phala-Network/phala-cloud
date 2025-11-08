@@ -12,7 +12,7 @@ import {
 	DEFAULT_VCPU,
 } from "@/src/utils/constants";
 import { waitForCvmReady } from "@/src/utils/cvms";
-import { logDetailedError } from "@/src/utils/error-handling";
+
 import { detectFileInCurrentDir, promptForFile } from "@/src/utils/prompts";
 import { parseDiskSizeInput, parseMemoryInput } from "@/src/utils/units";
 import {
@@ -291,7 +291,7 @@ const validateCpuMemoryDiskSize = async (options: Options) => {
 const validateNodeandKmsandImage = async (options: Options, client: Client) => {
 	const nodes_result = await safeGetAvailableNodes(client);
 	if (!nodes_result.success) {
-		logDetailedError(nodes_result.error, "Get Available Nodes");
+		logger.logDetailedError(nodes_result.error, "Get Available Nodes");
 		throw new Error(`Failed to get available nodes: ${nodes_result.error.message}`);
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
@@ -342,7 +342,7 @@ const validateNodeandKmsandImage = async (options: Options, client: Client) => {
 	if (target.support_onchain_kms) {
 		const kms_result = await safeGetKmsList(client);
 		if (!kms_result.success) {
-			logDetailedError(kms_result.error, "Get KMS List");
+			logger.logDetailedError(kms_result.error, "Get KMS List");
 			throw new Error(`Failed to get KMS list: ${kms_result.error.message}`);
 		}
 		// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
@@ -480,7 +480,7 @@ const deployNewCvm = async (
 	// Deploy the app with Centralized KMS
 	const provision_result = await safeProvisionCvm(client, app_compose);
 	if (!provision_result.success) {
-		logDetailedError(provision_result.error, "Provision CVM");
+		logger.logDetailedError(provision_result.error, "Provision CVM");
 		throw new Error(`Failed to provision CVM: ${provision_result.error.message}`);
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
@@ -517,7 +517,7 @@ const deployNewCvm = async (
 			composeHash: compose_hash,
 		});
 		if (!deploy_result.success) {
-			logDetailedError(deploy_result, "Deploy App Auth");
+			logger.logDetailedError(deploy_result, "Deploy App Auth");
 			const errorMsg = typeof deploy_result === 'object' && deploy_result !== null ? JSON.stringify(deploy_result) : String(deploy_result);
 			throw new Error(`Deployment contract failed: ${errorMsg}`);
 		}
@@ -529,7 +529,7 @@ const deployNewCvm = async (
 			kms: kms_slug,
 		});
 		if (!resp.success) {
-			logDetailedError(resp.error, "Get App Env Encrypt PubKey");
+			logger.logDetailedError(resp.error, "Get App Env Encrypt PubKey");
 			throw new Error(`Failed to get app env encrypt pubkey: ${resp.error.message}`);
 		}
 		// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
@@ -549,7 +549,7 @@ const deployNewCvm = async (
 	}
 
 	if (!commit_result.success) {
-		logDetailedError(commit_result.error, "Commit CVM Provision");
+		logger.logDetailedError(commit_result.error, "Commit CVM Provision");
 		throw new Error(`Failed to commit CVM provision: ${commit_result.error.message}`);
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
@@ -598,11 +598,11 @@ const updateCvm = async (
 		}),
 	]);
 	if (!cvm_result.success) {
-		logDetailedError(cvm_result.error, "Get CVM Info");
+		logger.logDetailedError(cvm_result.error, "Get CVM Info");
 		throw new Error(`Failed to get cvm info: ${cvm_result.error.message}`);
 	}
 	if (!app_compose_result.success) {
-		logDetailedError(app_compose_result.error, "Get CVM Compose File");
+		logger.logDetailedError(app_compose_result.error, "Get CVM Compose File");
 		throw new Error(`Failed to get cvm compose file: ${app_compose_result.error.message}`);
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
@@ -623,7 +623,7 @@ const updateCvm = async (
 			app_compose as ProvisionCvmComposeFileUpdateRequest["app_compose"],
 	});
 	if (!provision_result.success) {
-		logDetailedError(provision_result.error, "Provision CVM Compose File Update");
+		logger.logDetailedError(provision_result.error, "Provision CVM Compose File Update");
 		throw new Error(`Failed to provision cvm compose file: ${provision_result.error.message}`);
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
@@ -644,7 +644,7 @@ const updateCvm = async (
 			privateKey: validatedOptions.privateKey as `0x${string}`,
 		});
 		if (!receipt_result.success) {
-			logDetailedError(receipt_result, "Add Compose Hash");
+			logger.logDetailedError(receipt_result, "Add Compose Hash");
 			const errorMsg = typeof receipt_result === 'object' && receipt_result !== null ? JSON.stringify(receipt_result) : String(receipt_result);
 			throw new Error(`Failed to add compose hash: ${errorMsg}`);
 		}
@@ -673,7 +673,7 @@ const updateCvm = async (
 	const commitResult = await safeCommitCvmComposeFileUpdate(client, data);
 
 	if (!commitResult.success) {
-		logDetailedError(commitResult.error, "Commit CVM Compose File Update");
+		logger.logDetailedError(commitResult.error, "Commit CVM Compose File Update");
 		throw new Error(`Failed to commit CVM compose file update: ${commitResult.error.message}`);
 	}
 	// Wait for update to complete if --wait flag is set
@@ -683,10 +683,9 @@ const updateCvm = async (
 			await waitForCvmReady(
 				validatedOptions.uuid as string,
 				300000, // 5 minutes timeout
-				!validatedOptions.json, // show progress if not in JSON mode
 			);
 		} catch (error: unknown) {
-			logDetailedError(error, "Wait for CVM Ready");
+			logger.logDetailedError(error, "Wait for CVM Ready");
 			throw new Error(`Wait failed: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}

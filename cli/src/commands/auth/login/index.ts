@@ -5,7 +5,7 @@ import type { CommandContext } from "@/src/core/types";
 import { getClientWithKey } from "@/src/lib/client";
 import { removeApiKey, saveApiKey } from "@/src/utils/credentials";
 import { CLOUD_URL } from "@/src/utils/constants";
-import { logDetailedError } from "@/src/utils/error-handling";
+
 import { logger } from "@/src/utils/logger";
 import type { UserInfoResponse } from "@/src/api/types";
 import { loginCommandMeta, loginCommandSchema } from "./command";
@@ -93,7 +93,7 @@ async function runLoginCommand(
 		return 0;
 	} catch (error) {
 		logger.error("Failed to set API key");
-		logDetailedError(error);
+		logger.logDetailedError(error);
 		return 1;
 	}
 }

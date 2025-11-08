@@ -3,7 +3,7 @@ import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext, CommandMeta } from "@/src/core/types";
 import type { AvailableNodesResponse } from "@/src/api/types";
 import { getClient } from "@/src/lib/client";
-import { logger } from "@/src/utils/logger";
+import { logger, setJsonMode } from "@/src/utils/logger";
 import {
 	nodesListCommandMeta,
 	nodesListCommandSchema,
@@ -12,14 +12,18 @@ import {
 
 async function runNodesListCommand(
 	input: NodesListCommandInput,
-	_context: CommandContext,
+	context: CommandContext,
 ): Promise<number> {
+	// Enable JSON mode if --json flag is set
+	setJsonMode(input.json);
+
 	try {
 		const client = await getClient();
 		const result = await safeGetAvailableNodes(client);
 
 		if (!result.success) {
-			throw new Error(result.error.message);
+			context.fail(result.error.message);
+			return 1;
 		}
 
 		const { nodes: teepods, kms_list: kmsList } =
@@ -27,7 +31,7 @@ async function runNodesListCommand(
 
 		// JSON output mode
 		if (input.json) {
-			console.log(JSON.stringify({ nodes: teepods, kms_list: kmsList }, null, 2));
+			context.success({ nodes: teepods, kms_list: kmsList });
 			return 0;
 		}
 
@@ -74,7 +78,7 @@ async function runNodesListCommand(
 
 		return 0;
 	} catch (error) {
-		logger.error(
+		context.fail(
 			`Failed to list available nodes: ${
 				error instanceof Error ? error.message : String(error)
 			}`,

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import inquirer from "inquirer";
 import { DockerService } from "@/src/utils/docker";
-import { logDetailedError } from "@/src/utils/error-handling";
+
 import { logger } from "@/src/utils/logger";
 import { validateFileExists } from "@/src/utils/prompts";
 import { defineCommand } from "@/src/core/define-command";
@@ -133,7 +133,7 @@ async function runDockerCompose(
 		return 0;
 	} catch (error) {
 		logger.error("Failed to run Docker Compose");
-		logDetailedError(error);
+		logger.logDetailedError(error);
 		return 1;
 	}
 }

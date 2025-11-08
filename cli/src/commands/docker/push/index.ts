@@ -1,7 +1,7 @@
 import inquirer from "inquirer";
 import { getDockerCredentials } from "@/src/utils/credentials";
 import { DockerService } from "@/src/utils/docker";
-import { logDetailedError } from "@/src/utils/error-handling";
+
 import { logger } from "@/src/utils/logger";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
@@ -67,7 +67,7 @@ async function runDockerPush(
 		return 0;
 	} catch (error) {
 		logger.error("Failed to push Docker image");
-		logDetailedError(error);
+		logger.logDetailedError(error);
 		return 1;
 	}
 }

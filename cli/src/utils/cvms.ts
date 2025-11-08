@@ -2,18 +2,19 @@ import { checkCvmExists, selectCvm } from "@/src/api/cvms";
 import { createClient, safeGetCvmInfo } from "@phala/cloud";
 import { getApiKey } from "./credentials";
 import { logger } from "./logger";
+import { isInJsonMode } from "@/src/core/json-mode";
 
 /**
  * Resolves a CVM App ID either by prompting the user to select one if none is provided,
  * or by validating the provided App ID exists.
  *
+ * In JSON mode, success/error messages are suppressed to avoid polluting output.
+ *
  * @param appId Optional App ID to resolve
- * @param silent If true, don't log success/error messages (useful for JSON output mode)
  * @returns The resolved App ID or undefined if none was selected/found
  */
 export async function resolveCvmAppId(
 	appId?: string,
-	silent = false,
 ): Promise<string | undefined> {
 	if (!appId) {
 		// If no app ID is provided, prompt user to select one
@@ -24,39 +25,34 @@ export async function resolveCvmAppId(
 		return selectedCvm;
 	}
 	// Verify the provided App ID exists
-	return await checkCvmExists(appId, silent);
+	return await checkCvmExists(appId);
 }
 
 /**
  * Wait for CVM to complete any in-progress operations and reach running state
+ * Progress messages are automatically suppressed in JSON mode.
  *
  * @param uuid CVM UUID to monitor
  * @param timeoutMs Maximum time to wait in milliseconds (default: 5 minutes)
- * @param showProgress Whether to show progress messages (default: true)
  * @returns Promise that resolves when CVM is running and not in_progress, or rejects on timeout
  */
 export async function waitForCvmReady(
 	uuid: string,
 	timeoutMs = 300000, // 5 minutes default
-	showProgress = true,
 ): Promise<void> {
 	const apiKey = getApiKey();
 	const client = createClient({ apiKey });
 	const startTime = Date.now();
 	const checkIntervalMs = 2000; // Check every 2 seconds
 
-	if (showProgress) {
-		logger.info("Waiting for CVM to be ready...");
-	}
+	logger.info("Waiting for CVM to be ready...");
 
 	while (Date.now() - startTime < timeoutMs) {
 		try {
 			const result = await safeGetCvmInfo(client, { uuid });
 
 			if (!result.success) {
-				if (showProgress) {
-					logger.warn(`Failed to get CVM info: ${result.error.message}`);
-				}
+				logger.warn(`Failed to get CVM info: ${result.error.message}`);
 			} else {
 				const cvmInfo = result.data as {
 					status?: string;
@@ -65,26 +61,20 @@ export async function waitForCvmReady(
 				const currentStatus = cvmInfo.status;
 				const inProgress = cvmInfo.in_progress;
 
-				if (showProgress) {
-					const elapsed = Math.floor((Date.now() - startTime) / 1000);
-					logger.info(
-						`  [${elapsed}s] status=${currentStatus}, in_progress=${inProgress}`,
-					);
-				}
+				const elapsed = Math.floor((Date.now() - startTime) / 1000);
+				logger.info(
+					`  [${elapsed}s] status=${currentStatus}, in_progress=${inProgress}`,
+				);
 
 				// Success condition: running and not in_progress
 				if (currentStatus === "running" && !inProgress) {
-					if (showProgress) {
-						const elapsed = Math.floor((Date.now() - startTime) / 1000);
-						logger.success(`CVM is ready (took ${elapsed}s)`);
-					}
+					const elapsed = Math.floor((Date.now() - startTime) / 1000);
+					logger.success(`CVM is ready (took ${elapsed}s)`);
 					return;
 				}
 			}
 		} catch (error) {
-			if (showProgress) {
-				logger.warn(`Error checking CVM status: ${error}`);
-			}
+			logger.warn(`Error checking CVM status: ${error}`);
 		}
 
 		// Wait before next check

@@ -6,8 +6,7 @@ import type { CvmInfoResponse } from "@/src/api/types";
 import { getClient } from "@/src/lib/client";
 import { CLOUD_URL } from "@/src/utils/constants";
 import { resolveCvmAppId } from "@/src/utils/cvms";
-import { logDetailedError } from "@/src/utils/error-handling";
-import { logger } from "@/src/utils/logger";
+import { logger, setJsonMode } from "@/src/utils/logger";
 import {
 	cvmsGetCommandMeta,
 	cvmsGetCommandSchema,
@@ -18,46 +17,45 @@ async function runCvmsGetCommand(
 	input: CvmsGetCommandInput,
 	context: CommandContext,
 ): Promise<number> {
+	// Enable JSON mode if --json flag is set
+	setJsonMode(input.json);
+
 	try {
 		const resolvedAppId = await resolveCvmAppId(input.appId);
 		const cleanAppId = resolvedAppId?.replace(/^app_/, "") ?? "";
 
 		if (!cleanAppId) {
-			logger.error("No CVM App ID provided.");
+			context.fail("No CVM App ID provided.");
 			return 1;
 		}
 
-		let spinner;
-		if (!input.json) {
-			spinner = logger.startSpinner(
-				`Fetching CVM with App ID app_${cleanAppId}`,
-			);
-		}
+		const spinner = logger.startSpinner(
+			`Fetching CVM with App ID app_${cleanAppId}`,
+		);
 
 		const client = await getClient();
 		const result = await safeGetCvmInfo(client, { app_id: cleanAppId });
 
-		if (spinner) {
-			spinner.stop(true);
-		}
+		spinner.stop(true);
 
 		if (!result.success) {
-			throw new Error(result.error.message);
+			context.fail(result.error.message);
+			return 1;
 		}
 
 		const cvm = result.data as CvmInfoResponse | undefined;
 
 		if (!cvm) {
-			logger.error(`CVM with App ID app_${resolvedAppId} not found`);
+			context.fail(`CVM with App ID app_${resolvedAppId} not found`);
 			return 1;
 		}
 
-		logger.break();
-
 		if (input.json) {
-			context.stdout.write(`${JSON.stringify(cvm, null, 2)}\n`);
+			context.success(cvm);
 			return 0;
 		}
+
+		logger.break();
 
 		const statusColour =
 			cvm.status === "running"
@@ -79,8 +77,12 @@ async function runCvmsGetCommand(
 
 		return 0;
 	} catch (error) {
-		logger.error("Failed to get CVM details");
-		logDetailedError(error);
+		logger.logDetailedError(error);
+		context.fail(
+			`Failed to get CVM details: ${
+				error instanceof Error ? error.message : String(error)
+			}`,
+		);
 		return 1;
 	}
 }

@@ -1,5 +1,7 @@
 import chalk from "chalk";
 import ora, { type Ora } from "ora";
+import type { SafeResult } from "@phala/cloud";
+import type { ZodError } from "zod";
 import { isInJsonMode } from "@/src/core/json-mode";
 
 // Re-export setJsonMode for convenience
@@ -440,5 +442,71 @@ export const logger = {
 				}
 			},
 		};
+	},
+
+	/**
+	 * Logs detailed error information from any error type.
+	 * Handles SafeResult errors, RequestError, ZodError, and regular errors.
+	 * Automatically exposes HTTP status codes and response bodies when available.
+	 * Automatically suppressed in JSON mode.
+	 *
+	 * @param error - Error from SafeResult, RequestError, or any other error
+	 * @param context - Optional context string to help identify where the error occurred
+	 */
+	logDetailedError(
+		error: SafeResult<never>["error"] | unknown,
+		context?: string,
+	): void {
+		// In JSON mode, suppress detailed error logging (final output handles errors)
+		if (isInJsonMode()) return;
+
+		const prefix = context ? `[${context}] ` : "";
+
+		// Type guard for request errors (RequestError from SDK)
+		const isRequestError = (
+			err: unknown,
+		): err is { isRequestError: true; status: number; statusText: string; message: string; data?: unknown } => {
+			return (
+				err !== null &&
+				typeof err === "object" &&
+				"isRequestError" in err &&
+				err.isRequestError === true &&
+				"status" in err &&
+				"message" in err &&
+				"data" in err
+			);
+		};
+
+		// Type guard for validation errors
+		const isValidationError = (err: unknown): err is ZodError => {
+			return (
+				err !== null &&
+				typeof err === "object" &&
+				"issues" in err &&
+				Array.isArray((err as { issues: unknown }).issues)
+			);
+		};
+
+		// Check if it's a SafeResult request error
+		if (isRequestError(error)) {
+			process.stderr.write(`${prefix}HTTP ${error.status}: ${error.message}\n`);
+			if (error.data !== undefined && error.data !== null) {
+				process.stderr.write(`${JSON.stringify(error.data, null, 2)}\n`);
+			}
+			return;
+		}
+
+		// Check if it's a validation error
+		if (isValidationError(error)) {
+			process.stderr.write(`${prefix}Validation error: ${JSON.stringify(error.issues)}\n`);
+			return;
+		}
+
+		// Regular error
+		if (error instanceof Error) {
+			process.stderr.write(`${prefix}${error.message}\n`);
+		} else {
+			process.stderr.write(`${prefix}${String(error)}\n`);
+		}
 	},
 };

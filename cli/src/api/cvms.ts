@@ -29,18 +29,15 @@ import inquirer from "inquirer";
 /**
  * Check CVM exists for the current user and appId
  * @param appId App ID (with or without app_ prefix)
- * @param silent If true, don't log success/error messages (useful for JSON output mode)
- * @returns CVM appId string (without app_ prefix) or throws if not found
+ * @returns CVM appId string (without app_ prefix)
+ * @throws Error if CVM list fetch fails or CVM not found
  */
-export async function checkCvmExists(appId: string, silent = false): Promise<string> {
+export async function checkCvmExists(appId: string): Promise<string> {
 	const client = await getClient();
 	const result = await safeGetCvmList(client);
 
 	if (!result.success) {
-		if (!silent) {
-			logger.error(`Failed to fetch CVMs: ${result.error.message}`);
-		}
-		process.exit(1);
+		throw new Error(`Failed to fetch CVMs: ${result.error.message}`);
 	}
 
 	// Normalize input: remove app_ prefix if present
@@ -54,17 +51,12 @@ export async function checkCvmExists(appId: string, silent = false): Promise<str
 	});
 
 	if (!cvm) {
-		if (!silent) {
-			logger.error(`CVM with App ID app_${cleanAppId} not detected`);
-		}
-		process.exit(1);
-	} else {
-		if (!silent) {
-			logger.success(`CVM with App ID app_${cleanAppId} detected`);
-		}
-		const item = cvm as { hosted?: { app_id?: string } };
-		return item.hosted?.app_id || "";
+		throw new Error(`CVM with App ID app_${cleanAppId} not found`);
 	}
+
+	logger.success(`CVM with App ID app_${cleanAppId} detected`);
+	const item = cvm as { hosted?: { app_id?: string } };
+	return item.hosted?.app_id || "";
 }
 
 /**

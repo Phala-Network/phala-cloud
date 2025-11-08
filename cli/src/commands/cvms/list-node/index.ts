@@ -3,7 +3,7 @@ import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 import type { AvailableNodesResponse } from "@/src/api/types";
 import { getClient } from "@/src/lib/client";
-import { logDetailedError } from "@/src/utils/error-handling";
+
 import { logger } from "@/src/utils/logger";
 import {
 	cvmsListNodesCommandMeta,
@@ -67,7 +67,7 @@ async function runCvmsListNodesCommand(
 		return 0;
 	} catch (error) {
 		logger.error("Failed to list available nodes");
-		logDetailedError(error);
+		logger.logDetailedError(error);
 		return 1;
 	}
 }

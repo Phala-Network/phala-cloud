@@ -3,11 +3,12 @@ import inquirer from "inquirer";
 import { getCvmByAppId, resizeCvm } from "@/src/api/cvms";
 import { CLOUD_URL } from "@/src/utils/constants";
 import { resolveCvmAppId } from "@/src/utils/cvms";
-import { logDetailedError } from "@/src/utils/error-handling";
+
 import { logger, setJsonMode } from "@/src/utils/logger";
 import { retryOnConflict } from "@/src/utils/retry";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
+import { isInteractive } from "@/src/core/json-mode";
 import {
 	cvmsResizeCommandMeta,
 	cvmsResizeCommandSchema,
@@ -74,7 +75,7 @@ async function runCvmsResizeCommand(
 	setJsonMode(input.json);
 
 	try {
-		const resolvedAppId = await resolveCvmAppId(input.appId, input.json);
+		const resolvedAppId = await resolveCvmAppId(input.appId);
 		const cvm = await getCvmByAppId(resolvedAppId);
 		if (!cvm) {
 			context.fail(`CVM with App ID app_${resolvedAppId} not found`);
@@ -96,8 +97,8 @@ async function runCvmsResizeCommand(
 			return 1;
 		}
 
-		// Skip prompts in non-interactive mode (--json flag)
-		if (!input.json) {
+		// Prompt for missing values in interactive mode
+		if (isInteractive()) {
 			if (vcpu === undefined) {
 				vcpu = await promptForNumber("Enter number of vCPUs:", cvm.vcpu);
 			}
@@ -122,7 +123,7 @@ async function runCvmsResizeCommand(
 				allowRestart = response.allowRestart;
 			}
 		} else {
-			// In --json mode, use current values as defaults if not specified
+			// In non-interactive mode (--json), use current values as defaults if not specified
 			if (vcpu === undefined) vcpu = cvm.vcpu;
 			if (memory === undefined) memory = cvm.memory;
 			if (diskSize === undefined) diskSize = cvm.disk_size;
@@ -131,7 +132,8 @@ async function runCvmsResizeCommand(
 			if (allowRestart === undefined) allowRestart = true;
 		}
 
-		if (!input.json) {
+		// Show preview and confirmation in interactive mode
+		if (isInteractive()) {
 			logger.keyValueTable({
 				vCPUs:
 					cvm.vcpu !== vcpu
@@ -205,7 +207,7 @@ ${CLOUD_URL}/dashboard/cvms/app_${resolvedAppId}`,
 		return 0;
 	} catch (error) {
 		logger.error("Failed to resize CVM");
-		logDetailedError(error);
+		logger.logDetailedError(error);
 		context.fail(error instanceof Error ? error.message : String(error));
 		return 1;
 	}

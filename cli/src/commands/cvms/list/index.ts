@@ -5,8 +5,8 @@ import type { CommandContext } from "@/src/core/types";
 import type { CvmListResponse } from "@/src/api/types";
 import { getClient } from "@/src/lib/client";
 import { CLOUD_URL } from "@/src/utils/constants";
-import { logDetailedError } from "@/src/utils/error-handling";
-import { logger } from "@/src/utils/logger";
+
+import { logger, setJsonMode } from "@/src/utils/logger";
 import {
 	cvmsListCommandMeta,
 	cvmsListCommandSchema,
@@ -17,33 +17,33 @@ async function runCvmsListCommand(
 	input: CvmsListCommandInput,
 	context: CommandContext,
 ): Promise<number> {
+	// Enable JSON mode if --json flag is set
+	setJsonMode(input.json);
+
 	try {
-		let spinner;
-		if (!input.json) {
-			spinner = logger.startSpinner("Fetching CVMs");
-		}
+		const spinner = logger.startSpinner("Fetching CVMs");
 
 		const client = await getClient();
 		const result = await safeGetCvmList(client);
 
-		if (spinner) {
-			spinner.stop(true);
-		}
+		spinner.stop(true);
 
 		if (!result.success) {
-			throw new Error(result.error.message);
+			context.fail(result.error.message);
+			return 1;
 		}
 
 		const cvms = (result.data as CvmListResponse).items ?? [];
 
-		if (cvms.length === 0) {
-			logger.info("No CVMs found");
+		// Always return the list (context.success handles JSON vs human output)
+		if (input.json) {
+			context.success({ items: cvms });
 			return 0;
 		}
 
-		if (input.json) {
-			logger.break();
-			context.stdout.write(`${JSON.stringify(cvms, null, 2)}\n`);
+		// Human-readable output
+		if (cvms.length === 0) {
+			logger.info("No CVMs found");
 			return 0;
 		}
 
@@ -84,8 +84,12 @@ async function runCvmsListCommand(
 		logger.info(`Go to ${CLOUD_URL}/dashboard/ to view your CVMs`);
 		return 0;
 	} catch (error) {
-		logger.error("Failed to list CVMs");
-		logDetailedError(error);
+		logger.logDetailedError(error);
+		context.fail(
+			`Failed to list CVMs: ${
+				error instanceof Error ? error.message : String(error)
+			}`,
+		);
 		return 1;
 	}
 }

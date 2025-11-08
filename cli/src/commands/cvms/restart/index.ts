@@ -1,7 +1,7 @@
 import { getCvmByAppId, restartCvm } from "@/src/api/cvms";
 import { CLOUD_URL } from "@/src/utils/constants";
 import { resolveCvmAppId, waitForCvmReady } from "@/src/utils/cvms";
-import { logDetailedError } from "@/src/utils/error-handling";
+
 import { logger } from "@/src/utils/logger";
 import { retryOnConflict } from "@/src/utils/retry";
 import { defineCommand } from "@/src/core/define-command";
@@ -63,7 +63,7 @@ ${CLOUD_URL}/dashboard/cvms/app_${response.app_id}`,
 		return 0;
 	} catch (error) {
 		logger.error("Failed to restart CVM");
-		logDetailedError(error);
+		logger.logDetailedError(error);
 		return 1;
 	}
 }

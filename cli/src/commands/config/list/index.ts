@@ -1,6 +1,6 @@
 import { defineCommand } from "@/src/core/define-command";
 import { listConfigValues } from "@/src/utils/config";
-import { logDetailedError } from "@/src/utils/error-handling";
+
 import { setJsonMode } from "@/src/utils/logger";
 import type { CommandContext } from "@/src/core/types";
 import {
@@ -30,7 +30,7 @@ async function runConfigList(
 		}
 		return 0;
 	} catch (error) {
-		logDetailedError(error);
+		logger.logDetailedError(error);
 		context.fail("Failed to list configuration values");
 		return 1;
 	}

@@ -5,7 +5,7 @@ import {
 } from "./command";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
-import { logDetailedError } from "@/src/utils/error-handling";
+
 import { logger } from "@/src/utils/logger";
 import { stopSimulator } from "@/src/utils/simulator";
 
@@ -25,7 +25,7 @@ async function runSimulatorStop(
 		return 0;
 	} catch (error) {
 		logger.error("Failed to stop TEE simulator");
-		logDetailedError(error);
+		logger.logDetailedError(error);
 		return 1;
 	}
 }
