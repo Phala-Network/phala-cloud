@@ -14,11 +14,7 @@ export async function testHttpEndpoint(
 	expectedContent?: string,
 	options: RetryOptions = {},
 ): Promise<boolean> {
-	const {
-		maxAttempts = 5,
-		delayMs = 2000,
-		backoffMultiplier = 1.5,
-	} = options;
+	const { maxAttempts = 5, delayMs = 2000, backoffMultiplier = 1.5 } = options;
 
 	let currentDelay = delayMs;
 
@@ -121,11 +117,7 @@ export async function testJsonEndpoint<T = unknown>(
 	expectedFields?: string[],
 	options: RetryOptions = {},
 ): Promise<T> {
-	const {
-		maxAttempts = 5,
-		delayMs = 2000,
-		backoffMultiplier = 1.5,
-	} = options;
+	const { maxAttempts = 5, delayMs = 2000, backoffMultiplier = 1.5 } = options;
 
 	let currentDelay = delayMs;
 

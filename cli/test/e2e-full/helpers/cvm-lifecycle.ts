@@ -9,7 +9,11 @@ function formatErrorDetails(error: unknown): string {
 	const errorObj = error as any;
 
 	// Check if it's a SafeResult error
-	if (errorObj && typeof errorObj === "object" && "isRequestError" in errorObj) {
+	if (
+		errorObj &&
+		typeof errorObj === "object" &&
+		"isRequestError" in errorObj
+	) {
 		const parts = [`HTTP ${errorObj.status}: ${errorObj.message}`];
 		if (errorObj.data) {
 			parts.push(JSON.stringify(errorObj.data));
@@ -18,8 +22,15 @@ function formatErrorDetails(error: unknown): string {
 	}
 
 	// Check if it's a FetchError
-	if (errorObj && typeof errorObj === "object" && "status" in errorObj && "statusText" in errorObj) {
-		const parts = [`HTTP ${errorObj.status}: ${errorObj.message || errorObj.statusText}`];
+	if (
+		errorObj &&
+		typeof errorObj === "object" &&
+		"status" in errorObj &&
+		"statusText" in errorObj
+	) {
+		const parts = [
+			`HTTP ${errorObj.status}: ${errorObj.message || errorObj.statusText}`,
+		];
 		if (errorObj.data) {
 			parts.push(JSON.stringify(errorObj.data));
 		}
@@ -68,7 +79,9 @@ export async function getCvmSerialLogs(
 		// Make direct fetch call (SDK client prepends /api/v1/ which is wrong for logs)
 		const response = await fetch(logUrl);
 		if (!response.ok) {
-			logger.warn(`Failed to fetch logs: ${response.status} ${response.statusText}`);
+			logger.warn(
+				`Failed to fetch logs: ${response.status} ${response.statusText}`,
+			);
 			return "";
 		}
 
@@ -95,7 +108,7 @@ export async function getCvmEventLogs(
 		const eventUrl = `https://cloud.phala.network/api/cvms/${uuidNoDashes}/events`;
 
 		const headers: Record<string, string> = {
-			"accept": "*/*",
+			accept: "*/*",
 		};
 
 		if (apiKey) {
@@ -105,7 +118,9 @@ export async function getCvmEventLogs(
 		// Make direct fetch call
 		const response = await fetch(eventUrl, { headers });
 		if (!response.ok) {
-			logger.warn(`Failed to fetch event logs: ${response.status} ${response.statusText}`);
+			logger.warn(
+				`Failed to fetch event logs: ${response.status} ${response.statusText}`,
+			);
 			return [];
 		}
 
@@ -268,7 +283,9 @@ export async function waitForNewEvent(
 
 				if (matches) {
 					if (!foundNewEvent) {
-						logger.info(`New event detected: ${evt.event_type} - ${evt.status}`);
+						logger.info(
+							`New event detected: ${evt.event_type} - ${evt.status}`,
+						);
 						foundNewEvent = true;
 					}
 
@@ -411,7 +428,9 @@ export async function waitForCvmNetwork(
 		await new Promise((resolve) => setTimeout(resolve, checkIntervalMs));
 	}
 
-	throw new Error(`Timeout waiting for CVM network to be ready (${timeoutMs}ms)`);
+	throw new Error(
+		`Timeout waiting for CVM network to be ready (${timeoutMs}ms)`,
+	);
 }
 
 /**

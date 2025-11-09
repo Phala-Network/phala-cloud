@@ -72,7 +72,10 @@ export function createTestLogger(testName: string): TestLogger {
 		},
 
 		saveArtifact: (name: string, content: string) => {
-			const artifactPath = path.join(LOG_DIR, `${testName}-${name}-${timestamp}.json`);
+			const artifactPath = path.join(
+				LOG_DIR,
+				`${testName}-${name}-${timestamp}.json`,
+			);
 			try {
 				fs.writeFileSync(artifactPath, content);
 				writeLog("INFO", `Artifact saved: ${artifactPath}`);
@@ -105,7 +108,9 @@ export function logError(
 
 	if (isFetchError) {
 		// HTTP error from API
-		logger.error(`HTTP ${errorObj.status}: ${errorObj.message || errorObj.statusText}`);
+		logger.error(
+			`HTTP ${errorObj.status}: ${errorObj.message || errorObj.statusText}`,
+		);
 		if (errorObj.data !== undefined && errorObj.data !== null) {
 			logger.error("Response body:", errorObj.data);
 		}
