@@ -2,7 +2,6 @@ import { checkCvmExists, selectCvm } from "@/src/api/cvms";
 import { createClient, safeGetCvmInfo } from "@phala/cloud";
 import { getApiKey } from "./credentials";
 import { logger } from "./logger";
-import { isInJsonMode } from "@/src/core/json-mode";
 
 /**
  * Resolves a CVM App ID either by prompting the user to select one if none is provided,
