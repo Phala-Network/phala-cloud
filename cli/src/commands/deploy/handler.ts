@@ -104,20 +104,20 @@ async function readDockerComposeFile({
 }): Promise<string> {
 	// 1. If path is not provided and we're in interactive mode, try to detect it
 	if (!dockerComposePath) {
-        if (interactive) {
-            const possibleFiles = ["docker-compose.yml", "docker-compose.yaml"];
-            const composeFileName = detectFileInCurrentDir(
-                possibleFiles,
-                "Detected docker compose file: {path}",
-            );
-            dockerComposePath = await promptForFile(
-                "Enter the path to your Docker Compose file:",
-                composeFileName,
-                "file",
-            );
-        } else {
-            throw new Error(
-                dedent(`
+		if (interactive) {
+			const possibleFiles = ["docker-compose.yml", "docker-compose.yaml"];
+			const composeFileName = detectFileInCurrentDir(
+				possibleFiles,
+				"Detected docker compose file: {path}",
+			);
+			dockerComposePath = await promptForFile(
+				"Enter the path to your Docker Compose file:",
+				composeFileName,
+				"file",
+			);
+		} else {
+			throw new Error(
+				dedent(`
                        Docker Compose file is required.
 
                            Usage examples:
@@ -133,97 +133,97 @@ async function readDockerComposeFile({
 
                                Run with --interactive for guided setup
                                    `),
-            );
-        }
-    }
+			);
+		}
+	}
 
-    // 2. Validate the file exists
-    if (!fs.existsSync(dockerComposePath)) {
-        throw new Error(`Docker compose file not found: ${dockerComposePath}`);
-    }
+	// 2. Validate the file exists
+	if (!fs.existsSync(dockerComposePath)) {
+		throw new Error(`Docker compose file not found: ${dockerComposePath}`);
+	}
 
-    // 3. Read and return the file content
-    return fs.readFileSync(dockerComposePath, "utf8");
+	// 3. Read and return the file content
+	return fs.readFileSync(dockerComposePath, "utf8");
 }
 
 const validatePrivateKey = async (
-    options: Options,
-    chainId: string | number | undefined,
+	options: Options,
+	chainId: string | number | undefined,
 ): Promise<string | undefined> => {
-    // 1. Get private key from options or environment
-    let privateKey = options.privateKey || process.env.PRIVATE_KEY;
+	// 1. Get private key from options or environment
+	let privateKey = options.privateKey || process.env.PRIVATE_KEY;
 
-    // 2. Handle KMS related validations
-    if (options.kmsId && chainId) {
-        if (!options.privateKey) {
-            if (options.interactive) {
-                const result = await inquirer.prompt([
-                    {
-                        type: "password",
-                        name: "privateKey",
-                        message: "Enter your private key:",
-                        validate: (input: string) =>
-                        input.trim() ? true : "Private key is required",
-                    },
-                ]);
-                privateKey = result.privateKey;
-            } else {
-                throw new Error(
-                    "When using on-chain KMS, either --private-key (or PRIVATE_KEY env) must be provided",
-                );
-            }
-        }
-    }
-    return privateKey;
+	// 2. Handle KMS related validations
+	if (options.kmsId && chainId) {
+		if (!options.privateKey) {
+			if (options.interactive) {
+				const result = await inquirer.prompt([
+					{
+						type: "password",
+						name: "privateKey",
+						message: "Enter your private key:",
+						validate: (input: string) =>
+							input.trim() ? true : "Private key is required",
+					},
+				]);
+				privateKey = result.privateKey;
+			} else {
+				throw new Error(
+					"When using on-chain KMS, either --private-key (or PRIVATE_KEY env) must be provided",
+				);
+			}
+		}
+	}
+	return privateKey;
 };
 
 const validateName = async (options: Options): Promise<string | undefined> => {
-    let name = options.name;
-    if (!options.name) {
-        let folderName = path
-        .basename(process.cwd())
-        .toLowerCase()
-        .replace(/[^a-z0-9_-]/g, "-");
-        // Ensure folder name is at least 3 characters by appending 'cvm' if needed
-        if (folderName.length < 3) {
-            folderName = `${folderName}-cvm`;
-        }
-        const validFolderName = folderName.slice(0, 20); // Ensure max length of 20
+	let name = options.name;
+	if (!options.name) {
+		let folderName = path
+			.basename(process.cwd())
+			.toLowerCase()
+			.replace(/[^a-z0-9_-]/g, "-");
+		// Ensure folder name is at least 3 characters by appending 'cvm' if needed
+		if (folderName.length < 3) {
+			folderName = `${folderName}-cvm`;
+		}
+		const validFolderName = folderName.slice(0, 20); // Ensure max length of 20
 
-        if (!options.interactive) {
-            name = validFolderName;
-        } else {
-            const result = await inquirer.prompt([
-                {
-                    type: "input",
-                    name: "name",
-                    message: "Enter a name for the CVM:",
-                    default: validFolderName,
-                    validate: (input) => {
-                        if (!input.trim()) return "CVM name is required";
-                        if (input.trim().length > 20)
-                            return "CVM name must be less than 20 characters";
-                        if (input.trim().length < 3)
-                            return "CVM name must be at least 3 characters";
-                        if (!/^[a-zA-Z0-9_-]+$/.test(input))
-                            return "CVM name must contain only letters, numbers, underscores, and hyphens";
-                        return true;
-                    },
-                },
-            ]);
-            name = result.name;
-        }
-    }
-    return name;
+		if (!options.interactive) {
+			name = validFolderName;
+		} else {
+			const result = await inquirer.prompt([
+				{
+					type: "input",
+					name: "name",
+					message: "Enter a name for the CVM:",
+					default: validFolderName,
+					validate: (input) => {
+						if (!input.trim()) return "CVM name is required";
+						if (input.trim().length > 20)
+							return "CVM name must be less than 20 characters";
+						if (input.trim().length < 3)
+							return "CVM name must be at least 3 characters";
+						if (!/^[a-zA-Z0-9_-]+$/.test(input))
+							return "CVM name must contain only letters, numbers, underscores, and hyphens";
+						return true;
+					},
+				},
+			]);
+			name = result.name;
+		}
+	}
+	return name;
 };
 
 const validateEnvFile = async (options: Options) => {
-    // Handle environment variables
-    let envs: EnvVar[] | undefined = undefined;
-    let envFilePath = options.envFile;
+	// Handle environment variables
+	let envs: EnvVar[] | undefined = undefined;
+	let envFilePath = options.envFile;
 
-    // Handle environment file path resolution
-    if (options.interactive && (!options.envFile || envFilePath === true)) {
+	// Handle environment file path resolution
+	if (options.interactive && (!options.envFile || envFilePath === true)) {
 		envFilePath = await promptForFile(
 			"Enter the path to your environment file:",
 			".env",
@@ -292,7 +292,9 @@ const validateNodeandKmsandImage = async (options: Options, client: Client) => {
 	const nodes_result = await safeGetAvailableNodes(client);
 	if (!nodes_result.success) {
 		logger.logDetailedError(nodes_result.error, "Get Available Nodes");
-		throw new Error(`Failed to get available nodes: ${nodes_result.error.message}`);
+		throw new Error(
+			`Failed to get available nodes: ${nodes_result.error.message}`,
+		);
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
 	const nodes = nodes_result.data as any;
@@ -369,7 +371,8 @@ const validateNodeandKmsandImage = async (options: Options, client: Client) => {
 				if (target.default_kms) {
 					kms = kms_list.items.find(
 						// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
-						(k: any) => k.slug === target.default_kms || k.id === target.default_kms,
+						(k: any) =>
+							k.slug === target.default_kms || k.id === target.default_kms,
 					);
 					if (!kms) {
 						throw new Error(
@@ -481,7 +484,9 @@ const deployNewCvm = async (
 	const provision_result = await safeProvisionCvm(client, app_compose);
 	if (!provision_result.success) {
 		logger.logDetailedError(provision_result.error, "Provision CVM");
-		throw new Error(`Failed to provision CVM: ${provision_result.error.message}`);
+		throw new Error(
+			`Failed to provision CVM: ${provision_result.error.message}`,
+		);
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
 	const app = provision_result.data as any;
@@ -518,7 +523,10 @@ const deployNewCvm = async (
 		});
 		if (!deploy_result.success) {
 			logger.logDetailedError(deploy_result, "Deploy App Auth");
-			const errorMsg = typeof deploy_result === 'object' && deploy_result !== null ? JSON.stringify(deploy_result) : String(deploy_result);
+			const errorMsg =
+				typeof deploy_result === "object" && deploy_result !== null
+					? JSON.stringify(deploy_result)
+					: String(deploy_result);
 			throw new Error(`Deployment contract failed: ${errorMsg}`);
 		}
 		// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
@@ -530,7 +538,9 @@ const deployNewCvm = async (
 		});
 		if (!resp.success) {
 			logger.logDetailedError(resp.error, "Get App Env Encrypt PubKey");
-			throw new Error(`Failed to get app env encrypt pubkey: ${resp.error.message}`);
+			throw new Error(
+				`Failed to get app env encrypt pubkey: ${resp.error.message}`,
+			);
 		}
 		// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
 		const pubkey_signature = resp.data as any;
@@ -550,7 +560,9 @@ const deployNewCvm = async (
 
 	if (!commit_result.success) {
 		logger.logDetailedError(commit_result.error, "Commit CVM Provision");
-		throw new Error(`Failed to commit CVM provision: ${commit_result.error.message}`);
+		throw new Error(
+			`Failed to commit CVM provision: ${commit_result.error.message}`,
+		);
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
 	const cvm = commit_result.data as any;
@@ -603,7 +615,9 @@ const updateCvm = async (
 	}
 	if (!app_compose_result.success) {
 		logger.logDetailedError(app_compose_result.error, "Get CVM Compose File");
-		throw new Error(`Failed to get cvm compose file: ${app_compose_result.error.message}`);
+		throw new Error(
+			`Failed to get cvm compose file: ${app_compose_result.error.message}`,
+		);
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
 	const cvm = cvm_result.data as any;
@@ -623,8 +637,13 @@ const updateCvm = async (
 			app_compose as ProvisionCvmComposeFileUpdateRequest["app_compose"],
 	});
 	if (!provision_result.success) {
-		logger.logDetailedError(provision_result.error, "Provision CVM Compose File Update");
-		throw new Error(`Failed to provision cvm compose file: ${provision_result.error.message}`);
+		logger.logDetailedError(
+			provision_result.error,
+			"Provision CVM Compose File Update",
+		);
+		throw new Error(
+			`Failed to provision cvm compose file: ${provision_result.error.message}`,
+		);
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
 	const provision = provision_result.data as any;
@@ -645,7 +664,10 @@ const updateCvm = async (
 		});
 		if (!receipt_result.success) {
 			logger.logDetailedError(receipt_result, "Add Compose Hash");
-			const errorMsg = typeof receipt_result === 'object' && receipt_result !== null ? JSON.stringify(receipt_result) : String(receipt_result);
+			const errorMsg =
+				typeof receipt_result === "object" && receipt_result !== null
+					? JSON.stringify(receipt_result)
+					: String(receipt_result);
 			throw new Error(`Failed to add compose hash: ${errorMsg}`);
 		}
 	} else {
@@ -673,8 +695,13 @@ const updateCvm = async (
 	const commitResult = await safeCommitCvmComposeFileUpdate(client, data);
 
 	if (!commitResult.success) {
-		logger.logDetailedError(commitResult.error, "Commit CVM Compose File Update");
-		throw new Error(`Failed to commit CVM compose file update: ${commitResult.error.message}`);
+		logger.logDetailedError(
+			commitResult.error,
+			"Commit CVM Compose File Update",
+		);
+		throw new Error(
+			`Failed to commit CVM compose file update: ${commitResult.error.message}`,
+		);
 	}
 	// Wait for update to complete if --wait flag is set
 	if (validatedOptions.wait) {
@@ -686,7 +713,9 @@ const updateCvm = async (
 			);
 		} catch (error: unknown) {
 			logger.logDetailedError(error, "Wait for CVM Ready");
-			throw new Error(`Wait failed: ${error instanceof Error ? error.message : String(error)}`);
+			throw new Error(
+				`Wait failed: ${error instanceof Error ? error.message : String(error)}`,
+			);
 		}
 	}
 
