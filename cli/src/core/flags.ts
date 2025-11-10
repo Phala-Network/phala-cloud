@@ -55,7 +55,7 @@ export function prepareFlagConfig(
 					`Negated option is only supported for boolean types: ${option.name}`,
 				);
 			}
-			spec[negatedKey] = () => true;
+			spec[negatedKey] = arg.flag(() => true);
 			negatedLookup.set(negatedKey, {
 				option,
 				canonicalKey,

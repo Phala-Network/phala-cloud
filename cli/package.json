@@ -28,6 +28,8 @@
 		"build": "tsup && bun link",
 		"test": "bun test",
 		"test:e2e": "bun test test/e2e-full/",
+		"test:interface": "bun test test/interface-compat/",
+		"test:all": "bun run test:interface && bun run test:e2e",
 		"fmt": "biome format --write .",
 		"lint": "biome lint .",
 		"lint:fix": "biome lint --write .",

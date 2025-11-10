@@ -204,5 +204,24 @@ function formatOptionSignature(option: CommandOption): string {
 		signature += " <value>";
 	}
 	parts.push(signature);
+
+	// Add aliases
+	if (option.aliases && option.aliases.length > 0) {
+		for (const alias of option.aliases) {
+			let aliasSignature = `--${alias}`;
+			if (option.argumentName) {
+				aliasSignature += ` ${option.argumentName.toUpperCase()}`;
+			} else if (option.type !== "boolean") {
+				aliasSignature += " <value>";
+			}
+			parts.push(aliasSignature);
+		}
+	}
+
+	// Add negated form for boolean flags
+	if (option.type === "boolean" && option.negatedName) {
+		parts.push(`--${option.negatedName}`);
+	}
+
 	return parts.join(", ");
 }
