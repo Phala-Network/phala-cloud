@@ -14,6 +14,7 @@ import { nodesCommands } from "./commands/nodes";
 import { simulatorCommands } from "./commands/simulator";
 import { statusCommand } from "./commands/status";
 import { completionCommand } from "./commands/completion";
+import { sshCommand } from "./commands/ssh";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -27,6 +28,7 @@ registry.registerCommand(statusCommand);
 registry.registerCommand(deployCommand);
 registry.registerCommand(loginCommand);
 registry.registerCommand(completionCommand);
+registry.registerCommand(sshCommand);
 registry.registerGroup(authCommands.group);
 for (const command of authCommands.commands) {
 	registry.registerCommand(command);
