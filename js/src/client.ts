@@ -6,7 +6,7 @@ import type { Prettify } from "./types/common";
 import { parseApiError, PhalaCloudError, RequestError } from "./utils/errors";
 export type { SafeResult } from "./types/client";
 
-const SUPPORTED_API_VERSIONS = ["2025-05-31", "2025-10-28"];
+export const SUPPORTED_API_VERSIONS = ["2025-05-31", "2025-10-28"] as const;
 const logger = debug("phala::api-client");
 
 /**
@@ -84,7 +84,8 @@ export class Client {
     };
 
     const version =
-      resolvedConfig.version && SUPPORTED_API_VERSIONS.includes(resolvedConfig.version)
+      resolvedConfig.version &&
+      (SUPPORTED_API_VERSIONS as readonly string[]).includes(resolvedConfig.version)
         ? resolvedConfig.version!
         : SUPPORTED_API_VERSIONS[SUPPORTED_API_VERSIONS.length - 1]!; // Default to latest version
 

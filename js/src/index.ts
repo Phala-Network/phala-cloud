@@ -1,5 +1,9 @@
 // Client
-export { createClient as createBaseClient, type Client as BaseClient } from "./client";
+export {
+  createClient as createBaseClient,
+  type Client as BaseClient,
+  SUPPORTED_API_VERSIONS,
+} from "./client";
 export { createClient, type Client } from "./create-client";
 
 // Types
