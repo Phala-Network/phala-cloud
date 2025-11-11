@@ -251,16 +251,13 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
+      - name: Install workspace dependencies
+        run: bun install
+
       - name: Build js SDK (dependency for cli)
         if: env.PACKAGE == 'cli'
-        run: |
-          cd js
-          bun install --frozen-lockfile
-          bun run build
-
-      - name: Install dependencies
-        working-directory: ${{ env.PACKAGE }}
-        run: bun install --frozen-lockfile
+        working-directory: js
+        run: bun run build
 
       - name: Bump package version
         id: bump
