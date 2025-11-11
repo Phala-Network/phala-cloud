@@ -7,8 +7,9 @@ export const sshCommandMeta: CommandMeta = {
 	arguments: [
 		{
 			name: "cvm-id",
-			description: "CVM ID (app_id or UUID)",
-			required: true,
+			description:
+				"CVM ID (app_id or UUID). If not provided, reads from phala.toml",
+			required: false,
 			target: "cvmId",
 		},
 	],
@@ -51,7 +52,11 @@ export const sshCommandMeta: CommandMeta = {
 	],
 	examples: [
 		{
-			name: "Connect to a CVM",
+			name: "Connect using app_id from phala.toml",
+			value: "phala ssh",
+		},
+		{
+			name: "Connect to a CVM by ID",
 			value: "phala ssh app_123",
 		},
 		{
@@ -78,7 +83,7 @@ export const sshCommandMeta: CommandMeta = {
 };
 
 export const sshCommandSchema = z.object({
-	cvmId: z.string(),
+	cvmId: z.string().optional(),
 	identity: z.string().optional(),
 	port: z.string().default("443"),
 	gatewayDomain: z.string().optional(),

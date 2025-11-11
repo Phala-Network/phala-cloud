@@ -1,7 +1,7 @@
 import path from "node:path";
 import {
-	loadProjectConfig,
-	projectConfigExists,
+	type RuntimeProjectConfig,
+	parse_cvm_id,
 } from "@/src/utils/project-config";
 import { getApiKey } from "@/src/utils/credentials";
 import {
@@ -750,7 +750,11 @@ const updateCvm = async (
 
 export async function runDeploy(
 	input: DeployCommandInput,
-	context: { stdout: NodeJS.WriteStream; stderr: NodeJS.WriteStream },
+	context: {
+		stdout: NodeJS.WriteStream;
+		stderr: NodeJS.WriteStream;
+		projectConfig: RuntimeProjectConfig;
+	},
 ): Promise<void> {
 	try {
 		// Use positional argument if provided, otherwise use the --compose option
@@ -768,13 +772,8 @@ export async function runDeploy(
 
 		const envs = await validateEnvFile(input as Options);
 
-		// Load project config if exists
-		const projectConfig = projectConfigExists()
-			? loadProjectConfig()
-			: undefined;
-
-		// Determine UUID: priority is CLI input > phala.toml vm_uuid
-		const uuid = input.uuid || projectConfig?.vm_uuid;
+		// Determine UUID: priority is CLI input > phala.toml
+		const uuid = parse_cvm_id(input.uuid) ?? context.projectConfig.cvm_id;
 
 		const isUpdate = !!uuid;
 		if (isUpdate) {

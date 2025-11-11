@@ -15,6 +15,7 @@ async function handler(
 		await runDeploy(input, {
 			stdout: context.stdout,
 			stderr: context.stderr,
+			projectConfig: context.projectConfig,
 		});
 		return 0;
 	} catch (error) {

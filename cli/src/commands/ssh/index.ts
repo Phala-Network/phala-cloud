@@ -8,6 +8,7 @@ import type { CommandContext } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
 import { logDetailedError } from "@/src/utils/error-handling";
 import { logger } from "@/src/utils/logger";
+import { parse_cvm_id } from "@/src/utils/project-config";
 import {
 	sshCommandMeta,
 	sshCommandSchema,
@@ -19,8 +20,19 @@ async function runSshCommand(
 	context: CommandContext,
 ): Promise<number> {
 	try {
+		// Resolve CVM ID: command input > project config
+		const cvmId = parse_cvm_id(input.cvmId) ?? context.projectConfig.cvm_id;
+
+		if (!cvmId) {
+			logger.error(
+				"No CVM ID provided. Either pass a CVM ID as argument or configure it in phala.toml.\n" +
+					"Supported fields: id, uuid, app_id, or instance_id",
+			);
+			return 1;
+		}
+
 		const client = await getClient();
-		const cvm = await client.getCvmInfo({ id: input.cvmId });
+		const cvm = await client.getCvmInfo({ id: cvmId });
 
 		if (!cvm.gateway_domain && !input.gatewayDomain) {
 			logger.error("CVM is not registered on any gateway.");

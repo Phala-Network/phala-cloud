@@ -2,19 +2,28 @@ import path from "node:path";
 import fs from "fs-extra";
 import toml from "@iarna/toml";
 import { z } from "zod";
-import { CvmIdObjectSchema, SUPPORTED_API_VERSIONS } from "@phala/cloud";
+import {
+	CvmIdObjectSchema,
+	CvmIdSchema,
+	SUPPORTED_API_VERSIONS,
+	refineCvmId,
+} from "@phala/cloud";
 import { logger } from "./logger";
 
-export const ProjectConfigSchema = z
-	.object({
+// Project configuration schema - for validating phala.toml file content
+// Extends CvmIdObjectSchema and applies refineCvmId validation
+export const ProjectConfigSchema: z.ZodTypeAny = refineCvmId(
+	CvmIdObjectSchema.extend({
 		api_version: z.enum(SUPPORTED_API_VERSIONS),
-	})
-	.extend((CvmIdObjectSchema as unknown as z.AnyZodObject).shape);
+	}),
+);
 
 export type ProjectConfig = z.infer<typeof ProjectConfigSchema>;
 
-// Runtime project config - all fields optional for when file doesn't exist
-export type RuntimeProjectConfig = Partial<ProjectConfig>;
+// Runtime project config - includes extracted cvm_id field
+export type RuntimeProjectConfig = Partial<ProjectConfig> & {
+	cvm_id?: string;
+};
 
 const CONFIG_FILE_NAME = "phala.toml";
 
@@ -34,9 +43,10 @@ export function projectConfigExists(): boolean {
 
 /**
  * Load project configuration from phala.toml
+ * Extracts and normalizes cvm_id during loading
  * @throws Error if file doesn't exist or validation fails
  */
-export function loadProjectConfig(): ProjectConfig {
+export function loadProjectConfig(): RuntimeProjectConfig {
 	const configPath = getProjectConfigPath();
 
 	if (!fs.existsSync(configPath)) {
@@ -48,7 +58,22 @@ export function loadProjectConfig(): ProjectConfig {
 	try {
 		const fileContent = fs.readFileSync(configPath, "utf8");
 		const parsed = toml.parse(fileContent);
-		return ProjectConfigSchema.parse(parsed);
+		const validated = ProjectConfigSchema.parse(parsed);
+
+		// If any CVM ID field exists, extract and normalize it using CvmIdSchema
+		if (
+			validated.id ||
+			validated.uuid ||
+			validated.app_id ||
+			validated.instance_id
+		) {
+			const { cvmId } = (
+				CvmIdSchema as unknown as z.ZodType<{ cvmId: string }>
+			).parse(validated);
+			return { ...validated, cvm_id: cvmId };
+		}
+
+		return validated;
 	} catch (error) {
 		if (error instanceof z.ZodError) {
 			const issues = error.issues
@@ -101,4 +126,31 @@ export function getProjectConfig(): RuntimeProjectConfig {
 		return {};
 	}
 	return loadProjectConfig();
+}
+
+/**
+ * Parse and validate CVM ID from command input
+ * Uses CvmIdSchema to validate and extract the single cvmId
+ * Returns undefined if input is undefined
+ *
+ * @param input - CVM ID from command argument/option
+ * @returns Validated CVM ID string or undefined
+ * @throws ZodError if input is invalid
+ *
+ * @example
+ * ```typescript
+ * const cvm_id = parse_cvm_id(input.cvm_id) ?? projectConfig.cvm_id;
+ * ```
+ */
+export function parse_cvm_id(input: string | undefined): string | undefined {
+	if (!input) {
+		return undefined;
+	}
+
+	const { cvmId } = (
+		CvmIdSchema as unknown as z.ZodType<{ cvmId: string }>
+	).parse({
+		id: input,
+	});
+	return cvmId;
 }
