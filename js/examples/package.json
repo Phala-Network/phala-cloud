@@ -9,6 +9,6 @@
   },
   "dependencies": {
     "arg": "^5.0.2",
-    "@phala/cloud": "file:../"
+    "@phala/cloud": "workspace:*"
   }
 }

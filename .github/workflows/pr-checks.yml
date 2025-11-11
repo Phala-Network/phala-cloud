@@ -21,8 +21,7 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install dependencies
-        working-directory: js
+      - name: Install workspace dependencies
         run: bun install
 
       - name: Run format check
@@ -141,8 +140,7 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install dependencies
-        working-directory: js
+      - name: Install workspace dependencies
         run: bun install
 
       - name: Build for Node.js ${{ matrix.node-version }}
@@ -194,8 +192,7 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install dependencies
-        working-directory: js
+      - name: Install workspace dependencies
         run: bun install
 
       - name: Build for browser

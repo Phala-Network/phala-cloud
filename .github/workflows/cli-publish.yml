@@ -8,25 +8,27 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: cli
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - uses: oven-sh/setup-bun@v2
-      - run: bun install
-      - run: bun run build
-      - run: bun test
+      - name: Install workspace dependencies
+        run: bun install
+      - name: Build @phala/cloud package
+        working-directory: js
+        run: bun run build
+      - name: Build CLI
+        working-directory: cli
+        run: bun run build
+      - name: Test CLI
+        working-directory: cli
+        run: bun test
 
   publish-npm:
     needs: build
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: cli
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,8 +36,16 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org/
       - uses: oven-sh/setup-bun@v2
-      - run: bun install
-      - run: bun run build
-      - run: npm publish --access public
+      - name: Install workspace dependencies
+        run: bun install
+      - name: Build @phala/cloud package
+        working-directory: js
+        run: bun run build
+      - name: Build CLI
+        working-directory: cli
+        run: bun run build
+      - name: Publish to npm
+        working-directory: cli
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}

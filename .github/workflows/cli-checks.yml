@@ -26,14 +26,13 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Install workspace dependencies
+        working-directory: .
+        run: bun install
+
       - name: Build @phala/cloud package
         working-directory: js
-        run: |
-          bun install
-          bun run build
-
-      - name: Install dependencies
-        run: bun install
+        run: bun run build
 
       - name: Run format check
         id: format-check

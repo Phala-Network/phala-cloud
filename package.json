@@ -1,0 +1,9 @@
+{
+  "name": "phala-cloud",
+  "private": true,
+  "workspaces": [
+    "js",
+    "js/examples",
+    "cli"
+  ]
+}
