@@ -363,9 +363,26 @@ jobs:
         run: |
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
 
+      - name: Resolve workspace dependencies
+        working-directory: ${{ env.PACKAGE }}
+        run: |
+          # Get the version of @phala/cloud from js/package.json
+          if grep -q '"@phala/cloud": "workspace:\*"' package.json; then
+            JS_VERSION=$(node -e "console.log(require('../js/package.json').version)")
+            echo "Resolving workspace:* to version $JS_VERSION"
+            node -e "
+              const fs = require('fs');
+              const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+              if (pkg.dependencies && pkg.dependencies['@phala/cloud'] === 'workspace:*') {
+                pkg.dependencies['@phala/cloud'] = '^$JS_VERSION';
+                fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+              }
+            "
+          fi
+
       - name: Publish to npm
         working-directory: ${{ env.PACKAGE }}
-        run: bun publish --access public --tag "$NPM_TAG"
+        run: npm publish --access public --tag "$NPM_TAG"
 
       - name: Create tag
         run: git tag "$TAG_NAME"
