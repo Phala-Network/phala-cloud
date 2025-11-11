@@ -1,4 +1,5 @@
 import type { z, ZodTypeAny } from "zod";
+import type { RuntimeProjectConfig } from "@/src/utils/project-config";
 
 export type CommandPath = readonly string[];
 
@@ -62,6 +63,7 @@ export interface CommandContext {
 	readonly stdout: NodeJS.WriteStream;
 	readonly stderr: NodeJS.WriteStream;
 	readonly stdin: NodeJS.ReadStream;
+	readonly projectConfig: RuntimeProjectConfig;
 }
 
 export interface CommandDefinition<Schema extends ZodTypeAny = ZodTypeAny> {

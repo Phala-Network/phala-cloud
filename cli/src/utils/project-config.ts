@@ -2,21 +2,19 @@ import path from "node:path";
 import fs from "fs-extra";
 import toml from "@iarna/toml";
 import { z } from "zod";
+import { CvmIdObjectSchema, SUPPORTED_API_VERSIONS } from "@phala/cloud";
 import { logger } from "./logger";
 
-// Supported API versions from @phala/cloud
-const SUPPORTED_API_VERSIONS = ["2025-05-31", "2025-10-28"] as const;
-
-// Project configuration schema
 export const ProjectConfigSchema = z
 	.object({
 		api_version: z.enum(SUPPORTED_API_VERSIONS),
-		app_id: z.string().optional(),
-		vm_uuid: z.string().optional(),
 	})
-	.strict();
+	.extend((CvmIdObjectSchema as unknown as z.AnyZodObject).shape);
 
 export type ProjectConfig = z.infer<typeof ProjectConfigSchema>;
+
+// Runtime project config - all fields optional for when file doesn't exist
+export type RuntimeProjectConfig = Partial<ProjectConfig>;
 
 const CONFIG_FILE_NAME = "phala.toml";
 
@@ -91,4 +89,16 @@ export function saveProjectConfig(config: ProjectConfig): void {
 			`Failed to save ${CONFIG_FILE_NAME}: ${error instanceof Error ? error.message : String(error)}`,
 		);
 	}
+}
+
+/**
+ * Get project configuration from phala.toml
+ * Returns empty config object if file doesn't exist
+ * This is safe to call without checking if file exists first
+ */
+export function getProjectConfig(): RuntimeProjectConfig {
+	if (!projectConfigExists()) {
+		return {};
+	}
+	return loadProjectConfig();
 }

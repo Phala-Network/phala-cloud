@@ -4,6 +4,7 @@ import { parseCommandArguments } from "./parser";
 import type { CommandRegistry } from "./registry";
 import { formatCommandHelp, formatGlobalHelp, formatGroupHelp } from "./help";
 import type { CommandContext, CommandDefinition } from "./types";
+import { getProjectConfig } from "@/src/utils/project-config";
 
 export interface DispatchOptions {
 	readonly registry: CommandRegistry;
@@ -129,6 +130,7 @@ export async function dispatchCommand(
 			stdout,
 			stderr,
 			stdin,
+			projectConfig: getProjectConfig(),
 		};
 
 		const parsedInput = definition.schema.parse(mergedInput);
