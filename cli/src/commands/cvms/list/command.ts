@@ -5,7 +5,7 @@ import { jsonOption } from "@/src/commands/status/command";
 export const cvmsListCommandMeta: CommandMeta = {
 	name: "list",
 	aliases: ["ls"],
-	description: "List all CVMs",
+	description: "List your CVMs",
 	options: [jsonOption],
 	examples: [
 		{

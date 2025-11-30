@@ -338,3 +338,17 @@ export {
   GetCvmPreLaunchScriptRequestSchema,
   type GetCvmPreLaunchScriptRequest,
 } from "./cvms/get_cvm_prelaunch_script";
+
+// Apps
+export {
+  getAppsList,
+  safeGetAppsList,
+  GetAppsListRequestSchema,
+  GetAppsListSchema,
+  AppCvmInfoSchema,
+  DstackAppSchema,
+  type GetAppsListRequest,
+  type GetAppsListResponse,
+  type DstackApp,
+  type AppCvmInfo,
+} from "./apps";

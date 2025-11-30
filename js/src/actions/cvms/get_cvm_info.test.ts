@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { mainnet } from "viem/chains";
 import { createClient } from "../../client";
 import {
   getCvmInfo,
@@ -8,6 +9,7 @@ import {
 import type { CvmLegacyDetail } from "../../types/cvm_info";
 
 // Mock response data matching the CvmLegacyDetailSchema structure
+// Use mainnet from viem to ensure test stays in sync with library updates
 const mockCvmInfoData: CvmLegacyDetail = {
   id: 123,
   name: "test-cvm",
@@ -42,38 +44,7 @@ const mockCvmInfoData: CvmLegacyDetail = {
     chain_id: 1,
     kms_contract_address: "0x1234567890123456789012345678901234567890",
     gateway_app_id: "gateway-123",
-    chain: {
-      id: 1,
-      name: "Ethereum",
-      nativeCurrency: {
-        name: "Ether",
-        symbol: "ETH",
-        decimals: 18
-      },
-      rpcUrls: {
-        default: {
-          http: ["https://eth.merkle.io"]
-        }
-      },
-      blockExplorers: {
-        default: {
-          name: "Etherscan",
-          url: "https://etherscan.io",
-          apiUrl: "https://api.etherscan.io/api"
-        }
-      },
-      blockTime: 12000,
-      contracts: {
-        ensUniversalResolver: {
-          address: "0xeeeeeeee14d718c2b47d9923deab1335e144eeee",
-          blockCreated: 23085558
-        },
-        multicall3: {
-          address: "0xca11bde05977b3631167028862be2a173976ca11",
-          blockCreated: 14353601
-        }
-      }
-    }
+    chain: mainnet,
   },
   contract_address: "0x9876543210987654321098765432109876543210",
   deployer_address: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
@@ -157,7 +128,7 @@ describe("getCvmInfo", () => {
   describe("request validation", () => {
     it("should validate identifier requirements", async () => {
       // No identifier provided
-      await expect(getCvmInfo(client, {})).rejects.toThrow("One of id, uuid, app_id, or instance_id must be provided");
+      await expect(getCvmInfo(client, {})).rejects.toThrow("One of id, uuid, app_id, instance_id, or name must be provided");
 
       // Invalid UUID format
       await expect(getCvmInfo(client, { uuid: "invalid-uuid" })).rejects.toThrow();
