@@ -1,3 +1,15 @@
+## [1.1.3-beta.2](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.2...cli-v1.1.3-beta.2) (2026-01-18)
+
+### feat
+
+* **cli:** add unit tests for prefer_dev payload building ([0910785](https://github.com/Phala-Network/phala-cloud/commit/09107857b41260d859f8033c500f1044ed5511d7))
+* **cli:** add update check and self update ([e88f795](https://github.com/Phala-Network/phala-cloud/commit/e88f795ed26451e751577895543eb05d015583e9))
+
+### fix
+
+* migrate URLs from cloud.phala.network to cloud.phala.com ([cd48ed4](https://github.com/Phala-Network/phala-cloud/commit/cd48ed4a69ffc3bd4f4c8483946cf21c2b5d38a6))
+* **release:** handle main branch protection and improve release UX ([963e9f9](https://github.com/Phala-Network/phala-cloud/commit/963e9f9391582ba0f33217635e3fdcc18ebc85d7))
+* **sdk:** smart default for instance_type to allow vcpu/memory params to work ([9f0780d](https://github.com/Phala-Network/phala-cloud/commit/9f0780d892d43bcb354a5ada1b8edf7c2912e0fc))
 ## [1.1.2](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.1...cli-v1.1.2) (2026-01-09)
 
 ### fix
