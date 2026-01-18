@@ -1,7 +1,6 @@
 import os from "node:os";
 import path from "node:path";
 import fs from "fs-extra";
-import { logger } from "./logger";
 
 // Define the directory and file for storing configuration
 const PHALA_CLOUD_DIR = path.join(os.homedir(), ".phala-cloud");
@@ -27,8 +26,9 @@ function ensureDirectoryExists(): void {
 		try {
 			fs.mkdirSync(PHALA_CLOUD_DIR, { recursive: true });
 		} catch (error) {
-			logger.error(`Failed to create directory ${PHALA_CLOUD_DIR}:`, error);
-			throw error;
+			throw new Error(
+				`Failed to create directory ${PHALA_CLOUD_DIR}: ${String(error)}`,
+			);
 		}
 	}
 }
@@ -42,7 +42,6 @@ export function loadConfig(): Config {
 		}
 		return DEFAULT_CONFIG;
 	} catch (error) {
-		logger.error("Failed to load configuration:", error);
 		return DEFAULT_CONFIG;
 	}
 }
@@ -56,10 +55,8 @@ export function saveConfig(config: Config): void {
 			JSON.stringify({ ...loadConfig(), ...config }, null, 2),
 			{ mode: 0o600 }, // Restrict permissions to user only
 		);
-		logger.success("Configuration saved successfully.");
 	} catch (error) {
-		logger.error("Failed to save configuration:", error);
-		throw error;
+		throw new Error(`Failed to save configuration: ${String(error)}`);
 	}
 }
 

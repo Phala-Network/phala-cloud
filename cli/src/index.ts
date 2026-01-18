@@ -17,6 +17,8 @@ import { statusCommand } from "./commands/status";
 import { completionCommand } from "./commands/completion";
 import { sshCommand } from "./commands/ssh";
 import { cpCommand } from "./commands/cp";
+import { selfCommands } from "./commands/self";
+import { detectRuntimeFromProcess } from "./core/package-manager";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -28,6 +30,7 @@ const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
 declare const __GIT_INFO__: string;
 const gitInfo = typeof __GIT_INFO__ !== "undefined" ? __GIT_INFO__ : "";
 const version = `v${packageJson.version}${gitInfo}`;
+const runtime = detectRuntimeFromProcess();
 
 const registry = new CommandRegistry();
 registry.registerCommand(statusCommand);
@@ -37,6 +40,10 @@ registry.registerCommand(logoutCommand);
 registry.registerCommand(completionCommand);
 registry.registerCommand(sshCommand);
 registry.registerCommand(cpCommand);
+registry.registerGroup(selfCommands.group);
+for (const command of selfCommands.commands) {
+	registry.registerCommand(command);
+}
 registry.registerGroup(authCommands.group);
 for (const command of authCommands.commands) {
 	registry.registerCommand(command);
@@ -71,6 +78,9 @@ async function main(): Promise<void> {
 		argv: process.argv.slice(2),
 		executableName: packageJson.name ?? "phala",
 		version,
+		packageName: packageJson.name ?? "phala",
+		packageVersion: packageJson.version,
+		runtime,
 		cwd: process.cwd(),
 		env: process.env,
 		stdout: process.stdout,

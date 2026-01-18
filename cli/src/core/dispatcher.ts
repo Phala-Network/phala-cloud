@@ -9,12 +9,16 @@ import type { CommandContext, CommandDefinition } from "./types";
 import { isInJsonMode } from "./json-mode";
 import { getProjectConfig } from "@/src/utils/project-config";
 import { selectCvm } from "@/src/api/cvms";
+import { checkForUpdates, getCachedUpdateNotice } from "./update-check";
 
 export interface DispatchOptions {
 	readonly registry: CommandRegistry;
 	readonly argv: readonly string[];
 	readonly executableName: string;
 	readonly version: string;
+	readonly packageName: string;
+	readonly packageVersion: string;
+	readonly runtime: "node" | "bun";
 	readonly cwd: string;
 	readonly env: NodeJS.ProcessEnv;
 	readonly stdout: NodeJS.WriteStream;
@@ -30,6 +34,9 @@ export async function dispatchCommand(
 		argv,
 		executableName,
 		version,
+		packageName,
+		packageVersion,
+		runtime,
 		stdout,
 		stderr,
 		stdin,
@@ -54,6 +61,10 @@ export async function dispatchCommand(
 				argv,
 				executableName,
 				version,
+				packageName,
+				packageVersion,
+				runtime,
+				env,
 				stdout,
 				stderr,
 				groupPath: commandSegments,
@@ -74,6 +85,10 @@ export async function dispatchCommand(
 					argv,
 					executableName,
 					version,
+					packageName,
+					packageVersion,
+					runtime,
+					env,
 					stdout,
 					stderr,
 					groupPath: [commandSegments[0]],
@@ -86,6 +101,10 @@ export async function dispatchCommand(
 			argv,
 			executableName,
 			version,
+			packageName,
+			packageVersion,
+			runtime,
+			env,
 			stdout,
 			stderr,
 		});
@@ -111,6 +130,21 @@ export async function dispatchCommand(
 			);
 			return 0;
 		}
+
+		const shouldRunUpdateCheck = !(
+			definition.path[0] === "self" && definition.path[1] === "update"
+		);
+		const updateNoticePromise = shouldRunUpdateCheck
+			? checkForUpdates({
+					executableName,
+					packageName,
+					currentVersion: packageVersion,
+					runtime,
+					env,
+					isJson: parsedArguments.flags["--json"] === true,
+					stderrIsTTY: stderr.isTTY === true,
+				})
+			: Promise.resolve(null);
 
 		if (definition.meta.stability === "deprecated") {
 			stderr.write(
@@ -196,6 +230,12 @@ export async function dispatchCommand(
 			stdin,
 			projectConfig: getProjectConfig(),
 			cvmId,
+			cli: {
+				executableName,
+				packageName,
+				packageVersion,
+				runtime,
+			},
 
 			success(data: unknown): void {
 				if (isInJsonMode()) {
@@ -262,8 +302,15 @@ export async function dispatchCommand(
 		}
 
 		const result = await definition.run(parsedInput, context);
+		const updateNotice = await updateNoticePromise;
 		if (typeof result === "number") {
+			if (result === 0 && updateNotice && !isInJsonMode()) {
+				stderr.write(updateNotice.message);
+			}
 			return result;
+		}
+		if (updateNotice && !isInJsonMode()) {
+			stderr.write(updateNotice.message);
 		}
 		return 0;
 	} catch (error) {
@@ -284,12 +331,27 @@ interface GlobalRequestOptions {
 	readonly argv: readonly string[];
 	readonly executableName: string;
 	readonly version: string;
+	readonly packageName: string;
+	readonly packageVersion: string;
+	readonly runtime: "node" | "bun";
+	readonly env: NodeJS.ProcessEnv;
 	readonly stdout: NodeJS.WriteStream;
 	readonly stderr: NodeJS.WriteStream;
 }
 
 function handleGlobalRequest(options: GlobalRequestOptions): number {
-	const { registry, argv, executableName, version, stdout, stderr } = options;
+	const {
+		registry,
+		argv,
+		executableName,
+		version,
+		packageName,
+		packageVersion,
+		runtime,
+		env,
+		stdout,
+		stderr,
+	} = options;
 
 	try {
 		const parsed = parseCommandArguments(argv, undefined);
@@ -307,6 +369,18 @@ function handleGlobalRequest(options: GlobalRequestOptions): number {
 		if (parsed.positionals.length === 0) {
 			// Show help directly instead of error message
 			stdout.write(`${formatGlobalHelp({ registry, executableName })}\n`);
+			const cachedNotice = getCachedUpdateNotice({
+				executableName,
+				packageName,
+				currentVersion: packageVersion,
+				runtime,
+				env,
+				isJson: false,
+				stderrIsTTY: stderr.isTTY === true,
+			});
+			if (cachedNotice) {
+				stderr.write(cachedNotice.message);
+			}
 			return 0;
 		}
 
@@ -329,14 +403,29 @@ interface GroupRequestOptions {
 	readonly argv: readonly string[];
 	readonly executableName: string;
 	readonly version: string;
+	readonly packageName: string;
+	readonly packageVersion: string;
+	readonly runtime: "node" | "bun";
+	readonly env: NodeJS.ProcessEnv;
 	readonly stdout: NodeJS.WriteStream;
 	readonly stderr: NodeJS.WriteStream;
 	readonly groupPath: readonly string[];
 }
 
 function handleGroupRequest(options: GroupRequestOptions): number {
-	const { registry, argv, executableName, version, stdout, stderr, groupPath } =
-		options;
+	const {
+		registry,
+		argv,
+		executableName,
+		version,
+		packageName,
+		packageVersion,
+		runtime,
+		env,
+		stdout,
+		stderr,
+		groupPath,
+	} = options;
 
 	try {
 		const commandArgv = argv.slice(groupPath.length);
@@ -352,6 +441,20 @@ function handleGroupRequest(options: GroupRequestOptions): number {
 			stdout.write(
 				`${formatGroupHelp({ registry, executableName, groupPath })}\n`,
 			);
+			if (!parsed.flags["--help"]) {
+				const cachedNotice = getCachedUpdateNotice({
+					executableName,
+					packageName,
+					currentVersion: packageVersion,
+					runtime,
+					env,
+					isJson: false,
+					stderrIsTTY: stderr.isTTY === true,
+				});
+				if (cachedNotice) {
+					stderr.write(cachedNotice.message);
+				}
+			}
 			return 0;
 		}
 

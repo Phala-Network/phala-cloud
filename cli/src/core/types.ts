@@ -74,6 +74,12 @@ export interface CommandContext {
 	readonly stderr: NodeJS.WriteStream;
 	readonly stdin: NodeJS.ReadStream;
 	readonly projectConfig: RuntimeProjectConfig;
+	readonly cli?: {
+		readonly executableName: string;
+		readonly packageName: string;
+		readonly packageVersion: string;
+		readonly runtime: "node" | "bun";
+	};
 
 	/**
 	 * Parsed CVM identifier (optional)
