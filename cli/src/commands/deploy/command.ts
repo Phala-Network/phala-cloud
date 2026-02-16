@@ -71,6 +71,13 @@ export const deployCommandMeta: CommandMeta = {
 			group: "advanced",
 		},
 		{
+			name: "fs",
+			description: "Filesystem type (ext4 or zfs, default: zfs)",
+			type: "string",
+			target: "fs",
+			group: "advanced",
+		},
+		{
 			name: "image",
 			description: "OS image version (auto-selected if omitted)",
 			type: "string",
@@ -274,6 +281,7 @@ export const deployCommandSchema = z.object({
 	vcpu: z.string().optional(),
 	memory: z.string().optional(),
 	diskSize: z.string().optional(),
+	fs: z.enum(["ext4", "zfs"]).optional(),
 	image: z.string().optional(),
 	region: z.string().optional(),
 	nodeId: z.string().optional(),

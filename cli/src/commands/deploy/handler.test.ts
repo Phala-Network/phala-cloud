@@ -575,6 +575,60 @@ describe("buildProvisionPayload", () => {
 		});
 	});
 
+	describe("storage_fs handling", () => {
+		test("should include storage_fs in compose_file when fs is 'ext4'", () => {
+			const options = {
+				fs: "ext4",
+			};
+
+			const payload = buildProvisionPayload(
+				options,
+				defaultName,
+				defaultDockerCompose,
+				defaultEnvs,
+				defaultPrivacySettings,
+			);
+
+			expect(
+				(payload.compose_file as Record<string, unknown>).storage_fs,
+			).toBe("ext4");
+		});
+
+		test("should include storage_fs in compose_file when fs is 'zfs'", () => {
+			const options = {
+				fs: "zfs",
+			};
+
+			const payload = buildProvisionPayload(
+				options,
+				defaultName,
+				defaultDockerCompose,
+				defaultEnvs,
+				defaultPrivacySettings,
+			);
+
+			expect(
+				(payload.compose_file as Record<string, unknown>).storage_fs,
+			).toBe("zfs");
+		});
+
+		test("should not include storage_fs in compose_file when fs is not specified", () => {
+			const options = {};
+
+			const payload = buildProvisionPayload(
+				options,
+				defaultName,
+				defaultDockerCompose,
+				defaultEnvs,
+				defaultPrivacySettings,
+			);
+
+			expect(
+				"storage_fs" in (payload.compose_file as Record<string, unknown>),
+			).toBe(false);
+		});
+	});
+
 	describe("pre-launch script handling", () => {
 		test("should include pre_launch_script in compose_file when provided", () => {
 			const options = {};

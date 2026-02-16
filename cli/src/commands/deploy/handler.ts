@@ -60,6 +60,7 @@ interface Options {
 	vcpu?: string;
 	memory?: string;
 	diskSize?: string;
+	fs?: string;
 	image?: string;
 	region?: string;
 	nodeId?: string;
@@ -632,6 +633,10 @@ export const buildProvisionPayload = (
 
 	if (preLaunchScriptContent) {
 		composeFile.pre_launch_script = preLaunchScriptContent;
+	}
+
+	if (options.fs) {
+		composeFile.storage_fs = options.fs;
 	}
 
 	const payload: Record<string, unknown> = {

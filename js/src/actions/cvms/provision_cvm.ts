@@ -215,6 +215,7 @@ export const ProvisionCvmRequestSchema = z
         public_sysinfo: z.boolean().optional(),
         gateway_enabled: z.boolean().optional(), // recommended
         tproxy_enabled: z.boolean().optional(), // deprecated, for compatibility
+        storage_fs: z.enum(["ext4", "zfs"]).optional(),
       })
       .superRefine((data, ctx) => {
         validateComposePayloadSize(data.docker_compose_file, data.pre_launch_script, ctx);
