@@ -15,30 +15,72 @@ This provider is designed to feel familiar to DigitalOcean users:
 - Release process and gates: [RELEASE.md](./RELEASE.md)
 - Release history: [CHANGELOG.md](./CHANGELOG.md)
 
-## Quick Start
+## Quick Start (2-5 Minutes)
+
+Use this path if you are a normal user installing from the Terraform Registry.
+
+1. Export your API key:
+
+```bash
+export PHALA_CLOUD_API_KEY="phak_xxx"
+```
+
+2. Create `main.tf`:
 
 ```hcl
 terraform {
   required_providers {
     phala = {
       source  = "phala-network/phala"
-      version = "0.1.0"
+      version = "0.2.0-beta.1" # or newer published version
     }
   }
 }
 
-provider "phala" {
-  api_key = var.phala_api_key
-  # optional:
-  # api_prefix = "https://cloud-api.phala.com/api/v1"
-  # api_version = "2026-01-21"
+provider "phala" {}
+
+data "phala_sizes" "all" {}
+data "phala_regions" "all" {}
+
+resource "phala_cvm" "quickstart" {
+  name           = "quickstart-cvm"
+  size           = data.phala_sizes.all.sizes[0].slug
+  region         = data.phala_regions.all.regions[0].slug
+  docker_compose = <<-YAML
+    services:
+      web:
+        image: nginx:stable
+        ports:
+          - "80:80"
+  YAML
+
+  wait_for_ready = false
+}
+
+output "cvm_id" {
+  value = phala_cvm.quickstart.id
+}
+
+output "endpoint" {
+  value = phala_cvm.quickstart.endpoint
 }
 ```
 
-Environment fallback:
+3. Run:
+
+```bash
+terraform init
+terraform apply -auto-approve
+terraform output
+terraform destroy -auto-approve
+```
+
+Environment variables supported by the provider:
 
 - `PHALA_CLOUD_API_KEY`
 - `PHALA_CLOUD_API_PREFIX`
+
+If you need to test unreleased provider code from this repo, use `Developer Mode` below.
 
 ## DigitalOcean-style Discovery
 
@@ -145,9 +187,11 @@ resource "phala_app" "consumer" {
 }
 ```
 
-## Real Environment Smoke Test
+## Developer Mode (Contributors)
 
-The provider includes a smoke example and `make` targets under [`examples/smoke`](./examples/smoke).
+Use this only when developing the provider from source (dev overrides + local binary).
+
+The repo includes a smoke example and `make` targets under [`examples/smoke`](./examples/smoke).
 
 Read-only smoke (catalog data sources only):
 
