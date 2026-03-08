@@ -42,6 +42,12 @@ type cvmResourceModel struct {
 	Region             types.String `tfsdk:"region"`
 	Size               types.String `tfsdk:"size"`
 	Image              types.String `tfsdk:"image"`
+	PublicLogs         types.Bool   `tfsdk:"public_logs"`
+	PublicSysinfo      types.Bool   `tfsdk:"public_sysinfo"`
+	PublicTCBInfo      types.Bool   `tfsdk:"public_tcbinfo"`
+	GatewayEnabled     types.Bool   `tfsdk:"gateway_enabled"`
+	SecureTime         types.Bool   `tfsdk:"secure_time"`
+	StorageFS          types.String `tfsdk:"storage_fs"`
 	DiskSize           types.Int64  `tfsdk:"disk_size"`
 	DockerCompose      types.String `tfsdk:"docker_compose"`
 	PreLaunchScript    types.String `tfsdk:"pre_launch_script"`
@@ -96,6 +102,13 @@ type cvmAPIResponse struct {
 	OS *struct {
 		Name string `json:"name"`
 	} `json:"os"`
+	BaseImage      string `json:"base_image"`
+	PublicLogs     *bool  `json:"public_logs"`
+	PublicSysinfo  *bool  `json:"public_sysinfo"`
+	PublicTCBInfo  *bool  `json:"public_tcbinfo"`
+	GatewayEnabled *bool  `json:"gateway_enabled"`
+	SecureTime     *bool  `json:"secure_time"`
+	StorageFS      string `json:"storage_fs"`
 
 	Endpoints []struct {
 		App string `json:"app"`
@@ -146,6 +159,39 @@ func (r *cvmResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "OS image name.",
+			},
+			"public_logs": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Expose container logs publicly (compose file setting). Changing this triggers compose update/restart.",
+			},
+			"public_sysinfo": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Expose system info publicly (compose file setting). Changing this triggers compose update/restart.",
+			},
+			"public_tcbinfo": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Expose TCB attestation info publicly (compose file setting). Changing this triggers compose update/restart.",
+			},
+			"gateway_enabled": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Enable public gateway routing (compose file setting). Changing this triggers compose update/restart.",
+			},
+			"secure_time": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Enable secure time mode (compose file setting). Changing this triggers compose update/restart.",
+			},
+			"storage_fs": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Storage filesystem for deployment (`zfs` or `ext4`). Immutable after initial deployment.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"disk_size": schema.Int64Attribute{
 				Optional:            true,
@@ -324,6 +370,24 @@ func (r *cvmResource) Create(ctx context.Context, req resource.CreateRequest, re
 	if !plan.PreLaunchScript.IsNull() && !plan.PreLaunchScript.IsUnknown() {
 		composeFile["pre_launch_script"] = plan.PreLaunchScript.ValueString()
 	}
+	if !plan.PublicLogs.IsNull() && !plan.PublicLogs.IsUnknown() {
+		composeFile["public_logs"] = plan.PublicLogs.ValueBool()
+	}
+	if !plan.PublicSysinfo.IsNull() && !plan.PublicSysinfo.IsUnknown() {
+		composeFile["public_sysinfo"] = plan.PublicSysinfo.ValueBool()
+	}
+	if !plan.PublicTCBInfo.IsNull() && !plan.PublicTCBInfo.IsUnknown() {
+		composeFile["public_tcbinfo"] = plan.PublicTCBInfo.ValueBool()
+	}
+	if !plan.GatewayEnabled.IsNull() && !plan.GatewayEnabled.IsUnknown() {
+		composeFile["gateway_enabled"] = plan.GatewayEnabled.ValueBool()
+	}
+	if !plan.SecureTime.IsNull() && !plan.SecureTime.IsUnknown() {
+		composeFile["secure_time"] = plan.SecureTime.ValueBool()
+	}
+	if !plan.StorageFS.IsNull() && !plan.StorageFS.IsUnknown() {
+		composeFile["storage_fs"] = plan.StorageFS.ValueString()
+	}
 	if len(effectiveEnvKeys) > 0 {
 		composeFile["allowed_envs"] = effectiveEnvKeys
 	}
@@ -478,13 +542,51 @@ func (r *cvmResource) Update(ctx context.Context, req resource.UpdateRequest, re
 	if plan.Image.IsNull() || plan.Image.IsUnknown() {
 		plan.Image = state.Image
 	}
+	if plan.PublicLogs.IsNull() || plan.PublicLogs.IsUnknown() {
+		plan.PublicLogs = state.PublicLogs
+	}
+	if plan.PublicSysinfo.IsNull() || plan.PublicSysinfo.IsUnknown() {
+		plan.PublicSysinfo = state.PublicSysinfo
+	}
+	if plan.PublicTCBInfo.IsNull() || plan.PublicTCBInfo.IsUnknown() {
+		plan.PublicTCBInfo = state.PublicTCBInfo
+	}
+	if plan.GatewayEnabled.IsNull() || plan.GatewayEnabled.IsUnknown() {
+		plan.GatewayEnabled = state.GatewayEnabled
+	}
+	if plan.SecureTime.IsNull() || plan.SecureTime.IsUnknown() {
+		plan.SecureTime = state.SecureTime
+	}
+	if plan.StorageFS.IsNull() || plan.StorageFS.IsUnknown() {
+		plan.StorageFS = state.StorageFS
+	}
 	desiredSize := plan.Size
 	desiredDiskSize := plan.DiskSize
 	desiredImage := plan.Image
+	desiredPublicLogs := plan.PublicLogs
+	desiredPublicSysinfo := plan.PublicSysinfo
+	desiredPublicTCBInfo := plan.PublicTCBInfo
+	desiredGatewayEnabled := plan.GatewayEnabled
+	desiredSecureTime := plan.SecureTime
 	desiredDockerCompose := plan.DockerCompose
 	desiredPreLaunchScript := plan.PreLaunchScript
 	diskSizeChanged := !plan.DiskSize.IsNull() && !plan.DiskSize.IsUnknown() && !plan.DiskSize.Equal(state.DiskSize)
 	imageChanged := !plan.Image.Equal(state.Image)
+	composeSettingsChanged := !plan.PublicLogs.Equal(state.PublicLogs) ||
+		!plan.PublicSysinfo.Equal(state.PublicSysinfo) ||
+		!plan.PublicTCBInfo.Equal(state.PublicTCBInfo) ||
+		!plan.GatewayEnabled.Equal(state.GatewayEnabled) ||
+		!plan.SecureTime.Equal(state.SecureTime)
+
+	if diskSizeChanged &&
+		!state.DiskSize.IsNull() && !state.DiskSize.IsUnknown() &&
+		plan.DiskSize.ValueInt64() < state.DiskSize.ValueInt64() {
+		resp.Diagnostics.AddError(
+			"Invalid disk_size update",
+			fmt.Sprintf("disk_size can only grow (current=%d, requested=%d).", state.DiskSize.ValueInt64(), plan.DiskSize.ValueInt64()),
+		)
+		return
+	}
 
 	envVars, diags := mapValueAsStrings(ctx, plan.Env, "env")
 	resp.Diagnostics.Append(diags...)
@@ -544,6 +646,32 @@ func (r *cvmResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		}
 		if err := r.client.PatchJSON(ctx, cvmPath(id)+"/os-image", imageReq, nil); err != nil {
 			resp.Diagnostics.AddError("Failed to update OS image", err.Error())
+			return
+		}
+	}
+
+	if composeSettingsChanged {
+		composeReq := map[string]any{
+			"name": plan.Name.ValueString(),
+		}
+		if !plan.PublicLogs.IsNull() && !plan.PublicLogs.IsUnknown() {
+			composeReq["public_logs"] = plan.PublicLogs.ValueBool()
+		}
+		if !plan.PublicSysinfo.IsNull() && !plan.PublicSysinfo.IsUnknown() {
+			composeReq["public_sysinfo"] = plan.PublicSysinfo.ValueBool()
+		}
+		if !plan.PublicTCBInfo.IsNull() && !plan.PublicTCBInfo.IsUnknown() {
+			composeReq["public_tcbinfo"] = plan.PublicTCBInfo.ValueBool()
+		}
+		if !plan.GatewayEnabled.IsNull() && !plan.GatewayEnabled.IsUnknown() {
+			composeReq["gateway_enabled"] = plan.GatewayEnabled.ValueBool()
+		}
+		if !plan.SecureTime.IsNull() && !plan.SecureTime.IsUnknown() {
+			composeReq["secure_time"] = plan.SecureTime.ValueBool()
+		}
+
+		if err := provisionAndApplyComposeFileUpdate(ctx, r.client, id, composeReq); err != nil {
+			resp.Diagnostics.AddError("Failed to update compose settings", err.Error())
 			return
 		}
 	}
@@ -676,6 +804,13 @@ func (r *cvmResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		if imageChanged {
 			plan.Image = desiredImage
 		}
+		if composeSettingsChanged {
+			plan.PublicLogs = desiredPublicLogs
+			plan.PublicSysinfo = desiredPublicSysinfo
+			plan.PublicTCBInfo = desiredPublicTCBInfo
+			plan.GatewayEnabled = desiredGatewayEnabled
+			plan.SecureTime = desiredSecureTime
+		}
 		plan.Status = state.Status
 	}
 	if plan.DiskSize.IsUnknown() {
@@ -796,6 +931,12 @@ func (r *cvmResource) populateState(
 	if image := current.osImageName(); image != "" {
 		state.Image = types.StringValue(image)
 	}
+	state.PublicLogs = nullableBool(current.PublicLogs)
+	state.PublicSysinfo = nullableBool(current.PublicSysinfo)
+	state.PublicTCBInfo = nullableBool(current.PublicTCBInfo)
+	state.GatewayEnabled = nullableBool(current.GatewayEnabled)
+	state.SecureTime = nullableBool(current.SecureTime)
+	state.StorageFS = nullableString(current.StorageFS)
 
 	state.Status = nullableString(current.Status)
 	state.AppID = nullableString(current.AppID)
@@ -893,7 +1034,42 @@ func (r cvmAPIResponse) osImageName() string {
 	if r.OS != nil && strings.TrimSpace(r.OS.Name) != "" {
 		return strings.TrimSpace(r.OS.Name)
 	}
+	if strings.TrimSpace(r.BaseImage) != "" {
+		return strings.TrimSpace(r.BaseImage)
+	}
 	return ""
+}
+
+func provisionAndApplyComposeFileUpdate(
+	ctx context.Context,
+	client *APIClient,
+	cvmID string,
+	provisionReq map[string]any,
+) error {
+	if strings.TrimSpace(cvmID) == "" {
+		return fmt.Errorf("missing cvm id for compose update")
+	}
+	if strings.TrimSpace(stringFromAny(provisionReq["name"])) == "" {
+		return fmt.Errorf("compose update requires non-empty name")
+	}
+
+	var provisionResp struct {
+		ComposeHash string `json:"compose_hash"`
+	}
+	if err := client.PostJSON(ctx, cvmPath(cvmID)+"/compose_file/provision", provisionReq, &provisionResp); err != nil {
+		return err
+	}
+	if strings.TrimSpace(provisionResp.ComposeHash) == "" {
+		return fmt.Errorf("compose update provision did not return compose_hash")
+	}
+
+	triggerReq := map[string]any{
+		"compose_hash": provisionResp.ComposeHash,
+	}
+	if err := client.PatchJSON(ctx, cvmPath(cvmID)+"/compose_file", triggerReq, nil); err != nil {
+		return err
+	}
+	return nil
 }
 
 func nullableString(v string) types.String {

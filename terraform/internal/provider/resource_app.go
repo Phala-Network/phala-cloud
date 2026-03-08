@@ -37,6 +37,12 @@ type appResourceModel struct {
 	Region             types.String `tfsdk:"region"`
 	Size               types.String `tfsdk:"size"`
 	Image              types.String `tfsdk:"image"`
+	PublicLogs         types.Bool   `tfsdk:"public_logs"`
+	PublicSysinfo      types.Bool   `tfsdk:"public_sysinfo"`
+	PublicTCBInfo      types.Bool   `tfsdk:"public_tcbinfo"`
+	GatewayEnabled     types.Bool   `tfsdk:"gateway_enabled"`
+	SecureTime         types.Bool   `tfsdk:"secure_time"`
+	StorageFS          types.String `tfsdk:"storage_fs"`
 	DiskSize           types.Int64  `tfsdk:"disk_size"`
 	DockerCompose      types.String `tfsdk:"docker_compose"`
 	PreLaunchScript    types.String `tfsdk:"pre_launch_script"`
@@ -113,6 +119,39 @@ func (r *appResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "OS image name.",
+			},
+			"public_logs": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Expose container logs publicly (compose file setting). Changing this triggers compose update/restart.",
+			},
+			"public_sysinfo": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Expose system info publicly (compose file setting). Changing this triggers compose update/restart.",
+			},
+			"public_tcbinfo": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Expose TCB attestation info publicly (compose file setting). Changing this triggers compose update/restart.",
+			},
+			"gateway_enabled": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Enable public gateway routing (compose file setting). Changing this triggers compose update/restart.",
+			},
+			"secure_time": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Enable secure time mode (compose file setting). Changing this triggers compose update/restart.",
+			},
+			"storage_fs": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Storage filesystem for deployment (`zfs` or `ext4`). Immutable after initial deployment.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"disk_size": schema.Int64Attribute{
 				Optional:            true,
@@ -289,6 +328,24 @@ func (r *appResource) Create(ctx context.Context, req resource.CreateRequest, re
 	if !plan.PreLaunchScript.IsNull() && !plan.PreLaunchScript.IsUnknown() {
 		composeFile["pre_launch_script"] = plan.PreLaunchScript.ValueString()
 	}
+	if !plan.PublicLogs.IsNull() && !plan.PublicLogs.IsUnknown() {
+		composeFile["public_logs"] = plan.PublicLogs.ValueBool()
+	}
+	if !plan.PublicSysinfo.IsNull() && !plan.PublicSysinfo.IsUnknown() {
+		composeFile["public_sysinfo"] = plan.PublicSysinfo.ValueBool()
+	}
+	if !plan.PublicTCBInfo.IsNull() && !plan.PublicTCBInfo.IsUnknown() {
+		composeFile["public_tcbinfo"] = plan.PublicTCBInfo.ValueBool()
+	}
+	if !plan.GatewayEnabled.IsNull() && !plan.GatewayEnabled.IsUnknown() {
+		composeFile["gateway_enabled"] = plan.GatewayEnabled.ValueBool()
+	}
+	if !plan.SecureTime.IsNull() && !plan.SecureTime.IsUnknown() {
+		composeFile["secure_time"] = plan.SecureTime.ValueBool()
+	}
+	if !plan.StorageFS.IsNull() && !plan.StorageFS.IsUnknown() {
+		composeFile["storage_fs"] = plan.StorageFS.ValueString()
+	}
 	if len(effectiveEnvKeys) > 0 {
 		composeFile["allowed_envs"] = effectiveEnvKeys
 	}
@@ -457,11 +514,39 @@ func (r *appResource) Update(ctx context.Context, req resource.UpdateRequest, re
 	if plan.Image.IsNull() || plan.Image.IsUnknown() {
 		plan.Image = state.Image
 	}
+	if plan.PublicLogs.IsNull() || plan.PublicLogs.IsUnknown() {
+		plan.PublicLogs = state.PublicLogs
+	}
+	if plan.PublicSysinfo.IsNull() || plan.PublicSysinfo.IsUnknown() {
+		plan.PublicSysinfo = state.PublicSysinfo
+	}
+	if plan.PublicTCBInfo.IsNull() || plan.PublicTCBInfo.IsUnknown() {
+		plan.PublicTCBInfo = state.PublicTCBInfo
+	}
+	if plan.GatewayEnabled.IsNull() || plan.GatewayEnabled.IsUnknown() {
+		plan.GatewayEnabled = state.GatewayEnabled
+	}
+	if plan.SecureTime.IsNull() || plan.SecureTime.IsUnknown() {
+		plan.SecureTime = state.SecureTime
+	}
+	if plan.StorageFS.IsNull() || plan.StorageFS.IsUnknown() {
+		plan.StorageFS = state.StorageFS
+	}
 
 	desiredReplicas, diags := desiredReplicaCount(plan.Replicas)
 	resp.Diagnostics.Append(diags...)
 	desiredImage := plan.Image
 	imageChanged := !plan.Image.Equal(state.Image)
+	desiredPublicLogs := plan.PublicLogs
+	desiredPublicSysinfo := plan.PublicSysinfo
+	desiredPublicTCBInfo := plan.PublicTCBInfo
+	desiredGatewayEnabled := plan.GatewayEnabled
+	desiredSecureTime := plan.SecureTime
+	composeSettingsChanged := !plan.PublicLogs.Equal(state.PublicLogs) ||
+		!plan.PublicSysinfo.Equal(state.PublicSysinfo) ||
+		!plan.PublicTCBInfo.Equal(state.PublicTCBInfo) ||
+		!plan.GatewayEnabled.Equal(state.GatewayEnabled) ||
+		!plan.SecureTime.Equal(state.SecureTime)
 	envVars, diags := mapValueAsStrings(ctx, plan.Env, "env")
 	resp.Diagnostics.Append(diags...)
 	manualEnvKeys, diags := listValueAsStrings(ctx, plan.EnvKeys, "env_keys")
@@ -492,6 +577,16 @@ func (r *appResource) Update(ctx context.Context, req resource.UpdateRequest, re
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	diskSizeChanged := !plan.DiskSize.IsNull() && !plan.DiskSize.IsUnknown() && !plan.DiskSize.Equal(state.DiskSize)
+	if diskSizeChanged &&
+		!state.DiskSize.IsNull() && !state.DiskSize.IsUnknown() &&
+		plan.DiskSize.ValueInt64() < state.DiskSize.ValueInt64() {
+		resp.Diagnostics.AddError(
+			"Invalid disk_size update",
+			fmt.Sprintf("disk_size can only grow (current=%d, requested=%d).", state.DiskSize.ValueInt64(), plan.DiskSize.ValueInt64()),
+		)
+		return
+	}
 
 	_, cvms, err := r.fetchAppAndCVMs(ctx, appID)
 	if err != nil {
@@ -504,16 +599,42 @@ func (r *appResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		return
 	}
 
-	if !plan.Size.Equal(state.Size) || (!plan.DiskSize.IsNull() && !plan.DiskSize.IsUnknown() && !plan.DiskSize.Equal(state.DiskSize)) {
+	if !plan.Size.Equal(state.Size) || diskSizeChanged {
 		resourceReq := map[string]any{"allow_restart": true}
 		if !plan.Size.Equal(state.Size) {
 			resourceReq["instance_type"] = plan.Size.ValueString()
 		}
-		if !plan.DiskSize.IsNull() && !plan.DiskSize.IsUnknown() && !plan.DiskSize.Equal(state.DiskSize) {
+		if diskSizeChanged {
 			resourceReq["disk_size"] = plan.DiskSize.ValueInt64()
 		}
 		if err := r.client.PatchJSON(ctx, cvmPath(primaryCVMID)+"/resources", resourceReq, nil); err != nil {
 			resp.Diagnostics.AddError("Failed to update app resources", err.Error())
+			return
+		}
+	}
+
+	if composeSettingsChanged {
+		composeReq := map[string]any{
+			"name": plan.Name.ValueString(),
+		}
+		if !plan.PublicLogs.IsNull() && !plan.PublicLogs.IsUnknown() {
+			composeReq["public_logs"] = plan.PublicLogs.ValueBool()
+		}
+		if !plan.PublicSysinfo.IsNull() && !plan.PublicSysinfo.IsUnknown() {
+			composeReq["public_sysinfo"] = plan.PublicSysinfo.ValueBool()
+		}
+		if !plan.PublicTCBInfo.IsNull() && !plan.PublicTCBInfo.IsUnknown() {
+			composeReq["public_tcbinfo"] = plan.PublicTCBInfo.ValueBool()
+		}
+		if !plan.GatewayEnabled.IsNull() && !plan.GatewayEnabled.IsUnknown() {
+			composeReq["gateway_enabled"] = plan.GatewayEnabled.ValueBool()
+		}
+		if !plan.SecureTime.IsNull() && !plan.SecureTime.IsUnknown() {
+			composeReq["secure_time"] = plan.SecureTime.ValueBool()
+		}
+
+		if err := r.provisionAndApplyComposeSettingsAcrossReplicas(ctx, cvms, primaryCVMID, composeReq); err != nil {
+			resp.Diagnostics.AddError("Failed to update app compose settings", err.Error())
 			return
 		}
 	}
@@ -651,6 +772,13 @@ func (r *appResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		plan.Status = state.Status
 		if imageChanged {
 			plan.Image = desiredImage
+		}
+		if composeSettingsChanged {
+			plan.PublicLogs = desiredPublicLogs
+			plan.PublicSysinfo = desiredPublicSysinfo
+			plan.PublicTCBInfo = desiredPublicTCBInfo
+			plan.GatewayEnabled = desiredGatewayEnabled
+			plan.SecureTime = desiredSecureTime
 		}
 	}
 
@@ -981,6 +1109,12 @@ func (r *appResource) populateState(
 		if image := primary.osImageName(); image != "" {
 			state.Image = types.StringValue(image)
 		}
+		state.PublicLogs = nullableBool(primary.PublicLogs)
+		state.PublicSysinfo = nullableBool(primary.PublicSysinfo)
+		state.PublicTCBInfo = nullableBool(primary.PublicTCBInfo)
+		state.GatewayEnabled = nullableBool(primary.GatewayEnabled)
+		state.SecureTime = nullableBool(primary.SecureTime)
+		state.StorageFS = nullableString(primary.StorageFS)
 		state.Status = nullableString(primary.Status)
 		state.Endpoint = nullableString(primary.endpoint())
 		if primary.Listed != nil {
@@ -1246,6 +1380,26 @@ func (r *appResource) patchOSImageAcrossReplicas(
 	return nil
 }
 
+func (r *appResource) provisionAndApplyComposeSettingsAcrossReplicas(
+	ctx context.Context,
+	cvms []cvmAPIResponse,
+	preferredID string,
+	provisionReq map[string]any,
+) error {
+	ids := orderedReplicaIDs(cvms, preferredID)
+	if len(ids) == 0 {
+		return fmt.Errorf("no app replicas available for compose settings update")
+	}
+
+	for _, id := range ids {
+		if err := provisionAndApplyComposeFileUpdate(ctx, r.client, id, provisionReq); err != nil {
+			return fmt.Errorf("replica %q compose settings update failed: %w", id, err)
+		}
+	}
+
+	return nil
+}
+
 func normalizeCVMInfos(cvms []cvmAPIResponse) []cvmAPIResponse {
 	out := make([]cvmAPIResponse, 0, len(cvms))
 	for _, cvm := range cvms {
@@ -1282,6 +1436,25 @@ func normalizeCVMFromAny(raw map[string]any) cvmAPIResponse {
 	if b, ok := boolFromAny(raw["listed"]); ok {
 		out.Listed = &b
 	}
+	if b, ok := boolFromAny(raw["public_logs"]); ok {
+		out.PublicLogs = &b
+	}
+	if b, ok := boolFromAny(raw["public_sysinfo"]); ok {
+		out.PublicSysinfo = &b
+	}
+	if b, ok := boolFromAny(raw["public_tcbinfo"]); ok {
+		out.PublicTCBInfo = &b
+	}
+	if b, ok := boolFromAny(raw["gateway_enabled"]); ok {
+		out.GatewayEnabled = &b
+	}
+	if b, ok := boolFromAny(raw["secure_time"]); ok {
+		out.SecureTime = &b
+	}
+	out.StorageFS = stringFromAny(raw["storage_fs"])
+	if out.BaseImage == "" {
+		out.BaseImage = stringFromAny(raw["base_image"])
+	}
 	if idJSON, err := marshalJSONRaw(raw["id"]); err == nil && len(idJSON) > 0 {
 		out.ID = idJSON
 	}
@@ -1301,6 +1474,37 @@ func normalizeCVMFromAny(raw map[string]any) cvmAPIResponse {
 		}
 		if out.VMUUID == "" {
 			out.VMUUID = stringFromAny(hostedRaw["id"])
+		}
+		if out.BaseImage == "" {
+			out.BaseImage = stringFromAny(hostedRaw["base_image"])
+		}
+		if out.StorageFS == "" {
+			out.StorageFS = stringFromAny(hostedRaw["storage_fs"])
+		}
+		if out.PublicLogs == nil {
+			if b, ok := boolFromAny(hostedRaw["public_logs"]); ok {
+				out.PublicLogs = &b
+			}
+		}
+		if out.PublicSysinfo == nil {
+			if b, ok := boolFromAny(hostedRaw["public_sysinfo"]); ok {
+				out.PublicSysinfo = &b
+			}
+		}
+		if out.PublicTCBInfo == nil {
+			if b, ok := boolFromAny(hostedRaw["public_tcbinfo"]); ok {
+				out.PublicTCBInfo = &b
+			}
+		}
+		if out.GatewayEnabled == nil {
+			if b, ok := boolFromAny(hostedRaw["gateway_enabled"]); ok {
+				out.GatewayEnabled = &b
+			}
+		}
+		if out.SecureTime == nil {
+			if b, ok := boolFromAny(hostedRaw["secure_time"]); ok {
+				out.SecureTime = &b
+			}
 		}
 		if len(out.ID) == 0 {
 			if idJSON, err := marshalJSONRaw(hostedRaw["id"]); err == nil && len(idJSON) > 0 {

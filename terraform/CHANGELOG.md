@@ -20,6 +20,11 @@ All notable changes to `terraform-provider-phala` are documented in this file.
 - `image` is now updatable in-place for:
   - `phala_cvm` via `PATCH /cvms/{id}/os-image`
   - `phala_app` by updating OS image across app replicas
+- Added compose-file runtime settings to `phala_cvm` and `phala_app`:
+  - `public_logs`, `public_sysinfo`, `public_tcbinfo`, `gateway_enabled`, `secure_time`
+  - updates use compose provision/apply flow and trigger restart/redeploy
+- `storage_fs` (`zfs`/`ext4`) is now explicit and immutable (replacement required on change).
+- `disk_size` updates are constrained to grow-only (shrink rejected by provider validation).
 
 ## [0.1.0] - 2026-03-07
 

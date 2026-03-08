@@ -32,6 +32,9 @@ Last updated: 2026-03-08
 | Per-deploy SSH key injection | yes |
 | OS image selection + update | yes (`image`, in-place via `/os-image`) |
 | Encrypted env workflow | yes (auto via `env`, manual via `encrypted_env` + `env_keys`) |
+| Compose runtime settings | yes (`public_logs`, `public_sysinfo`, `public_tcbinfo`, `gateway_enabled`, `secure_time`) |
+| Storage FS selection | yes (`storage_fs`: `zfs`/`ext4`, immutable after create) |
+| Disk resize semantics | grow-only (`disk_size` shrink rejected) |
 | Workspace/account introspection | yes |
 | Custom domain management | not yet (planned via compose definition support) |
 | VPC/network primitives | not applicable (Phala serverless-style network model) |

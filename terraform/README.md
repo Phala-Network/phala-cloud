@@ -208,7 +208,18 @@ Notes:
 - Create flow follows Phala's two-step API: `POST /cvms/provision` then `POST /cvms`.
 - Current MVP supports `kms = PHALA` create flow.
 - In-place updates: size, disk, OS image (`PATCH /cvms/{id}/os-image`), docker compose, pre-launch script, encrypted env (`PATCH /cvms/{id}/envs`).
+- Compose-file runtime settings are exposed as first-class attributes:
+  - `public_logs`
+  - `public_sysinfo`
+  - `public_tcbinfo`
+  - `gateway_enabled`
+  - `secure_time`
+  - `storage_fs`
+- Changing compose-file runtime settings triggers compose provision/apply flow and CVM restart (`/cvms/{id}/compose_file/provision` + `/cvms/{id}/compose_file`).
 - Per-deployment SSH keys are supported via `ssh_authorized_keys` (applied at create time using `user_config`; force-new).
+- `storage_fs` is immutable after initial deployment (`zfs` or `ext4`); changing it forces replacement.
+- `disk_size` can only grow (shrink is rejected).
+- CPU/RAM changes are supported through `size` updates.
 - Encrypted secret modes:
   - `env` (recommended): provider auto-derives `env_keys` and encrypts values before API calls.
   - `encrypted_env` + `env_keys` (manual): pass-through encrypted payload mode.
@@ -222,7 +233,7 @@ Notes:
 - Manual encrypted fields:
   - `encrypted_env` (sensitive, pass-through hex blob)
   - `env_keys` (allowed env keys)
-- Force-new fields: `name`, `region`, `listed`, `ssh_authorized_keys`.
+- Force-new fields: `name`, `region`, `listed`, `ssh_authorized_keys`, `storage_fs`.
 
 ### `phala_cvm_power`
 
