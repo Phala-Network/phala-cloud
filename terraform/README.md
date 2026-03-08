@@ -1,31 +1,38 @@
 # Terraform Provider: Phala Cloud
 
-This provider is designed to feel familiar to DigitalOcean users:
+Deploy confidential apps and CVMs on Phala Cloud with Terraform.
 
-- `phala_app` is the recommended primary resource (shared app-compose + env + replica count).
-- `phala_cvm` is the Phala equivalent of a droplet-style compute resource.
-- `phala_cvm_power` manages start/stop state, similar to action-oriented power controls.
-- `phala_ssh_key` mirrors SSH key lifecycle patterns.
-- `phala_account`, `phala_workspace`, `phala_sizes`, `phala_regions`, `phala_images`, `phala_nodes`, and `phala_attestation` provide account/workspace/catalog/placement/attestation data sources.
+Start with `phala_app`. It deploys one app definition with shared Docker Compose, shared environment, and one or more CVM replicas behind a single app identity. That is the default Phala Cloud workflow this provider is built around.
 
-## Maturity and Release Status
+This provider is intentionally close to the Terraform ergonomics people expect from providers like DigitalOcean: catalog data sources, declarative compute resources, explicit power control, SSH key resources, and straightforward outputs such as `app_id`, `cvm_ids`, and `endpoint`.
 
-- Current maturity: `beta` (core compute + power + SSH key + discovery data sources are implemented).
-- Detailed matrix: [FEATURE_MATURITY.md](./FEATURE_MATURITY.md)
-- Release process and gates: [RELEASE.md](./RELEASE.md)
-- Release history: [CHANGELOG.md](./CHANGELOG.md)
+## Before You Start
 
-## Quick Start (2-5 Minutes)
+You need:
 
-Use this path if you are a normal user installing from the Terraform Registry.
+- Terraform installed.
+- A Phala Cloud account.
+- A Phala Cloud API key.
+- An SSH public key only if you want SSH access inside a deployment.
 
-1. Export your API key:
+Get an API key from the Phala Cloud dashboard:
+
+1. Sign in to `https://cloud.phala.com`.
+2. Open `Settings` -> `API Keys` or your profile page.
+3. Create a key and export it:
 
 ```bash
 export PHALA_CLOUD_API_KEY="phak_xxx"
 ```
 
-2. Create `main.tf`:
+Provider environment variables:
+
+- `PHALA_CLOUD_API_KEY`
+- `PHALA_CLOUD_API_PREFIX`
+
+## Quick Start
+
+This is the default path. It deploys one app with one replica and gives you an `app_id` and public endpoint.
 
 ```hcl
 terraform {
@@ -42,10 +49,12 @@ provider "phala" {}
 data "phala_sizes" "all" {}
 data "phala_regions" "all" {}
 
-resource "phala_cvm" "quickstart" {
-  name           = "quickstart-cvm"
-  size           = data.phala_sizes.all.sizes[0].slug
-  region         = data.phala_regions.all.regions[0].slug
+resource "phala_app" "hello" {
+  name     = "hello-phala"
+  size     = data.phala_sizes.all.sizes[0].slug
+  region   = data.phala_regions.all.regions[0].slug
+  replicas = 1
+
   docker_compose = <<-YAML
     services:
       web:
@@ -54,19 +63,20 @@ resource "phala_cvm" "quickstart" {
           - "80:80"
   YAML
 
-  wait_for_ready = false
+  wait_for_ready       = true
+  wait_timeout_seconds = 900
 }
 
-output "cvm_id" {
-  value = phala_cvm.quickstart.id
+output "app_id" {
+  value = phala_app.hello.app_id
 }
 
 output "endpoint" {
-  value = phala_cvm.quickstart.endpoint
+  value = phala_app.hello.endpoint
 }
 ```
 
-3. Run:
+Run:
 
 ```bash
 terraform init
@@ -75,14 +85,17 @@ terraform output
 terraform destroy -auto-approve
 ```
 
-Environment variables supported by the provider:
+What success looks like:
 
-- `PHALA_CLOUD_API_KEY`
-- `PHALA_CLOUD_API_PREFIX`
+- Terraform prints an `app_id`.
+- Terraform prints a public `endpoint`.
+- The app appears in your Phala Cloud dashboard and reaches running state.
 
-If you need to test unreleased provider code from this repo, use `Developer Mode` below.
+If you want to test unreleased provider code from this repo, skip this path and use `Developer Mode` below.
 
-## DigitalOcean-style Discovery
+## Common Tasks
+
+### Discover available sizes, regions, images, nodes, and workspace info
 
 ```hcl
 data "phala_sizes" "all" {}
@@ -107,7 +120,7 @@ data "phala_attestation" "web" {
 }
 ```
 
-## SSH Key + CVM Example
+### Advanced: deploy a single CVM with SSH access
 
 ```hcl
 resource "phala_ssh_key" "laptop" {
@@ -151,7 +164,7 @@ resource "phala_cvm_power" "web_power" {
 }
 ```
 
-## App-first Example (Recommended)
+### Deploy one app and wire its outputs into another app
 
 ```hcl
 resource "phala_app" "api" {
@@ -184,6 +197,28 @@ resource "phala_app" "consumer" {
     UPSTREAM_APP_ID   = phala_app.api.app_id
     UPSTREAM_ENDPOINT = phala_app.api.endpoint
   }
+}
+```
+
+### Pin placement to a specific node
+
+```hcl
+data "phala_nodes" "west" {
+  region = "us-west"
+}
+
+resource "phala_cvm" "pinned" {
+  name    = "pinned-cvm"
+  size    = data.phala_sizes.all.sizes[0].slug
+  node_id = data.phala_nodes.west.nodes[0].node_id
+
+  docker_compose = <<-YAML
+    services:
+      web:
+        image: nginx:stable
+        ports:
+          - "80:80"
+  YAML
 }
 ```
 
@@ -253,7 +288,7 @@ Notes:
 - Set `CREATE_LINKED_CVM=true` to exercise multi-CVM wiring where the linked CVM receives `PRIMARY_APP_ID` and `PRIMARY_ENDPOINT` from the primary CVM.
 - `WAIT_FOR_READY=false` can be useful for infrastructure lifecycle tests when runtime boot latency is variable.
 
-## Resource Notes
+## Behavior and Lifecycle Notes
 
 ### `phala_cvm`
 
@@ -315,12 +350,22 @@ Notes:
   - `DELETE /user/ssh-keys/{id}`
 - `name` and `public_key` are immutable (replace on change), similar to DO-style patterns.
 
+## Project Status
+
+- Current maturity: `beta`.
+- Detailed matrix: [FEATURE_MATURITY.md](./FEATURE_MATURITY.md)
+- Release history: [CHANGELOG.md](./CHANGELOG.md)
+
 ## Roadmap
 
 - On-chain KMS create/update flows (BASE/ETHEREUM).
 - Add richer filtering for data sources (`images`, `sizes`, `regions`).
 
-## Maintainer Release Quick Path
+## Maintainers
+
+Release process and gates: [RELEASE.md](./RELEASE.md)
+
+### Release Quick Path
 
 ```bash
 cd terraform
