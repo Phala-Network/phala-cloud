@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Phala-Network/phala-cloud/terraform-provider-phala/internal/phalaapi"
+	"github.com/Phala-Network/phala-cloud/terraform/internal/phalaapi"
 )
 
 // Async CVM operations can keep resources locked for several minutes.

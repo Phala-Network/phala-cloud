@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 
-	"github.com/Phala-Network/phala-cloud/terraform-provider-phala/internal/provider"
+	"github.com/Phala-Network/phala-cloud/terraform/internal/provider"
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 )
 

@@ -144,14 +144,14 @@ The provider includes a smoke example and `make` targets under [`examples/smoke`
 Read-only smoke (catalog data sources only):
 
 ```bash
-cd terraform-provider-phala
+cd terraform
 make smoke-plan PHALA_API_KEY="phat_xxx" CREATE_RESOURCES=false
 ```
 
 Create + destroy smoke:
 
 ```bash
-cd terraform-provider-phala
+cd terraform
 make smoke-apply \
   PHALA_API_KEY="phat_xxx" \
   CREATE_RESOURCES=true \
@@ -249,7 +249,7 @@ Notes:
 ## Maintainer Release Quick Path
 
 ```bash
-cd terraform-provider-phala
+cd terraform
 make ci
 make package-release VERSION=0.2.0
 ```

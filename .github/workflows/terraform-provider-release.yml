@@ -24,7 +24,7 @@ jobs:
       TAG_NAME: terraform-provider-phala/v${{ inputs.version }}
     defaults:
       run:
-        working-directory: terraform-provider-phala
+        working-directory: terraform
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,8 +41,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: terraform-provider-phala/go.mod
-          cache-dependency-path: terraform-provider-phala/go.sum
+          go-version-file: terraform/go.mod
+          cache-dependency-path: terraform/go.sum
 
       - name: Run checks
         run: make ci VERSION="${VERSION}"
@@ -70,5 +70,5 @@ jobs:
           prerelease: ${{ inputs.prerelease }}
           generate_release_notes: true
           files: |
-            terraform-provider-phala/dist/${{ inputs.version }}/*.zip
-            terraform-provider-phala/dist/${{ inputs.version }}/*SHA256SUMS
+            terraform/dist/${{ inputs.version }}/*.zip
+            terraform/dist/${{ inputs.version }}/*SHA256SUMS

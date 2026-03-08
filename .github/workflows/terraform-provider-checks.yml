@@ -3,11 +3,11 @@ name: Terraform Provider Checks
 on:
   pull_request:
     paths:
-      - "terraform-provider-phala/**"
+      - "terraform/**"
       - ".github/workflows/terraform-provider-checks.yml"
   push:
     paths:
-      - "terraform-provider-phala/**"
+      - "terraform/**"
       - ".github/workflows/terraform-provider-checks.yml"
 
 jobs:
@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: terraform-provider-phala
+        working-directory: terraform
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,8 +23,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: terraform-provider-phala/go.mod
-          cache-dependency-path: terraform-provider-phala/go.sum
+          go-version-file: terraform/go.mod
+          cache-dependency-path: terraform/go.sum
 
       - name: Download dependencies
         run: go mod download

@@ -25,7 +25,7 @@ Before cutting a release:
 ## Build Release Artifacts Locally
 
 ```bash
-cd terraform-provider-phala
+cd terraform
 make package-release VERSION=0.2.0
 ```
 
