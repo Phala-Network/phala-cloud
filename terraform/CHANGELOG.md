@@ -15,6 +15,12 @@ All notable changes to `terraform-provider-phala` are documented in this file.
 - Manual GitHub release workflow for versioned artifacts.
 - Feature maturity and release process documentation.
 
+### Changed
+
+- `image` is now updatable in-place for:
+  - `phala_cvm` via `PATCH /cvms/{id}/os-image`
+  - `phala_app` by updating OS image across app replicas
+
 ## [0.1.0] - 2026-03-07
 
 ### Added

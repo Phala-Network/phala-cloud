@@ -1,6 +1,6 @@
 # Terraform Provider Feature Maturity
 
-Last updated: 2026-03-07
+Last updated: 2026-03-08
 
 ## Maturity Levels
 
@@ -30,6 +30,7 @@ Last updated: 2026-03-07
 | Declarative compute resource (`phala_cvm`) | yes |
 | Separate power resource (`phala_cvm_power`) | yes |
 | Per-deploy SSH key injection | yes |
+| OS image selection + update | yes (`image`, in-place via `/os-image`) |
 | Encrypted env workflow | yes (auto via `env`, manual via `encrypted_env` + `env_keys`) |
 | Workspace/account introspection | yes |
 | Custom domain management | not yet (planned via compose definition support) |

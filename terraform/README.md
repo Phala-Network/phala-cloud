@@ -207,7 +207,7 @@ Notes:
 
 - Create flow follows Phala's two-step API: `POST /cvms/provision` then `POST /cvms`.
 - Current MVP supports `kms = PHALA` create flow.
-- In-place updates: size, disk, docker compose, pre-launch script, encrypted env (`PATCH /cvms/{id}/envs`).
+- In-place updates: size, disk, OS image (`PATCH /cvms/{id}/os-image`), docker compose, pre-launch script, encrypted env (`PATCH /cvms/{id}/envs`).
 - Per-deployment SSH keys are supported via `ssh_authorized_keys` (applied at create time using `user_config`; force-new).
 - Encrypted secret modes:
   - `env` (recommended): provider auto-derives `env_keys` and encrypts values before API calls.
@@ -222,7 +222,7 @@ Notes:
 - Manual encrypted fields:
   - `encrypted_env` (sensitive, pass-through hex blob)
   - `env_keys` (allowed env keys)
-- Force-new fields: `name`, `region`, `image`, `listed`, `ssh_authorized_keys`.
+- Force-new fields: `name`, `region`, `listed`, `ssh_authorized_keys`.
 
 ### `phala_cvm_power`
 

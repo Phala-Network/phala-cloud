@@ -111,10 +111,8 @@ func (r *appResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 			},
 			"image": schema.StringAttribute{
 				Optional:            true,
-				MarkdownDescription: "OS image name. Force-new.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
+				Computed:            true,
+				MarkdownDescription: "OS image name.",
 			},
 			"disk_size": schema.Int64Attribute{
 				Optional:            true,
@@ -456,9 +454,14 @@ func (r *appResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		resp.Diagnostics.AddError("Missing app ID", "Cannot update app without a persisted app_id.")
 		return
 	}
+	if plan.Image.IsNull() || plan.Image.IsUnknown() {
+		plan.Image = state.Image
+	}
 
 	desiredReplicas, diags := desiredReplicaCount(plan.Replicas)
 	resp.Diagnostics.Append(diags...)
+	desiredImage := plan.Image
+	imageChanged := !plan.Image.Equal(state.Image)
 	envVars, diags := mapValueAsStrings(ctx, plan.Env, "env")
 	resp.Diagnostics.Append(diags...)
 	manualEnvKeys, diags := listValueAsStrings(ctx, plan.EnvKeys, "env_keys")
@@ -511,6 +514,20 @@ func (r *appResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		}
 		if err := r.client.PatchJSON(ctx, cvmPath(primaryCVMID)+"/resources", resourceReq, nil); err != nil {
 			resp.Diagnostics.AddError("Failed to update app resources", err.Error())
+			return
+		}
+	}
+
+	if imageChanged {
+		if plan.Image.IsNull() || plan.Image.IsUnknown() || strings.TrimSpace(plan.Image.ValueString()) == "" {
+			resp.Diagnostics.AddError(
+				"Invalid image update",
+				"image must be set to a target OS image name when updating.",
+			)
+			return
+		}
+		if err := r.patchOSImageAcrossReplicas(ctx, cvms, primaryCVMID, plan.Image.ValueString()); err != nil {
+			resp.Diagnostics.AddError("Failed to update app OS image", err.Error())
 			return
 		}
 	}
@@ -632,6 +649,9 @@ func (r *appResource) Update(ctx context.Context, req resource.UpdateRequest, re
 
 	if !shouldWait(plan.WaitForReady) {
 		plan.Status = state.Status
+		if imageChanged {
+			plan.Image = desiredImage
+		}
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
@@ -958,6 +978,9 @@ func (r *appResource) populateState(
 		if region := primary.region(); region != "" {
 			state.Region = types.StringValue(region)
 		}
+		if image := primary.osImageName(); image != "" {
+			state.Image = types.StringValue(image)
+		}
 		state.Status = nullableString(primary.Status)
 		state.Endpoint = nullableString(primary.endpoint())
 		if primary.Listed != nil {
@@ -1199,6 +1222,30 @@ func (r *appResource) patchJSONAcrossReplicas(
 	return fmt.Errorf("patch operation failed on all app replicas")
 }
 
+func (r *appResource) patchOSImageAcrossReplicas(
+	ctx context.Context,
+	cvms []cvmAPIResponse,
+	preferredID string,
+	imageName string,
+) error {
+	ids := orderedReplicaIDs(cvms, preferredID)
+	if len(ids) == 0 {
+		return fmt.Errorf("no app replicas available for OS image update")
+	}
+
+	payload := map[string]any{
+		"os_image_name": imageName,
+	}
+
+	for _, id := range ids {
+		if err := r.client.PatchJSON(ctx, cvmPath(id)+"/os-image", payload, nil); err != nil {
+			return fmt.Errorf("replica %q OS image update failed: %w", id, err)
+		}
+	}
+
+	return nil
+}
+
 func normalizeCVMInfos(cvms []cvmAPIResponse) []cvmAPIResponse {
 	out := make([]cvmAPIResponse, 0, len(cvms))
 	for _, cvm := range cvms {
@@ -1221,6 +1268,13 @@ func normalizeCVMFromAny(raw map[string]any) cvmAPIResponse {
 		AppID:      ensureAppPrefix(stringFromAny(raw["app_id"])),
 		VMUUID:     stringFromAny(raw["vm_uuid"]),
 		InstanceID: stringFromAny(raw["instance_id"]),
+	}
+	if osRaw, ok := raw["os"].(map[string]any); ok {
+		if name := stringFromAny(osRaw["name"]); name != "" {
+			out.OS = &struct {
+				Name string `json:"name"`
+			}{Name: name}
+		}
 	}
 	if b, ok := boolFromAny(raw["in_progress"]); ok {
 		out.InProgress = b

@@ -93,6 +93,9 @@ type cvmAPIResponse struct {
 	Node *struct {
 		RegionIdentifier string `json:"region_identifier"`
 	} `json:"node"`
+	OS *struct {
+		Name string `json:"name"`
+	} `json:"os"`
 
 	Endpoints []struct {
 		App string `json:"app"`
@@ -141,10 +144,8 @@ func (r *cvmResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 			},
 			"image": schema.StringAttribute{
 				Optional:            true,
-				MarkdownDescription: "OS image name. Force-new.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
+				Computed:            true,
+				MarkdownDescription: "OS image name.",
 			},
 			"disk_size": schema.Int64Attribute{
 				Optional:            true,
@@ -474,11 +475,16 @@ func (r *cvmResource) Update(ctx context.Context, req resource.UpdateRequest, re
 
 	id := state.ID.ValueString()
 	plan.ID = state.ID
+	if plan.Image.IsNull() || plan.Image.IsUnknown() {
+		plan.Image = state.Image
+	}
 	desiredSize := plan.Size
 	desiredDiskSize := plan.DiskSize
+	desiredImage := plan.Image
 	desiredDockerCompose := plan.DockerCompose
 	desiredPreLaunchScript := plan.PreLaunchScript
 	diskSizeChanged := !plan.DiskSize.IsNull() && !plan.DiskSize.IsUnknown() && !plan.DiskSize.Equal(state.DiskSize)
+	imageChanged := !plan.Image.Equal(state.Image)
 
 	envVars, diags := mapValueAsStrings(ctx, plan.Env, "env")
 	resp.Diagnostics.Append(diags...)
@@ -520,6 +526,24 @@ func (r *cvmResource) Update(ctx context.Context, req resource.UpdateRequest, re
 
 		if err := r.client.PatchJSON(ctx, cvmPath(id)+"/resources", resourceReq, nil); err != nil {
 			resp.Diagnostics.AddError("Failed to resize/update resources", err.Error())
+			return
+		}
+	}
+
+	if imageChanged {
+		if plan.Image.IsNull() || plan.Image.IsUnknown() || strings.TrimSpace(plan.Image.ValueString()) == "" {
+			resp.Diagnostics.AddError(
+				"Invalid image update",
+				"image must be set to a target OS image name when updating.",
+			)
+			return
+		}
+
+		imageReq := map[string]any{
+			"os_image_name": plan.Image.ValueString(),
+		}
+		if err := r.client.PatchJSON(ctx, cvmPath(id)+"/os-image", imageReq, nil); err != nil {
+			resp.Diagnostics.AddError("Failed to update OS image", err.Error())
 			return
 		}
 	}
@@ -649,6 +673,9 @@ func (r *cvmResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		if !desiredPreLaunchScript.Equal(state.PreLaunchScript) {
 			plan.PreLaunchScript = desiredPreLaunchScript
 		}
+		if imageChanged {
+			plan.Image = desiredImage
+		}
 		plan.Status = state.Status
 	}
 	if plan.DiskSize.IsUnknown() {
@@ -766,6 +793,9 @@ func (r *cvmResource) populateState(
 	if region := current.region(); region != "" {
 		state.Region = types.StringValue(region)
 	}
+	if image := current.osImageName(); image != "" {
+		state.Image = types.StringValue(image)
+	}
 
 	state.Status = nullableString(current.Status)
 	state.AppID = nullableString(current.AppID)
@@ -855,6 +885,13 @@ func (r cvmAPIResponse) envEncryptionPubkey() string {
 	}
 	if r.KMSInfo != nil && strings.TrimSpace(r.KMSInfo.EncryptedEnvPubkey) != "" {
 		return strings.TrimSpace(r.KMSInfo.EncryptedEnvPubkey)
+	}
+	return ""
+}
+
+func (r cvmAPIResponse) osImageName() string {
+	if r.OS != nil && strings.TrimSpace(r.OS.Name) != "" {
+		return strings.TrimSpace(r.OS.Name)
 	}
 	return ""
 }
