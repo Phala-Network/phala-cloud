@@ -1,0 +1,42 @@
+name: Terraform Provider Checks
+
+on:
+  pull_request:
+    paths:
+      - "terraform-provider-phala/**"
+      - ".github/workflows/terraform-provider-checks.yml"
+  push:
+    paths:
+      - "terraform-provider-phala/**"
+      - ".github/workflows/terraform-provider-checks.yml"
+
+jobs:
+  provider-checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform-provider-phala
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: terraform-provider-phala/go.mod
+          cache-dependency-path: terraform-provider-phala/go.sum
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run formatting check
+        run: make fmt-check
+
+      - name: Run go vet
+        run: make vet
+
+      - name: Run tests
+        run: make test
+
+      - name: Build release binary
+        run: make build-release VERSION=ci

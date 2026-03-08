@@ -1,0 +1,27 @@
+# Required
+phala_api_key = "phat_your_api_key_here"
+
+# Optional
+create_resources = false
+create_app_resources = false
+ssh_public_key   = ""
+ssh_key_name     = "tf-smoke-key"
+cvm_name         = "tf-smoke-cvm"
+app_name         = "tf-smoke-app"
+app_replicas     = 1
+create_consumer_app = false
+consumer_app_name = "tf-smoke-consumer"
+consumer_app_replicas = 1
+create_linked_cvm = false
+linked_cvm_name   = "tf-smoke-cvm-linked"
+cvm_ssh_authorized_keys = []
+cvm_env          = {}
+app_env          = {}
+consumer_app_env = {}
+linked_cvm_env   = {}
+cvm_power_state  = ""
+wait_for_ready   = true
+wait_timeout_seconds = 900
+size             = ""
+region           = ""
+image            = ""

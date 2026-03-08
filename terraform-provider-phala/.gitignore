@@ -1,0 +1,5 @@
+.env*
+dist/
+examples/smoke/.terraform/
+examples/smoke/terraform.tfstate
+examples/smoke/terraform.tfstate.*
