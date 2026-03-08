@@ -34,6 +34,15 @@ Provider environment variables:
 
 This is the default path. It deploys one app with one replica and gives you an `app_id` and public endpoint.
 
+The example below uses concrete defaults:
+
+- `size = "tdx.medium"`
+- `region = "US-WEST-1"`
+- `disk_size = 40` (GB)
+- `image = "dstack-dev-0.5.7-9b6a5239"`
+
+These values were tested against real Phala Cloud on March 8, 2026. If you need different sizes, regions, or images, use the discovery examples in `Common Tasks` after you complete this first deploy.
+
 ```hcl
 terraform {
   required_providers {
@@ -46,14 +55,13 @@ terraform {
 
 provider "phala" {}
 
-data "phala_sizes" "all" {}
-data "phala_regions" "all" {}
-
 resource "phala_app" "hello" {
-  name     = "hello-phala"
-  size     = data.phala_sizes.all.sizes[0].slug
-  region   = data.phala_regions.all.regions[0].slug
-  replicas = 1
+  name      = "hello-phala"
+  size      = "tdx.medium"
+  region    = "US-WEST-1"
+  image     = "dstack-dev-0.5.7-9b6a5239" # use a full image slug from data.phala_images
+  disk_size = 40 # GB
+  replicas  = 1
 
   docker_compose = <<-YAML
     services:
@@ -117,6 +125,18 @@ data "phala_workspace" "current" {}
 
 data "phala_attestation" "web" {
   cvm_id = "app_abc123"
+}
+```
+
+For image selection, use the exact `slug` from `data.phala_images`. Do not shorten it to `dstack-dev` or `dstack-dev-0.5.7`.
+
+```hcl
+data "phala_images" "west" {
+  region = "us-west"
+}
+
+output "image_slugs" {
+  value = data.phala_images.west.images[*].slug
 }
 ```
 

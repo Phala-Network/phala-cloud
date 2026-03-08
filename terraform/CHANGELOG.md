@@ -4,6 +4,8 @@ All notable changes to `terraform-provider-phala` are documented in this file.
 
 ## [Unreleased]
 
+## [0.2.0-beta.1] - 2026-03-08
+
 ### Added
 
 - New `phala_app` resource (app-first model):
