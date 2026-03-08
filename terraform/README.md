@@ -99,6 +99,8 @@ What success looks like:
 - Terraform prints a public `endpoint`.
 - The app appears in your Phala Cloud dashboard and reaches running state.
 
+A complete copy of this example also lives in [examples/app-quickstart](/home/h4x/workspace/phala-cloud/terraform/examples/app-quickstart).
+
 If you want to test unreleased provider code from this repo, skip this path and use `Developer Mode` below.
 
 ## Common Tasks
@@ -246,7 +248,7 @@ resource "phala_cvm" "pinned" {
 
 Use this only when developing the provider from source (dev overrides + local binary).
 
-The repo includes a smoke example and `make` targets under [`examples/smoke`](./examples/smoke).
+The repo includes a smoke fixture and `make` targets under [`examples/smoke`](./examples/smoke). This is for coverage and regression testing, not for first-time user onboarding.
 
 Read-only smoke (catalog data sources only):
 
