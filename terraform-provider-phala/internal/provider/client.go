@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Phala-Network/phala-cloud/terraform-provider-phala/internal/phalaapi"
 )
 
 // Async CVM operations can keep resources locked for several minutes.
@@ -22,6 +24,7 @@ type APIClient struct {
 	apiKey     string
 	apiVersion string
 	httpClient *http.Client
+	typed      *phalaapi.ClientWithResponses
 }
 
 type APIError struct {
@@ -76,6 +79,7 @@ func NewAPIClient(baseURL, apiKey, apiVersion string, timeout time.Duration) *AP
 		apiKey:     apiKey,
 		apiVersion: apiVersion,
 		httpClient: httpClient,
+		typed:      newTypedClient(strings.TrimSuffix(baseURL, "/"), apiKey, apiVersion, httpClient),
 	}
 }
 
@@ -171,6 +175,10 @@ func (c *APIClient) requestJSON(
 	headers map[string]string,
 	out any,
 ) error {
+	if handled, err := c.tryTypedRequest(ctx, method, path, contentType, payload, headers, out); handled {
+		return err
+	}
+
 	var bodyBytes []byte
 	var err error
 

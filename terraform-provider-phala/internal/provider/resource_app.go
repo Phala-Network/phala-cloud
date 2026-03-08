@@ -375,7 +375,7 @@ func (r *appResource) Create(ctx context.Context, req resource.CreateRequest, re
 		return
 	}
 
-	appID := ensureAppPrefix(firstNonEmptyString(createResp.AppID, provisionResp.AppID))
+	appID := ensureAppPrefix(nonEmpty(createResp.AppID, provisionResp.AppID))
 	if strings.TrimSpace(appID) == "" {
 		resp.Diagnostics.AddError("Invalid create response", "Missing app_id in create/provision response.")
 		return
@@ -934,7 +934,7 @@ func (r *appResource) populateState(
 		state.CVMIDs = emptyIDs
 	}
 
-	appID := ensureAppPrefix(firstNonEmptyString(app.AppID, stringFromRawJSON(app.ID), state.ID.ValueString()))
+	appID := ensureAppPrefix(nonEmpty(app.AppID, stringFromRawJSON(app.ID), state.ID.ValueString()))
 	if appID != "" {
 		state.ID = types.StringValue(appID)
 		state.AppID = types.StringValue(appID)
