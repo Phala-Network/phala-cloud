@@ -6,7 +6,7 @@ This provider is designed to feel familiar to DigitalOcean users:
 - `phala_cvm` is the Phala equivalent of a droplet-style compute resource.
 - `phala_cvm_power` manages start/stop state, similar to action-oriented power controls.
 - `phala_ssh_key` mirrors SSH key lifecycle patterns.
-- `phala_account`, `phala_workspace`, `phala_sizes`, `phala_regions`, and `phala_images` provide account/workspace/catalog discovery data sources.
+- `phala_account`, `phala_workspace`, `phala_sizes`, `phala_regions`, `phala_images`, `phala_nodes`, and `phala_attestation` provide account/workspace/catalog/placement/attestation data sources.
 
 ## Maturity and Release Status
 
@@ -52,9 +52,17 @@ data "phala_images" "all" {
   # region = "us-east"
 }
 
+data "phala_nodes" "west" {
+  region = "us-west"
+}
+
 data "phala_account" "current" {}
 
 data "phala_workspace" "current" {}
+
+data "phala_attestation" "web" {
+  cvm_id = "app_abc123"
+}
 ```
 
 ## SSH Key + CVM Example
@@ -206,7 +214,10 @@ Notes:
 ### `phala_cvm`
 
 - Create flow follows Phala's two-step API: `POST /cvms/provision` then `POST /cvms`.
-- Current MVP supports `kms = PHALA` create flow.
+- Create-time identity/placement fields:
+  - `kms` (currently `phala` only; `ethereum`/`base` planned)
+  - `custom_app_id` + `nonce` (deterministic identity flow for PHALA KMS)
+  - `node_id` (maps to provision `teepod_id`; discover via `data.phala_nodes`)
 - In-place updates: size, disk, OS image (`PATCH /cvms/{id}/os-image`), docker compose, pre-launch script, encrypted env (`PATCH /cvms/{id}/envs`).
 - Compose-file runtime settings are exposed as first-class attributes:
   - `public_logs`
@@ -234,6 +245,14 @@ Notes:
   - `encrypted_env` (sensitive, pass-through hex blob)
   - `env_keys` (allowed env keys)
 - Force-new fields: `name`, `region`, `listed`, `ssh_authorized_keys`, `storage_fs`.
+
+### `phala_attestation` (data source)
+
+- Read-only attestation fetch by `cvm_id`.
+- Returns:
+  - `is_online`, `is_public`, `error`, `compose_file`
+  - `tcb_info_json`, `app_certificates_json`
+  - `raw_json` (full response)
 
 ### `phala_cvm_power`
 

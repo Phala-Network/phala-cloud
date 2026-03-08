@@ -10,6 +10,8 @@ All notable changes to `terraform-provider-phala` are documented in this file.
   - shared compose/env at app scope
   - replica count management via `replicas`
   - app-level outputs: `app_id`, `cvm_ids`, `endpoint`
+- New `phala_nodes` data source for node placement discovery (`node_id`) with optional filters.
+- New `phala_attestation` data source (read-only attestation fetch by `cvm_id`).
 - Release packaging script for cross-platform provider artifacts.
 - CI workflow for provider tests/build checks.
 - Manual GitHub release workflow for versioned artifacts.
@@ -20,6 +22,10 @@ All notable changes to `terraform-provider-phala` are documented in this file.
 - `image` is now updatable in-place for:
   - `phala_cvm` via `PATCH /cvms/{id}/os-image`
   - `phala_app` by updating OS image across app replicas
+- Added create-time identity/placement inputs for `phala_cvm` and `phala_app`:
+  - `kms` (currently `phala` only; `ethereum`/`base` planned)
+  - `custom_app_id` + `nonce` (PHALA deterministic identity flow)
+  - `node_id` (maps to provision `teepod_id`)
 - Added compose-file runtime settings to `phala_cvm` and `phala_app`:
   - `public_logs`, `public_sysinfo`, `public_tcbinfo`, `gateway_enabled`, `secure_time`
   - updates use compose provision/apply flow and trigger restart/redeploy

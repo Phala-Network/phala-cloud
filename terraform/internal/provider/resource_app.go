@@ -17,8 +17,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
@@ -37,6 +39,10 @@ type appResourceModel struct {
 	Region             types.String `tfsdk:"region"`
 	Size               types.String `tfsdk:"size"`
 	Image              types.String `tfsdk:"image"`
+	KMS                types.String `tfsdk:"kms"`
+	NodeID             types.Int64  `tfsdk:"node_id"`
+	CustomAppID        types.String `tfsdk:"custom_app_id"`
+	Nonce              types.Int64  `tfsdk:"nonce"`
 	PublicLogs         types.Bool   `tfsdk:"public_logs"`
 	PublicSysinfo      types.Bool   `tfsdk:"public_sysinfo"`
 	PublicTCBInfo      types.Bool   `tfsdk:"public_tcbinfo"`
@@ -119,6 +125,40 @@ func (r *appResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "OS image name.",
+			},
+			"kms": schema.StringAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  stringdefault.StaticString("phala"),
+				MarkdownDescription: "KMS type for app provisioning (`phala`, `ethereum`, `base`). " +
+					"Changing this forces replacement.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"node_id": schema.Int64Attribute{
+				Optional: true,
+				MarkdownDescription: "Optional target node (teepod) ID for initial app placement. " +
+					"Changing this forces replacement.",
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.RequiresReplace(),
+				},
+			},
+			"custom_app_id": schema.StringAttribute{
+				Optional: true,
+				MarkdownDescription: "Optional custom app_id for deterministic identity flow. " +
+					"Changing this forces replacement.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"nonce": schema.Int64Attribute{
+				Optional: true,
+				MarkdownDescription: "Optional nonce paired with custom_app_id for PHALA KMS deterministic app_id flow. " +
+					"Changing this forces replacement.",
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.RequiresReplace(),
+				},
 			},
 			"public_logs": schema.BoolAttribute{
 				Optional:            true,
@@ -275,6 +315,17 @@ func (r *appResource) Create(ctx context.Context, req resource.CreateRequest, re
 		return
 	}
 
+	kmsType, customAppID, hasCustomAppID, nonce, hasNonce, diags := resolveProvisionIdentity(plan.KMS, plan.CustomAppID, plan.Nonce)
+	resp.Diagnostics.Append(diags...)
+	nodeID, hasNodeID, diags := knownOptionalInt64(plan.NodeID, "node_id")
+	resp.Diagnostics.Append(diags...)
+	if hasNodeID && nodeID <= 0 {
+		resp.Diagnostics.AddError("Invalid node_id", "node_id must be greater than 0.")
+	}
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	replicas, diags := desiredReplicaCount(plan.Replicas)
 	resp.Diagnostics.Append(diags...)
 	sshAuthorizedKeys, diags := listValueAsStrings(ctx, plan.SSHAuthorizedKeys, "ssh_authorized_keys")
@@ -354,14 +405,23 @@ func (r *appResource) Create(ctx context.Context, req resource.CreateRequest, re
 		"name":          plan.Name.ValueString(),
 		"instance_type": plan.Size.ValueString(),
 		"compose_file":  composeFile,
-		"kms":           "PHALA",
+		"kms":           kmsPayloadValue(kmsType),
 		"listed":        plan.Listed.ValueBool(),
 	}
 	if !plan.Region.IsNull() && !plan.Region.IsUnknown() {
 		provisionReq["region"] = plan.Region.ValueString()
 	}
+	if hasNodeID {
+		provisionReq["teepod_id"] = nodeID
+	}
 	if !plan.Image.IsNull() && !plan.Image.IsUnknown() {
 		provisionReq["image"] = plan.Image.ValueString()
+	}
+	if hasCustomAppID {
+		provisionReq["app_id"] = customAppID
+	}
+	if hasNonce {
+		provisionReq["nonce"] = nonce
 	}
 	if !plan.DiskSize.IsNull() && !plan.DiskSize.IsUnknown() {
 		provisionReq["disk_size"] = plan.DiskSize.ValueInt64()

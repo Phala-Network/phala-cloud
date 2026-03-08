@@ -130,6 +130,8 @@ func (p *phalaProvider) DataSources(_ context.Context) []func() datasource.DataS
 		NewSizesDataSource,
 		NewRegionsDataSource,
 		NewImagesDataSource,
+		NewNodesDataSource,
+		NewAttestationDataSource,
 	}
 }
 

@@ -23,8 +23,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
@@ -42,6 +44,10 @@ type cvmResourceModel struct {
 	Region             types.String `tfsdk:"region"`
 	Size               types.String `tfsdk:"size"`
 	Image              types.String `tfsdk:"image"`
+	KMS                types.String `tfsdk:"kms"`
+	NodeID             types.Int64  `tfsdk:"node_id"`
+	CustomAppID        types.String `tfsdk:"custom_app_id"`
+	Nonce              types.Int64  `tfsdk:"nonce"`
 	PublicLogs         types.Bool   `tfsdk:"public_logs"`
 	PublicSysinfo      types.Bool   `tfsdk:"public_sysinfo"`
 	PublicTCBInfo      types.Bool   `tfsdk:"public_tcbinfo"`
@@ -159,6 +165,40 @@ func (r *cvmResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "OS image name.",
+			},
+			"kms": schema.StringAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  stringdefault.StaticString("phala"),
+				MarkdownDescription: "KMS type for app provisioning (`phala`, `ethereum`, `base`). " +
+					"Changing this forces replacement.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"node_id": schema.Int64Attribute{
+				Optional: true,
+				MarkdownDescription: "Optional target node (teepod) ID for initial placement. " +
+					"Changing this forces replacement.",
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.RequiresReplace(),
+				},
+			},
+			"custom_app_id": schema.StringAttribute{
+				Optional: true,
+				MarkdownDescription: "Optional custom app_id for deterministic identity flow. " +
+					"Changing this forces replacement.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"nonce": schema.Int64Attribute{
+				Optional: true,
+				MarkdownDescription: "Optional nonce paired with custom_app_id for PHALA KMS deterministic app_id flow. " +
+					"Changing this forces replacement.",
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.RequiresReplace(),
+				},
 			},
 			"public_logs": schema.BoolAttribute{
 				Optional:            true,
@@ -320,6 +360,17 @@ func (r *cvmResource) Create(ctx context.Context, req resource.CreateRequest, re
 		return
 	}
 
+	kmsType, customAppID, hasCustomAppID, nonce, hasNonce, diags := resolveProvisionIdentity(plan.KMS, plan.CustomAppID, plan.Nonce)
+	resp.Diagnostics.Append(diags...)
+	nodeID, hasNodeID, diags := knownOptionalInt64(plan.NodeID, "node_id")
+	resp.Diagnostics.Append(diags...)
+	if hasNodeID && nodeID <= 0 {
+		resp.Diagnostics.AddError("Invalid node_id", "node_id must be greater than 0.")
+	}
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	sshAuthorizedKeys, diags := listValueAsStrings(ctx, plan.SSHAuthorizedKeys, "ssh_authorized_keys")
 	resp.Diagnostics.Append(diags...)
 	envVars, diags := mapValueAsStrings(ctx, plan.Env, "env")
@@ -396,14 +447,23 @@ func (r *cvmResource) Create(ctx context.Context, req resource.CreateRequest, re
 		"name":          plan.Name.ValueString(),
 		"instance_type": plan.Size.ValueString(),
 		"compose_file":  composeFile,
-		"kms":           "PHALA",
+		"kms":           kmsPayloadValue(kmsType),
 		"listed":        plan.Listed.ValueBool(),
 	}
 	if !plan.Region.IsNull() && !plan.Region.IsUnknown() {
 		provisionReq["region"] = plan.Region.ValueString()
 	}
+	if hasNodeID {
+		provisionReq["teepod_id"] = nodeID
+	}
 	if !plan.Image.IsNull() && !plan.Image.IsUnknown() {
 		provisionReq["image"] = plan.Image.ValueString()
+	}
+	if hasCustomAppID {
+		provisionReq["app_id"] = customAppID
+	}
+	if hasNonce {
+		provisionReq["nonce"] = nonce
 	}
 	if !plan.DiskSize.IsNull() && !plan.DiskSize.IsUnknown() {
 		provisionReq["disk_size"] = plan.DiskSize.ValueInt64()
@@ -1215,6 +1275,93 @@ func knownOptionalString(value types.String, fieldName string) (string, bool, di
 		return "", false, diags
 	}
 	return value.ValueString(), true, diags
+}
+
+func knownOptionalInt64(value types.Int64, fieldName string) (int64, bool, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	if value.IsNull() {
+		return 0, false, diags
+	}
+	if value.IsUnknown() {
+		diags.AddError("Unknown integer value", fmt.Sprintf("%s must be known at apply time.", fieldName))
+		return 0, false, diags
+	}
+	return value.ValueInt64(), true, diags
+}
+
+func resolveProvisionIdentity(
+	kmsValue types.String,
+	customAppIDValue types.String,
+	nonceValue types.Int64,
+) (string, string, bool, int64, bool, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	kmsRaw, hasKMS, kmsDiags := knownOptionalString(kmsValue, "kms")
+	diags.Append(kmsDiags...)
+	kmsType := "phala"
+	if hasKMS {
+		normalized, err := normalizeKMSType(kmsRaw)
+		if err != nil {
+			diags.AddError("Invalid kms", err.Error())
+		} else {
+			kmsType = normalized
+		}
+	}
+
+	customAppID, hasCustomAppID, customDiags := knownOptionalString(customAppIDValue, "custom_app_id")
+	diags.Append(customDiags...)
+	customAppID = strings.TrimSpace(customAppID)
+	if hasCustomAppID && customAppID == "" {
+		diags.AddError("Invalid custom_app_id", "custom_app_id cannot be empty.")
+	}
+
+	nonce, hasNonce, nonceDiags := knownOptionalInt64(nonceValue, "nonce")
+	diags.Append(nonceDiags...)
+	if hasNonce && nonce < 0 {
+		diags.AddError("Invalid nonce", "nonce must be greater than or equal to 0.")
+	}
+
+	if hasNonce && !hasCustomAppID {
+		diags.AddError("Invalid nonce configuration", "nonce requires custom_app_id to be set.")
+	}
+	if hasCustomAppID && kmsType == "phala" && !hasNonce {
+		diags.AddError("Invalid custom_app_id configuration", "nonce is required when custom_app_id is set with kms = phala.")
+	}
+	if hasNonce && kmsType != "phala" {
+		diags.AddError("Invalid nonce configuration", "nonce is only supported when kms = phala.")
+	}
+	if kmsType != "phala" {
+		diags.AddError(
+			"Unsupported kms flow",
+			"Only kms = phala is currently supported by this provider. On-chain kms flows (ethereum/base) are planned but not implemented yet.",
+		)
+	}
+
+	return kmsType, customAppID, hasCustomAppID, nonce, hasNonce, diags
+}
+
+func normalizeKMSType(raw string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "phala":
+		return "phala", nil
+	case "ethereum", "eth":
+		return "ethereum", nil
+	case "base":
+		return "base", nil
+	default:
+		return "", fmt.Errorf(`kms must be one of "phala", "ethereum", "eth", or "base"`)
+	}
+}
+
+func kmsPayloadValue(kms string) string {
+	switch kms {
+	case "ethereum":
+		return "ETHEREUM"
+	case "base":
+		return "BASE"
+	default:
+		return "PHALA"
+	}
 }
 
 func validateEncryptedEnvConfig(
