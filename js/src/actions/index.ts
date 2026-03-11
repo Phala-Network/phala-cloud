@@ -487,6 +487,15 @@ export {
 } from "./apps/get_app_cvms";
 
 export {
+  getAppDeviceAllowlist,
+  safeGetAppDeviceAllowlist,
+  GetAppDeviceAllowlistRequestSchema,
+  type GetAppDeviceAllowlistRequest,
+  type DeviceAllowlistResponse,
+  type DeviceAllowlistItem,
+} from "./apps/get_app_device_allowlist";
+
+export {
   getAppRevisions,
   safeGetAppRevisions,
   GetAppRevisionsRequestSchema,
