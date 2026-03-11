@@ -40,6 +40,10 @@ async function runCvmsDeviceAllowlistCommand(
 		}
 
 		const appId = cvm.app_id;
+		if (!appId) {
+			context.fail("CVM has no app_id assigned yet.");
+			return 1;
+		}
 
 		const spinner2 = logger.startSpinner(
 			`Fetching device allowlist for app_${appId}...`,
