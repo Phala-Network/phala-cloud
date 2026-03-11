@@ -57,6 +57,56 @@ export {
 } from "./blockchains/add_compose_hash";
 
 export {
+  addDevice,
+  safeAddDevice,
+  type AddDeviceParameters,
+  type AddDeviceReturnType,
+  AddDeviceSchema,
+  type AddDevice,
+  type AddDeviceRequest,
+  type SafeAddDeviceResult,
+} from "./blockchains/add_device";
+
+export {
+  removeDevice,
+  safeRemoveDevice,
+  type RemoveDeviceParameters,
+  type RemoveDeviceReturnType,
+  RemoveDeviceSchema,
+  type RemoveDevice,
+  type RemoveDeviceRequest,
+  type SafeRemoveDeviceResult,
+} from "./blockchains/remove_device";
+
+export {
+  setAllowAnyDevice,
+  safeSetAllowAnyDevice,
+  type SetAllowAnyDeviceParameters,
+  type SetAllowAnyDeviceReturnType,
+  SetAllowAnyDeviceSchema,
+  type SetAllowAnyDevice,
+  type SetAllowAnyDeviceRequest,
+  type SafeSetAllowAnyDeviceResult,
+} from "./blockchains/set_allow_any_device";
+
+export {
+  getAllowedDevices,
+  safeGetAllowedDevices,
+  GetAllowedDevicesSchema,
+  type GetAllowedDevices,
+  type GetAllowedDevicesRequest,
+  type SafeGetAllowedDevicesResult,
+} from "./blockchains/get_allowed_devices";
+
+export {
+  checkDeviceAllowed,
+  safeCheckDeviceAllowed,
+  type CheckDeviceAllowedRequest,
+} from "./blockchains/check_device_allowed";
+
+export { dstackAppAbi } from "./blockchains/abi/dstack_app";
+
+export {
   getCvmComposeFile,
   safeGetCvmComposeFile,
   type GetCvmComposeFileResult,

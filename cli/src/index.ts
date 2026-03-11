@@ -88,6 +88,12 @@ registry.registerGroup(cvmsCommands.group);
 for (const command of cvmsCommands.commands) {
 	registry.registerCommand(command);
 }
+for (const subgroup of cvmsCommands.subgroups ?? []) {
+	registry.registerGroup(subgroup.group);
+	for (const command of subgroup.commands) {
+		registry.registerCommand(command);
+	}
+}
 
 registry.registerGroup(sshKeysCommands.group);
 for (const command of sshKeysCommands.commands) {

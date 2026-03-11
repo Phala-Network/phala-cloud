@@ -3,6 +3,7 @@ import { cvmsAttestationCommand } from "./attestation";
 import { cvmsCreateCommand } from "./create";
 import { cvmsDeleteCommand } from "./delete";
 import { cvmsDeviceAllowlistCommand } from "./device-allowlist";
+import { cvmsDevicesCommands } from "./devices";
 import { cvmsGetCommand } from "./get";
 import { cvmsListCommand } from "./list";
 import { cvmsListNodesCommand } from "./list-node";
@@ -34,6 +35,7 @@ export const cvmsCommands = {
 		cvmsStopCommand,
 		cvmsUpgradeCommand,
 	],
+	subgroups: [cvmsDevicesCommands],
 };
 
 export default cvmsCommands;
