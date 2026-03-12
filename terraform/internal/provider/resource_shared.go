@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -420,6 +421,18 @@ func parseEnvConfig(
 	}
 	if diags.HasError() {
 		return nil, diags
+	}
+
+	if hasManualEncrypted {
+		trimmed := strings.TrimSpace(manualEncrypted)
+		if trimmed == "" {
+			diags.AddError("Invalid encrypted_env", "encrypted_env cannot be empty when set.")
+			return nil, diags
+		}
+		if _, err := hex.DecodeString(trimmed); err != nil {
+			diags.AddError("Invalid encrypted_env", fmt.Sprintf("encrypted_env must be a valid hex string: %v", err))
+			return nil, diags
+		}
 	}
 
 	cfg := &envConfig{
