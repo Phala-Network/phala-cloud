@@ -70,13 +70,13 @@ variable "cvm_power_state" {
 variable "size" {
   type        = string
   default     = ""
-  description = "Optional explicit size slug. Defaults to first from phala_sizes."
+  description = "Optional explicit size slug. Defaults to tdx.small for a stable smoke target."
 }
 
 variable "region" {
   type        = string
   default     = ""
-  description = "Optional explicit region slug. Defaults to first from phala_regions."
+  description = "Optional explicit region slug. Empty lets the backend auto-place the workload."
 }
 
 variable "image" {

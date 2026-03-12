@@ -508,15 +508,34 @@ func encryptEnvMap(env map[string]string, publicKeyBase64 string) (string, error
 		return "", fmt.Errorf("generate nonce: %w", err)
 	}
 
-	plaintext, err := json.Marshal(map[string]map[string]string{
-		"env": env,
+	type envVar struct {
+		Key   string `json:"key"`
+		Value string `json:"value"`
+	}
+
+	keys := make([]string, 0, len(env))
+	for key := range env {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	envVars := make([]envVar, 0, len(keys))
+	for _, key := range keys {
+		envVars = append(envVars, envVar{
+			Key:   key,
+			Value: env[key],
+		})
+	}
+
+	plaintext, err := json.Marshal(map[string][]envVar{
+		"env": envVars,
 	})
 	if err != nil {
 		return "", fmt.Errorf("marshal env payload: %w", err)
 	}
 
 	ephemeralPub := ephemeralPriv.PublicKey().Bytes()
-	ciphertext := aead.Seal(nil, nonce, plaintext, ephemeralPub)
+	ciphertext := aead.Seal(nil, nonce, plaintext, nil)
 
 	out := make([]byte, 0, len(ephemeralPub)+len(nonce)+len(ciphertext))
 	out = append(out, ephemeralPub...)
@@ -531,6 +550,8 @@ func decodeEnvPublicKey(v string) ([]byte, error) {
 	if trimmed == "" {
 		return nil, fmt.Errorf("empty value")
 	}
+	trimmed = strings.TrimPrefix(trimmed, "0x")
+	trimmed = strings.TrimPrefix(trimmed, "0X")
 
 	// Newer API versions return a hex-encoded X25519 public key.
 	if out, err := hex.DecodeString(trimmed); err == nil && len(out) == 32 {

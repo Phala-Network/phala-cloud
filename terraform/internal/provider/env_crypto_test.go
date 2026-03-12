@@ -60,13 +60,16 @@ func TestEncryptEnvMapRoundTrip(t *testing.T) {
 		t.Fatalf("create AES-GCM: %v", err)
 	}
 
-	plaintext, err := aead.Open(nil, nonce, ciphertext, ephemeralPubBytes)
+	plaintext, err := aead.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
 		t.Fatalf("decrypt payload: %v", err)
 	}
 
 	var payload struct {
-		Env map[string]string `json:"env"`
+		Env []struct {
+			Key   string `json:"key"`
+			Value string `json:"value"`
+		} `json:"env"`
 	}
 	if err := json.Unmarshal(plaintext, &payload); err != nil {
 		t.Fatalf("unmarshal decrypted JSON: %v", err)
@@ -75,8 +78,12 @@ func TestEncryptEnvMapRoundTrip(t *testing.T) {
 	if len(payload.Env) != len(env) {
 		t.Fatalf("unexpected env count: got %d want %d", len(payload.Env), len(env))
 	}
+	gotEnv := make(map[string]string, len(payload.Env))
+	for _, item := range payload.Env {
+		gotEnv[item.Key] = item.Value
+	}
 	for k, want := range env {
-		got, ok := payload.Env[k]
+		got, ok := gotEnv[k]
 		if !ok {
 			t.Fatalf("missing env key %q", k)
 		}
@@ -110,9 +117,17 @@ func TestEncryptEnvMapAcceptsHexPublicKey(t *testing.T) {
 		t.Fatalf("generate receiver key: %v", err)
 	}
 
-	pubHex := hex.EncodeToString(receiverPriv.PublicKey().Bytes())
-	_, err = encryptEnvMap(map[string]string{"A": "1"}, pubHex)
-	if err != nil {
-		t.Fatalf("expected hex public key to work, got error: %v", err)
-	}
+	t.Run("plain hex", func(t *testing.T) {
+		pubHex := hex.EncodeToString(receiverPriv.PublicKey().Bytes())
+		if _, err := encryptEnvMap(map[string]string{"A": "1"}, pubHex); err != nil {
+			t.Fatalf("expected hex public key to work, got error: %v", err)
+		}
+	})
+
+	t.Run("0x-prefixed hex", func(t *testing.T) {
+		pubHex := "0x" + hex.EncodeToString(receiverPriv.PublicKey().Bytes())
+		if _, err := encryptEnvMap(map[string]string{"A": "1"}, pubHex); err != nil {
+			t.Fatalf("expected 0x-prefixed hex public key to work, got error: %v", err)
+		}
+	})
 }

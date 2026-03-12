@@ -16,6 +16,6 @@ consumer_app_env = {}
 cvm_power_state  = ""
 wait_for_ready   = true
 wait_timeout_seconds = 900
-size             = ""
+size             = "tdx.small"
 region           = ""
 image            = ""

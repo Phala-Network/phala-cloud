@@ -61,6 +61,19 @@ func (c *requestCapture) mustFind(t *testing.T, method, path string) recordedReq
 	return recordedRequest{}
 }
 
+func (c *requestCapture) count(method, path string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	count := 0
+	for _, entry := range c.entries {
+		if entry.Method == method && entry.Path == path {
+			count++
+		}
+	}
+	return count
+}
+
 func writeJSON(t *testing.T, w http.ResponseWriter, status int, body string) {
 	t.Helper()
 	w.Header().Set("Content-Type", "application/json")
@@ -368,5 +381,102 @@ func TestAPIClientContract_TypedErrorReturnsAPIError(t *testing.T) {
 	}
 	if !strings.Contains(apiErr.Message, "not found") {
 		t.Fatalf("unexpected API error message: %q", apiErr.Message)
+	}
+}
+
+func TestAPIClientContract_RetriesOnlyReplaySafeWrites(t *testing.T) {
+	capture := &requestCapture{}
+	attempts := map[string]int{}
+	var attemptsMu sync.Mutex
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		capture.add(r, body)
+
+		key := r.Method + " " + r.URL.Path
+		attemptsMu.Lock()
+		attempts[key]++
+		attempt := attempts[key]
+		attemptsMu.Unlock()
+
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/user/ssh-keys":
+			if attempt == 1 {
+				writeJSON(t, w, http.StatusServiceUnavailable, `{"message":"backend busy"}`)
+				return
+			}
+			writeJSON(t, w, http.StatusOK, `{"id":"sshkey_1"}`)
+			return
+
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/cvms/cvm123/start":
+			if attempt == 1 {
+				writeJSON(t, w, http.StatusServiceUnavailable, `{"message":"try again"}`)
+				return
+			}
+			writeJSON(t, w, http.StatusAccepted, `{}`)
+			return
+
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/cvms/provision":
+			if attempt == 1 {
+				writeJSON(t, w, http.StatusServiceUnavailable, `{"message":"try again"}`)
+				return
+			}
+			writeJSON(t, w, http.StatusOK, `{"app_id":"app_test","compose_hash":"compose_hash_test"}`)
+			return
+
+		case r.Method == http.MethodPatch && r.URL.Path == "/api/v1/cvms/cvm123/resources":
+			if attempt == 1 {
+				writeJSON(t, w, http.StatusServiceUnavailable, `{"message":"try again"}`)
+				return
+			}
+			writeJSON(t, w, http.StatusAccepted, `{}`)
+			return
+
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, "not found")
+		}
+	}))
+	defer srv.Close()
+
+	client := NewAPIClient(srv.URL+"/api/v1", "phat_test_key", "2026-01-21", 5*time.Second)
+	ctx := context.Background()
+
+	var sshResp map[string]any
+	err := client.PostJSON(ctx, "/user/ssh-keys", map[string]any{
+		"name":       "laptop",
+		"public_key": "ssh-ed25519 AAA",
+	}, &sshResp)
+	if err == nil {
+		t.Fatal("expected create POST not to be retried after 503")
+	}
+	apiErr, ok := err.(*APIError)
+	if !ok || apiErr.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 APIError, got %T: %v", err, err)
+	}
+	if got := capture.count(http.MethodPost, "/api/v1/user/ssh-keys"); got != 1 {
+		t.Fatalf("unexpected retry count for create POST: got %d want 1", got)
+	}
+
+	if err := client.PostJSON(ctx, "/cvms/cvm123/start", map[string]any{"polling": "v1"}, nil); err != nil {
+		t.Fatalf("expected start POST to be retried safely: %v", err)
+	}
+	if got := capture.count(http.MethodPost, "/api/v1/cvms/cvm123/start"); got != 2 {
+		t.Fatalf("unexpected retry count for start POST: got %d want 2", got)
+	}
+
+	var provisionResp map[string]any
+	if err := client.PostJSON(ctx, "/cvms/provision", map[string]any{"name": "demo"}, &provisionResp); err != nil {
+		t.Fatalf("expected /cvms/provision POST to be retried safely: %v", err)
+	}
+	if got := capture.count(http.MethodPost, "/api/v1/cvms/provision"); got != 2 {
+		t.Fatalf("unexpected retry count for /cvms/provision POST: got %d want 2", got)
+	}
+
+	if err := client.PatchJSON(ctx, "/cvms/cvm123/resources", map[string]any{"allow_restart": true}, nil); err != nil {
+		t.Fatalf("expected PATCH to be retried safely: %v", err)
+	}
+	if got := capture.count(http.MethodPatch, "/api/v1/cvms/cvm123/resources"); got != 2 {
+		t.Fatalf("unexpected retry count for PATCH: got %d want 2", got)
 	}
 }

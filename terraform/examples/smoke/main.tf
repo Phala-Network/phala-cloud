@@ -23,8 +23,7 @@ data "phala_regions" "all" {}
 data "phala_images" "all" {}
 
 locals {
-  selected_size   = var.size != "" ? var.size : data.phala_sizes.all.sizes[0].slug
-  selected_region = var.region != "" ? var.region : data.phala_regions.all.regions[0].slug
+  selected_size = var.size != "" ? var.size : "tdx.small"
 }
 
 resource "phala_ssh_key" "smoke" {
@@ -39,7 +38,7 @@ resource "phala_app" "smoke" {
 
   name                = var.app_name
   size                = local.selected_size
-  region              = local.selected_region
+  region              = var.region != "" ? var.region : null
   image               = var.image != "" ? var.image : null
   ssh_authorized_keys = var.cvm_ssh_authorized_keys
   env                 = var.app_env
@@ -55,7 +54,7 @@ resource "phala_app" "consumer" {
 
   name                = var.consumer_app_name
   size                = local.selected_size
-  region              = local.selected_region
+  region              = var.region != "" ? var.region : null
   image               = var.image != "" ? var.image : null
   ssh_authorized_keys = var.cvm_ssh_authorized_keys
   env = merge(

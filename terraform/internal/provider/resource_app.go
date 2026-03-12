@@ -72,6 +72,12 @@ type appAPIResponse struct {
 	CVMCount   *int64           `json:"cvm_count"`
 }
 
+type appFetchResult struct {
+	App                *appAPIResponse
+	CVMs               []cvmAPIResponse
+	ReplicaListWarning error
+}
+
 func NewAppResource() resource.Resource {
 	return &appResource{}
 }
@@ -257,12 +263,13 @@ func (r *appResource) Create(ctx context.Context, req resource.CreateRequest, re
 	plan.ID = types.StringValue(appID)
 	plan.AppID = types.StringValue(appID)
 
-	app, cvms, err := r.fetchAppAndCVMs(ctx, appID)
+	fetched, err := r.fetchAppAndCVMs(ctx, appID)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to read app after create", err.Error())
 		return
 	}
-	resp.Diagnostics.Append(r.populateState(ctx, &plan, app, cvms)...)
+	appendReplicaListWarning(&resp.Diagnostics, fetched.ReplicaListWarning)
+	resp.Diagnostics.Append(r.populateState(ctx, &plan, fetched.App, fetched.CVMs)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -283,7 +290,7 @@ func (r *appResource) Read(ctx context.Context, req resource.ReadRequest, resp *
 		return
 	}
 
-	app, cvms, err := r.fetchAppAndCVMs(ctx, appID)
+	fetched, err := r.fetchAppAndCVMs(ctx, appID)
 	if err != nil {
 		if isNotFound(err) {
 			resp.State.RemoveResource(ctx)
@@ -292,8 +299,8 @@ func (r *appResource) Read(ctx context.Context, req resource.ReadRequest, resp *
 		resp.Diagnostics.AddError("Failed to read app", err.Error())
 		return
 	}
-
-	resp.Diagnostics.Append(r.populateState(ctx, &state, app, cvms)...)
+	appendReplicaListWarning(&resp.Diagnostics, fetched.ReplicaListWarning)
+	resp.Diagnostics.Append(r.populateState(ctx, &state, fetched.App, fetched.CVMs)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -340,7 +347,7 @@ func (r *appResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		return
 	}
 
-	_, cvms, err := r.fetchAppAndCVMs(ctx, appID)
+	cvms, err := r.fetchAppCVMs(ctx, appID)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to fetch current app replicas", err.Error())
 		return
@@ -453,12 +460,13 @@ func (r *appResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		}
 	}
 
-	app, cvms, err := r.fetchAppAndCVMs(ctx, appID)
+	fetched, err := r.fetchAppAndCVMs(ctx, appID)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to read app after update", err.Error())
 		return
 	}
-	resp.Diagnostics.Append(r.populateState(ctx, &plan, app, cvms)...)
+	appendReplicaListWarning(&resp.Diagnostics, fetched.ReplicaListWarning)
+	resp.Diagnostics.Append(r.populateState(ctx, &plan, fetched.App, fetched.CVMs)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -546,22 +554,33 @@ func (r *appResource) ImportState(
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func (r *appResource) fetchAppAndCVMs(ctx context.Context, appID string) (*appAPIResponse, []cvmAPIResponse, error) {
+func (r *appResource) fetchAppAndCVMs(ctx context.Context, appID string) (*appFetchResult, error) {
 	app := &appAPIResponse{}
 	if err := r.client.GetJSON(ctx, appPath(appID), app); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if strings.TrimSpace(app.AppID) == "" {
 		app.AppID = ensureAppPrefix(appID)
 	}
 	cvms := normalizeCVMInfos(app.CVMs)
+	var replicaListWarning error
 	if len(cvms) == 0 {
 		listed, err := r.fetchAppCVMs(ctx, app.AppID)
-		if err == nil {
+		if err != nil {
+			if isRetryable(err) {
+				replicaListWarning = err
+			} else {
+				return nil, err
+			}
+		} else {
 			cvms = listed
 		}
 	}
-	return app, cvms, nil
+	return &appFetchResult{
+		App:                app,
+		CVMs:               cvms,
+		ReplicaListWarning: replicaListWarning,
+	}, nil
 }
 
 func (r *appResource) fetchAppCVMs(ctx context.Context, appID string) ([]cvmAPIResponse, error) {
@@ -740,6 +759,10 @@ func (r *appResource) waitForAppReady(ctx context.Context, appID string, replica
 			continue
 		}
 
+		if failed, summary := stoppedReplicaFailure(cvms); failed {
+			return fmt.Errorf("app %q failed to become ready: %s", appID, summary)
+		}
+
 		allRunning := true
 		for _, cvm := range cvms {
 			if !strings.EqualFold(strings.TrimSpace(cvm.Status), "running") || cvm.inProgress() {
@@ -760,6 +783,44 @@ func (r *appResource) waitForAppReady(ctx context.Context, appID string, replica
 	return fmt.Errorf("timeout after %s waiting for app %q replicas to become running", timeout, appID)
 }
 
+func stoppedReplicaFailure(cvms []cvmAPIResponse) (bool, string) {
+	failures := make([]string, 0, len(cvms))
+	for _, cvm := range cvms {
+		if stablePowerState(cvm.Status) != "stopped" || cvm.inProgress() {
+			continue
+		}
+		failures = append(failures, describeReplicaState(cvm))
+	}
+	if len(failures) == 0 {
+		return false, ""
+	}
+	sort.Strings(failures)
+	return true, "replica entered terminal stopped state: " + strings.Join(failures, ", ")
+}
+
+func describeReplicaState(cvm cvmAPIResponse) string {
+	id := strings.TrimSpace(cvm.VMUUID)
+	if id == "" {
+		id = strings.TrimSpace(cvm.InstanceID)
+	}
+	if id == "" {
+		id = cvm.idString()
+	}
+	if id == "" {
+		id = "<unknown>"
+	}
+
+	status := strings.TrimSpace(cvm.Status)
+	if status == "" {
+		status = "unknown"
+	}
+
+	if cvm.Progress != nil && strings.TrimSpace(cvm.Progress.Target) != "" {
+		return fmt.Sprintf("%s(status=%s,target=%s)", id, status, strings.TrimSpace(cvm.Progress.Target))
+	}
+	return fmt.Sprintf("%s(status=%s)", id, status)
+}
+
 func (r *appResource) populateState(
 	ctx context.Context,
 	state *appResourceModel,
@@ -768,15 +829,17 @@ func (r *appResource) populateState(
 ) diag.Diagnostics {
 	var diags diag.Diagnostics
 
-	// Ensure computed fields are always known after apply/read.
-	state.DiskSize = types.Int64Null()
-	state.Status = types.StringNull()
-	state.Endpoint = types.StringNull()
-	state.PrimaryCVMID = types.StringNull()
-	emptyIDs, listDiags := types.ListValueFrom(ctx, types.StringType, []string{})
-	diags.Append(listDiags...)
-	if !diags.HasError() {
-		state.CVMIDs = emptyIDs
+	if len(cvms) > 0 {
+		// Reset computed replica-derived fields only when we have fresh CVM data.
+		state.DiskSize = types.Int64Null()
+		state.Status = types.StringNull()
+		state.Endpoint = types.StringNull()
+		state.PrimaryCVMID = types.StringNull()
+		emptyIDs, listDiags := types.ListValueFrom(ctx, types.StringType, []string{})
+		diags.Append(listDiags...)
+		if !diags.HasError() {
+			state.CVMIDs = emptyIDs
+		}
 	}
 
 	appID := ensureAppPrefix(nonEmpty(app.AppID, stringFromRawJSON(app.ID), state.ID.ValueString()))
@@ -826,9 +889,14 @@ func (r *appResource) populateState(
 					state.DockerCompose = types.StringValue(normalizeTextBody(compose))
 				}
 			}
-			preLaunchScript, err := r.client.GetText(ctx, cvmPath(primaryID)+"/pre-launch-script")
-			if err == nil && !state.PreLaunchScript.IsNull() && !state.PreLaunchScript.IsUnknown() {
-				state.PreLaunchScript = types.StringValue(normalizeTextBody(preLaunchScript))
+			// The backend injects a default pre-launch script even when the user
+			// did not set pre_launch_script. Keep null/unknown state null so an
+			// optional unmanaged field does not become provider-managed drift.
+			if !state.PreLaunchScript.IsNull() && !state.PreLaunchScript.IsUnknown() {
+				preLaunchScript, err := r.client.GetText(ctx, cvmPath(primaryID)+"/pre-launch-script")
+				if err == nil {
+					state.PreLaunchScript = nullableString(normalizeTextBody(preLaunchScript))
+				}
 			}
 		}
 	}
@@ -838,6 +906,17 @@ func (r *appResource) populateState(
 		if id := selectReplicaIdentifier(cvm); id != "" {
 			replicaIDs = append(replicaIDs, id)
 		}
+	}
+	if len(cvms) == 0 {
+		if state.Replicas.IsNull() || state.Replicas.IsUnknown() || state.Replicas.ValueInt64() <= 0 {
+			state.Replicas = types.Int64Value(0)
+			emptyIDs, listDiags := types.ListValueFrom(ctx, types.StringType, []string{})
+			diags.Append(listDiags...)
+			if !diags.HasError() {
+				state.CVMIDs = emptyIDs
+			}
+		}
+		return diags
 	}
 	sort.Strings(replicaIDs)
 	replicaCount := len(cvms)
@@ -853,6 +932,17 @@ func (r *appResource) populateState(
 	}
 
 	return diags
+}
+
+func appendReplicaListWarning(diags *diag.Diagnostics, err error) {
+	if err == nil {
+		return
+	}
+
+	diags.AddWarning(
+		"App replica details temporarily unavailable",
+		fmt.Sprintf("Using existing replica-derived state because listing app replicas failed: %v", err),
+	)
 }
 
 func desiredReplicaCount(v types.Int64) (int, diag.Diagnostics) {

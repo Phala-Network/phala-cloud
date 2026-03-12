@@ -15,8 +15,7 @@ import (
 )
 
 // Async CVM operations can keep resources locked for several minutes.
-// Keep retrying retryable write errors (409/429/503) long enough to cover
-// typical backend convergence windows.
+// Keep retrying retryable errors only for writes that are safe to replay.
 const maxWriteRetries = 30
 
 type APIClient struct {
@@ -131,7 +130,10 @@ func (c *APIClient) requestWithRetry(
 		}
 
 		apiErr, ok := err.(*APIError)
-		if !ok || !isRetryableStatus(apiErr.StatusCode) || attempt == maxWriteRetries {
+		if !ok ||
+			!isRetryableStatus(apiErr.StatusCode) ||
+			!shouldRetryWrite(method, path) ||
+			attempt == maxWriteRetries {
 			return err
 		}
 
@@ -148,6 +150,31 @@ func (c *APIClient) requestWithRetry(
 	}
 
 	return fmt.Errorf("request failed after retries")
+}
+
+func shouldRetryWrite(method, path string) bool {
+	normalizedPath := normalizePath(path)
+
+	switch method {
+	case http.MethodPatch, http.MethodDelete:
+		return true
+	case http.MethodPost:
+		if normalizedPath == "/cvms/provision" {
+			return true
+		}
+		if _, ok := extractCVMID(normalizedPath, "/start"); ok {
+			return true
+		}
+		if _, ok := extractCVMID(normalizedPath, "/stop"); ok {
+			return true
+		}
+		if _, ok := extractCVMID(normalizedPath, "/compose_file/provision"); ok {
+			return true
+		}
+		return false
+	default:
+		return false
+	}
 }
 
 func isRetryableStatus(status int) bool {
