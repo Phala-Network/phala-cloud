@@ -277,7 +277,7 @@ func (r *cvmPowerResource) waitForPowerState(
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
-				case <-time.After(3 * time.Second):
+				case <-time.After(pollInterval(3 * time.Second)):
 					continue
 				}
 			}
@@ -291,7 +291,7 @@ func (r *cvmPowerResource) waitForPowerState(
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(3 * time.Second):
+		case <-time.After(pollInterval(3 * time.Second)):
 		}
 	}
 

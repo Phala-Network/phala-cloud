@@ -18,36 +18,20 @@ output "workspace_slug" {
   value = data.phala_workspace.current.slug
 }
 
-output "cvm_id" {
-  value = var.create_resources ? phala_cvm.smoke[0].id : null
-}
-
-output "cvm_endpoint" {
-  value = var.create_resources ? phala_cvm.smoke[0].endpoint : null
-}
-
 output "app_id" {
-  value = var.create_app_resources ? phala_app.smoke[0].app_id : null
+  value = var.create_resources ? phala_app.smoke[0].app_id : null
 }
 
 output "app_endpoint" {
-  value = var.create_app_resources ? phala_app.smoke[0].endpoint : null
+  value = var.create_resources ? phala_app.smoke[0].endpoint : null
 }
 
 output "app_cvm_ids" {
-  value = var.create_app_resources ? phala_app.smoke[0].cvm_ids : null
+  value = var.create_resources ? phala_app.smoke[0].cvm_ids : null
 }
 
 output "consumer_app_id" {
-  value = var.create_app_resources && var.create_consumer_app ? phala_app.consumer[0].app_id : null
-}
-
-output "linked_cvm_id" {
-  value = var.create_resources && var.create_linked_cvm ? phala_cvm.linked[0].id : null
-}
-
-output "linked_cvm_endpoint" {
-  value = var.create_resources && var.create_linked_cvm ? phala_cvm.linked[0].endpoint : null
+  value = var.create_resources && var.create_consumer_app ? phala_app.consumer[0].app_id : null
 }
 
 output "ssh_key_id" {

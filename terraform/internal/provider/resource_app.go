@@ -14,13 +14,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
@@ -86,216 +81,43 @@ func (r *appResource) Metadata(_ context.Context, req resource.MetadataRequest, 
 }
 
 func (r *appResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+	attrs := sharedCVMSchemaAttrs()
+	// App-specific overrides and additions.
+	attrs["id"] = schema.StringAttribute{
+		Computed:            true,
+		MarkdownDescription: "Terraform ID (same as app_id).",
+		PlanModifiers: []planmodifier.String{
+			stringplanmodifier.UseStateForUnknown(),
+		},
+	}
+	attrs["app_id"] = schema.StringAttribute{
+		Computed:            true,
+		MarkdownDescription: "Phala app identifier.",
+		PlanModifiers: []planmodifier.String{
+			stringplanmodifier.UseStateForUnknown(),
+		},
+	}
+	attrs["replicas"] = schema.Int64Attribute{
+		Optional:            true,
+		Computed:            true,
+		Default:             int64default.StaticInt64(1),
+		MarkdownDescription: "Desired number of CVMs under this app.",
+	}
+	attrs["primary_cvm_id"] = schema.StringAttribute{
+		Computed:            true,
+		MarkdownDescription: "Primary CVM identifier used for app-level patch operations.",
+		PlanModifiers: []planmodifier.String{
+			stringplanmodifier.UseStateForUnknown(),
+		},
+	}
+	attrs["cvm_ids"] = schema.ListAttribute{
+		Computed:            true,
+		ElementType:         types.StringType,
+		MarkdownDescription: "Identifiers of CVMs currently attached to this app.",
+	}
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages a Phala Cloud App (app_id + shared compose/env + replica count).",
-		Attributes: map[string]schema.Attribute{
-			"id": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Terraform ID (same as app_id).",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"app_id": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Phala app identifier.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"name": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "App name. Force-new.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
-			},
-			"region": schema.StringAttribute{
-				Optional:            true,
-				MarkdownDescription: "Preferred region identifier. Force-new.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
-			},
-			"size": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "Instance type for CVMs under this app.",
-			},
-			"image": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "OS image name.",
-			},
-			"kms": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  stringdefault.StaticString("phala"),
-				MarkdownDescription: "KMS type for app provisioning (`phala`, `ethereum`, `base`). " +
-					"Changing this forces replacement.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
-			},
-			"node_id": schema.Int64Attribute{
-				Optional: true,
-				MarkdownDescription: "Optional target node (teepod) ID for initial app placement. " +
-					"Changing this forces replacement.",
-				PlanModifiers: []planmodifier.Int64{
-					int64planmodifier.RequiresReplace(),
-				},
-			},
-			"custom_app_id": schema.StringAttribute{
-				Optional: true,
-				MarkdownDescription: "Optional custom app_id for deterministic identity flow. " +
-					"Changing this forces replacement.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
-			},
-			"nonce": schema.Int64Attribute{
-				Optional: true,
-				MarkdownDescription: "Optional nonce paired with custom_app_id for PHALA KMS deterministic app_id flow. " +
-					"Changing this forces replacement.",
-				PlanModifiers: []planmodifier.Int64{
-					int64planmodifier.RequiresReplace(),
-				},
-			},
-			"public_logs": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Expose container logs publicly (compose file setting). Changing this triggers compose update/restart.",
-			},
-			"public_sysinfo": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Expose system info publicly (compose file setting). Changing this triggers compose update/restart.",
-			},
-			"public_tcbinfo": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Expose TCB attestation info publicly (compose file setting). Changing this triggers compose update/restart.",
-			},
-			"gateway_enabled": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Enable public gateway routing (compose file setting). Changing this triggers compose update/restart.",
-			},
-			"secure_time": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Enable secure time mode (compose file setting). Changing this triggers compose update/restart.",
-			},
-			"storage_fs": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Storage filesystem for deployment (`zfs` or `ext4`). Immutable after initial deployment.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
-			},
-			"disk_size": schema.Int64Attribute{
-				Optional:            true,
-				Computed:            true,
-				MarkdownDescription: "Disk size in GB.",
-			},
-			"docker_compose": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "Shared app docker compose YAML.",
-			},
-			"pre_launch_script": schema.StringAttribute{
-				Optional:            true,
-				MarkdownDescription: "Optional pre-launch script content.",
-			},
-			"ssh_authorized_keys": schema.ListAttribute{
-				Optional:    true,
-				ElementType: types.StringType,
-				MarkdownDescription: "Per-deployment SSH public keys injected at first CVM launch via user_config. " +
-					"Force-new because runtime mutation is not exposed in current public API.",
-				PlanModifiers: []planmodifier.List{
-					listplanmodifier.RequiresReplace(),
-				},
-			},
-			"env": schema.MapAttribute{
-				Optional:    true,
-				Sensitive:   true,
-				ElementType: types.StringType,
-				MarkdownDescription: "Plaintext env vars. Provider auto-derives env_keys and encrypts values " +
-					"before API submission. Plaintext still exists in Terraform state.",
-			},
-			"encrypted_env": schema.StringAttribute{
-				Optional:            true,
-				Sensitive:           true,
-				MarkdownDescription: "Hex-encoded encrypted env payload (manual mode).",
-			},
-			"env_keys": schema.ListAttribute{
-				Optional:            true,
-				ElementType:         types.StringType,
-				MarkdownDescription: "Allowed environment variable keys used with encrypted_env/manual mode.",
-			},
-			"env_compose_hash": schema.StringAttribute{
-				Optional: true,
-				MarkdownDescription: "Optional compose hash for phase-2 encrypted env update flow " +
-					"(contract-owned KMS; used with env_transaction_hash).",
-			},
-			"env_transaction_hash": schema.StringAttribute{
-				Optional: true,
-				MarkdownDescription: "Optional on-chain transaction hash for phase-2 encrypted env update flow " +
-					"(contract-owned KMS; used with env_compose_hash).",
-			},
-			"listed": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				Default:             booldefault.StaticBool(false),
-				MarkdownDescription: "Whether the app should be publicly listed. Force-new.",
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.RequiresReplace(),
-				},
-			},
-			"replicas": schema.Int64Attribute{
-				Optional:            true,
-				Computed:            true,
-				Default:             int64default.StaticInt64(1),
-				MarkdownDescription: "Desired number of CVMs under this app.",
-			},
-			"wait_for_ready": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				Default:             booldefault.StaticBool(true),
-				MarkdownDescription: "Wait until desired replicas are running after create/update.",
-			},
-			"wait_timeout_seconds": schema.Int64Attribute{
-				Optional:            true,
-				Computed:            true,
-				Default:             int64default.StaticInt64(600),
-				MarkdownDescription: "Wait timeout for async operations.",
-			},
-			"status": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Status of primary CVM in the app.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"primary_cvm_id": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Primary CVM identifier used for app-level patch operations.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"cvm_ids": schema.ListAttribute{
-				Computed:            true,
-				ElementType:         types.StringType,
-				MarkdownDescription: "Identifiers of CVMs currently attached to this app.",
-			},
-			"endpoint": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Primary public endpoint URL.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-		},
+		Attributes:          attrs,
 	}
 }
 
@@ -330,167 +152,88 @@ func (r *appResource) Create(ctx context.Context, req resource.CreateRequest, re
 	resp.Diagnostics.Append(diags...)
 	sshAuthorizedKeys, diags := listValueAsStrings(ctx, plan.SSHAuthorizedKeys, "ssh_authorized_keys")
 	resp.Diagnostics.Append(diags...)
-	envVars, diags := mapValueAsStrings(ctx, plan.Env, "env")
-	resp.Diagnostics.Append(diags...)
-	manualEnvKeys, diags := listValueAsStrings(ctx, plan.EnvKeys, "env_keys")
-	resp.Diagnostics.Append(diags...)
-	manualEncryptedEnv, hasManualEncryptedEnv, diags := knownOptionalString(plan.EncryptedEnv, "encrypted_env")
-	resp.Diagnostics.Append(diags...)
-	envComposeHash, _, diags := knownOptionalString(plan.EnvComposeHash, "env_compose_hash")
-	resp.Diagnostics.Append(diags...)
-	envTransactionHash, _, diags := knownOptionalString(plan.EnvTransactionHash, "env_transaction_hash")
-	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	if strings.TrimSpace(envComposeHash) != "" || strings.TrimSpace(envTransactionHash) != "" {
-		resp.Diagnostics.AddError(
-			"Invalid create configuration",
-			"env_compose_hash and env_transaction_hash are update-only fields.",
-		)
-		return
-	}
-
-	hasAutoEnv := !plan.Env.IsNull()
-	if hasAutoEnv && (hasManualEncryptedEnv || len(manualEnvKeys) > 0) {
-		resp.Diagnostics.AddError(
-			"Conflicting env configuration",
-			"Use either env (auto encryption) or encrypted_env/env_keys (manual mode), not both.",
-		)
-		return
-	}
-	resp.Diagnostics.Append(validateEncryptedEnvConfig(hasManualEncryptedEnv, len(manualEnvKeys) > 0, "", "")...)
+	envCfg, envDiags := parseEnvConfig(ctx, plan.Env, plan.EncryptedEnv, plan.EnvKeys, plan.EnvComposeHash, plan.EnvTransactionHash, true)
+	resp.Diagnostics.Append(envDiags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	effectiveEnvKeys := manualEnvKeys
-	effectiveEncryptedEnv := manualEncryptedEnv
-	hasEffectiveEncryptedEnv := hasManualEncryptedEnv
-	if hasAutoEnv {
-		effectiveEnvKeys = sortedEnvKeys(envVars)
+	composeFile := buildComposeFile(composeFileFields{
+		Name:            plan.Name.ValueString(),
+		DockerCompose:   plan.DockerCompose.ValueString(),
+		PreLaunchScript: plan.PreLaunchScript,
+		PublicLogs:      plan.PublicLogs,
+		PublicSysinfo:   plan.PublicSysinfo,
+		PublicTCBInfo:   plan.PublicTCBInfo,
+		GatewayEnabled:  plan.GatewayEnabled,
+		SecureTime:      plan.SecureTime,
+		StorageFS:       plan.StorageFS,
+		EnvKeys:         envCfg.EffectiveEnvKeys,
+	})
+
+	provReq, err := buildProvisionReq(provisionFields{
+		Name:              plan.Name.ValueString(),
+		Size:              plan.Size.ValueString(),
+		ComposeFile:       composeFile,
+		KMS:               kmsType,
+		Listed:            plan.Listed.ValueBool(),
+		Region:            plan.Region,
+		NodeID:            nodeID,
+		HasNodeID:         hasNodeID,
+		Image:             plan.Image,
+		CustomAppID:       customAppID,
+		HasCustomAppID:    hasCustomAppID,
+		Nonce:             nonce,
+		HasNonce:          hasNonce,
+		DiskSize:          plan.DiskSize,
+		SSHAuthorizedKeys: sshAuthorizedKeys,
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid provision parameters", err.Error())
+		return
 	}
 
-	composeFile := map[string]any{
-		"name":                plan.Name.ValueString(),
-		"docker_compose_file": plan.DockerCompose.ValueString(),
-	}
-	if !plan.PreLaunchScript.IsNull() && !plan.PreLaunchScript.IsUnknown() {
-		composeFile["pre_launch_script"] = plan.PreLaunchScript.ValueString()
-	}
-	if !plan.PublicLogs.IsNull() && !plan.PublicLogs.IsUnknown() {
-		composeFile["public_logs"] = plan.PublicLogs.ValueBool()
-	}
-	if !plan.PublicSysinfo.IsNull() && !plan.PublicSysinfo.IsUnknown() {
-		composeFile["public_sysinfo"] = plan.PublicSysinfo.ValueBool()
-	}
-	if !plan.PublicTCBInfo.IsNull() && !plan.PublicTCBInfo.IsUnknown() {
-		composeFile["public_tcbinfo"] = plan.PublicTCBInfo.ValueBool()
-	}
-	if !plan.GatewayEnabled.IsNull() && !plan.GatewayEnabled.IsUnknown() {
-		composeFile["gateway_enabled"] = plan.GatewayEnabled.ValueBool()
-	}
-	if !plan.SecureTime.IsNull() && !plan.SecureTime.IsUnknown() {
-		composeFile["secure_time"] = plan.SecureTime.ValueBool()
-	}
-	if !plan.StorageFS.IsNull() && !plan.StorageFS.IsUnknown() {
-		composeFile["storage_fs"] = plan.StorageFS.ValueString()
-	}
-	if len(effectiveEnvKeys) > 0 {
-		composeFile["allowed_envs"] = effectiveEnvKeys
-	}
-
-	provisionReq := map[string]any{
-		"name":          plan.Name.ValueString(),
-		"instance_type": plan.Size.ValueString(),
-		"compose_file":  composeFile,
-		"kms":           kmsPayloadValue(kmsType),
-		"listed":        plan.Listed.ValueBool(),
-	}
-	if !plan.Region.IsNull() && !plan.Region.IsUnknown() {
-		provisionReq["region"] = plan.Region.ValueString()
-	}
-	if hasNodeID {
-		provisionReq["teepod_id"] = nodeID
-	}
-	if !plan.Image.IsNull() && !plan.Image.IsUnknown() {
-		provisionReq["image"] = plan.Image.ValueString()
-	}
-	if hasCustomAppID {
-		provisionReq["app_id"] = customAppID
-	}
-	if hasNonce {
-		provisionReq["nonce"] = nonce
-	}
-	if !plan.DiskSize.IsNull() && !plan.DiskSize.IsUnknown() {
-		provisionReq["disk_size"] = plan.DiskSize.ValueInt64()
-	}
-	if len(sshAuthorizedKeys) > 0 {
-		userConfig, err := json.Marshal(map[string]any{
-			"ssh_authorized_keys": sshAuthorizedKeys,
-		})
-		if err != nil {
-			resp.Diagnostics.AddError("Invalid ssh_authorized_keys", fmt.Sprintf("Failed to build user_config JSON: %v", err))
-			return
-		}
-		provisionReq["user_config"] = string(userConfig)
-	}
-
-	var provisionResp struct {
-		AppID               string `json:"app_id"`
-		ComposeHash         string `json:"compose_hash"`
-		AppEnvEncryptPubkey string `json:"app_env_encrypt_pubkey"`
-	}
-	if err := r.client.PostJSON(ctx, "/cvms/provision", provisionReq, &provisionResp); err != nil {
+	var provResp provisionResponse
+	if err := r.client.PostJSON(ctx, "/cvms/provision", provReq, &provResp); err != nil {
 		resp.Diagnostics.AddError("Failed to provision app", err.Error())
 		return
 	}
-	if provisionResp.ComposeHash == "" {
+	if provResp.ComposeHash == "" {
 		resp.Diagnostics.AddError("Invalid provision response", "compose_hash was empty.")
 		return
 	}
-	if strings.TrimSpace(provisionResp.AppID) == "" {
+	if strings.TrimSpace(provResp.AppID) == "" {
 		resp.Diagnostics.AddError(
 			"Unsupported KMS flow",
 			"Provision did not return app_id. This usually means onchain KMS flow is required and is not yet supported by this provider.",
 		)
 		return
 	}
-	if hasAutoEnv {
-		if strings.TrimSpace(provisionResp.AppEnvEncryptPubkey) == "" {
+	if envCfg.HasAutoEnv {
+		if strings.TrimSpace(provResp.AppEnvEncryptPubkey) == "" {
 			resp.Diagnostics.AddError(
 				"Missing encryption public key",
 				"Provision response did not include app_env_encrypt_pubkey required for env auto-encryption.",
 			)
 			return
 		}
-		encryptedEnv, err := encryptEnvMap(envVars, provisionResp.AppEnvEncryptPubkey)
-		if err != nil {
+		if err := envCfg.encryptAutoEnv(provResp.AppEnvEncryptPubkey); err != nil {
 			resp.Diagnostics.AddError("Failed to encrypt env", err.Error())
 			return
 		}
-		effectiveEncryptedEnv = encryptedEnv
-		hasEffectiveEncryptedEnv = true
 	}
 
-	var createResp cvmAPIResponse
-	commitReq := map[string]any{
-		"app_id":       provisionResp.AppID,
-		"compose_hash": provisionResp.ComposeHash,
-	}
-	if hasEffectiveEncryptedEnv {
-		commitReq["encrypted_env"] = effectiveEncryptedEnv
-	}
-	if len(effectiveEnvKeys) > 0 {
-		commitReq["env_keys"] = effectiveEnvKeys
-	}
-	if err := r.client.PostJSON(ctx, "/cvms", commitReq, &createResp); err != nil {
+	createResp, err := commitAndCreate(ctx, r.client, provResp, envCfg.EffectiveEncrypted, envCfg.HasEffectiveEncrypted, envCfg.EffectiveEnvKeys)
+	if err != nil {
 		resp.Diagnostics.AddError("Failed to create initial app CVM", err.Error())
 		return
 	}
 
-	appID := ensureAppPrefix(nonEmpty(createResp.AppID, provisionResp.AppID))
+	appID := ensureAppPrefix(nonEmpty(createResp.AppID, provResp.AppID))
 	if strings.TrimSpace(appID) == "" {
 		resp.Diagnostics.AddError("Invalid create response", "Missing app_id in create/provision response.")
 		return
@@ -571,80 +314,29 @@ func (r *appResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		resp.Diagnostics.AddError("Missing app ID", "Cannot update app without a persisted app_id.")
 		return
 	}
-	if plan.Image.IsNull() || plan.Image.IsUnknown() {
-		plan.Image = state.Image
-	}
-	if plan.PublicLogs.IsNull() || plan.PublicLogs.IsUnknown() {
-		plan.PublicLogs = state.PublicLogs
-	}
-	if plan.PublicSysinfo.IsNull() || plan.PublicSysinfo.IsUnknown() {
-		plan.PublicSysinfo = state.PublicSysinfo
-	}
-	if plan.PublicTCBInfo.IsNull() || plan.PublicTCBInfo.IsUnknown() {
-		plan.PublicTCBInfo = state.PublicTCBInfo
-	}
-	if plan.GatewayEnabled.IsNull() || plan.GatewayEnabled.IsUnknown() {
-		plan.GatewayEnabled = state.GatewayEnabled
-	}
-	if plan.SecureTime.IsNull() || plan.SecureTime.IsUnknown() {
-		plan.SecureTime = state.SecureTime
-	}
-	if plan.StorageFS.IsNull() || plan.StorageFS.IsUnknown() {
-		plan.StorageFS = state.StorageFS
-	}
+	plan.Image = inheritOptionalString(plan.Image, state.Image)
+	plan.PublicLogs = inheritOptionalBool(plan.PublicLogs, state.PublicLogs)
+	plan.PublicSysinfo = inheritOptionalBool(plan.PublicSysinfo, state.PublicSysinfo)
+	plan.PublicTCBInfo = inheritOptionalBool(plan.PublicTCBInfo, state.PublicTCBInfo)
+	plan.GatewayEnabled = inheritOptionalBool(plan.GatewayEnabled, state.GatewayEnabled)
+	plan.SecureTime = inheritOptionalBool(plan.SecureTime, state.SecureTime)
+	plan.StorageFS = inheritOptionalString(plan.StorageFS, state.StorageFS)
 
 	desiredReplicas, diags := desiredReplicaCount(plan.Replicas)
 	resp.Diagnostics.Append(diags...)
+
 	desiredImage := plan.Image
 	imageChanged := !plan.Image.Equal(state.Image)
-	desiredPublicLogs := plan.PublicLogs
-	desiredPublicSysinfo := plan.PublicSysinfo
-	desiredPublicTCBInfo := plan.PublicTCBInfo
-	desiredGatewayEnabled := plan.GatewayEnabled
-	desiredSecureTime := plan.SecureTime
-	composeSettingsChanged := !plan.PublicLogs.Equal(state.PublicLogs) ||
-		!plan.PublicSysinfo.Equal(state.PublicSysinfo) ||
-		!plan.PublicTCBInfo.Equal(state.PublicTCBInfo) ||
-		!plan.GatewayEnabled.Equal(state.GatewayEnabled) ||
-		!plan.SecureTime.Equal(state.SecureTime)
-	envVars, diags := mapValueAsStrings(ctx, plan.Env, "env")
-	resp.Diagnostics.Append(diags...)
-	manualEnvKeys, diags := listValueAsStrings(ctx, plan.EnvKeys, "env_keys")
-	resp.Diagnostics.Append(diags...)
-	manualEncryptedEnv, hasManualEncryptedEnv, diags := knownOptionalString(plan.EncryptedEnv, "encrypted_env")
-	resp.Diagnostics.Append(diags...)
-	envComposeHash, _, diags := knownOptionalString(plan.EnvComposeHash, "env_compose_hash")
-	resp.Diagnostics.Append(diags...)
-	envTransactionHash, _, diags := knownOptionalString(plan.EnvTransactionHash, "env_transaction_hash")
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
+	planSettings := composeSettingsValues{plan.PublicLogs, plan.PublicSysinfo, plan.PublicTCBInfo, plan.GatewayEnabled, plan.SecureTime}
+	stateSettings := composeSettingsValues{state.PublicLogs, state.PublicSysinfo, state.PublicTCBInfo, state.GatewayEnabled, state.SecureTime}
+	settingsChanged := planSettings.changed(stateSettings)
 
-	hasAutoEnv := !plan.Env.IsNull()
-	if hasAutoEnv && (hasManualEncryptedEnv || len(manualEnvKeys) > 0) {
-		resp.Diagnostics.AddError(
-			"Conflicting env configuration",
-			"Use either env (auto encryption) or encrypted_env/env_keys (manual mode), not both.",
-		)
-		return
-	}
-	if hasAutoEnv {
-		resp.Diagnostics.Append(validateEncryptedEnvConfig(true, true, envComposeHash, envTransactionHash)...)
-	} else {
-		resp.Diagnostics.Append(validateEncryptedEnvConfig(hasManualEncryptedEnv, len(manualEnvKeys) > 0, envComposeHash, envTransactionHash)...)
-	}
+	diskSizeChanged, diskDiags := diskSizeValidation(plan.DiskSize, state.DiskSize)
+	resp.Diagnostics.Append(diskDiags...)
+
+	envCfg, envDiags := parseEnvConfig(ctx, plan.Env, plan.EncryptedEnv, plan.EnvKeys, plan.EnvComposeHash, plan.EnvTransactionHash, false)
+	resp.Diagnostics.Append(envDiags...)
 	if resp.Diagnostics.HasError() {
-		return
-	}
-	diskSizeChanged := !plan.DiskSize.IsNull() && !plan.DiskSize.IsUnknown() && !plan.DiskSize.Equal(state.DiskSize)
-	if diskSizeChanged &&
-		!state.DiskSize.IsNull() && !state.DiskSize.IsUnknown() &&
-		plan.DiskSize.ValueInt64() < state.DiskSize.ValueInt64() {
-		resp.Diagnostics.AddError(
-			"Invalid disk_size update",
-			fmt.Sprintf("disk_size can only grow (current=%d, requested=%d).", state.DiskSize.ValueInt64(), plan.DiskSize.ValueInt64()),
-		)
 		return
 	}
 
@@ -673,26 +365,8 @@ func (r *appResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		}
 	}
 
-	if composeSettingsChanged {
-		composeReq := map[string]any{
-			"name": plan.Name.ValueString(),
-		}
-		if !plan.PublicLogs.IsNull() && !plan.PublicLogs.IsUnknown() {
-			composeReq["public_logs"] = plan.PublicLogs.ValueBool()
-		}
-		if !plan.PublicSysinfo.IsNull() && !plan.PublicSysinfo.IsUnknown() {
-			composeReq["public_sysinfo"] = plan.PublicSysinfo.ValueBool()
-		}
-		if !plan.PublicTCBInfo.IsNull() && !plan.PublicTCBInfo.IsUnknown() {
-			composeReq["public_tcbinfo"] = plan.PublicTCBInfo.ValueBool()
-		}
-		if !plan.GatewayEnabled.IsNull() && !plan.GatewayEnabled.IsUnknown() {
-			composeReq["gateway_enabled"] = plan.GatewayEnabled.ValueBool()
-		}
-		if !plan.SecureTime.IsNull() && !plan.SecureTime.IsUnknown() {
-			composeReq["secure_time"] = plan.SecureTime.ValueBool()
-		}
-
+	if settingsChanged {
+		composeReq := planSettings.buildProvisionReq(plan.Name.ValueString())
 		if err := r.provisionAndApplyComposeSettingsAcrossReplicas(ctx, cvms, primaryCVMID, composeReq); err != nil {
 			resp.Diagnostics.AddError("Failed to update app compose settings", err.Error())
 			return
@@ -701,10 +375,7 @@ func (r *appResource) Update(ctx context.Context, req resource.UpdateRequest, re
 
 	if imageChanged {
 		if plan.Image.IsNull() || plan.Image.IsUnknown() || strings.TrimSpace(plan.Image.ValueString()) == "" {
-			resp.Diagnostics.AddError(
-				"Invalid image update",
-				"image must be set to a target OS image name when updating.",
-			)
+			resp.Diagnostics.AddError("Invalid image update", "image must be set to a target OS image name when updating.")
 			return
 		}
 		if err := r.patchOSImageAcrossReplicas(ctx, cvms, primaryCVMID, plan.Image.ValueString()); err != nil {
@@ -714,14 +385,7 @@ func (r *appResource) Update(ctx context.Context, req resource.UpdateRequest, re
 	}
 
 	if !plan.DockerCompose.Equal(state.DockerCompose) {
-		if err := r.patchTextAcrossReplicas(
-			ctx,
-			cvms,
-			primaryCVMID,
-			"/docker-compose",
-			plan.DockerCompose.ValueString(),
-			map[string]string{"Content-Type": "text/yaml"},
-		); err != nil {
+		if err := r.patchTextAcrossReplicas(ctx, cvms, primaryCVMID, "/docker-compose", plan.DockerCompose.ValueString(), map[string]string{"Content-Type": "text/yaml"}); err != nil {
 			resp.Diagnostics.AddError("Failed to update app docker compose", err.Error())
 			return
 		}
@@ -732,14 +396,7 @@ func (r *appResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		if !plan.PreLaunchScript.IsNull() && !plan.PreLaunchScript.IsUnknown() {
 			script = plan.PreLaunchScript.ValueString()
 		}
-		if err := r.patchTextAcrossReplicas(
-			ctx,
-			cvms,
-			primaryCVMID,
-			"/pre-launch-script",
-			script,
-			map[string]string{"Content-Type": "text/plain"},
-		); err != nil {
+		if err := r.patchTextAcrossReplicas(ctx, cvms, primaryCVMID, "/pre-launch-script", script, map[string]string{"Content-Type": "text/plain"}); err != nil {
 			resp.Diagnostics.AddError("Failed to update app pre-launch script", err.Error())
 			return
 		}
@@ -750,8 +407,7 @@ func (r *appResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		!plan.EnvKeys.Equal(state.EnvKeys) ||
 		!plan.EnvComposeHash.Equal(state.EnvComposeHash) ||
 		!plan.EnvTransactionHash.Equal(state.EnvTransactionHash) {
-		envReq := map[string]any{}
-		if hasAutoEnv {
+		if envCfg.HasAutoEnv {
 			current, err := r.fetchCVM(ctx, primaryCVMID)
 			if err != nil {
 				resp.Diagnostics.AddError("Failed to load app encryption key", err.Error())
@@ -759,40 +415,19 @@ func (r *appResource) Update(ctx context.Context, req resource.UpdateRequest, re
 			}
 			pubkey := current.envEncryptionPubkey()
 			if pubkey == "" {
-				resp.Diagnostics.AddError(
-					"Missing encryption public key",
-					"Primary CVM response did not include encrypted_env_pubkey. Use manual encrypted_env/env_keys mode.",
-				)
+				resp.Diagnostics.AddError("Missing encryption public key", "Primary CVM response did not include encrypted_env_pubkey. Use manual encrypted_env/env_keys mode.")
 				return
 			}
-
-			encryptedEnv, err := encryptEnvMap(envVars, pubkey)
-			if err != nil {
+			if err := envCfg.encryptAutoEnv(pubkey); err != nil {
 				resp.Diagnostics.AddError("Failed to encrypt env", err.Error())
 				return
 			}
-			envReq["encrypted_env"] = encryptedEnv
-			envReq["env_keys"] = sortedEnvKeys(envVars)
-		} else {
-			if !hasManualEncryptedEnv {
-				resp.Diagnostics.AddError(
-					"Missing encrypted_env",
-					"Updating env_keys or phase-2 fields requires encrypted_env to be set.",
-				)
-				return
-			}
-			envReq["encrypted_env"] = manualEncryptedEnv
-			if !plan.EnvKeys.IsNull() && !plan.EnvKeys.IsUnknown() {
-				envReq["env_keys"] = manualEnvKeys
-			}
 		}
-		if strings.TrimSpace(envComposeHash) != "" {
-			envReq["compose_hash"] = envComposeHash
+		envReq, err := envCfg.buildEnvUpdateReq(plan.EnvKeys)
+		if err != nil {
+			resp.Diagnostics.AddError("Missing encrypted_env", err.Error())
+			return
 		}
-		if strings.TrimSpace(envTransactionHash) != "" {
-			envReq["transaction_hash"] = envTransactionHash
-		}
-
 		if err := r.patchJSONAcrossReplicas(ctx, cvms, primaryCVMID, "/envs", envReq); err != nil {
 			if apiErr, ok := err.(*APIError); ok && apiErr.StatusCode == 465 {
 				resp.Diagnostics.AddError(
@@ -833,12 +468,12 @@ func (r *appResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		if imageChanged {
 			plan.Image = desiredImage
 		}
-		if composeSettingsChanged {
-			plan.PublicLogs = desiredPublicLogs
-			plan.PublicSysinfo = desiredPublicSysinfo
-			plan.PublicTCBInfo = desiredPublicTCBInfo
-			plan.GatewayEnabled = desiredGatewayEnabled
-			plan.SecureTime = desiredSecureTime
+		if settingsChanged {
+			plan.PublicLogs = planSettings.PublicLogs
+			plan.PublicSysinfo = planSettings.PublicSysinfo
+			plan.PublicTCBInfo = planSettings.PublicTCBInfo
+			plan.GatewayEnabled = planSettings.GatewayEnabled
+			plan.SecureTime = planSettings.SecureTime
 		}
 	}
 
@@ -880,7 +515,7 @@ func (r *appResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 				return
 			}
 			if !isRetryable(err) {
-				resp.Diagnostics.AddWarning("Delete verification skipped", err.Error())
+				resp.Diagnostics.AddError("Delete verification failed", err.Error())
 				return
 			}
 		}
@@ -889,15 +524,15 @@ func (r *appResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 		}
 		select {
 		case <-ctx.Done():
-			resp.Diagnostics.AddWarning("Delete wait interrupted", ctx.Err().Error())
+			resp.Diagnostics.AddError("Delete wait interrupted", ctx.Err().Error())
 			return
-		case <-time.After(2 * time.Second):
+		case <-time.After(pollInterval(2 * time.Second)):
 		}
 	}
 
-	resp.Diagnostics.AddWarning(
-		"App deletion not fully confirmed",
-		"Delete requests succeeded but final empty-replica confirmation timed out.",
+	resp.Diagnostics.AddError(
+		"App deletion not confirmed",
+		"Delete requests succeeded but app replicas still exist after 120s. Resources may be orphaned — verify manually and run terraform import if needed.",
 	)
 }
 
@@ -979,7 +614,7 @@ func (r *appResource) reconcileReplicas(
 						select {
 						case <-ctx.Done():
 							return ctx.Err()
-						case <-time.After(2 * time.Second):
+						case <-time.After(pollInterval(2 * time.Second)):
 							continue
 						}
 					}
@@ -991,7 +626,7 @@ func (r *appResource) reconcileReplicas(
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
-				case <-time.After(2 * time.Second):
+				case <-time.After(pollInterval(2 * time.Second)):
 				}
 			}
 			if len(cvms) == 0 {
@@ -1060,7 +695,7 @@ func (r *appResource) waitForReplicaCount(ctx context.Context, appID string, tar
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
-				case <-time.After(2 * time.Second):
+				case <-time.After(pollInterval(2 * time.Second)):
 					continue
 				}
 			}
@@ -1072,7 +707,7 @@ func (r *appResource) waitForReplicaCount(ctx context.Context, appID string, tar
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(2 * time.Second):
+		case <-time.After(pollInterval(2 * time.Second)):
 		}
 	}
 	return fmt.Errorf("timeout waiting for app %q to reach %d replicas", appID, target)
@@ -1087,7 +722,7 @@ func (r *appResource) waitForAppReady(ctx context.Context, appID string, replica
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
-				case <-time.After(3 * time.Second):
+				case <-time.After(pollInterval(3 * time.Second)):
 					continue
 				}
 			}
@@ -1098,7 +733,7 @@ func (r *appResource) waitForAppReady(ctx context.Context, appID string, replica
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(3 * time.Second):
+			case <-time.After(pollInterval(3 * time.Second)):
 			}
 			continue
 		}
@@ -1117,7 +752,7 @@ func (r *appResource) waitForAppReady(ctx context.Context, appID string, replica
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(3 * time.Second):
+		case <-time.After(pollInterval(3 * time.Second)):
 		}
 	}
 	return fmt.Errorf("timeout after %s waiting for app %q replicas to become running", timeout, appID)

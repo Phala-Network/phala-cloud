@@ -9,12 +9,6 @@ variable "create_resources" {
   description = "If false, run read-only smoke checks with data sources only."
 }
 
-variable "create_app_resources" {
-  type        = bool
-  default     = false
-  description = "If true, create app-first resources (phala_app) for smoke tests."
-}
-
 variable "ssh_public_key" {
   type        = string
   default     = ""
@@ -24,11 +18,6 @@ variable "ssh_public_key" {
 variable "ssh_key_name" {
   type    = string
   default = "tf-smoke-key"
-}
-
-variable "cvm_name" {
-  type    = string
-  default = "tf-smoke-cvm"
 }
 
 variable "app_name" {
@@ -59,28 +48,10 @@ variable "consumer_app_replicas" {
   description = "Desired replica count for the consumer app."
 }
 
-variable "create_linked_cvm" {
-  type        = bool
-  default     = false
-  description = "If true, create a second CVM wired to the primary CVM via env (PRIMARY_APP_ID, PRIMARY_ENDPOINT)."
-}
-
-variable "linked_cvm_name" {
-  type    = string
-  default = "tf-smoke-cvm-linked"
-}
-
 variable "cvm_ssh_authorized_keys" {
   type        = list(string)
   default     = []
   description = "Optional per-deployment SSH public keys injected at CVM launch."
-}
-
-variable "cvm_env" {
-  type        = map(string)
-  default     = {}
-  sensitive   = true
-  description = "Optional plaintext env map. Provider auto-encrypts it."
 }
 
 variable "app_env" {
@@ -125,40 +96,11 @@ variable "docker_compose" {
   YAML
 }
 
-variable "linked_cvm_env" {
-  type        = map(string)
-  default     = {}
-  sensitive   = true
-  description = "Optional additional env for the linked CVM. PRIMARY_APP_ID/PRIMARY_ENDPOINT are injected automatically."
-}
-
 variable "consumer_app_env" {
   type        = map(string)
   default     = {}
   sensitive   = true
   description = "Optional additional env for the consumer app. UPSTREAM_APP_ID/UPSTREAM_ENDPOINT are injected automatically."
-}
-
-variable "linked_docker_compose" {
-  type    = string
-  default = <<-YAML
-    services:
-      web:
-        image: nginx:stable
-        ports:
-          - "80:80"
-  YAML
-}
-
-variable "app_docker_compose" {
-  type    = string
-  default = <<-YAML
-    services:
-      web:
-        image: nginx:stable
-        ports:
-          - "80:80"
-  YAML
 }
 
 variable "consumer_app_docker_compose" {

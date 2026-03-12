@@ -12,8 +12,7 @@ Last updated: 2026-03-08
 
 | Component | Level | Status | Notes |
 | --- | --- | --- | --- |
-| `phala_app` | beta | create/read/update/delete + replica scaling | Recommended primary abstraction: shared app-compose + env with N CVM replicas under one app_id. |
-| `phala_cvm` | beta | create/read/update/delete | Core lifecycle works. Known gaps: VPC-equivalent networking, movable volumes/snapshots, full on-chain KMS create flow. |
+| `phala_app` | beta | create/read/update/delete + replica scaling | Sole lifecycle resource: shared app-compose + env with N CVM replicas under one app_id. |
 | `phala_cvm_power` | beta | running/stopped state management | Separate action-style power control works; delete is state-only by design. |
 | `phala_ssh_key` | beta | create/read/delete | DO-style key lifecycle. |
 | `phala_account` | beta | read | Returns user/workspace linkage + credits. |
@@ -29,7 +28,6 @@ Last updated: 2026-03-08
 | Capability | Current |
 | --- | --- |
 | App-first resource + replica scaling | yes (`phala_app.replicas`) |
-| Declarative compute resource (`phala_cvm`) | yes |
 | Separate power resource (`phala_cvm_power`) | yes |
 | Per-deploy SSH key injection | yes |
 | OS image selection + update | yes (`image`, in-place via `/os-image`) |

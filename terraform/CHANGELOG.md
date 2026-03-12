@@ -4,6 +4,10 @@ All notable changes to `terraform-provider-phala` are documented in this file.
 
 ## [Unreleased]
 
+### Removed
+
+- **`phala_cvm` resource removed.** Use `phala_app` with `replicas = 1` instead. `phala_app` is now the sole lifecycle resource for managing CVMs on Phala Cloud.
+
 ## [0.2.0-beta.1] - 2026-03-08
 
 ### Added
@@ -21,14 +25,12 @@ All notable changes to `terraform-provider-phala` are documented in this file.
 
 ### Changed
 
-- `image` is now updatable in-place for:
-  - `phala_cvm` via `PATCH /cvms/{id}/os-image`
-  - `phala_app` by updating OS image across app replicas
-- Added create-time identity/placement inputs for `phala_cvm` and `phala_app`:
+- `image` is now updatable in-place via `PATCH /cvms/{id}/os-image`.
+- Added create-time identity/placement inputs for `phala_app`:
   - `kms` (currently `phala` only; `ethereum`/`base` planned)
   - `custom_app_id` + `nonce` (PHALA deterministic identity flow)
   - `node_id` (maps to provision `teepod_id`)
-- Added compose-file runtime settings to `phala_cvm` and `phala_app`:
+- Added compose-file runtime settings to `phala_app`:
   - `public_logs`, `public_sysinfo`, `public_tcbinfo`, `gateway_enabled`, `secure_time`
   - updates use compose provision/apply flow and trigger restart/redeploy
 - `storage_fs` (`zfs`/`ext4`) is now explicit and immutable (replacement required on change).
@@ -39,7 +41,7 @@ All notable changes to `terraform-provider-phala` are documented in this file.
 ### Added
 
 - Initial provider MVP:
-  - `phala_cvm`
+  - `phala_app`
   - `phala_cvm_power`
   - `phala_ssh_key`
   - `phala_account`

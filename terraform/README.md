@@ -142,7 +142,7 @@ output "image_slugs" {
 }
 ```
 
-### Advanced: deploy a single CVM with SSH access
+### Advanced: deploy a single app with SSH access and power control
 
 ```hcl
 resource "phala_ssh_key" "laptop" {
@@ -155,10 +155,11 @@ locals {
   chosen_region = data.phala_regions.all.regions[0].slug
 }
 
-resource "phala_cvm" "web" {
+resource "phala_app" "web" {
   name           = "my-phala-web"
   size           = local.chosen_size
   region         = local.chosen_region
+  replicas       = 1
   ssh_authorized_keys = [
     file("~/.ssh/id_ed25519.pub"),
   ]
@@ -178,7 +179,7 @@ resource "phala_cvm" "web" {
 }
 
 resource "phala_cvm_power" "web_power" {
-  cvm_id = phala_cvm.web.id
+  cvm_id = phala_app.web.primary_cvm_id
   state  = "running" # or "stopped"
 
   wait_for_state       = true
@@ -229,8 +230,8 @@ data "phala_nodes" "west" {
   region = "us-west"
 }
 
-resource "phala_cvm" "pinned" {
-  name    = "pinned-cvm"
+resource "phala_app" "pinned" {
+  name    = "pinned-app"
   size    = data.phala_sizes.all.sizes[0].slug
   node_id = data.phala_nodes.west.nodes[0].node_id
 
@@ -264,18 +265,13 @@ cd terraform
 make smoke-apply \
   PHALA_API_KEY="phat_xxx" \
   CREATE_RESOURCES=true \
-  CREATE_APP_RESOURCES=true \
   APP_NAME="tf-smoke-app" \
   APP_REPLICAS=2 \
   CREATE_CONSUMER_APP=true \
   CONSUMER_APP_NAME="tf-smoke-consumer" \
   CONSUMER_APP_REPLICAS=1 \
-  CVM_NAME="tf-smoke-cvm" \
-  CREATE_LINKED_CVM=true \
-  LINKED_CVM_NAME="tf-smoke-cvm-linked" \
   CVM_SSH_AUTHORIZED_KEYS='["ssh-ed25519 AAAA... your-key"]' \
-  CVM_ENV='{"APP_SECRET":"replace-me"}' \
-  LINKED_CVM_ENV='{"CONSUMER_MODE":"true"}' \
+  APP_ENV='{"APP_SECRET":"replace-me"}' \
   CVM_POWER_STATE="stopped" \
   WAIT_FOR_READY=false \
   SSH_PUBLIC_KEY="$(cat ~/.ssh/id_ed25519.pub)"
@@ -283,18 +279,13 @@ make smoke-apply \
 make smoke-destroy \
   PHALA_API_KEY="phat_xxx" \
   CREATE_RESOURCES=true \
-  CREATE_APP_RESOURCES=true \
   APP_NAME="tf-smoke-app" \
   APP_REPLICAS=2 \
   CREATE_CONSUMER_APP=true \
   CONSUMER_APP_NAME="tf-smoke-consumer" \
   CONSUMER_APP_REPLICAS=1 \
-  CVM_NAME="tf-smoke-cvm" \
-  CREATE_LINKED_CVM=true \
-  LINKED_CVM_NAME="tf-smoke-cvm-linked" \
   CVM_SSH_AUTHORIZED_KEYS='["ssh-ed25519 AAAA... your-key"]' \
-  CVM_ENV='{"APP_SECRET":"replace-me"}' \
-  LINKED_CVM_ENV='{"CONSUMER_MODE":"true"}' \
+  APP_ENV='{"APP_SECRET":"replace-me"}' \
   CVM_POWER_STATE="stopped" \
   WAIT_FOR_READY=false \
   SSH_PUBLIC_KEY="$(cat ~/.ssh/id_ed25519.pub)"
@@ -305,21 +296,22 @@ Notes:
 - `make` writes a local Terraform CLI config at `/tmp/phala-tf-dev/terraformrc` with `dev_overrides` so your global `~/.terraformrc` is unchanged.
 - Smoke variables can be overridden with `SIZE`, `REGION`, and `IMAGE`.
 - Set `CVM_POWER_STATE=running|stopped` to exercise `phala_cvm_power` in smoke tests.
-- Set `CREATE_APP_RESOURCES=true` to exercise app-first orchestration with shared compose/env and `replicas` scaling.
 - Set `CREATE_CONSUMER_APP=true` to exercise cross-app wiring (`UPSTREAM_APP_ID`, `UPSTREAM_ENDPOINT`).
-- Set `CREATE_LINKED_CVM=true` to exercise multi-CVM wiring where the linked CVM receives `PRIMARY_APP_ID` and `PRIMARY_ENDPOINT` from the primary CVM.
 - `WAIT_FOR_READY=false` can be useful for infrastructure lifecycle tests when runtime boot latency is variable.
 
 ## Behavior and Lifecycle Notes
 
-### `phala_cvm`
+### `phala_app`
 
+- `phala_app` is the sole lifecycle resource. It manages one app identity with one or more CVM replicas.
 - Create flow follows Phala's two-step API: `POST /cvms/provision` then `POST /cvms`.
+- Replica management: set `replicas` to scale horizontally. All replicas share the same compose, env, and settings.
+- Key outputs: `app_id`, `primary_cvm_id`, `cvm_ids`, `endpoint`.
 - Create-time identity/placement fields:
   - `kms` (currently `phala` only; `ethereum`/`base` planned)
   - `custom_app_id` + `nonce` (deterministic identity flow for PHALA KMS)
   - `node_id` (maps to provision `teepod_id`; discover via `data.phala_nodes`)
-- In-place updates: size, disk, OS image (`PATCH /cvms/{id}/os-image`), docker compose, pre-launch script, encrypted env (`PATCH /cvms/{id}/envs`).
+- In-place updates: size, disk, OS image, docker compose, pre-launch script, encrypted env, replicas.
 - Compose-file runtime settings are exposed as first-class attributes:
   - `public_logs`
   - `public_sysinfo`
@@ -327,7 +319,7 @@ Notes:
   - `gateway_enabled`
   - `secure_time`
   - `storage_fs`
-- Changing compose-file runtime settings triggers compose provision/apply flow and CVM restart (`/cvms/{id}/compose_file/provision` + `/cvms/{id}/compose_file`).
+- Changing compose-file runtime settings triggers compose provision/apply flow and CVM restart.
 - Per-deployment SSH keys are supported via `ssh_authorized_keys` (applied at create time using `user_config`; force-new).
 - `storage_fs` is immutable after initial deployment (`zfs` or `ext4`); changing it forces replacement.
 - `disk_size` can only grow (shrink is rejected).
