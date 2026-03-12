@@ -179,6 +179,7 @@ func (r *appResource) Create(ctx context.Context, req resource.CreateRequest, re
 		SecureTime:      plan.SecureTime,
 		StorageFS:       plan.StorageFS,
 		EnvKeys:         envCfg.EffectiveEnvKeys,
+		HasEnvKeys:      len(envCfg.EffectiveEnvKeys) > 0,
 	})
 
 	provReq, err := buildProvisionReq(provisionFields{
@@ -347,6 +348,21 @@ func (r *appResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		return
 	}
 
+	desiredComposeEnvKeys, desiredComposeEnvKeysKnown, envKeyDiags := composeEnvKeysFromAttrs(ctx, plan.Env, plan.EnvKeys)
+	resp.Diagnostics.Append(envKeyDiags...)
+	currentComposeEnvKeys, currentComposeEnvKeysKnown, envKeyDiags := composeEnvKeysFromAttrs(ctx, state.Env, state.EnvKeys)
+	resp.Diagnostics.Append(envKeyDiags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	composeEnvKeys := currentComposeEnvKeys
+	composeHasEnvKeys := currentComposeEnvKeysKnown
+	if desiredComposeEnvKeysKnown {
+		composeEnvKeys = desiredComposeEnvKeys
+		composeHasEnvKeys = true
+	}
+	updateComposeEnvKeys := desiredComposeEnvKeysKnown && !equalStringSlices(desiredComposeEnvKeys, currentComposeEnvKeys)
+
 	cvms, err := r.fetchAppCVMs(ctx, appID)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to fetch current app replicas", err.Error())
@@ -373,7 +389,19 @@ func (r *appResource) Update(ctx context.Context, req resource.UpdateRequest, re
 	}
 
 	if settingsChanged {
-		composeReq := planSettings.buildProvisionReq(plan.Name.ValueString())
+		composeReq := buildComposeFileUpdateRequest(composeFileFields{
+			Name:            plan.Name.ValueString(),
+			DockerCompose:   plan.DockerCompose.ValueString(),
+			PreLaunchScript: plan.PreLaunchScript,
+			PublicLogs:      plan.PublicLogs,
+			PublicSysinfo:   plan.PublicSysinfo,
+			PublicTCBInfo:   plan.PublicTCBInfo,
+			GatewayEnabled:  plan.GatewayEnabled,
+			SecureTime:      plan.SecureTime,
+			StorageFS:       plan.StorageFS,
+			EnvKeys:         composeEnvKeys,
+			HasEnvKeys:      composeHasEnvKeys,
+		}, updateComposeEnvKeys)
 		if err := r.provisionAndApplyComposeSettingsAcrossReplicas(ctx, cvms, primaryCVMID, composeReq); err != nil {
 			resp.Diagnostics.AddError("Failed to update app compose settings", err.Error())
 			return
@@ -854,6 +882,13 @@ func (r *appResource) populateState(
 
 	primary := selectPrimaryCVM(cvms, "")
 	if primary != nil {
+		primaryID := selectReplicaIdentifier(*primary)
+		if primaryID != "" && r.client != nil {
+			if detailed, err := r.fetchCVM(ctx, primaryID); err == nil && detailed != nil {
+				primary = detailed
+			}
+		}
+
 		if v := primary.instanceType(); v != "" {
 			state.Size = types.StringValue(v)
 		}
@@ -869,18 +904,17 @@ func (r *appResource) populateState(
 		if image := primary.osImageName(); image != "" {
 			state.Image = types.StringValue(image)
 		}
-		state.PublicLogs = nullableBool(primary.PublicLogs)
-		state.PublicSysinfo = nullableBool(primary.PublicSysinfo)
-		state.PublicTCBInfo = nullableBool(primary.PublicTCBInfo)
-		state.GatewayEnabled = nullableBool(primary.GatewayEnabled)
-		state.SecureTime = nullableBool(primary.SecureTime)
-		state.StorageFS = nullableString(primary.StorageFS)
+		state.PublicLogs = nullableBool(primary.publicLogsValue())
+		state.PublicSysinfo = nullableBool(primary.publicSysinfoValue())
+		state.PublicTCBInfo = nullableBool(primary.publicTCBInfoValue())
+		state.GatewayEnabled = nullableBool(primary.gatewayEnabledValue())
+		state.SecureTime = nullableBool(primary.secureTimeValue())
+		state.StorageFS = nullableString(primary.storageFSValue())
 		state.Status = nullableString(primary.Status)
 		state.Endpoint = nullableString(primary.endpoint())
 		if primary.Listed != nil {
 			state.Listed = types.BoolValue(*primary.Listed)
 		}
-		primaryID := selectReplicaIdentifier(*primary)
 		if primaryID != "" {
 			state.PrimaryCVMID = types.StringValue(primaryID)
 			if state.DockerCompose.IsNull() || state.DockerCompose.IsUnknown() {
@@ -943,6 +977,43 @@ func appendReplicaListWarning(diags *diag.Diagnostics, err error) {
 		"App replica details temporarily unavailable",
 		fmt.Sprintf("Using existing replica-derived state because listing app replicas failed: %v", err),
 	)
+}
+
+func composeEnvKeysFromAttrs(ctx context.Context, env types.Map, envKeys types.List) ([]string, bool, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	if !env.IsNull() && !env.IsUnknown() {
+		envMap, mapDiags := mapValueAsStrings(ctx, env, "env")
+		diags.Append(mapDiags...)
+		if diags.HasError() {
+			return nil, false, diags
+		}
+		return sortedEnvKeys(envMap), true, diags
+	}
+
+	if !envKeys.IsNull() && !envKeys.IsUnknown() {
+		keys, listDiags := listValueAsStrings(ctx, envKeys, "env_keys")
+		diags.Append(listDiags...)
+		if diags.HasError() {
+			return nil, false, diags
+		}
+		sort.Strings(keys)
+		return keys, true, diags
+	}
+
+	return nil, false, diags
+}
+
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func desiredReplicaCount(v types.Int64) (int, diag.Diagnostics) {

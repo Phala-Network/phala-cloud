@@ -57,6 +57,66 @@ func TestBuildComposeFile(t *testing.T) {
 			t.Errorf("allowed_envs = %v", cf["allowed_envs"])
 		}
 	})
+
+	t.Run("explicit_empty_env_keys", func(t *testing.T) {
+		cf := buildComposeFile(composeFileFields{
+			Name:          "test-app",
+			DockerCompose: "version: '3'",
+			EnvKeys:       []string{},
+			HasEnvKeys:    true,
+		})
+		keys, ok := cf["allowed_envs"].([]string)
+		if !ok {
+			t.Fatalf("allowed_envs missing or wrong type: %#v", cf["allowed_envs"])
+		}
+		if len(keys) != 0 {
+			t.Fatalf("allowed_envs = %v, want empty slice", keys)
+		}
+	})
+}
+
+func TestBuildComposeFileUpdateRequest(t *testing.T) {
+	t.Parallel()
+
+	req := buildComposeFileUpdateRequest(composeFileFields{
+		Name:            "test-app",
+		DockerCompose:   "version: '3'",
+		PreLaunchScript: types.StringValue("#!/bin/sh\necho hi\n"),
+		PublicLogs:      types.BoolValue(false),
+		PublicSysinfo:   types.BoolValue(true),
+		PublicTCBInfo:   types.BoolValue(false),
+		GatewayEnabled:  types.BoolValue(true),
+		SecureTime:      types.BoolValue(false),
+		StorageFS:       types.StringValue("zfs"),
+		EnvKeys:         []string{"API_KEY"},
+		HasEnvKeys:      true,
+	}, true)
+
+	if req["name"] != "test-app" {
+		t.Fatalf("name = %v", req["name"])
+	}
+	if req["docker_compose_file"] != "version: '3'" {
+		t.Fatalf("docker_compose_file = %v", req["docker_compose_file"])
+	}
+	if req["pre_launch_script"] != "#!/bin/sh\necho hi\n" {
+		t.Fatalf("pre_launch_script = %v", req["pre_launch_script"])
+	}
+	if req["public_logs"] != false || req["public_sysinfo"] != true || req["public_tcbinfo"] != false {
+		t.Fatalf("unexpected visibility flags: %#v", req)
+	}
+	if req["gateway_enabled"] != true || req["secure_time"] != false {
+		t.Fatalf("unexpected gateway/secure_time flags: %#v", req)
+	}
+	if req["storage_fs"] != "zfs" {
+		t.Fatalf("storage_fs = %v", req["storage_fs"])
+	}
+	keys, ok := req["allowed_envs"].([]string)
+	if !ok || len(keys) != 1 || keys[0] != "API_KEY" {
+		t.Fatalf("allowed_envs = %#v", req["allowed_envs"])
+	}
+	if req["update_env_vars"] != true {
+		t.Fatalf("update_env_vars = %v", req["update_env_vars"])
+	}
 }
 
 func TestBuildProvisionReq(t *testing.T) {

@@ -233,3 +233,131 @@ func TestAppResourceWaitForAppReadyFailsFastOnStoppedReplica(t *testing.T) {
 		t.Fatalf("expected error to include stopped status, got: %v", err)
 	}
 }
+
+func TestAppResourcePopulateStatePrefersComposeFileVisibilityFlags(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/cvms/cvm123":
+			writeJSON(t, w, http.StatusOK, `{
+				"vm_uuid":"cvm123",
+				"status":"running",
+				"public_logs":true,
+				"public_sysinfo":true,
+				"public_tcbinfo":true,
+				"compose_file":{
+					"public_logs":false,
+					"public_sysinfo":false,
+					"public_tcbinfo":false,
+					"storage_fs":"zfs"
+				}
+			}`)
+			return
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, "not found")
+		}
+	}))
+	defer srv.Close()
+
+	resource := &appResource{
+		client: NewAPIClient(srv.URL+"/api/v1", "phat_test_key", "2026-01-21", 5*time.Second),
+	}
+	state := appResourceModel{
+		ID:              types.StringValue("app_test"),
+		Replicas:        types.Int64Null(),
+		DockerCompose:   types.StringValue("services:\n  app:\n"),
+		PreLaunchScript: types.StringNull(),
+	}
+	trueValue := true
+	app := &appAPIResponse{
+		AppID: "app_test",
+		Name:  "demo",
+	}
+	cvms := []cvmAPIResponse{{
+		VMUUID:        "cvm123",
+		Status:        "running",
+		PublicLogs:    &trueValue,
+		PublicSysinfo: &trueValue,
+		PublicTCBInfo: &trueValue,
+	}}
+
+	diags := resource.populateState(context.Background(), &state, app, cvms)
+	if diags.HasError() {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	if state.PublicLogs.IsNull() || state.PublicLogs.ValueBool() {
+		t.Fatalf("public_logs should prefer compose_file value, got %#v", state.PublicLogs)
+	}
+	if state.PublicSysinfo.IsNull() || state.PublicSysinfo.ValueBool() {
+		t.Fatalf("public_sysinfo should prefer compose_file value, got %#v", state.PublicSysinfo)
+	}
+	if state.PublicTCBInfo.IsNull() || state.PublicTCBInfo.ValueBool() {
+		t.Fatalf("public_tcbinfo should prefer compose_file value, got %#v", state.PublicTCBInfo)
+	}
+	if state.StorageFS.IsNull() || state.StorageFS.ValueString() != "zfs" {
+		t.Fatalf("storage_fs should prefer compose_file value, got %#v", state.StorageFS)
+	}
+}
+
+func TestComposeEnvKeysFromAttrs(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	t.Run("prefers_env_map", func(t *testing.T) {
+		envMap, diags := types.MapValueFrom(ctx, types.StringType, map[string]string{
+			"ZED": "1",
+			"API": "2",
+		})
+		if diags.HasError() {
+			t.Fatalf("build env map: %v", diags)
+		}
+
+		keys, known, diags := composeEnvKeysFromAttrs(ctx, envMap, types.ListNull(types.StringType))
+		if diags.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", diags)
+		}
+		if !known {
+			t.Fatal("expected env keys to be known")
+		}
+		if len(keys) != 2 || keys[0] != "API" || keys[1] != "ZED" {
+			t.Fatalf("unexpected env keys: %#v", keys)
+		}
+	})
+
+	t.Run("uses_env_keys_list", func(t *testing.T) {
+		envKeys, diags := types.ListValueFrom(ctx, types.StringType, []string{"ZED", "API"})
+		if diags.HasError() {
+			t.Fatalf("build env_keys list: %v", diags)
+		}
+
+		keys, known, diags := composeEnvKeysFromAttrs(ctx, types.MapNull(types.StringType), envKeys)
+		if diags.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", diags)
+		}
+		if !known {
+			t.Fatal("expected env keys to be known")
+		}
+		if len(keys) != 2 || keys[0] != "API" || keys[1] != "ZED" {
+			t.Fatalf("unexpected env keys: %#v", keys)
+		}
+	})
+
+	t.Run("handles_explicit_empty_env", func(t *testing.T) {
+		envMap, diags := types.MapValueFrom(ctx, types.StringType, map[string]string{})
+		if diags.HasError() {
+			t.Fatalf("build empty env map: %v", diags)
+		}
+
+		keys, known, diags := composeEnvKeysFromAttrs(ctx, envMap, types.ListNull(types.StringType))
+		if diags.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", diags)
+		}
+		if !known {
+			t.Fatal("expected empty env map to be treated as explicit")
+		}
+		if len(keys) != 0 {
+			t.Fatalf("unexpected env keys: %#v", keys)
+		}
+	})
+}

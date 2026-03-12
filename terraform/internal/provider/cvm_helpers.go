@@ -65,6 +65,14 @@ type cvmAPIResponse struct {
 	GatewayEnabled *bool  `json:"gateway_enabled"`
 	SecureTime     *bool  `json:"secure_time"`
 	StorageFS      string `json:"storage_fs"`
+	ComposeFile    *struct {
+		PublicLogs     *bool  `json:"public_logs"`
+		PublicSysinfo  *bool  `json:"public_sysinfo"`
+		PublicTCBInfo  *bool  `json:"public_tcbinfo"`
+		GatewayEnabled *bool  `json:"gateway_enabled"`
+		SecureTime     *bool  `json:"secure_time"`
+		StorageFS      string `json:"storage_fs"`
+	} `json:"compose_file"`
 
 	Endpoints []struct {
 		App string `json:"app"`
@@ -146,6 +154,48 @@ func (r cvmAPIResponse) endpoint() string {
 		return r.PublicURLs[0].App
 	}
 	return ""
+}
+
+func (r cvmAPIResponse) publicLogsValue() *bool {
+	if r.ComposeFile != nil && r.ComposeFile.PublicLogs != nil {
+		return r.ComposeFile.PublicLogs
+	}
+	return r.PublicLogs
+}
+
+func (r cvmAPIResponse) publicSysinfoValue() *bool {
+	if r.ComposeFile != nil && r.ComposeFile.PublicSysinfo != nil {
+		return r.ComposeFile.PublicSysinfo
+	}
+	return r.PublicSysinfo
+}
+
+func (r cvmAPIResponse) publicTCBInfoValue() *bool {
+	if r.ComposeFile != nil && r.ComposeFile.PublicTCBInfo != nil {
+		return r.ComposeFile.PublicTCBInfo
+	}
+	return r.PublicTCBInfo
+}
+
+func (r cvmAPIResponse) gatewayEnabledValue() *bool {
+	if r.ComposeFile != nil && r.ComposeFile.GatewayEnabled != nil {
+		return r.ComposeFile.GatewayEnabled
+	}
+	return r.GatewayEnabled
+}
+
+func (r cvmAPIResponse) secureTimeValue() *bool {
+	if r.ComposeFile != nil && r.ComposeFile.SecureTime != nil {
+		return r.ComposeFile.SecureTime
+	}
+	return r.SecureTime
+}
+
+func (r cvmAPIResponse) storageFSValue() string {
+	if r.ComposeFile != nil && strings.TrimSpace(r.ComposeFile.StorageFS) != "" {
+		return r.ComposeFile.StorageFS
+	}
+	return r.StorageFS
 }
 
 // ---------------------------------------------------------------------------

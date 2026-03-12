@@ -225,6 +225,7 @@ type composeFileFields struct {
 	SecureTime      types.Bool
 	StorageFS       types.String
 	EnvKeys         []string
+	HasEnvKeys      bool
 }
 
 func buildComposeFile(f composeFileFields) map[string]any {
@@ -253,10 +254,18 @@ func buildComposeFile(f composeFileFields) map[string]any {
 	if !f.StorageFS.IsNull() && !f.StorageFS.IsUnknown() {
 		cf["storage_fs"] = f.StorageFS.ValueString()
 	}
-	if len(f.EnvKeys) > 0 {
+	if f.HasEnvKeys || len(f.EnvKeys) > 0 {
 		cf["allowed_envs"] = f.EnvKeys
 	}
 	return cf
+}
+
+func buildComposeFileUpdateRequest(f composeFileFields, updateEnvVars bool) map[string]any {
+	req := buildComposeFile(f)
+	if updateEnvVars {
+		req["update_env_vars"] = true
+	}
+	return req
 }
 
 // provisionFields holds the inputs needed to build a /cvms/provision request.
@@ -512,26 +521,6 @@ func (v composeSettingsValues) changed(other composeSettingsValues) bool {
 		!v.PublicTCBInfo.Equal(other.PublicTCBInfo) ||
 		!v.GatewayEnabled.Equal(other.GatewayEnabled) ||
 		!v.SecureTime.Equal(other.SecureTime)
-}
-
-func (v composeSettingsValues) buildProvisionReq(name string) map[string]any {
-	req := map[string]any{"name": name}
-	if !v.PublicLogs.IsNull() && !v.PublicLogs.IsUnknown() {
-		req["public_logs"] = v.PublicLogs.ValueBool()
-	}
-	if !v.PublicSysinfo.IsNull() && !v.PublicSysinfo.IsUnknown() {
-		req["public_sysinfo"] = v.PublicSysinfo.ValueBool()
-	}
-	if !v.PublicTCBInfo.IsNull() && !v.PublicTCBInfo.IsUnknown() {
-		req["public_tcbinfo"] = v.PublicTCBInfo.ValueBool()
-	}
-	if !v.GatewayEnabled.IsNull() && !v.GatewayEnabled.IsUnknown() {
-		req["gateway_enabled"] = v.GatewayEnabled.ValueBool()
-	}
-	if !v.SecureTime.IsNull() && !v.SecureTime.IsUnknown() {
-		req["secure_time"] = v.SecureTime.ValueBool()
-	}
-	return req
 }
 
 // ---------------------------------------------------------------------------
