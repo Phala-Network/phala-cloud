@@ -67,9 +67,7 @@ export async function checkDeviceAllowed(request: CheckDeviceAllowedRequest): Pr
   return allowed as boolean;
 }
 
-export async function safeCheckDeviceAllowed(
-  request: CheckDeviceAllowedRequest,
-): Promise<
+export async function safeCheckDeviceAllowed(request: CheckDeviceAllowedRequest): Promise<
   | { success: true; data: boolean }
   | {
       success: false;
