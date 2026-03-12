@@ -8,6 +8,19 @@ All notable changes to `terraform-provider-phala` are documented in this file.
 
 - **`phala_cvm` resource removed.** Use `phala_app` with `replicas = 1` instead. `phala_app` is now the sole lifecycle resource for managing CVMs on Phala Cloud.
 
+### Changed
+
+- Stabilized data source IDs: `phala_account` uses fixed `"current"`, `phala_workspace` uses immutable workspace ID. Prevents state churn on profile changes.
+- Delete polling now respects `wait_timeout_seconds` instead of hardcoded 120s.
+- Unified replica patch semantics: OS image and compose settings updates now use consistent 409-fallthrough across replicas.
+- Improved error messages for public key decoding and delete timeout failures.
+
+### Fixed
+
+- API key no longer leaked in error response headers.
+- `encrypted_env` is now validated as valid hex before sending to API.
+- Typed API client logs a warning on initialization failure instead of silently degrading.
+
 ## [0.2.0-beta.1] - 2026-03-08
 
 ### Added

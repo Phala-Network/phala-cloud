@@ -255,7 +255,7 @@ Read-only smoke (catalog data sources only):
 
 ```bash
 cd terraform
-make smoke-plan PHALA_API_KEY="phat_xxx" CREATE_RESOURCES=false
+make smoke-plan PHALA_API_KEY="phak_xxx" CREATE_RESOURCES=false
 ```
 
 Create + destroy smoke:
@@ -263,7 +263,7 @@ Create + destroy smoke:
 ```bash
 cd terraform
 make smoke-apply \
-  PHALA_API_KEY="phat_xxx" \
+  PHALA_API_KEY="phak_xxx" \
   CREATE_RESOURCES=true \
   APP_NAME="tf-smoke-app" \
   APP_REPLICAS=2 \
@@ -277,7 +277,7 @@ make smoke-apply \
   SSH_PUBLIC_KEY="$(cat ~/.ssh/id_ed25519.pub)"
 
 make smoke-destroy \
-  PHALA_API_KEY="phat_xxx" \
+  PHALA_API_KEY="phak_xxx" \
   CREATE_RESOURCES=true \
   APP_NAME="tf-smoke-app" \
   APP_REPLICAS=2 \
