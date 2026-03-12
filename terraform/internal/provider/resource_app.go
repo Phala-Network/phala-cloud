@@ -494,7 +494,8 @@ func (r *appResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 
 	cvms, err := r.fetchAppCVMs(ctx, appID)
 	if err != nil && !isNotFound(err) {
-		resp.Diagnostics.AddWarning("Delete fallback", fmt.Sprintf("Failed to list app CVMs before delete: %v", err))
+		resp.Diagnostics.AddError("Failed to list app CVMs before delete", fmt.Sprintf("Cannot safely delete app without knowing its CVMs: %v. Retry or delete manually.", err))
+		return
 	}
 	for _, cvm := range cvms {
 		identifier := selectReplicaIdentifier(cvm)

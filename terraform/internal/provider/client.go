@@ -262,7 +262,10 @@ func (c *APIClient) doRaw(
 		return resp.StatusCode, respBody, nil
 	}
 
-	return resp.StatusCode, respBody, c.parseAPIError(resp.StatusCode, resp.Status, respBody, resp.Header)
+	safeHeaders := resp.Header.Clone()
+	safeHeaders.Del("X-API-Key")
+	safeHeaders.Del("Authorization")
+	return resp.StatusCode, respBody, c.parseAPIError(resp.StatusCode, resp.Status, respBody, safeHeaders)
 }
 
 func (c *APIClient) parseAPIError(
