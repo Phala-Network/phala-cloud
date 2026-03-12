@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"strings"
 	"time"
 
@@ -541,7 +541,7 @@ func (v composeSettingsValues) buildProvisionReq(name string) map[string]any {
 // pollInterval returns a base duration with added jitter (±25%) to avoid
 // thundering-herd effects when multiple resources poll concurrently.
 func pollInterval(base time.Duration) time.Duration {
-	jitter := time.Duration(rand.Int63n(int64(base) / 2)) //nolint:gosec // jitter doesn't need crypto rand
+	jitter := time.Duration(rand.Int64N(int64(base) / 2))
 	return base - base/4 + jitter
 }
 

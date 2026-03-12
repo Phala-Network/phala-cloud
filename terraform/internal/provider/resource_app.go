@@ -137,7 +137,7 @@ func (r *appResource) Create(ctx context.Context, req resource.CreateRequest, re
 		return
 	}
 
-	kmsType, customAppID, hasCustomAppID, nonce, hasNonce, diags := resolveProvisionIdentity(plan.KMS, plan.CustomAppID, plan.Nonce)
+	identity, diags := resolveProvisionIdentity(plan.KMS, plan.CustomAppID, plan.Nonce)
 	resp.Diagnostics.Append(diags...)
 	nodeID, hasNodeID, diags := knownOptionalInt64(plan.NodeID, "node_id")
 	resp.Diagnostics.Append(diags...)
@@ -179,16 +179,16 @@ func (r *appResource) Create(ctx context.Context, req resource.CreateRequest, re
 		Name:              plan.Name.ValueString(),
 		Size:              plan.Size.ValueString(),
 		ComposeFile:       composeFile,
-		KMS:               kmsType,
+		KMS:               identity.KMSType,
 		Listed:            plan.Listed.ValueBool(),
 		Region:            plan.Region,
 		NodeID:            nodeID,
 		HasNodeID:         hasNodeID,
 		Image:             plan.Image,
-		CustomAppID:       customAppID,
-		HasCustomAppID:    hasCustomAppID,
-		Nonce:             nonce,
-		HasNonce:          hasNonce,
+		CustomAppID:       identity.CustomAppID,
+		HasCustomAppID:    identity.HasCustomAppID,
+		Nonce:             identity.Nonce,
+		HasNonce:          identity.HasNonce,
 		DiskSize:          plan.DiskSize,
 		SSHAuthorizedKeys: sshAuthorizedKeys,
 	})
@@ -508,7 +508,8 @@ func (r *appResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 		}
 	}
 
-	deadline := time.Now().Add(120 * time.Second)
+	deleteTimeout := waitTimeout(state.WaitTimeoutSecond)
+	deadline := time.Now().Add(deleteTimeout)
 	for time.Now().Before(deadline) {
 		refreshed, err := r.fetchAppCVMs(ctx, appID)
 		if err != nil {
@@ -533,7 +534,7 @@ func (r *appResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 
 	resp.Diagnostics.AddError(
 		"App deletion not confirmed",
-		"Delete requests succeeded but app replicas still exist after 120s. Resources may be orphaned — verify manually and run terraform import if needed.",
+		fmt.Sprintf("Delete requests succeeded but app replicas still exist after %s. Resources may be orphaned — verify manually and run terraform import if needed.", deleteTimeout),
 	)
 }
 
@@ -1067,13 +1068,24 @@ func (r *appResource) patchOSImageAcrossReplicas(
 		"os_image_name": imageName,
 	}
 
-	for _, id := range ids {
-		if err := r.client.PatchJSON(ctx, cvmPath(id)+"/os-image", payload, nil); err != nil {
-			return fmt.Errorf("replica %q OS image update failed: %w", id, err)
+	var lastErr error
+	for i, id := range ids {
+		err := r.client.PatchJSON(ctx, cvmPath(id)+"/os-image", payload, nil)
+		if err == nil {
+			return nil
 		}
+		apiErr, ok := err.(*APIError)
+		if ok && apiErr.StatusCode == http.StatusConflict && i < len(ids)-1 {
+			lastErr = err
+			continue
+		}
+		return err
 	}
 
-	return nil
+	if lastErr != nil {
+		return lastErr
+	}
+	return fmt.Errorf("OS image update failed on all app replicas")
 }
 
 func (r *appResource) provisionAndApplyComposeSettingsAcrossReplicas(
@@ -1087,13 +1099,24 @@ func (r *appResource) provisionAndApplyComposeSettingsAcrossReplicas(
 		return fmt.Errorf("no app replicas available for compose settings update")
 	}
 
-	for _, id := range ids {
-		if err := provisionAndApplyComposeFileUpdate(ctx, r.client, id, provisionReq); err != nil {
-			return fmt.Errorf("replica %q compose settings update failed: %w", id, err)
+	var lastErr error
+	for i, id := range ids {
+		err := provisionAndApplyComposeFileUpdate(ctx, r.client, id, provisionReq)
+		if err == nil {
+			return nil
 		}
+		apiErr, ok := err.(*APIError)
+		if ok && apiErr.StatusCode == http.StatusConflict && i < len(ids)-1 {
+			lastErr = err
+			continue
+		}
+		return err
 	}
 
-	return nil
+	if lastErr != nil {
+		return lastErr
+	}
+	return fmt.Errorf("compose settings update failed on all app replicas")
 }
 
 func normalizeCVMInfos(cvms []cvmAPIResponse) []cvmAPIResponse {
@@ -1112,130 +1135,74 @@ func normalizeCVMInfos(cvms []cvmAPIResponse) []cvmAPIResponse {
 }
 
 func normalizeCVMFromAny(raw map[string]any) cvmAPIResponse {
-	out := cvmAPIResponse{
-		Name:       stringFromAny(raw["name"]),
-		Status:     stringFromAny(raw["status"]),
-		AppID:      ensureAppPrefix(stringFromAny(raw["app_id"])),
-		VMUUID:     stringFromAny(raw["vm_uuid"]),
-		InstanceID: stringFromAny(raw["instance_id"]),
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return cvmAPIResponse{}
 	}
-	if osRaw, ok := raw["os"].(map[string]any); ok {
-		if name := stringFromAny(osRaw["name"]); name != "" {
-			out.OS = &struct {
-				Name string `json:"name"`
-			}{Name: name}
-		}
+	var out cvmAPIResponse
+	if err := json.Unmarshal(b, &out); err != nil {
+		return cvmAPIResponse{}
 	}
-	if b, ok := boolFromAny(raw["in_progress"]); ok {
-		out.InProgress = b
+	out.AppID = ensureAppPrefix(out.AppID)
+
+	// The API sometimes nests CVM fields inside a "hosted" sub-object.
+	// Unmarshal it separately and use as fallback for any empty top-level fields.
+	hostedRaw, ok := raw["hosted"].(map[string]any)
+	if !ok {
+		return out
 	}
-	if b, ok := boolFromAny(raw["listed"]); ok {
-		out.Listed = &b
+	hb, err := json.Marshal(hostedRaw)
+	if err != nil {
+		return out
 	}
-	if b, ok := boolFromAny(raw["public_logs"]); ok {
-		out.PublicLogs = &b
+	var hosted cvmAPIResponse
+	if err := json.Unmarshal(hb, &hosted); err != nil {
+		return out
 	}
-	if b, ok := boolFromAny(raw["public_sysinfo"]); ok {
-		out.PublicSysinfo = &b
+
+	if out.Name == "" {
+		out.Name = hosted.Name
 	}
-	if b, ok := boolFromAny(raw["public_tcbinfo"]); ok {
-		out.PublicTCBInfo = &b
+	if out.Status == "" {
+		out.Status = hosted.Status
 	}
-	if b, ok := boolFromAny(raw["gateway_enabled"]); ok {
-		out.GatewayEnabled = &b
+	if out.AppID == "" {
+		out.AppID = ensureAppPrefix(hosted.AppID)
 	}
-	if b, ok := boolFromAny(raw["secure_time"]); ok {
-		out.SecureTime = &b
+	if out.InstanceID == "" {
+		out.InstanceID = hosted.InstanceID
 	}
-	out.StorageFS = stringFromAny(raw["storage_fs"])
+	if out.VMUUID == "" {
+		out.VMUUID = hosted.idString()
+	}
 	if out.BaseImage == "" {
-		out.BaseImage = stringFromAny(raw["base_image"])
+		out.BaseImage = hosted.BaseImage
 	}
-	if idJSON, err := marshalJSONRaw(raw["id"]); err == nil && len(idJSON) > 0 {
-		out.ID = idJSON
+	if out.StorageFS == "" {
+		out.StorageFS = hosted.StorageFS
 	}
-
-	if hostedRaw, ok := raw["hosted"].(map[string]any); ok {
-		if out.Name == "" {
-			out.Name = stringFromAny(hostedRaw["name"])
-		}
-		if out.Status == "" {
-			out.Status = stringFromAny(hostedRaw["status"])
-		}
-		if out.AppID == "" {
-			out.AppID = ensureAppPrefix(stringFromAny(hostedRaw["app_id"]))
-		}
-		if out.InstanceID == "" {
-			out.InstanceID = stringFromAny(hostedRaw["instance_id"])
-		}
-		if out.VMUUID == "" {
-			out.VMUUID = stringFromAny(hostedRaw["id"])
-		}
-		if out.BaseImage == "" {
-			out.BaseImage = stringFromAny(hostedRaw["base_image"])
-		}
-		if out.StorageFS == "" {
-			out.StorageFS = stringFromAny(hostedRaw["storage_fs"])
-		}
-		if out.PublicLogs == nil {
-			if b, ok := boolFromAny(hostedRaw["public_logs"]); ok {
-				out.PublicLogs = &b
-			}
-		}
-		if out.PublicSysinfo == nil {
-			if b, ok := boolFromAny(hostedRaw["public_sysinfo"]); ok {
-				out.PublicSysinfo = &b
-			}
-		}
-		if out.PublicTCBInfo == nil {
-			if b, ok := boolFromAny(hostedRaw["public_tcbinfo"]); ok {
-				out.PublicTCBInfo = &b
-			}
-		}
-		if out.GatewayEnabled == nil {
-			if b, ok := boolFromAny(hostedRaw["gateway_enabled"]); ok {
-				out.GatewayEnabled = &b
-			}
-		}
-		if out.SecureTime == nil {
-			if b, ok := boolFromAny(hostedRaw["secure_time"]); ok {
-				out.SecureTime = &b
-			}
-		}
-		if len(out.ID) == 0 {
-			if idJSON, err := marshalJSONRaw(hostedRaw["id"]); err == nil && len(idJSON) > 0 {
-				out.ID = idJSON
-			}
-		}
-		if appURL := stringFromAny(hostedRaw["app_url"]); appURL != "" {
-			out.Endpoints = append(out.Endpoints, struct {
-				App string `json:"app"`
-			}{App: appURL})
-		}
+	if out.PublicLogs == nil {
+		out.PublicLogs = hosted.PublicLogs
 	}
-
-	if publicURLs, ok := raw["public_urls"].([]any); ok {
-		out.PublicURLs = make([]struct {
+	if out.PublicSysinfo == nil {
+		out.PublicSysinfo = hosted.PublicSysinfo
+	}
+	if out.PublicTCBInfo == nil {
+		out.PublicTCBInfo = hosted.PublicTCBInfo
+	}
+	if out.GatewayEnabled == nil {
+		out.GatewayEnabled = hosted.GatewayEnabled
+	}
+	if out.SecureTime == nil {
+		out.SecureTime = hosted.SecureTime
+	}
+	if len(out.ID) == 0 {
+		out.ID = hosted.ID
+	}
+	if appURL := stringFromAny(hostedRaw["app_url"]); appURL != "" && len(out.Endpoints) == 0 {
+		out.Endpoints = append(out.Endpoints, struct {
 			App string `json:"app"`
-		}, 0, len(publicURLs))
-		for _, item := range publicURLs {
-			if obj, ok := item.(map[string]any); ok {
-				if app := stringFromAny(obj["app"]); app != "" {
-					out.PublicURLs = append(out.PublicURLs, struct {
-						App string `json:"app"`
-					}{App: app})
-				}
-			}
-		}
-	}
-
-	if nodeInfo, ok := raw["node_info"].(map[string]any); ok {
-		region := stringFromAny(nodeInfo["region"])
-		if region != "" {
-			out.NodeInfo = &struct {
-				Region string `json:"region"`
-			}{Region: region}
-		}
+		}{App: appURL})
 	}
 
 	return out
@@ -1269,24 +1236,4 @@ func stringFromAny(v any) string {
 	default:
 		return ""
 	}
-}
-
-func boolFromAny(v any) (bool, bool) {
-	switch t := v.(type) {
-	case bool:
-		return t, true
-	default:
-		return false, false
-	}
-}
-
-func marshalJSONRaw(v any) (json.RawMessage, error) {
-	if v == nil {
-		return nil, nil
-	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-	return json.RawMessage(b), nil
 }

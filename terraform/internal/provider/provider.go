@@ -86,7 +86,7 @@ func (p *phalaProvider) Configure(ctx context.Context, req provider.ConfigureReq
 		return
 	}
 
-	apiKey := firstNonEmptyString(
+	apiKey := nonEmpty(
 		stringFromTF(config.APIKey),
 		os.Getenv("PHALA_CLOUD_API_KEY"),
 	)
@@ -98,13 +98,13 @@ func (p *phalaProvider) Configure(ctx context.Context, req provider.ConfigureReq
 		return
 	}
 
-	apiPrefix := firstNonEmptyString(
+	apiPrefix := nonEmpty(
 		stringFromTF(config.APIPrefix),
 		os.Getenv("PHALA_CLOUD_API_PREFIX"),
 		DefaultAPIPrefix,
 	)
 
-	apiVersion := firstNonEmptyString(
+	apiVersion := nonEmpty(
 		stringFromTF(config.APIVersion),
 		DefaultAPIVersion,
 	)
@@ -148,13 +148,4 @@ func stringFromTF(v types.String) string {
 		return ""
 	}
 	return v.ValueString()
-}
-
-func firstNonEmptyString(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }

@@ -7,7 +7,7 @@ import (
 )
 
 func TestResolveProvisionIdentity_DefaultPhala(t *testing.T) {
-	kms, customAppID, hasCustomAppID, nonce, hasNonce, diags := resolveProvisionIdentity(
+	id, diags := resolveProvisionIdentity(
 		types.StringNull(),
 		types.StringNull(),
 		types.Int64Null(),
@@ -15,19 +15,19 @@ func TestResolveProvisionIdentity_DefaultPhala(t *testing.T) {
 	if diags.HasError() {
 		t.Fatalf("expected no errors, got: %v", diags)
 	}
-	if kms != "phala" {
-		t.Fatalf("expected kms phala, got %q", kms)
+	if id.KMSType != "phala" {
+		t.Fatalf("expected kms phala, got %q", id.KMSType)
 	}
-	if customAppID != "" || hasCustomAppID {
-		t.Fatalf("expected no custom app id, got %q / %v", customAppID, hasCustomAppID)
+	if id.CustomAppID != "" || id.HasCustomAppID {
+		t.Fatalf("expected no custom app id, got %q / %v", id.CustomAppID, id.HasCustomAppID)
 	}
-	if nonce != 0 || hasNonce {
-		t.Fatalf("expected no nonce, got %d / %v", nonce, hasNonce)
+	if id.Nonce != 0 || id.HasNonce {
+		t.Fatalf("expected no nonce, got %d / %v", id.Nonce, id.HasNonce)
 	}
 }
 
 func TestResolveProvisionIdentity_CustomAppIDRequiresNonceForPhala(t *testing.T) {
-	_, _, _, _, _, diags := resolveProvisionIdentity(
+	_, diags := resolveProvisionIdentity(
 		types.StringValue("phala"),
 		types.StringValue("app_custom123"),
 		types.Int64Null(),
@@ -38,7 +38,7 @@ func TestResolveProvisionIdentity_CustomAppIDRequiresNonceForPhala(t *testing.T)
 }
 
 func TestResolveProvisionIdentity_NonceRequiresCustomAppID(t *testing.T) {
-	_, _, _, _, _, diags := resolveProvisionIdentity(
+	_, diags := resolveProvisionIdentity(
 		types.StringValue("phala"),
 		types.StringNull(),
 		types.Int64Value(1),
@@ -49,7 +49,7 @@ func TestResolveProvisionIdentity_NonceRequiresCustomAppID(t *testing.T) {
 }
 
 func TestResolveProvisionIdentity_NonPhalaUnsupportedForNow(t *testing.T) {
-	_, _, _, _, _, diags := resolveProvisionIdentity(
+	_, diags := resolveProvisionIdentity(
 		types.StringValue("ethereum"),
 		types.StringNull(),
 		types.Int64Null(),

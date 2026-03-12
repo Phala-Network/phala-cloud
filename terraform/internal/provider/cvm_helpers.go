@@ -343,55 +343,68 @@ func knownOptionalInt64(value types.Int64, fieldName string) (int64, bool, diag.
 // Provisioning identity helpers
 // ---------------------------------------------------------------------------
 
+// provisionIdentity holds the resolved KMS and custom app identity values
+// for a provision request.
+type provisionIdentity struct {
+	KMSType        string
+	CustomAppID    string
+	HasCustomAppID bool
+	Nonce          int64
+	HasNonce       bool
+}
+
 func resolveProvisionIdentity(
 	kmsValue types.String,
 	customAppIDValue types.String,
 	nonceValue types.Int64,
-) (string, string, bool, int64, bool, diag.Diagnostics) {
+) (provisionIdentity, diag.Diagnostics) {
 	var diags diag.Diagnostics
+	var id provisionIdentity
 
 	kmsRaw, hasKMS, kmsDiags := knownOptionalString(kmsValue, "kms")
 	diags.Append(kmsDiags...)
-	kmsType := "phala"
+	id.KMSType = "phala"
 	if hasKMS {
 		normalized, err := normalizeKMSType(kmsRaw)
 		if err != nil {
 			diags.AddError("Invalid kms", err.Error())
 		} else {
-			kmsType = normalized
+			id.KMSType = normalized
 		}
 	}
 
-	customAppID, hasCustomAppID, customDiags := knownOptionalString(customAppIDValue, "custom_app_id")
+	var customDiags diag.Diagnostics
+	id.CustomAppID, id.HasCustomAppID, customDiags = knownOptionalString(customAppIDValue, "custom_app_id")
 	diags.Append(customDiags...)
-	customAppID = strings.TrimSpace(customAppID)
-	if hasCustomAppID && customAppID == "" {
+	id.CustomAppID = strings.TrimSpace(id.CustomAppID)
+	if id.HasCustomAppID && id.CustomAppID == "" {
 		diags.AddError("Invalid custom_app_id", "custom_app_id cannot be empty.")
 	}
 
-	nonce, hasNonce, nonceDiags := knownOptionalInt64(nonceValue, "nonce")
+	var nonceDiags diag.Diagnostics
+	id.Nonce, id.HasNonce, nonceDiags = knownOptionalInt64(nonceValue, "nonce")
 	diags.Append(nonceDiags...)
-	if hasNonce && nonce < 0 {
+	if id.HasNonce && id.Nonce < 0 {
 		diags.AddError("Invalid nonce", "nonce must be greater than or equal to 0.")
 	}
 
-	if hasNonce && !hasCustomAppID {
+	if id.HasNonce && !id.HasCustomAppID {
 		diags.AddError("Invalid nonce configuration", "nonce requires custom_app_id to be set.")
 	}
-	if hasCustomAppID && kmsType == "phala" && !hasNonce {
+	if id.HasCustomAppID && id.KMSType == "phala" && !id.HasNonce {
 		diags.AddError("Invalid custom_app_id configuration", "nonce is required when custom_app_id is set with kms = phala.")
 	}
-	if hasNonce && kmsType != "phala" {
+	if id.HasNonce && id.KMSType != "phala" {
 		diags.AddError("Invalid nonce configuration", "nonce is only supported when kms = phala.")
 	}
-	if kmsType != "phala" {
+	if id.KMSType != "phala" {
 		diags.AddError(
 			"Unsupported kms flow",
 			"Only kms = phala is currently supported by this provider. On-chain kms flows (ethereum/base) are planned but not implemented yet.",
 		)
 	}
 
-	return kmsType, customAppID, hasCustomAppID, nonce, hasNonce, diags
+	return id, diags
 }
 
 func normalizeKMSType(raw string) (string, error) {
@@ -532,7 +545,7 @@ func decodeEnvPublicKey(v string) ([]byte, error) {
 		return out, nil
 	}
 
-	return nil, fmt.Errorf("invalid base64 encoding")
+	return nil, fmt.Errorf("unable to decode public key (expected 32-byte hex or base64 format)")
 }
 
 // ---------------------------------------------------------------------------
