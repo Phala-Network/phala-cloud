@@ -101,17 +101,53 @@ export async function getAllowedDevices(
     }),
   ]);
 
-  const addedDevices = new Set<Hash>();
-  const removedDevices = new Set<Hash>();
+  // Merge all events, tag with action, sort chronologically, then replay
+  type DeviceEvent = {
+    deviceId: Hash;
+    action: "add" | "remove";
+    blockNumber: bigint;
+    logIndex: number;
+  };
+  const allEvents: DeviceEvent[] = [];
 
   for (const event of addedEvents) {
-    if (event.args?.deviceId) addedDevices.add(event.args.deviceId as Hash);
+    if (event.args?.deviceId) {
+      allEvents.push({
+        deviceId: event.args.deviceId as Hash,
+        action: "add",
+        blockNumber: event.blockNumber,
+        logIndex: event.logIndex,
+      });
+    }
   }
   for (const event of removedEvents) {
-    if (event.args?.deviceId) removedDevices.add(event.args.deviceId as Hash);
+    if (event.args?.deviceId) {
+      allEvents.push({
+        deviceId: event.args.deviceId as Hash,
+        action: "remove",
+        blockNumber: event.blockNumber,
+        logIndex: event.logIndex,
+      });
+    }
   }
 
-  const devices = Array.from(addedDevices).filter((id) => !removedDevices.has(id));
+  // Sort by block number, then by log index within the same block
+  allEvents.sort((a, b) => {
+    if (a.blockNumber !== b.blockNumber) return a.blockNumber < b.blockNumber ? -1 : 1;
+    return a.logIndex - b.logIndex;
+  });
+
+  // Replay events to compute final state
+  const activeDevices = new Set<Hash>();
+  for (const event of allEvents) {
+    if (event.action === "add") {
+      activeDevices.add(event.deviceId);
+    } else {
+      activeDevices.delete(event.deviceId);
+    }
+  }
+
+  const devices = Array.from(activeDevices);
 
   return {
     appAddress: contractAddress,
