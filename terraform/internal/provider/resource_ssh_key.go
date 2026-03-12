@@ -232,6 +232,9 @@ func (r *sshKeyResource) ImportState(
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
+// findSSHKey fetches all SSH keys and scans for the given id.
+// The Phala Cloud API does not expose a GET /user/ssh-keys/{id} endpoint,
+// so a list-and-filter is the only option.
 func (r *sshKeyResource) findSSHKey(ctx context.Context, id string) (*sshKeyAPI, error) {
 	var keys []sshKeyAPI
 	if err := r.client.GetJSON(ctx, "/user/ssh-keys", &keys); err != nil {

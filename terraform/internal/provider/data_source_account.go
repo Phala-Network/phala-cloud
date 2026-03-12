@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -135,19 +134,11 @@ func (d *accountDataSource) Read(ctx context.Context, _ datasource.ReadRequest, 
 		return
 	}
 
-	id := strings.TrimSpace(me.User.Email)
-	if id == "" {
-		id = strings.TrimSpace(me.User.Username)
-	}
-	if id == "" {
-		id = strings.TrimSpace(me.Workspace.ID)
-	}
-	if id == "" {
-		id = "current"
-	}
-
+	// Use a stable identifier that won't change when the user updates
+	// their profile (email, username). "current" represents "whoever
+	// the API key belongs to" — the same semantic every refresh.
 	state := accountDataSourceModel{
-		ID:       types.StringValue(id),
+		ID:       types.StringValue("current"),
 		Username: nullableString(me.User.Username),
 		Email:    nullableString(me.User.Email),
 		Role:     nullableString(me.User.Role),

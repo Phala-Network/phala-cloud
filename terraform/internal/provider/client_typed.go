@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -29,6 +30,7 @@ func newTypedClient(baseURL, apiKey, apiVersion string, httpClient *http.Client)
 		}),
 	)
 	if err != nil {
+		log.Printf("[WARN] phala: failed to initialize typed API client, falling back to raw HTTP: %v", err)
 		return nil
 	}
 

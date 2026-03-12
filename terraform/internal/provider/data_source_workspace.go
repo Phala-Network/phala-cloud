@@ -84,16 +84,15 @@ func (d *workspaceDataSource) Read(ctx context.Context, _ datasource.ReadRequest
 		return
 	}
 
-	id := strings.TrimSpace(me.Workspace.ID)
-	if id == "" {
-		id = strings.TrimSpace(me.Workspace.Slug)
-	}
-	if id == "" {
-		id = "current"
+	// Prefer workspace ID (immutable) for a stable data source identity.
+	// Fall back to "current" if the API doesn't return one.
+	wsID := strings.TrimSpace(me.Workspace.ID)
+	if wsID == "" {
+		wsID = "current"
 	}
 
 	state := workspaceDataSourceModel{
-		ID:     types.StringValue(id),
+		ID:     types.StringValue(wsID),
 		Name:   nullableString(me.Workspace.Name),
 		Slug:   nullableString(me.Workspace.Slug),
 		Tier:   nullableString(me.Workspace.Tier),

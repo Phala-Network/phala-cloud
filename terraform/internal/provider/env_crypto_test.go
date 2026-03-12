@@ -33,8 +33,9 @@ func TestEncryptEnvMapRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode encrypted hex: %v", err)
 	}
-	if len(packet) <= 44 {
-		t.Fatalf("encrypted packet too short: %d", len(packet))
+	// Minimum: 32 (ephemeral pub) + 12 (GCM nonce) + 16 (GCM tag) + 1 (ciphertext) = 61
+	if len(packet) < 61 {
+		t.Fatalf("encrypted packet too short: got %d, minimum valid is 61", len(packet))
 	}
 
 	ephemeralPubBytes := packet[:32]
