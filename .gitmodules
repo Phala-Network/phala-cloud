@@ -1,0 +1,4 @@
+[submodule "terraform"]
+	path = terraform
+	url = ../terraform-provider-phala
+	branch = main

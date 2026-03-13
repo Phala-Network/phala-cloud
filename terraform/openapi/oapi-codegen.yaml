@@ -1,8 +1,0 @@
-package: phalaapi
-generate:
-  models: true
-  client: true
-  client-with-responses: true
-output-options:
-  skip-prune: true
-output: internal/phalaapi/client.gen.go

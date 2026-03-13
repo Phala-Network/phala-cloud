@@ -16,9 +16,26 @@ A curated list of awesome Phala Cloud resources, tools, and templates.
 
 - **CLI** (`/cli`) - Official Phala Cloud CLI tools
 - **JavaScript/TypeScript SDK** (`/js`) - Official Phala Cloud API client for managing cloud resources
+- **Terraform Provider** (`/terraform`) - Official Phala Cloud Terraform provider, vendored here as a git submodule from `terraform-provider-phala`
 - **Documentation & Guides** (`/docs`) - Integration guides and examples  
 - **Templates** (`/templates`) - Curated collection of Phala Cloud templates and prebuilt applications
 - **Community Issues** - Feature requests, bug reports, and discussions
+
+## Clone With Submodules
+
+The Terraform provider now lives in its own repository and is included here as a git submodule.
+
+Clone this repository with:
+
+```bash
+git clone --recurse-submodules git@github.com:Phala-Network/phala-cloud.git
+```
+
+If you already cloned it without submodules, run:
+
+```bash
+git submodule update --init --recursive
+```
 
 ## Use Phala Cloud
 
@@ -124,4 +141,3 @@ Keep up with the latest developments:
 - [Phala Discord](https://discord.gg/phala-network)
 
 Join the community and help build the future of confidential computing!
-
