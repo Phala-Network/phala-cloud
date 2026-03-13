@@ -29,6 +29,12 @@ import {
 	cvmsDevicesAllowAnyMeta,
 	cvmsDevicesAllowAnySchema,
 	type CvmsDevicesAllowAnyInput,
+	cvmsDevicesDisallowAnyMeta,
+	cvmsDevicesDisallowAnySchema,
+	type CvmsDevicesDisallowAnyInput,
+	cvmsDevicesToggleAllowAnyMeta,
+	cvmsDevicesToggleAllowAnySchema,
+	type CvmsDevicesToggleAllowAnyInput,
 } from "./command";
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -288,58 +294,22 @@ async function runAllowAny(
 	input: CvmsDevicesAllowAnyInput,
 	context: CommandContext,
 ): Promise<number> {
-	if (!input.enable && !input.disable) {
-		context.fail("Specify --enable or --disable.");
-		return 1;
-	}
 	if (input.enable && input.disable) {
 		context.fail("Cannot use both --enable and --disable.");
 		return 1;
 	}
 
-	const allow = !!input.enable;
+	const allow = !input.disable;
 
 	try {
 		const resolved = await resolveAppContract(context);
 		if (!resolved) return 1;
 
-		const { chain, appContractAddress } = resolved;
-		const privateKey = resolvePrivateKey(input);
-
-		const spinner = logger.startSpinner(
-			`Submitting setAllowAnyDevice(${allow}) transaction...`,
-		);
-		const result = await safeSetAllowAnyDevice({
-			chain,
-			rpcUrl: input.rpcUrl,
-			appAddress: appContractAddress,
+		return await executeSetAllowAny(input, context, {
+			chain: resolved.chain,
+			appContractAddress: resolved.appContractAddress,
 			allow,
-			privateKey: privateKey as `0x${string}`,
 		});
-		spinner.stop(true);
-
-		if (!result.success) {
-			const err = result as { success: false; error: { message: string } };
-			context.fail(err.error.message);
-			return 1;
-		}
-
-		const data = result.data as SetAllowAnyDevice;
-
-		if (input.json) {
-			context.success(data);
-			return 0;
-		}
-
-		logger.break();
-		logger.success(
-			`Allow-any-device ${allow ? "enabled" : "disabled"} successfully!`,
-		);
-		logger.keyValueTable({
-			Transaction: data.transactionHash,
-		});
-
-		return 0;
 	} catch (error) {
 		logger.logDetailedError(error);
 		context.fail(
@@ -347,6 +317,113 @@ async function runAllowAny(
 		);
 		return 1;
 	}
+}
+
+async function runDisallowAny(
+	input: CvmsDevicesDisallowAnyInput,
+	context: CommandContext,
+): Promise<number> {
+	try {
+		const resolved = await resolveAppContract(context);
+		if (!resolved) return 1;
+
+		return await executeSetAllowAny(input, context, {
+			chain: resolved.chain,
+			appContractAddress: resolved.appContractAddress,
+			allow: false,
+		});
+	} catch (error) {
+		logger.logDetailedError(error);
+		context.fail(
+			`Failed: ${error instanceof Error ? error.message : String(error)}`,
+		);
+		return 1;
+	}
+}
+
+async function runToggleAllowAny(
+	input: CvmsDevicesToggleAllowAnyInput,
+	context: CommandContext,
+): Promise<number> {
+	if (input.enable && input.disable) {
+		context.fail("Cannot use both --enable and --disable.");
+		return 1;
+	}
+
+	try {
+		const resolved = await resolveAppContract(context);
+		if (!resolved) return 1;
+
+		const allow =
+			input.enable === true
+				? true
+				: input.disable === true
+					? false
+					: !resolved.allowlist.allow_any_device;
+
+		return await executeSetAllowAny(input, context, {
+			chain: resolved.chain,
+			appContractAddress: resolved.appContractAddress,
+			allow,
+		});
+	} catch (error) {
+		logger.logDetailedError(error);
+		context.fail(
+			`Failed: ${error instanceof Error ? error.message : String(error)}`,
+		);
+		return 1;
+	}
+}
+
+async function executeSetAllowAny(
+	input: {
+		privateKey?: string;
+		rpcUrl?: string;
+		json?: boolean;
+	},
+	context: CommandContext,
+	params: {
+		chain: (typeof SUPPORTED_CHAINS)[keyof typeof SUPPORTED_CHAINS];
+		appContractAddress: `0x${string}`;
+		allow: boolean;
+	},
+): Promise<number> {
+	const { chain, appContractAddress, allow } = params;
+	const privateKey = resolvePrivateKey(input);
+
+	const spinner = logger.startSpinner(
+		`Submitting setAllowAnyDevice(${allow}) transaction...`,
+	);
+	const result = await safeSetAllowAnyDevice({
+		chain,
+		rpcUrl: input.rpcUrl,
+		appAddress: appContractAddress,
+		allow,
+		privateKey: privateKey as `0x${string}`,
+	});
+	spinner.stop(true);
+
+	if (!result.success) {
+		const err = result as { success: false; error: { message: string } };
+		context.fail(err.error.message);
+		return 1;
+	}
+
+	const data = result.data as SetAllowAnyDevice;
+	if (input.json) {
+		context.success(data);
+		return 0;
+	}
+
+	logger.break();
+	logger.success(
+		`Allow-any-device ${allow ? "enabled" : "disabled"} successfully!`,
+	);
+	logger.keyValueTable({
+		Transaction: data.transactionHash,
+	});
+
+	return 0;
 }
 
 // ── Command definitions ─────────────────────────────────────────────
@@ -379,6 +456,20 @@ export const cvmsDevicesAllowAnyCommand = defineCommand({
 	handler: runAllowAny,
 });
 
+export const cvmsDevicesDisallowAnyCommand = defineCommand({
+	path: ["cvms", "devices", "disallow-any"],
+	meta: cvmsDevicesDisallowAnyMeta,
+	schema: cvmsDevicesDisallowAnySchema,
+	handler: runDisallowAny,
+});
+
+export const cvmsDevicesToggleAllowAnyCommand = defineCommand({
+	path: ["cvms", "devices", "toggle-allow-any"],
+	meta: cvmsDevicesToggleAllowAnyMeta,
+	schema: cvmsDevicesToggleAllowAnySchema,
+	handler: runToggleAllowAny,
+});
+
 export const cvmsDevicesCommands = {
 	group: cvmsDevicesGroup,
 	commands: [
@@ -386,6 +477,8 @@ export const cvmsDevicesCommands = {
 		cvmsDevicesAddCommand,
 		cvmsDevicesRemoveCommand,
 		cvmsDevicesAllowAnyCommand,
+		cvmsDevicesDisallowAnyCommand,
+		cvmsDevicesToggleAllowAnyCommand,
 	],
 };
 

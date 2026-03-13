@@ -145,7 +145,7 @@ export type CvmsDevicesRemoveInput = z.infer<typeof cvmsDevicesRemoveSchema>;
 
 export const cvmsDevicesAllowAnyMeta: CommandMeta = {
 	name: "allow-any",
-	description: "Toggle the allow-any-device flag on the contract",
+	description: "Set allow-any-device flag on the contract",
 	stability: "unstable",
 	arguments: [cvmIdArgument],
 	options: [
@@ -204,4 +204,120 @@ export const cvmsDevicesAllowAnySchema = z.object({
 
 export type CvmsDevicesAllowAnyInput = z.infer<
 	typeof cvmsDevicesAllowAnySchema
+>;
+
+// ── disallow-any ────────────────────────────────────────────────────
+
+export const cvmsDevicesDisallowAnyMeta: CommandMeta = {
+	name: "disallow-any",
+	description: "Disable allow-any-device on the contract",
+	stability: "unstable",
+	arguments: [cvmIdArgument],
+	options: [
+		{
+			name: "private-key",
+			description: "Private key for signing the transaction",
+			type: "string",
+			target: "privateKey",
+			group: "advanced",
+		},
+		{
+			name: "rpc-url",
+			description: "Custom RPC URL for the blockchain",
+			type: "string",
+			target: "rpcUrl",
+			group: "advanced",
+		},
+		jsonOption,
+		interactiveOption,
+	],
+	examples: [
+		{
+			name: "Disable allow-any-device",
+			value:
+				"phala cvms devices disallow-any app_abc123 --private-key 0x...",
+		},
+	],
+};
+
+export const cvmsDevicesDisallowAnySchema = z.object({
+	cvmId: z.string().optional(),
+	privateKey: z.string().optional(),
+	rpcUrl: z.string().optional(),
+	json: z.boolean().default(false),
+	interactive: z.boolean().default(false),
+});
+
+export type CvmsDevicesDisallowAnyInput = z.infer<
+	typeof cvmsDevicesDisallowAnySchema
+>;
+
+// ── toggle-allow-any ────────────────────────────────────────────────
+
+export const cvmsDevicesToggleAllowAnyMeta: CommandMeta = {
+	name: "toggle-allow-any",
+	description:
+		"Toggle allow-any-device on the contract (or force via --enable/--disable)",
+	stability: "unstable",
+	arguments: [cvmIdArgument],
+	options: [
+		{
+			name: "enable",
+			description: "Force enable allow-any-device",
+			type: "boolean",
+			target: "enable",
+		},
+		{
+			name: "disable",
+			description: "Force disable allow-any-device",
+			type: "boolean",
+			target: "disable",
+		},
+		{
+			name: "private-key",
+			description: "Private key for signing the transaction",
+			type: "string",
+			target: "privateKey",
+			group: "advanced",
+		},
+		{
+			name: "rpc-url",
+			description: "Custom RPC URL for the blockchain",
+			type: "string",
+			target: "rpcUrl",
+			group: "advanced",
+		},
+		jsonOption,
+		interactiveOption,
+	],
+	examples: [
+		{
+			name: "Toggle based on current state",
+			value: "phala cvms devices toggle-allow-any app_abc123 --private-key 0x...",
+		},
+		{
+			name: "Force enable",
+			value:
+				"phala cvms devices toggle-allow-any app_abc123 --enable --private-key 0x...",
+		},
+		{
+			name: "Force disable",
+			value:
+				"phala cvms devices toggle-allow-any app_abc123 --disable --private-key 0x...",
+		},
+	],
+};
+
+export const cvmsDevicesToggleAllowAnySchema = z.object({
+	cvmId: z.string().optional(),
+	enable: z.boolean().optional(),
+	disable: z.boolean().optional(),
+	privateKey: z.string().optional(),
+	rpcUrl: z.string().optional(),
+	json: z.boolean().default(false),
+	interactive: z.boolean().default(false),
+});
+
+export type CvmsDevicesToggleAllowAnyInput = z.infer<
+	typeof cvmsDevicesToggleAllowAnySchema
 >;
