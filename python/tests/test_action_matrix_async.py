@@ -110,6 +110,33 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
     if method == "POST" and path == "/api/v1/status/batch":
         return httpx.Response(200, json={"vm1": {"status": "running"}})
 
+    if method == "GET" and path.startswith("/api/v1/kms/on-chain/"):
+        return httpx.Response(200, json={"chain_name": "base", "chain_id": 8453, "contracts": []})
+    if method == "GET" and path == "/api/v1/os-images":
+        return httpx.Response(
+            200,
+            json={
+                "items": [
+                    {
+                        "name": "prod-0.3.0",
+                        "slug": "prod",
+                        "version": "0.3.0",
+                        "os_image_hash": "abc",
+                        "is_dev": False,
+                        "requires_gpu": False,
+                    }
+                ],
+                "total": 1,
+                "page": 1,
+                "page_size": 10,
+                "pages": 1,
+            },
+        )
+    if method == "GET" and path.endswith("/device-allowlist"):
+        return httpx.Response(
+            200, json={"is_onchain_kms": False, "allow_any_device": True, "devices": []}
+        )
+
     return httpx.Response(200, json={})
 
 
@@ -136,6 +163,9 @@ async def test_async_action_matrix_and_safe() -> None:
         await c.get_app_filter_options()
         await c.list_ssh_keys()
         await c.get_cvm_status_batch({"vmUuids": ["v1"]})
+        await c.get_kms_on_chain_detail({"chain": "base"})
+        await c.get_os_images()
+        await c.get_app_device_allowlist({"appId": "a"})
 
         assert (await c.safe_get_current_user()).ok
         assert (await c.safe_get_available_nodes()).ok

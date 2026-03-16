@@ -15,6 +15,12 @@ def test_actions_exports_have_core_entries() -> None:
         "safe_add_compose_hash",
         "deploy_app_auth",
         "safe_deploy_app_auth",
+        "get_kms_on_chain_detail",
+        "safe_get_kms_on_chain_detail",
+        "get_os_images",
+        "safe_get_os_images",
+        "get_app_device_allowlist",
+        "safe_get_app_device_allowlist",
     ]
     for name in required:
         assert hasattr(actions, name)

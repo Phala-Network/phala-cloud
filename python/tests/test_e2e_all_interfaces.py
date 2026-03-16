@@ -288,6 +288,17 @@ def test_e2e_sync_all_interfaces() -> None:
         pass
     client.safe_sync_github_ssh_keys()
 
+    # KMS on-chain detail
+    try:
+        client.get_kms_on_chain_detail({"chain": "base"})
+    except Exception:
+        pass
+    client.safe_get_kms_on_chain_detail({"chain": "base"})
+
+    # OS images
+    client.get_os_images()
+    assert client.safe_get_os_images().ok
+
     # Apps
     try:
         client.get_app_info({"appId": app_id})
@@ -302,6 +313,13 @@ def test_e2e_sync_all_interfaces() -> None:
     client.safe_get_app_attestation({"appId": app_id})
     client.get_app_filter_options()
     client.safe_get_app_filter_options()
+
+    # App device allowlist
+    try:
+        client.get_app_device_allowlist({"appId": app_id})
+    except Exception:
+        pass
+    client.safe_get_app_device_allowlist({"appId": app_id})
 
     # CVM read
     req = {"id": cvm_id}
@@ -460,6 +478,15 @@ async def test_e2e_async_all_interfaces() -> None:
 
     await client.get_kms_info({"kms_id": kms_id})
     assert (await client.safe_get_kms_info({"kms_id": kms_id})).ok
+
+    # KMS on-chain detail
+    await client.safe_get_kms_on_chain_detail({"chain": "base"})
+
+    # OS images
+    assert (await client.safe_get_os_images()).ok
+
+    # App device allowlist
+    await client.safe_get_app_device_allowlist({"appId": app_id})
 
     req = {"id": cvm_id}
     await client.get_cvm_info(req)

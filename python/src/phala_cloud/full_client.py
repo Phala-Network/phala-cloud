@@ -46,11 +46,13 @@ from .blockchains import add_compose_hash as _add_compose_hash
 from .blockchains import deploy_app_auth as _deploy_app_auth
 from .client import AsyncPhalaCloud as _AsyncBase
 from .client import PhalaCloud as _SyncBase
+from .models.apps import DeviceAllowlistResponse as _DeviceAllowlistResponse
 from .models.auth import CurrentUserV20251028, CurrentUserV20260121
 from .models.base import CloudModel
 from .models.cvms import PaginatedCvmInfosV20251028, PaginatedCvmInfosV20260121
-from .models.kms import GetKmsListResponse, KmsInfo
+from .models.kms import GetKmsListResponse, GetKmsOnChainDetailResponse, KmsInfo
 from .models.nodes import AvailableNodes
+from .models.os_images import GetOsImagesRequest, GetOsImagesResponse
 from .result import SafeResult
 
 
@@ -167,6 +169,14 @@ class UpdateOsImageRequest(CvmIdRequest):
     os_image_name: str
 
 
+class KmsOnChainDetailRequest(BaseModel):
+    chain: str
+
+
+class GetAppDeviceAllowlistRequest(BaseModel):
+    app_id: str = Field(alias="appId")
+
+
 class RefreshCvmInstanceIdRequest(CvmIdRequest):
     overwrite: bool | None = None
     dry_run: bool | None = None
@@ -274,6 +284,8 @@ class _ExtMixin:
             return CvmUserConfigResponse
         if m == "GET" and re.fullmatch(r"/cvms/[^/]+", path):
             return CvmInfoResponse
+        if m == "GET" and re.fullmatch(r"/kms/on-chain/[^/]+", path):
+            return GetKmsOnChainDetailResponse
         if m == "GET" and re.fullmatch(r"/kms/[^/]+", path):
             return KmsInfo
         if m == "GET" and re.fullmatch(r"/kms/[^/]+/pubkey/[^/]+", path):
@@ -305,6 +317,8 @@ class _ExtMixin:
             return AppListResponse
         if m == "GET" and path == "/apps/filter-options":
             return AppFilterOptionsResponse
+        if m == "GET" and re.fullmatch(r"/apps/[^/]+/device-allowlist", path):
+            return _DeviceAllowlistResponse
         if m == "GET" and re.fullmatch(r"/apps/[^/]+/cvms", path):
             return list[GenericObject]
         if m == "GET" and re.fullmatch(r"/apps/[^/]+/revisions", path):
@@ -315,6 +329,9 @@ class _ExtMixin:
             return AppAttestationResponse
         if m == "GET" and re.fullmatch(r"/apps/[^/]+", path):
             return AppInfoResponse
+
+        if m == "GET" and path == "/os-images":
+            return GetOsImagesResponse
 
         if m == "POST" and path == "/status/batch":
             return dict[str, GenericObject]
@@ -994,6 +1011,36 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         self, request: AppIdRequest | Mapping[str, Any]
     ) -> SafeResult[Any]:
         return self.safe(self.get_app_attestation, request)
+
+    def get_kms_on_chain_detail(self, request: KmsOnChainDetailRequest | Mapping[str, Any]) -> Any:
+        req = KmsOnChainDetailRequest.model_validate(request)
+        return self._loose_validate(self.get(f"/kms/on-chain/{req.chain}"))
+
+    def safe_get_kms_on_chain_detail(
+        self, request: KmsOnChainDetailRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
+        return self.safe(self.get_kms_on_chain_detail, request)
+
+    def get_os_images(self, request: GetOsImagesRequest | Mapping[str, Any] | None = None) -> Any:
+        req = GetOsImagesRequest.model_validate(request or {})
+        params = req.model_dump(exclude_none=True)
+        return self._loose_validate(self.get("/os-images", params=params or None))
+
+    def safe_get_os_images(
+        self, request: GetOsImagesRequest | Mapping[str, Any] | None = None
+    ) -> SafeResult[Any]:
+        return self.safe(self.get_os_images, request)
+
+    def get_app_device_allowlist(
+        self, request: GetAppDeviceAllowlistRequest | Mapping[str, Any]
+    ) -> Any:
+        req = GetAppDeviceAllowlistRequest.model_validate(request)
+        return self._loose_validate(self.get(f"/apps/{req.app_id}/device-allowlist"))
+
+    def safe_get_app_device_allowlist(
+        self, request: GetAppDeviceAllowlistRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
+        return self.safe(self.get_app_device_allowlist, request)
 
     def add_compose_hash(self, *args: Any, **kwargs: Any) -> Any:
         return _add_compose_hash(*args, **kwargs)
@@ -1689,6 +1736,40 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         self, request: AppIdRequest | Mapping[str, Any]
     ) -> SafeResult[Any]:
         return await self.safe(self.get_app_attestation, request)
+
+    async def get_kms_on_chain_detail(
+        self, request: KmsOnChainDetailRequest | Mapping[str, Any]
+    ) -> Any:
+        req = KmsOnChainDetailRequest.model_validate(request)
+        return self._loose_validate(await self.get(f"/kms/on-chain/{req.chain}"))
+
+    async def safe_get_kms_on_chain_detail(
+        self, request: KmsOnChainDetailRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
+        return await self.safe(self.get_kms_on_chain_detail, request)
+
+    async def get_os_images(
+        self, request: GetOsImagesRequest | Mapping[str, Any] | None = None
+    ) -> Any:
+        req = GetOsImagesRequest.model_validate(request or {})
+        params = req.model_dump(exclude_none=True)
+        return self._loose_validate(await self.get("/os-images", params=params or None))
+
+    async def safe_get_os_images(
+        self, request: GetOsImagesRequest | Mapping[str, Any] | None = None
+    ) -> SafeResult[Any]:
+        return await self.safe(self.get_os_images, request)
+
+    async def get_app_device_allowlist(
+        self, request: GetAppDeviceAllowlistRequest | Mapping[str, Any]
+    ) -> Any:
+        req = GetAppDeviceAllowlistRequest.model_validate(request)
+        return self._loose_validate(await self.get(f"/apps/{req.app_id}/device-allowlist"))
+
+    async def safe_get_app_device_allowlist(
+        self, request: GetAppDeviceAllowlistRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
+        return await self.safe(self.get_app_device_allowlist, request)
 
     async def add_compose_hash(self, *args: Any, **kwargs: Any) -> Any:
         return _add_compose_hash(*args, **kwargs)

@@ -116,6 +116,12 @@ __all__ = [
     "safe_get_app_filter_options",
     "get_app_attestation",
     "safe_get_app_attestation",
+    "get_kms_on_chain_detail",
+    "safe_get_kms_on_chain_detail",
+    "get_os_images",
+    "safe_get_os_images",
+    "get_app_device_allowlist",
+    "safe_get_app_device_allowlist",
     "add_compose_hash",
     "safe_add_compose_hash",
     "deploy_app_auth",
@@ -565,6 +571,30 @@ def get_app_attestation(client: Any, *args: Any, **kwargs: Any) -> Any:
 
 def safe_get_app_attestation(client: Any, *args: Any, **kwargs: Any) -> Any:
     return client.safe_get_app_attestation(*args, **kwargs)
+
+
+def get_kms_on_chain_detail(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.get_kms_on_chain_detail(*args, **kwargs)
+
+
+def safe_get_kms_on_chain_detail(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.safe_get_kms_on_chain_detail(*args, **kwargs)
+
+
+def get_os_images(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.get_os_images(*args, **kwargs)
+
+
+def safe_get_os_images(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.safe_get_os_images(*args, **kwargs)
+
+
+def get_app_device_allowlist(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.get_app_device_allowlist(*args, **kwargs)
+
+
+def safe_get_app_device_allowlist(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.safe_get_app_device_allowlist(*args, **kwargs)
 
 
 def add_compose_hash(client: Any, *args: Any, **kwargs: Any) -> Any:
