@@ -18,7 +18,6 @@ import {
 	type Client,
 	type EnvVar,
 	type ErrorLink,
-	type ProvisionCvmComposeFileUpdateRequest,
 	CvmIdSchema,
 	MAX_COMPOSE_PAYLOAD_BYTES,
 	ResourceError,
@@ -27,17 +26,16 @@ import {
 	formatStructuredError,
 	parseEnvVars,
 	safeAddComposeHash,
-	safeCommitCvmComposeFileUpdate,
 	safeCommitCvmProvision,
+	safeConfirmCvmPatch,
 	safeDeployAppAuth,
 	safeGetAppEnvEncryptPubKey,
 	safeGetAvailableNodes,
-	safeGetCvmComposeFile,
 	safeGetCvmInfo,
 	safeGetCvmList,
 	safeGetCurrentUser,
+	safePatchCvm,
 	safeProvisionCvm,
-	safeProvisionCvmComposeFileUpdate,
 	safeUpdateCvmVisibility,
 	convertToHostname,
 	isValidHostname,
@@ -918,66 +916,92 @@ const updateCvm = async (
 	stdout: NodeJS.WriteStream,
 	preLaunchScriptContent?: string,
 ) => {
-	const [cvm_result, app_compose_result] = await Promise.all([
-		safeGetCvmInfo(client, {
-			id: validatedOptions.uuid,
-		}),
-		safeGetCvmComposeFile(client, {
-			id: validatedOptions.uuid,
-		}),
-	]);
+	const cvm_result = await safeGetCvmInfo(client, {
+		id: validatedOptions.uuid,
+	});
 	if (!cvm_result.success) {
 		logger.logDetailedError(cvm_result.error, "Get CVM Info");
 		throw new Error(`Failed to get cvm info: ${cvm_result.error.message}`);
 	}
-	if (!app_compose_result.success) {
-		logger.logDetailedError(app_compose_result.error, "Get CVM Compose File");
-		throw new Error(
-			`Failed to get cvm compose file: ${app_compose_result.error.message}`,
-		);
-	}
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
 	const cvm = cvm_result.data as any;
-	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
-	const app_compose = app_compose_result.data as any;
 
-	// patched the compose_file
-	app_compose.docker_compose_file = docker_compose_yml;
+	// Encrypt env vars before patching (backend stores the full body in Redis for two-phase)
+	let encrypted_env: string | undefined;
+	if (envs && envs.length > 0) {
+		if (cvm.kms_info?.chain_id) {
+			// On-chain KMS: fetch encrypt pubkey from API
+			const kmsSlug = cvm.kms_info?.slug || cvm.kms_info?.id;
+			if (!kmsSlug) {
+				throw new Error("KMS slug or id is required for decentralized KMS");
+			}
+			const resp = await safeGetAppEnvEncryptPubKey(client, {
+				app_id: cvm.app_id,
+				kms: kmsSlug,
+			});
+			if (!resp.success) {
+				logger.logDetailedError(resp.error, "Get App Env Encrypt PubKey");
+				throw new Error(
+					`Failed to get app env encrypt pubkey: ${resp.error.message}`,
+				);
+			}
+			// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
+			const pubkey_signature = resp.data as any;
+			encrypted_env = await encryptEnvVars(envs, pubkey_signature.public_key);
+		} else {
+			// Centralized KMS: use pubkey from CVM info
+			if (!cvm.encrypted_env_pubkey) {
+				throw new Error(
+					"CVM encrypted_env_pubkey is required for centralized KMS",
+				);
+			}
+			encrypted_env = await encryptEnvVars(envs, cvm.encrypted_env_pubkey);
+		}
+	}
+
+	// Build unified patch request
+	const patchBody: Record<string, unknown> = {
+		id: validatedOptions.uuid,
+		docker_compose_file: docker_compose_yml,
+	};
 	if (preLaunchScriptContent) {
-		app_compose.pre_launch_script = preLaunchScriptContent;
+		patchBody.pre_launch_script = preLaunchScriptContent;
 	}
 	if (envs && envs.length > 0) {
-		app_compose.allowed_envs = envs.map((env) => env.key);
+		patchBody.allowed_envs = envs.map((env) => env.key);
+	}
+	if (encrypted_env) {
+		patchBody.encrypted_env = encrypted_env;
+	}
+	if (validatedOptions.publicLogs !== undefined) {
+		patchBody.public_logs = validatedOptions.publicLogs;
+	}
+	if (validatedOptions.publicSysinfo !== undefined) {
+		patchBody.public_sysinfo = validatedOptions.publicSysinfo;
 	}
 
-	logger.info(`Preparing update for CVM ${validatedOptions.uuid}...`);
-	const provision_result = await safeProvisionCvmComposeFileUpdate(client, {
-		id: validatedOptions.uuid,
-		app_compose:
-			app_compose as ProvisionCvmComposeFileUpdateRequest["app_compose"],
-		update_env_vars: !!(envs && envs.length > 0),
-	});
-	if (!provision_result.success) {
-		logger.logDetailedError(
-			provision_result.error,
-			"Provision CVM Compose File Update",
+	logger.info(`Updating CVM ${validatedOptions.uuid}...`);
+	// biome-ignore lint/suspicious/noExplicitAny: dynamic patch body
+	const patchResult = await safePatchCvm(client, patchBody as any);
+	if (!patchResult.success) {
+		const formattedError = handleProvisionError(
+			patchResult.error,
+			validatedOptions,
 		);
-		throw new Error(
-			`Failed to provision cvm compose file: ${provision_result.error.message}`,
-		);
+		logger.error("Error updating CVM:", formattedError);
+		throw patchResult.error;
 	}
-	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
-	const provision = provision_result.data as any;
 
-	let encrypted_env: string | undefined;
-	if (cvm.kms_info?.chain_id) {
-		// Update with decentralized KMS.
+	const result = patchResult.data;
+
+	// Two-phase flow: on-chain KMS requires compose hash registration
+	if (result.requiresOnChainHash) {
 		if (!validatedOptions.privateKey) {
 			throw new Error("Private key is required for contract DstackApp");
 		}
 
 		if (validatedOptions.debug) {
-			console.log("[DEBUG] provision.compose_hash:", provision.compose_hash);
+			console.log("[DEBUG] patchCvm.composeHash:", result.composeHash);
 			console.log("[DEBUG] cvm.app_id:", cvm.app_id);
 		}
 
@@ -985,7 +1009,7 @@ const updateCvm = async (
 			chain: cvm.kms_info?.chain,
 			rpcUrl: validatedOptions.rpcUrl,
 			appId: cvm.app_id as `0x${string}`,
-			composeHash: provision.compose_hash,
+			composeHash: result.composeHash,
 			privateKey: validatedOptions.privateKey as `0x${string}`,
 		});
 		if (!receipt_result.success) {
@@ -997,11 +1021,9 @@ const updateCvm = async (
 			throw new Error(`Failed to add compose hash: ${errorMsg}`);
 		}
 
+		// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
+		const txResult = receipt_result.data as any;
 		if (validatedOptions.debug) {
-			const txResult = receipt_result.data as {
-				transactionHash?: string;
-				composeHash?: string;
-			};
 			console.log(
 				"[DEBUG] addComposeHash.transactionHash:",
 				txResult.transactionHash,
@@ -1009,74 +1031,21 @@ const updateCvm = async (
 			console.log("[DEBUG] addComposeHash.composeHash:", txResult.composeHash);
 		}
 
-		// Encrypt environment variables for decentralized KMS
-		if (envs && envs.length > 0) {
-			const kmsSlug = cvm.kms_info?.slug || cvm.kms_info?.id;
-			if (!kmsSlug) {
-				throw new Error("KMS slug or id is required for decentralized KMS");
-			}
-
-			const resp = await safeGetAppEnvEncryptPubKey(client, {
-				app_id: cvm.app_id,
-				kms: kmsSlug,
-			});
-
-			if (!resp.success) {
-				logger.logDetailedError(resp.error, "Get App Env Encrypt PubKey");
-				throw new Error(
-					`Failed to get app env encrypt pubkey: ${resp.error.message}`,
-				);
-			}
-
-			// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
-			const pubkey_signature = resp.data as any;
-			encrypted_env = await encryptEnvVars(envs, pubkey_signature.public_key);
-		}
-	} else {
-		if (envs && envs.length > 0) {
-			if (!cvm.encrypted_env_pubkey) {
-				throw new Error(
-					"CVM encrypted_env_pubkey is required for centralized KMS",
-				);
-			}
-			const encrypted_env_vars = await encryptEnvVars(
-				envs,
-				cvm.encrypted_env_pubkey,
+		const confirmResult = await safeConfirmCvmPatch(client, {
+			id: validatedOptions.uuid,
+			composeHash: result.composeHash,
+			transactionHash: txResult.transactionHash,
+		});
+		if (!confirmResult.success) {
+			logger.logDetailedError(confirmResult.error, "Confirm CVM Patch");
+			throw new Error(
+				`Failed to confirm CVM update: ${confirmResult.error.message}`,
 			);
-			encrypted_env = encrypted_env_vars;
 		}
 	}
 
-	const data = {
-		id: validatedOptions.uuid,
-		compose_hash: provision.compose_hash,
-		encrypted_env: encrypted_env,
-		env_keys: envs?.length ? envs.map((env) => env.key) : undefined,
-		update_env_vars: envs?.length ? true : undefined,
-	};
-
-	if (validatedOptions.debug) {
-		console.log("[DEBUG] commit.compose_hash:", data.compose_hash);
-	}
-	// @ts-ignore
-	const commitResult = await safeCommitCvmComposeFileUpdate(client, data);
-
-	if (!commitResult.success) {
-		logger.logDetailedError(
-			commitResult.error,
-			"Commit CVM Compose File Update",
-		);
-		throw new Error(
-			`Failed to commit CVM compose file update: ${commitResult.error.message}`,
-		);
-	}
-
-	const needsVisibilityUpdate =
-		validatedOptions.publicLogs !== undefined ||
-		validatedOptions.publicSysinfo !== undefined;
-
-	// Wait for compose update to complete if --wait flag is set OR if we need to update visibility
-	if (validatedOptions.wait || needsVisibilityUpdate) {
+	// Wait for update to complete if --wait flag is set
+	if (validatedOptions.wait) {
 		logger.info("Waiting for update to complete...");
 		try {
 			await waitForCvmReady(
@@ -1088,31 +1057,6 @@ const updateCvm = async (
 			throw new Error(
 				`Wait failed: ${error instanceof Error ? error.message : String(error)}`,
 			);
-		}
-	}
-
-	// Update visibility if explicitly specified (after waiting for compose update)
-	if (needsVisibilityUpdate) {
-		const visibilityResult = await safeUpdateCvmVisibility(client, {
-			id: validatedOptions.uuid,
-			public_logs: validatedOptions.publicLogs ?? cvm.public_logs,
-			public_sysinfo: validatedOptions.publicSysinfo ?? cvm.public_sysinfo,
-		});
-		if (visibilityResult.success) {
-			logger.info("CVM visibility settings updated");
-		} else {
-			const is409 =
-				"status" in visibilityResult.error &&
-				visibilityResult.error.status === 409;
-			if (is409) {
-				logger.warn(
-					"Cannot update visibility while CVM operation is in progress. Please wait and try again.",
-				);
-			} else {
-				logger.warn(
-					`Failed to update visibility: ${visibilityResult.error.message}`,
-				);
-			}
 		}
 	}
 
@@ -1131,7 +1075,7 @@ const updateCvm = async (
 			)}\n`,
 		);
 	} else {
-		stdout.write("CVM compose file updated successfully!\n");
+		stdout.write("CVM updated successfully!\n");
 	}
 };
 

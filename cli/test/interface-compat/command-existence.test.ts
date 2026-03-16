@@ -25,11 +25,15 @@ describe("CLI Interface Compatibility - Command Existence (v1.0.40 baseline)", (
 
 	for (const { name, commands } of commandGroups) {
 		const commandCount = Object.keys(commands).length;
-		test(`all v1.0.40 ${name} exist`, async () => {
-			for (const cmd of Object.values(commands)) {
-				expect(await commandExists(cmd.name)).toBe(true);
-			}
-		}, Math.max(commandCount * 3000, 5000));
+		test(
+			`all v1.0.40 ${name} exist`,
+			async () => {
+				for (const cmd of Object.values(commands)) {
+					expect(await commandExists(cmd.name)).toBe(true);
+				}
+			},
+			Math.max(commandCount * 3000, 5000),
+		);
 	}
 
 	test("command aliases still work", async () => {

@@ -589,9 +589,9 @@ describe("buildProvisionPayload", () => {
 				defaultPrivacySettings,
 			);
 
-			expect(
-				(payload.compose_file as Record<string, unknown>).storage_fs,
-			).toBe("ext4");
+			expect((payload.compose_file as Record<string, unknown>).storage_fs).toBe(
+				"ext4",
+			);
 		});
 
 		test("should include storage_fs in compose_file when fs is 'zfs'", () => {
@@ -607,9 +607,9 @@ describe("buildProvisionPayload", () => {
 				defaultPrivacySettings,
 			);
 
-			expect(
-				(payload.compose_file as Record<string, unknown>).storage_fs,
-			).toBe("zfs");
+			expect((payload.compose_file as Record<string, unknown>).storage_fs).toBe(
+				"zfs",
+			);
 		});
 
 		test("should not include storage_fs in compose_file when fs is not specified", () => {

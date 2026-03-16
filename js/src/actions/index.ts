@@ -375,6 +375,26 @@ export {
   type GetCvmDockerComposeRequest,
 } from "./cvms/get_cvm_docker_compose";
 
+// CVM Unified Patch
+export {
+  patchCvm,
+  safePatchCvm,
+  PatchCvmRequestSchema,
+  PatchCvmResultSchema,
+  type PatchCvmRequest,
+  type PatchCvmResult,
+  type PatchCvmAccepted,
+  type PatchCvmHashRequired,
+} from "./cvms/patch_cvm";
+
+export {
+  confirmCvmPatch,
+  safeConfirmCvmPatch,
+  ConfirmCvmPatchRequestSchema,
+  type ConfirmCvmPatchRequest,
+  type ConfirmCvmPatchResult,
+} from "./cvms/confirm_cvm_patch";
+
 // CVM Update Operations
 export {
   updateCvmResources,
