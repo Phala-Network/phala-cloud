@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pydantic import Field
 
+from .models.apps import AppRevisionDetailResponse as AppRevisionDetailResponse
+from .models.apps import AppRevisionsResponse as AppRevisionsResponse
 from .models.auth import CurrentUserV20251028, CurrentUserV20260121
 from .models.base import CloudModel
 from .models.cvms import PaginatedCvmInfosV20251028, PaginatedCvmInfosV20260121
@@ -202,16 +204,7 @@ class AppInfoResponse(CloudModel):
     name: str | None = None
 
 
-class AppRevisionsResponse(CloudModel):
-    items: list[GenericObject] = Field(default_factory=list)
-    total: int | None = None
-    page: int | None = None
-    page_size: int | None = None
-    pages: int | None = None
-
-
-class AppRevisionDetailResponse(CloudModel):
-    id: str | None = None
+# AppRevisionsResponse and AppRevisionDetailResponse are imported from models.apps
 
 
 class AppAttestationResponse(CloudModel):

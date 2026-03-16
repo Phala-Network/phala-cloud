@@ -259,9 +259,20 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
     if method == "GET" and path.endswith("/cvms") and path.startswith("/api/v1/apps/"):
         return _json_response([])
     if method == "GET" and path.endswith("/revisions"):
-        return _json_response({"items": [], "total": 0, "page": 1, "page_size": 10, "pages": 0})
+        return _json_response(
+            {"revisions": [], "total": 0, "page": 1, "page_size": 10, "total_pages": 0}
+        )
     if method == "GET" and "/revisions/" in path:
-        return _json_response({"id": "rev_1"})
+        return _json_response(
+            {
+                "revision_id": "rev_1",
+                "app_id": "a",
+                "vm_uuid": "u",
+                "compose_hash": "h",
+                "created_at": "2025-01-01T00:00:00Z",
+                "operation_type": "deploy",
+            }
+        )
     if method == "GET" and path.startswith("/api/v1/apps/"):
         return _json_response({"id": "a", "name": "app"})
 
