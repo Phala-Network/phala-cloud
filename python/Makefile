@@ -13,8 +13,8 @@ test:
 
 e2e:
 	@bash -lc 'set -a; [ -f .env.test ] && source .env.test; set +a; \
-	if [ -z "$$PHALA_CLOUD_E2E_BASE_URL" ] || [ -z "$$PHALA_CLOUD_E2E_API_KEY" ]; then \
-		echo "Missing env: PHALA_CLOUD_E2E_BASE_URL / PHALA_CLOUD_E2E_API_KEY"; \
+	if [ -z "$$PHALA_CLOUD_E2E_API_KEY" ]; then \
+		echo "Missing env: PHALA_CLOUD_E2E_API_KEY"; \
 		exit 1; \
 	fi; \
-	uv run pytest -m e2e -q'
+	ALL_PROXY= NO_PROXY="*" uv run pytest -m e2e -q'

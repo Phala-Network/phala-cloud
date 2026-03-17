@@ -98,27 +98,28 @@ make check
 
 ## E2E Test
 
-E2E only needs two variables:
+E2E tests cover sync + async, direct + safe styles, and full interface paths.
 
-- `PHALA_CLOUD_E2E_BASE_URL`
-- `PHALA_CLOUD_E2E_API_KEY`
+Required:
 
-It covers sync + async, direct + safe styles, and full interface paths.
+- `PHALA_CLOUD_E2E_API_KEY` — your Phala Cloud API key
+
+Optional:
+
+- `PHALA_CLOUD_E2E_BASE_URL` — defaults to `https://cloud-api.phala.com/api/v1`
 
 ### Run
 
 ```bash
 cd python
-PHALA_CLOUD_E2E_BASE_URL="https://<your-test-api>/api/v1" \
-PHALA_CLOUD_E2E_API_KEY="<api-key>" \
-make e2e
+PHALA_CLOUD_E2E_API_KEY="<api-key>" make e2e
 ```
 
 Or put them in `python/.env.test`:
 
 ```dotenv
-PHALA_CLOUD_E2E_BASE_URL=https://<your-test-api>/api/v1
 PHALA_CLOUD_E2E_API_KEY=<api-key>
+# PHALA_CLOUD_E2E_BASE_URL=https://cloud-api.phala.com/api/v1
 ```
 
 Then simply:

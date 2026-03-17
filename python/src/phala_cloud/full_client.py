@@ -178,8 +178,8 @@ class GetAppDeviceAllowlistRequest(BaseModel):
 
 
 class RefreshCvmInstanceIdRequest(CvmIdRequest):
-    overwrite: bool | None = None
-    dry_run: bool | None = None
+    overwrite: bool = False
+    dry_run: bool = False
 
 
 class RefreshCvmInstanceIdsRequest(BaseModel):
@@ -453,7 +453,12 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         return self.safe(self.get_cvm_info, request)
 
     def provision_cvm(self, request: Mapping[str, Any]) -> Any:
-        return self._loose_validate(self.post("/cvms/provision", json=dict(request)))
+        body = dict(request)
+        if "compose_file" in body:
+            cf = dict(body["compose_file"])
+            cf.setdefault("name", "")
+            body["compose_file"] = cf
+        return self._loose_validate(self.post("/cvms/provision", json=body))
 
     def safe_provision_cvm(self, request: Mapping[str, Any]) -> SafeResult[Any]:
         return self.safe(self.provision_cvm, request)
@@ -1142,7 +1147,12 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         return await self.safe(self.get_cvm_info, request)
 
     async def provision_cvm(self, request: Mapping[str, Any]) -> Any:
-        return self._loose_validate(await self.post("/cvms/provision", json=dict(request)))
+        body = dict(request)
+        if "compose_file" in body:
+            cf = dict(body["compose_file"])
+            cf.setdefault("name", "")
+            body["compose_file"] = cf
+        return self._loose_validate(await self.post("/cvms/provision", json=body))
 
     async def safe_provision_cvm(self, request: Mapping[str, Any]) -> SafeResult[Any]:
         return await self.safe(self.provision_cvm, request)
