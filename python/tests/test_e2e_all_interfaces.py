@@ -59,8 +59,13 @@ def _attr(obj: Any, key: str, default: Any = None) -> Any:
 # ---------------------------------------------------------------------------
 
 _TRANSIENT = {
-    "starting", "stopping", "restarting", "shutting_down",
-    "provisioning", "in_progress", "updating",
+    "starting",
+    "stopping",
+    "restarting",
+    "shutting_down",
+    "provisioning",
+    "in_progress",
+    "updating",
 }
 
 
@@ -95,7 +100,8 @@ async def _get_detail_async(client: Any, cvm_id: str) -> dict[str, Any]:
 def _log_state(label: str, d: dict[str, Any]) -> None:
     extra = (
         f" progress.target={d['progress_target']} since={d['progress_started']}"
-        if d["has_progress"] else ""
+        if d["has_progress"]
+        else ""
     )
     print(f"  [{label}] status={d['status']}{extra}", flush=True)
 
@@ -175,14 +181,16 @@ def _deploy(client: Any) -> tuple[str, str | None, str | None]:
     name = _gen_cvm_name()
     print(f"deploy: provisioning {name} ...", flush=True)
 
-    provision = client.provision_cvm({
-        "name": name,
-        "instance_type": "tdx.small",
-        "compose_file": {
-            "docker_compose_file": TEST_COMPOSE,
-            "gateway_enabled": True,
-        },
-    })
+    provision = client.provision_cvm(
+        {
+            "name": name,
+            "instance_type": "tdx.small",
+            "compose_file": {
+                "docker_compose_file": TEST_COMPOSE,
+                "gateway_enabled": True,
+            },
+        }
+    )
     app_id = _attr(provision, "app_id")
     compose_hash = _attr(provision, "compose_hash")
     encrypt_pubkey = _attr(provision, "app_env_encrypt_pubkey")
@@ -190,7 +198,7 @@ def _deploy(client: Any) -> tuple[str, str | None, str | None]:
     assert compose_hash, f"missing compose_hash: {provision}"
     print(f"deploy: app_id={app_id} encrypt_pubkey={'yes' if encrypt_pubkey else 'no'}", flush=True)
 
-    print(f"deploy: committing ...", flush=True)
+    print("deploy: committing ...", flush=True)
     commit = client.commit_cvm_provision({"app_id": app_id, "compose_hash": compose_hash})
     cvm_id = str(_attr(commit, "id") or _attr(commit, "cvm_id") or app_id)
 
@@ -204,14 +212,16 @@ async def _deploy_async(client: Any) -> tuple[str, str | None, str | None]:
     name = _gen_cvm_name()
     print(f"deploy(async): provisioning {name} ...", flush=True)
 
-    provision = await client.provision_cvm({
-        "name": name,
-        "instance_type": "tdx.small",
-        "compose_file": {
-            "docker_compose_file": TEST_COMPOSE,
-            "gateway_enabled": True,
-        },
-    })
+    provision = await client.provision_cvm(
+        {
+            "name": name,
+            "instance_type": "tdx.small",
+            "compose_file": {
+                "docker_compose_file": TEST_COMPOSE,
+                "gateway_enabled": True,
+            },
+        }
+    )
     app_id = _attr(provision, "app_id")
     compose_hash = _attr(provision, "compose_hash")
     encrypt_pubkey = _attr(provision, "app_env_encrypt_pubkey")
@@ -251,13 +261,13 @@ async def _cleanup_async(client: Any, cvm_id: str) -> None:
 def _pick_kms_id(kms_list: Any) -> str:
     items = getattr(kms_list, "items", None) or []
     assert items, "Need at least one KMS"
-    return str(getattr(items[0], "id"))
+    return str(items[0].id)
 
 
 def _pick_workspace_slug(workspaces: Any) -> str:
     data = getattr(workspaces, "data", None) or []
     assert data, "Need at least one workspace"
-    return str(getattr(data[0], "slug"))
+    return str(data[0].slug)
 
 
 # ---------------------------------------------------------------------------
@@ -298,7 +308,7 @@ def test_e2e_sync_all_interfaces() -> None:
 
         # cvm list
         print("cvm list ...", flush=True)
-        cvm_list = client.get_cvm_list()
+        client.get_cvm_list()
         assert client.safe_get_cvm_list().ok
 
         # kms list
@@ -339,13 +349,15 @@ def test_e2e_sync_all_interfaces() -> None:
         assert client.safe_list_ssh_keys().ok
         client.safe_sync_github_ssh_keys()
 
-        ssh_result = client.safe_create_ssh_key({
-            "name": f"e2e-test-{uuid.uuid4().hex[:8]}",
-            "public_key": (
-                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKeyForE2E"
-                "000000000000000000000000000000 e2e@test"
-            ),
-        })
+        ssh_result = client.safe_create_ssh_key(
+            {
+                "name": f"e2e-test-{uuid.uuid4().hex[:8]}",
+                "public_key": (
+                    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKeyForE2E"
+                    "000000000000000000000000000000 e2e@test"
+                ),
+            }
+        )
         if ssh_result.ok and ssh_result.data:
             key_id = _attr(ssh_result.data, "id") or _attr(ssh_result.data, "key_id")
             if key_id:
@@ -406,9 +418,12 @@ def test_e2e_sync_all_interfaces() -> None:
                 if items:
                     rev_id = _attr(items[0], "id")
                     if rev_id:
-                        client.safe_get_app_revision_detail({
-                            "appId": app_id, "revisionId": str(rev_id),
-                        })
+                        client.safe_get_app_revision_detail(
+                            {
+                                "appId": app_id,
+                                "revisionId": str(rev_id),
+                            }
+                        )
 
             client.safe_get_app_attestation({"appId": app_id})
             client.safe_get_app_device_allowlist({"appId": app_id})
@@ -456,9 +471,7 @@ def test_e2e_sync_all_interfaces() -> None:
         # -- update_docker_compose --
         _assert_idle(client, cvm_id, "update_docker_compose")
         print("  update_docker_compose ...", flush=True)
-        r = client.safe_update_docker_compose(
-            {"id": cvm_id, "docker_compose_file": TEST_COMPOSE}
-        )
+        r = client.safe_update_docker_compose({"id": cvm_id, "docker_compose_file": TEST_COMPOSE})
         assert r.ok, r.error
         print("  [ok]", flush=True)
         _wait_idle(client, cvm_id)

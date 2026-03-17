@@ -17,4 +17,4 @@ e2e:
 		echo "Missing env: PHALA_CLOUD_E2E_API_KEY"; \
 		exit 1; \
 	fi; \
-	ALL_PROXY= NO_PROXY="*" uv run pytest -m e2e -q'
+	ALL_PROXY= NO_PROXY="*" uv run pytest -m e2e -s -q'

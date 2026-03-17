@@ -5,7 +5,7 @@ import time
 from collections.abc import Mapping
 from typing import Any
 
-from pydantic import BaseModel, Field, TypeAdapter, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from .action_responses import (
     AppAttestationResponse,
@@ -56,6 +56,10 @@ from .models.os_images import GetOsImagesRequest, GetOsImagesResponse
 from .result import SafeResult
 
 
+class _AliasModel(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class CvmIdRequest(BaseModel):
     id: str | None = None
     uuid: str | None = None
@@ -87,33 +91,33 @@ class FamilyRequest(BaseModel):
     family: str
 
 
-class TeamSlugRequest(BaseModel):
+class TeamSlugRequest(_AliasModel):
     team_slug: str = Field(alias="teamSlug")
 
 
-class WorkspaceNodesRequest(BaseModel):
+class WorkspaceNodesRequest(_AliasModel):
     team_slug: str = Field(alias="teamSlug")
     page: int | None = Field(default=None, ge=1)
     page_size: int | None = Field(default=None, ge=1, alias="pageSize")
 
 
-class AppIdRequest(BaseModel):
+class AppIdRequest(_AliasModel):
     app_id: str = Field(alias="appId")
 
 
-class AppRevisionsRequest(BaseModel):
+class AppRevisionsRequest(_AliasModel):
     app_id: str = Field(alias="appId")
     page: int | None = Field(default=None, ge=1)
     page_size: int | None = Field(default=None, ge=1)
 
 
-class AppRevisionDetailRequest(BaseModel):
+class AppRevisionDetailRequest(_AliasModel):
     app_id: str = Field(alias="appId")
     revision_id: str = Field(alias="revisionId")
     raw_compose_file: bool | None = Field(default=None, alias="rawComposeFile")
 
 
-class KeyIdRequest(BaseModel):
+class KeyIdRequest(_AliasModel):
     key_id: str = Field(alias="keyId")
 
 
@@ -139,7 +143,7 @@ class NextAppIdsRequest(BaseModel):
     counts: int = Field(default=1, ge=1, le=20)
 
 
-class StatusBatchRequest(BaseModel):
+class StatusBatchRequest(_AliasModel):
     vm_uuids: list[str] = Field(alias="vmUuids")
 
 
@@ -173,7 +177,7 @@ class KmsOnChainDetailRequest(BaseModel):
     chain: str
 
 
-class GetAppDeviceAllowlistRequest(BaseModel):
+class GetAppDeviceAllowlistRequest(_AliasModel):
     app_id: str = Field(alias="appId")
 
 
