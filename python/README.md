@@ -9,6 +9,11 @@ Python SDK for Phala Cloud API, aligned with `@phala/cloud` action surface.
 - Pydantic request/response validation
 - Safe calls (`safe_*`) without exceptions
 
+## Requirements
+
+- Python >= 3.10
+- [uv](https://docs.astral.sh/uv/) (for development)
+
 ## Installation
 
 ```bash
@@ -76,7 +81,22 @@ else:
     print(result.error)
 ```
 
-## E2E Test (full interface matrix)
+## Development
+
+```bash
+cd python
+
+# Install dependencies
+uv sync
+
+# Run tests
+make test
+
+# Lint & format
+make check
+```
+
+## E2E Test
 
 E2E only needs two variables:
 
@@ -106,13 +126,6 @@ Then simply:
 ```bash
 cd python
 make e2e
-```
-
-## Development
-
-```bash
-cd python
-make test
 ```
 
 ## License
