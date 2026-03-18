@@ -7,7 +7,16 @@ from typing import Any, Literal, TypeVar
 import httpx
 from pydantic import ValidationError as PydanticValidationError
 
-from .errors import ApiError, PhalaCloudError, RequestError, ValidationError
+from .errors import (
+    ApiError,
+    AuthError,
+    BusinessError,
+    PhalaCloudError,
+    RequestError,
+    ResourceError,
+    ServerError,
+    ValidationError,
+)
 from .models import (
     AvailableNodes,
     CurrentUser,
@@ -231,12 +240,32 @@ class AsyncPhalaCloud:
         except Exception:
             pass
 
-        return ApiError(
-            status_code=response.status_code,
-            message=message,
-            code=code,
-            detail=payload,
-        )
+        status = response.status_code
+        base_kwargs: dict[str, Any] = {
+            "status_code": status,
+            "message": message,
+            "code": code,
+            "detail": payload,
+        }
+
+        # Structured error (has error_code field)
+        if isinstance(payload, dict) and "error_code" in payload:
+            return ResourceError(
+                **base_kwargs,
+                error_code=payload.get("error_code"),
+                structured_details=payload.get("details"),
+                suggestions=payload.get("suggestions"),
+                links=payload.get("links"),
+            )
+
+        if status in (401, 403):
+            return AuthError(**base_kwargs)
+        if status >= 500:
+            return ServerError(**base_kwargs)
+        if status >= 400:
+            return BusinessError(**base_kwargs)
+
+        return ApiError(**base_kwargs)
 
     def _validate(self, model_type: type[T], data: Any) -> T:
         try:
@@ -428,12 +457,32 @@ class PhalaCloud:
         except Exception:
             pass
 
-        return ApiError(
-            status_code=response.status_code,
-            message=message,
-            code=code,
-            detail=payload,
-        )
+        status = response.status_code
+        base_kwargs: dict[str, Any] = {
+            "status_code": status,
+            "message": message,
+            "code": code,
+            "detail": payload,
+        }
+
+        # Structured error (has error_code field)
+        if isinstance(payload, dict) and "error_code" in payload:
+            return ResourceError(
+                **base_kwargs,
+                error_code=payload.get("error_code"),
+                structured_details=payload.get("details"),
+                suggestions=payload.get("suggestions"),
+                links=payload.get("links"),
+            )
+
+        if status in (401, 403):
+            return AuthError(**base_kwargs)
+        if status >= 500:
+            return ServerError(**base_kwargs)
+        if status >= 400:
+            return BusinessError(**base_kwargs)
+
+        return ApiError(**base_kwargs)
 
     def _validate(self, model_type: type[T], data: Any) -> T:
         try:
