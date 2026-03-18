@@ -1,6 +1,7 @@
 package phala
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -11,7 +12,7 @@ import (
 // ErrorDetail represents a field-level validation error detail.
 type ErrorDetail struct {
 	Field   string `json:"field"`
-	Value   string `json:"value"`
+	Value   any    `json:"value"`
 	Message string `json:"message"`
 }
 
@@ -132,8 +133,8 @@ func (e *APIError) FormatError() string {
 			fmt.Fprintf(&b, "\n  - %s", d.Message)
 			if d.Field != "" {
 				fmt.Fprintf(&b, " (field: %s", d.Field)
-				if d.Value != "" {
-					fmt.Fprintf(&b, ", value: %s", d.Value)
+				if rendered := formatErrorDetailValue(d.Value); rendered != "" {
+					fmt.Fprintf(&b, ", value: %s", rendered)
 				}
 				b.WriteString(")")
 			}
@@ -159,4 +160,19 @@ func (e *APIError) FormatError() string {
 	}
 
 	return b.String()
+}
+
+func formatErrorDetailValue(value any) string {
+	switch v := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return v
+	default:
+		b, err := json.Marshal(v)
+		if err != nil {
+			return fmt.Sprintf("%v", v)
+		}
+		return string(b)
+	}
 }

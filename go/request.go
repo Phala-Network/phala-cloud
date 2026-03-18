@@ -75,7 +75,7 @@ func (c *Client) do(ctx context.Context, req *http.Request) (*http.Response, err
 					if f, ok := dm["field"].(string); ok {
 						ed.Field = f
 					}
-					if v, ok := dm["value"].(string); ok {
+					if v, ok := dm["value"]; ok {
 						ed.Value = v
 					}
 					if m, ok := dm["message"].(string); ok {

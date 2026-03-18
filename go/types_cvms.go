@@ -47,7 +47,8 @@ type CVMInfo struct {
 
 // CVMEndpoint represents a CVM endpoint URL.
 type CVMEndpoint struct {
-	App string `json:"app"`
+	App      string `json:"app"`
+	Instance string `json:"instance"`
 }
 
 // CvmResource holds CVM resource allocation.
