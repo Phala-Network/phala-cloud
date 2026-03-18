@@ -281,6 +281,7 @@ jobs:
         run: bun add -d playwright
 
       - name: Install Playwright system dependencies
+        working-directory: js
         run: bunx playwright install-deps
 
       - name: Cache Playwright browsers
