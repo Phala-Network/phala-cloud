@@ -278,10 +278,23 @@ jobs:
 
       - name: Install Playwright
         working-directory: js
-        run: |
-          bun add -d playwright
-          npx playwright install-deps
-          npx playwright install chromium firefox webkit
+        run: bun add -d playwright
+
+      - name: Install Playwright system dependencies
+        working-directory: js
+        run: bunx playwright install-deps
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('js/node_modules/playwright/package.json') }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: js
+        run: bunx playwright install chromium firefox webkit
 
       - name: Test browser compatibility  
         working-directory: js
