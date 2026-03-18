@@ -166,11 +166,20 @@ func (c *Client) ShutdownCVM(ctx context.Context, cvmID string) (*CVMActionRespo
 	return &result, nil
 }
 
+// RestartCVMOptions configures optional parameters for RestartCVM.
+type RestartCVMOptions struct {
+	Force bool `json:"force"`
+}
+
 // RestartCVM restarts a CVM.
-func (c *Client) RestartCVM(ctx context.Context, cvmID string) (*CVMActionResponse, error) {
+func (c *Client) RestartCVM(ctx context.Context, cvmID string, opts *RestartCVMOptions) (*CVMActionResponse, error) {
+	body := map[string]bool{"force": false}
+	if opts != nil {
+		body["force"] = opts.Force
+	}
 	var result CVMActionResponse
 	err := c.doWithRetry(ctx, func() error {
-		return c.doJSON(ctx, "POST", cvmPath(cvmID, "restart"), map[string]bool{"force": true}, &result)
+		return c.doJSON(ctx, "POST", cvmPath(cvmID, "restart"), body, &result)
 	})
 	if err != nil {
 		return nil, err

@@ -52,11 +52,21 @@ func (c *Client) UpdateOSImage(ctx context.Context, cvmID string, req *UpdateOSI
 // RefreshInstanceIDResponse is the response for refreshing a CVM instance ID.
 type RefreshInstanceIDResponse = GenericObject
 
+// RefreshInstanceIDOptions configures optional parameters for RefreshCVMInstanceID.
+type RefreshInstanceIDOptions struct {
+	Overwrite *bool `json:"overwrite,omitempty"`
+	DryRun    *bool `json:"dry_run,omitempty"`
+}
+
 // RefreshCVMInstanceID refreshes the instance ID for a CVM.
-func (c *Client) RefreshCVMInstanceID(ctx context.Context, cvmID string) (*RefreshInstanceIDResponse, error) {
+func (c *Client) RefreshCVMInstanceID(ctx context.Context, cvmID string, opts *RefreshInstanceIDOptions) (*RefreshInstanceIDResponse, error) {
+	var body any
+	if opts != nil {
+		body = opts
+	}
 	var result RefreshInstanceIDResponse
 	err := c.doWithRetry(ctx, func() error {
-		return c.doJSON(ctx, "PATCH", cvmPath(cvmID, "instance-id"), nil, &result)
+		return c.doJSON(ctx, "PATCH", cvmPath(cvmID, "instance-id"), body, &result)
 	})
 	if err != nil {
 		return nil, err
@@ -67,11 +77,27 @@ func (c *Client) RefreshCVMInstanceID(ctx context.Context, cvmID string) (*Refre
 // RefreshInstanceIDsResponse is the response for refreshing all CVM instance IDs.
 type RefreshInstanceIDsResponse = GenericObject
 
-// RefreshCVMInstanceIDs refreshes instance IDs for all CVMs.
-func (c *Client) RefreshCVMInstanceIDs(ctx context.Context) (*RefreshInstanceIDsResponse, error) {
+// RefreshInstanceIDsRequest configures optional parameters for RefreshCVMInstanceIDs.
+type RefreshInstanceIDsRequest struct {
+	CVMIDs      []string `json:"cvm_ids,omitempty"`
+	RunningOnly *bool    `json:"running_only,omitempty"`
+	MissingOnly *bool    `json:"missing_only,omitempty"`
+	Overwrite   *bool    `json:"overwrite,omitempty"`
+	Limit       *int     `json:"limit,omitempty"`
+	DryRun      *bool    `json:"dry_run,omitempty"`
+}
+
+// RefreshCVMInstanceIDs refreshes instance IDs for CVMs.
+func (c *Client) RefreshCVMInstanceIDs(ctx context.Context, req *RefreshInstanceIDsRequest) (*RefreshInstanceIDsResponse, error) {
+	var body any
+	if req != nil {
+		body = req
+	} else {
+		body = map[string]any{}
+	}
 	var result RefreshInstanceIDsResponse
 	err := c.doWithRetry(ctx, func() error {
-		return c.doJSON(ctx, "PATCH", "/cvms/instance-ids", map[string]any{}, &result)
+		return c.doJSON(ctx, "PATCH", "/cvms/instance-ids", body, &result)
 	})
 	if err != nil {
 		return nil, err

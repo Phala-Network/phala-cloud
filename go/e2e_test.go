@@ -501,12 +501,12 @@ func TestE2EAllInterfaces(t *testing.T) {
 		waitIdle(t, client, cvmID, 5*time.Minute)
 
 		// Refresh instance ID
-		_, err = client.RefreshCVMInstanceID(ctx, cvmID)
+		_, err = client.RefreshCVMInstanceID(ctx, cvmID, nil)
 		if err != nil {
 			t.Logf("RefreshCVMInstanceID: %v", err)
 		}
 
-		_, err = client.RefreshCVMInstanceIDs(ctx)
+		_, err = client.RefreshCVMInstanceIDs(ctx, nil)
 		if err != nil {
 			t.Logf("RefreshCVMInstanceIDs: %v", err)
 		}
@@ -533,7 +533,7 @@ func TestE2EAllInterfaces(t *testing.T) {
 		assertIdle(t, client, cvmID, "before lifecycle")
 
 		// Restart
-		_, err := client.RestartCVM(ctx, cvmID)
+		_, err := client.RestartCVM(ctx, cvmID, nil)
 		if err != nil {
 			t.Fatalf("RestartCVM: %v", err)
 		}
