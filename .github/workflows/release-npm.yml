@@ -1,4 +1,4 @@
-name: Release Command
+name: Release npm (JS & CLI)
 
 on:
   issue_comment:
@@ -101,6 +101,12 @@ jobs:
               return;
             }
 
+            // go/golang packages are handled by release-go.yml — skip silently
+            const goPackages = ['go', 'golang'];
+            if (goPackages.includes(packageName)) {
+              return;
+            }
+
             const invalidPackage = !allowedPackages.includes(packageName);
             const invalidBump = !allowedBumps.includes(releaseType);
             const invalidPrerelease = prereleaseTag && !allowedPrereleaseTags.includes(prereleaseTag);
@@ -109,12 +115,13 @@ jobs:
               const message = [
                 `⚠️ @${actor} I couldn't parse the release command.`,
                 '',
-                'Expected format: `!release <cli|js|python> <patch|minor|major> [beta|alpha|rc]`',
+                'Expected format: `!release <cli|js|python|go> <patch|minor|major> [beta|alpha|rc]`',
                 '',
                 'Examples:',
                 '- `!release cli patch` - stable release',
                 '- `!release js minor beta` - beta release',
-                '- `!release python minor` - Python SDK release'
+                '- `!release python minor` - Python SDK release',
+                '- `!release go minor` - Go SDK release'
               ];
               await github.rest.issues.createComment({
                 owner,
@@ -496,7 +503,7 @@ jobs:
             echo "   - Provider: GitHub Actions"
             echo "   - Owner: Phala-Network"
             echo "   - Repository: phala-cloud"
-            echo "   - Workflow: release-command.yml"
+            echo "   - Workflow: release-npm.yml"
             echo "   - Environment: (empty)"
             echo ""
             echo "   Actual workflow context:"
