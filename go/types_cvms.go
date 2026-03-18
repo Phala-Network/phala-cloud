@@ -36,6 +36,18 @@ type CVMInfo struct {
 	Runner         *string          `json:"runner,omitempty"`
 	ManifestVer    *string          `json:"manifest_version,omitempty"`
 	ComposeFile    any              `json:"compose_file,omitempty"`
+
+	// Additional fields used by the Terraform provider.
+	InProgress         bool          `json:"in_progress,omitempty"`
+	EncryptedEnvPubkey *string       `json:"encrypted_env_pubkey,omitempty"`
+	DiskSize           *int64        `json:"disk_size,omitempty"`
+	Endpoints          []CVMEndpoint `json:"endpoints,omitempty"`
+	PublicURLs         []CVMEndpoint `json:"public_urls,omitempty"`
+}
+
+// CVMEndpoint represents a CVM endpoint URL.
+type CVMEndpoint struct {
+	App string `json:"app"`
 }
 
 // CvmResource holds CVM resource allocation.
@@ -134,15 +146,19 @@ type ProvisionCVMRequest struct {
 	ComposeFile  *ComposeFile `json:"compose_file,omitempty"`
 
 	// Optional fields.
-	VCPU       *int    `json:"vcpu,omitempty"`
-	Memory     *int    `json:"memory,omitempty"`
-	DiskSize   *int    `json:"disk_size,omitempty"`
-	TeepodID   *int    `json:"teepod_id,omitempty"`
-	Image      *string `json:"image,omitempty"`
-	KMSType    *string `json:"kms_type,omitempty"`
-	Listed     *bool   `json:"listed,omitempty"`
-	Encrypted  *bool   `json:"encrypted,omitempty"`
-	SecureTime *bool   `json:"secure_time,omitempty"`
+	VCPU              *int     `json:"vcpu,omitempty"`
+	Memory            *int     `json:"memory,omitempty"`
+	DiskSize          *int     `json:"disk_size,omitempty"`
+	TeepodID          *int     `json:"teepod_id,omitempty"`
+	Image             *string  `json:"image,omitempty"`
+	KMSType           *string  `json:"kms_type,omitempty"`
+	Listed            *bool    `json:"listed,omitempty"`
+	Encrypted         *bool    `json:"encrypted,omitempty"`
+	SecureTime        *bool    `json:"secure_time,omitempty"`
+	SSHAuthorizedKeys []string `json:"ssh_authorized_keys,omitempty"`
+	CustomAppID       *string  `json:"custom_app_id,omitempty"`
+	Nonce             *int64   `json:"nonce,omitempty"`
+	StorageFS         *string  `json:"storage_fs,omitempty"`
 }
 
 // ComposeFile represents a compose file configuration.
@@ -171,9 +187,11 @@ type ProvisionCVMResponse struct {
 
 // CommitCVMProvisionRequest is the request for committing a CVM provision.
 type CommitCVMProvisionRequest struct {
-	AppID           string  `json:"app_id"`
-	ComposeHash     string  `json:"compose_hash"`
-	TransactionHash *string `json:"transaction_hash,omitempty"`
+	AppID           string   `json:"app_id"`
+	ComposeHash     string   `json:"compose_hash"`
+	TransactionHash *string  `json:"transaction_hash,omitempty"`
+	EncryptedEnv    *string  `json:"encrypted_env,omitempty"`
+	EnvKeys         []string `json:"env_keys,omitempty"`
 }
 
 // CommitCVMProvisionResponse is the response from committing a CVM provision.
