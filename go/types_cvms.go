@@ -165,17 +165,17 @@ type ProvisionCVMRequest struct {
 
 // ComposeFile represents a compose file configuration.
 type ComposeFile struct {
-	Name              string  `json:"name"`
-	DockerComposeFile string  `json:"docker_compose_file"`
-	GatewayEnabled    *bool   `json:"gateway_enabled,omitempty"`
-	PreLaunchScript   *string `json:"pre_launch_script,omitempty"`
-	EncryptedEnv      *string `json:"encrypted_env,omitempty"`
-	EnvKeys           *string `json:"env_keys,omitempty"`
-	PublicLogs        *bool   `json:"public_logs,omitempty"`
-	PublicSysinfo     *bool   `json:"public_sysinfo,omitempty"`
-	PublicTcbinfo     *bool   `json:"public_tcbinfo,omitempty"`
-	SecureTime        *bool   `json:"secure_time,omitempty"`
-	StorageFS         *string `json:"storage_fs,omitempty"`
+	Name              string   `json:"name"`
+	DockerComposeFile string   `json:"docker_compose_file"`
+	GatewayEnabled    *bool    `json:"gateway_enabled,omitempty"`
+	PreLaunchScript   *string  `json:"pre_launch_script,omitempty"`
+	EncryptedEnv      *string  `json:"encrypted_env,omitempty"`
+	AllowedEnvs       []string `json:"allowed_envs,omitempty"`
+	PublicLogs        *bool    `json:"public_logs,omitempty"`
+	PublicSysinfo     *bool    `json:"public_sysinfo,omitempty"`
+	PublicTcbinfo     *bool    `json:"public_tcbinfo,omitempty"`
+	SecureTime        *bool    `json:"secure_time,omitempty"`
+	StorageFS         *string  `json:"storage_fs,omitempty"`
 }
 
 // ProvisionCVMResponse is the response from provisioning a CVM.
@@ -245,22 +245,22 @@ type ReplicateCVMOptions struct {
 
 // PatchCVMRequest is the request for patching a CVM (multi-field update).
 type PatchCVMRequest struct {
-	DockerComposeFile *string `json:"docker_compose_file,omitempty"`
-	PreLaunchScript   *string `json:"pre_launch_script,omitempty"`
-	EncryptedEnv      *string `json:"encrypted_env,omitempty"`
-	EnvKeys           *string `json:"env_keys,omitempty"`
-	PublicSysinfo     *bool   `json:"public_sysinfo,omitempty"`
-	PublicLogs        *bool   `json:"public_logs,omitempty"`
-	PublicTcbinfo     *bool   `json:"public_tcbinfo,omitempty"`
-	GatewayEnabled    *bool   `json:"gateway_enabled,omitempty"`
-	SecureTime        *bool   `json:"secure_time,omitempty"`
-	Listed            *bool   `json:"listed,omitempty"`
-	VCPU              *int    `json:"vcpu,omitempty"`
-	Memory            *int    `json:"memory,omitempty"`
-	DiskSize          *int    `json:"disk_size,omitempty"`
-	InstanceType      *string `json:"instance_type,omitempty"`
-	OSImageName       *string `json:"os_image_name,omitempty"`
-	AllowRestart      *bool   `json:"allow_restart,omitempty"`
+	DockerComposeFile *string  `json:"docker_compose_file,omitempty"`
+	PreLaunchScript   *string  `json:"pre_launch_script,omitempty"`
+	EncryptedEnv      *string  `json:"encrypted_env,omitempty"`
+	AllowedEnvs       []string `json:"allowed_envs,omitempty"`
+	PublicSysinfo     *bool    `json:"public_sysinfo,omitempty"`
+	PublicLogs        *bool    `json:"public_logs,omitempty"`
+	PublicTcbinfo     *bool    `json:"public_tcbinfo,omitempty"`
+	GatewayEnabled    *bool    `json:"gateway_enabled,omitempty"`
+	SecureTime        *bool    `json:"secure_time,omitempty"`
+	Listed            *bool    `json:"listed,omitempty"`
+	VCPU              *int     `json:"vcpu,omitempty"`
+	Memory            *int     `json:"memory,omitempty"`
+	DiskSize          *int     `json:"disk_size,omitempty"`
+	InstanceType      *string  `json:"instance_type,omitempty"`
+	OSImageName       *string  `json:"os_image_name,omitempty"`
+	AllowRestart      *bool    `json:"allow_restart,omitempty"`
 }
 
 // PatchCVMResponse is the response from patching a CVM.
