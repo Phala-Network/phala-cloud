@@ -22,8 +22,8 @@ type AppEnvPubKeyResponse = GenericObject
 
 // KMSOnChainDetail represents KMS on-chain detail.
 type KMSOnChainDetail struct {
-	ChainName string             `json:"chain_name"`
-	ChainID   int                `json:"chain_id"`
+	ChainName string               `json:"chain_name"`
+	ChainID   int                  `json:"chain_id"`
 	Contracts []OnChainKMSContract `json:"contracts,omitempty"`
 }
 

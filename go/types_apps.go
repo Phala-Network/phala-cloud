@@ -2,17 +2,17 @@ package phala
 
 // AppInfo represents application information.
 type AppInfo struct {
-	ID               string   `json:"id"`
-	Name             string   `json:"name"`
-	AppID            string   `json:"app_id"`
-	AppProvisionType *string  `json:"app_provision_type,omitempty"`
-	AppIconURL       *string  `json:"app_icon_url,omitempty"`
-	CreatedAt        string   `json:"created_at"`
-	KMSType          string   `json:"kms_type"`
+	ID               string      `json:"id"`
+	Name             string      `json:"name"`
+	AppID            string      `json:"app_id"`
+	AppProvisionType *string     `json:"app_provision_type,omitempty"`
+	AppIconURL       *string     `json:"app_icon_url,omitempty"`
+	CreatedAt        string      `json:"created_at"`
+	KMSType          string      `json:"kms_type"`
 	Profile          *AppProfile `json:"profile,omitempty"`
-	CurrentCVM       *CVMInfo `json:"current_cvm,omitempty"`
-	CVMs             []CVMInfo `json:"cvms,omitempty"`
-	CVMCount         int      `json:"cvm_count"`
+	CurrentCVM       *CVMInfo    `json:"current_cvm,omitempty"`
+	CVMs             []CVMInfo   `json:"cvms,omitempty"`
+	CVMCount         int         `json:"cvm_count"`
 }
 
 // AppProfile represents an app profile.
@@ -77,11 +77,11 @@ type AppAttestationResponse = GenericObject
 
 // DeviceAllowlistItem represents an item in the device allowlist.
 type DeviceAllowlistItem struct {
-	DeviceID       string `json:"device_id"`
+	DeviceID       string  `json:"device_id"`
 	NodeName       *string `json:"node_name,omitempty"`
-	CVMIDs         []int  `json:"cvm_ids,omitempty"`
-	AllowedOnchain bool   `json:"allowed_onchain"`
-	Status         string `json:"status"`
+	CVMIDs         []int   `json:"cvm_ids,omitempty"`
+	AllowedOnchain bool    `json:"allowed_onchain"`
+	Status         string  `json:"status"`
 }
 
 // DeviceAllowlistResponse is the response for getting app device allowlist.

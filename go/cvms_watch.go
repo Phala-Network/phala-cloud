@@ -11,9 +11,9 @@ import (
 
 // CVMStateEvent represents an event from the CVM state SSE stream.
 type CVMStateEvent struct {
-	Event string         `json:"event"`
-	Data  GenericObject  `json:"data,omitempty"`
-	Error error          `json:"-"`
+	Event string        `json:"event"`
+	Data  GenericObject `json:"data,omitempty"`
+	Error error         `json:"-"`
 }
 
 // WatchCVMStateOptions holds options for watching CVM state.

@@ -157,16 +157,16 @@ type ComposeFile struct {
 
 // ProvisionCVMResponse is the response from provisioning a CVM.
 type ProvisionCVMResponse struct {
-	AppID              string      `json:"app_id"`
-	ComposeHash        string      `json:"compose_hash"`
-	AppEnvEncryptPubkey string     `json:"app_env_encrypt_pubkey,omitempty"`
-	KMSInfo            *CvmKmsInfo `json:"kms_info,omitempty"`
-	FMSPC              string      `json:"fmspc,omitempty"`
-	DeviceID           string      `json:"device_id,omitempty"`
-	OSImageHash        string      `json:"os_image_hash,omitempty"`
-	InstanceType       string      `json:"instance_type,omitempty"`
-	NodeID             *int        `json:"node_id,omitempty"`
-	KMSID              string      `json:"kms_id,omitempty"`
+	AppID               string      `json:"app_id"`
+	ComposeHash         string      `json:"compose_hash"`
+	AppEnvEncryptPubkey string      `json:"app_env_encrypt_pubkey,omitempty"`
+	KMSInfo             *CvmKmsInfo `json:"kms_info,omitempty"`
+	FMSPC               string      `json:"fmspc,omitempty"`
+	DeviceID            string      `json:"device_id,omitempty"`
+	OSImageHash         string      `json:"os_image_hash,omitempty"`
+	InstanceType        string      `json:"instance_type,omitempty"`
+	NodeID              *int        `json:"node_id,omitempty"`
+	KMSID               string      `json:"kms_id,omitempty"`
 }
 
 // CommitCVMProvisionRequest is the request for committing a CVM provision.
@@ -256,13 +256,13 @@ type ConfirmCVMPatchRequest struct {
 
 // CVMAttestation represents CVM attestation data.
 type CVMAttestation struct {
-	Name            *string        `json:"name,omitempty"`
-	IsOnline        bool           `json:"is_online"`
-	IsPublic        bool           `json:"is_public"`
-	Error           *string        `json:"error,omitempty"`
-	AppCertificates []Certificate  `json:"app_certificates,omitempty"`
-	TCBInfo         *TcbInfo       `json:"tcb_info,omitempty"`
-	ComposeFile     *string        `json:"compose_file,omitempty"`
+	Name            *string       `json:"name,omitempty"`
+	IsOnline        bool          `json:"is_online"`
+	IsPublic        bool          `json:"is_public"`
+	Error           *string       `json:"error,omitempty"`
+	AppCertificates []Certificate `json:"app_certificates,omitempty"`
+	TCBInfo         *TcbInfo      `json:"tcb_info,omitempty"`
+	ComposeFile     *string       `json:"compose_file,omitempty"`
 }
 
 // Certificate represents a TLS certificate.

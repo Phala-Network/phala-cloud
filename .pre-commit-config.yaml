@@ -8,3 +8,23 @@ repos:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
         files: ^python/
+  - repo: local
+    hooks:
+      - id: gofmt
+        name: gofmt
+        entry: bash -c 'cd go && files=$(gofmt -l .); [ -z "$files" ] || gofmt -l -w $files'
+        language: system
+        files: ^go/.*\.go$
+        pass_filenames: false
+      - id: govet
+        name: go vet
+        entry: bash -c 'cd go && go vet ./...'
+        language: system
+        files: ^go/.*\.go$
+        pass_filenames: false
+      - id: gotest
+        name: go test
+        entry: bash -c 'cd go && go test ./...'
+        language: system
+        files: ^go/.*\.go$
+        pass_filenames: false
