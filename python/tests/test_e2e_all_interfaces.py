@@ -495,10 +495,10 @@ def test_e2e_sync_all_interfaces() -> None:
         _wait_idle(client, cvm_id)
 
         # -- refresh_cvm_instance_ids (global, no cvm_id needed) --
-        # NOTE: may fail if backend routes PATCH /cvms/instance-ids as /cvms/{cvm_id}
         print("  refresh_cvm_instance_ids ...", flush=True)
         r = client.safe_refresh_cvm_instance_ids({})
-        print(f"  [{'ok' if r.ok else 'skip: ' + str(r.error)[:80]}]", flush=True)
+        assert r.ok, r.error
+        print("  [ok]", flush=True)
 
         # ================================================================
         # 7. Lifecycle: restart → stop → start
