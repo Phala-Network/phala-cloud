@@ -5,7 +5,7 @@ Go client for the [Phala Cloud](https://cloud.phala.network) API.
 ## Installation
 
 ```bash
-go get github.com/Phala-Network/phala-cloud-sdk-go
+go get github.com/Phala-Network/phala-cloud/sdks/go
 ```
 
 Requires Go 1.25+.
@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"log"
 
-	phala "github.com/Phala-Network/phala-cloud-sdk-go"
+	phala "github.com/Phala-Network/phala-cloud/sdks/go"
 )
 
 func main() {

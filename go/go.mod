@@ -1,4 +1,4 @@
-module github.com/Phala-Network/phala-cloud-sdk-go
+module github.com/Phala-Network/phala-cloud/sdks/go
 
 go 1.25.0
 
