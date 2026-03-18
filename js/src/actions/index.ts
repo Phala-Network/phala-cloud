@@ -104,6 +104,19 @@ export {
   type CheckDeviceAllowedRequest,
 } from "./blockchains/check_device_allowed";
 
+export {
+  checkComposeHashAllowed,
+  safeCheckComposeHashAllowed,
+  type CheckComposeHashAllowedRequest,
+} from "./blockchains/check_compose_hash_allowed";
+
+export {
+  checkOnChainPrerequisites,
+  safeCheckOnChainPrerequisites,
+  type CheckOnChainPrerequisitesRequest,
+  type OnChainPrerequisites,
+} from "./blockchains/check_on_chain_prerequisites";
+
 export { dstackAppAbi } from "./blockchains/abi/dstack_app";
 
 export {

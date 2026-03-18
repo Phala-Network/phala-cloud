@@ -59,12 +59,16 @@ const { action: confirmCvmPatch, safeAction: safeConfirmCvmPatch } = defineActio
   const parsed = ConfirmCvmPatchRequestSchema.parse(request);
   const { cvmId } = CvmIdSchema.parse(parsed);
 
-  const response = await client.patch<{ correlation_id: string }>(`/cvms/${cvmId}`, {}, {
-    headers: {
-      "X-Compose-Hash": parsed.composeHash,
-      "X-Transaction-Hash": parsed.transactionHash,
+  const response = await client.patch<{ correlation_id: string }>(
+    `/cvms/${cvmId}`,
+    {},
+    {
+      headers: {
+        "X-Compose-Hash": parsed.composeHash,
+        "X-Transaction-Hash": parsed.transactionHash,
+      },
     },
-  });
+  );
 
   return {
     correlationId: response.correlation_id,

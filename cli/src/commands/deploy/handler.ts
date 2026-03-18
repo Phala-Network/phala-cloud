@@ -26,6 +26,8 @@ import {
 	formatStructuredError,
 	parseEnvVars,
 	safeAddComposeHash,
+	safeAddDevice,
+	safeCheckOnChainPrerequisites,
 	safeCommitCvmProvision,
 	safeConfirmCvmPatch,
 	safeDeployAppAuth,
@@ -1003,43 +1005,109 @@ const updateCvm = async (
 		if (validatedOptions.debug) {
 			console.log("[DEBUG] patchCvm.composeHash:", result.composeHash);
 			console.log("[DEBUG] cvm.app_id:", cvm.app_id);
+			console.log("[DEBUG] patchCvm.deviceId:", result.deviceId);
 		}
 
-		const receipt_result = await safeAddComposeHash({
+		// Check on-chain prerequisites (device + compose hash status)
+		const prereqs = await safeCheckOnChainPrerequisites({
 			chain: cvm.kms_info?.chain,
 			rpcUrl: validatedOptions.rpcUrl,
-			appId: cvm.app_id as `0x${string}`,
+			appAddress: cvm.app_id as `0x${string}`,
+			deviceId: result.deviceId,
 			composeHash: result.composeHash,
-			privateKey: validatedOptions.privateKey as `0x${string}`,
 		});
-		if (!receipt_result.success) {
-			logger.logDetailedError(receipt_result, "Add Compose Hash");
-			const errorMsg =
-				typeof receipt_result === "object" && receipt_result !== null
-					? JSON.stringify(receipt_result)
-					: String(receipt_result);
-			throw new Error(`Failed to add compose hash: ${errorMsg}`);
+
+		if (!prereqs.success) {
+			// biome-ignore lint/suspicious/noExplicitAny: type narrowing issue with safe result union
+			const errDetail = (prereqs as any).error;
+			throw new Error(
+				`Failed to check on-chain prerequisites (contract: ${cvm.app_id}): ${errDetail.message}`,
+			);
 		}
 
-		// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
-		const txResult = receipt_result.data as any;
 		if (validatedOptions.debug) {
-			console.log(
-				"[DEBUG] addComposeHash.transactionHash:",
-				txResult.transactionHash,
+			console.log("[DEBUG] prereqs:", prereqs.data);
+		}
+
+		// Add device if not registered
+		if (!prereqs.data.deviceAllowed) {
+			logger.info("Device not registered on-chain, adding...");
+			const deviceResult = await safeAddDevice({
+				chain: cvm.kms_info?.chain,
+				rpcUrl: validatedOptions.rpcUrl,
+				appAddress: cvm.app_id as `0x${string}`,
+				deviceId: result.deviceId,
+				privateKey: validatedOptions.privateKey as `0x${string}`,
+			});
+			if (!deviceResult.success) {
+				// biome-ignore lint/suspicious/noExplicitAny: type narrowing issue with safe result union
+				const errDetail = (deviceResult as any).error;
+				throw new Error(
+					`Failed to register device on-chain (device: ${result.deviceId.slice(0, 10)}...): ${errDetail.message}`,
+				);
+			}
+		}
+
+		// Add compose hash if not already registered
+		let transactionHash: string;
+		if (prereqs.data.composeHashAllowed) {
+			logger.info(
+				"Compose hash already registered on-chain, skipping transaction",
 			);
-			console.log("[DEBUG] addComposeHash.composeHash:", txResult.composeHash);
+			transactionHash = "already-registered";
+		} else {
+			const receipt_result = await safeAddComposeHash({
+				chain: cvm.kms_info?.chain,
+				rpcUrl: validatedOptions.rpcUrl,
+				appId: cvm.app_id as `0x${string}`,
+				composeHash: result.composeHash,
+				privateKey: validatedOptions.privateKey as `0x${string}`,
+			});
+			if (!receipt_result.success) {
+				// biome-ignore lint/suspicious/noExplicitAny: type narrowing issue with safe result union
+				const errDetail = (receipt_result as any).error;
+				throw new Error(
+					`Failed to register compose hash on-chain (hash: ${result.composeHash.slice(0, 10)}...): ${errDetail.message}`,
+				);
+			}
+
+			// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
+			const txResult = receipt_result.data as any;
+			transactionHash = txResult.transactionHash;
+		}
+
+		if (validatedOptions.debug) {
+			console.log("[DEBUG] transactionHash:", transactionHash);
 		}
 
 		const confirmResult = await safeConfirmCvmPatch(client, {
 			id: validatedOptions.uuid,
 			composeHash: result.composeHash,
-			transactionHash: txResult.transactionHash,
+			transactionHash,
 		});
 		if (!confirmResult.success) {
-			logger.logDetailedError(confirmResult.error, "Confirm CVM Patch");
+			const errMsg = confirmResult.error.message;
+			const status =
+				"status" in confirmResult.error
+					? (confirmResult.error as { status: number }).status
+					: undefined;
+			if (status === 466) {
+				throw new Error(
+					"Compose hash expired. Please retry the update from the beginning.",
+				);
+			}
+			if (status === 467) {
+				throw new Error(
+					`Transaction verification failed on backend. Hash: ${transactionHash}`,
+				);
+			}
+			if (status === 468) {
+				throw new Error(
+					`Compose hash not found on-chain. Contract: ${cvm.app_id}`,
+				);
+			}
 			throw new Error(
-				`Failed to confirm CVM update: ${confirmResult.error.message}`,
+				`Failed to confirm CVM update after on-chain registration: ${errMsg}`,
 			);
 		}
 	}
