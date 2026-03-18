@@ -1,4 +1,4 @@
-name: Release Python SDK
+name: Release Go SDK
 
 on:
   issue_comment:
@@ -32,7 +32,6 @@ permissions:
   contents: write
   issues: write
   pull-requests: write
-  id-token: write  # Required for PyPI Trusted Publishers (OIDC)
 
 jobs:
   parse:
@@ -61,7 +60,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const allowedPackages = ['python', 'py'];
+            const allowedPackages = ['go', 'golang'];
             const allowedBumps = ['patch', 'minor', 'major'];
             const allowedPrereleaseTags = ['beta', 'alpha', 'rc'];
 
@@ -76,7 +75,7 @@ jobs:
             const releaseType = match[2].toLowerCase();
             const prereleaseTag = match[3] ? match[3].toLowerCase() : '';
 
-            // Only handle python/py - let other packages be handled by release-npm.yml / release-go.yml
+            // Only handle go/golang
             if (!allowedPackages.includes(packageName)) {
               return;
             }
@@ -95,11 +94,11 @@ jobs:
               const message = [
                 `⚠️ @${actor} I couldn't parse the release command.`,
                 '',
-                'Expected format: `!release <python|py> <patch|minor|major> [beta|alpha|rc]`',
+                'Expected format: `!release <go|golang> <patch|minor|major> [beta|alpha|rc]`',
                 '',
                 'Examples:',
-                '- `!release python patch` - stable release',
-                '- `!release py minor beta` - beta release'
+                '- `!release go patch` - stable release',
+                '- `!release go minor beta` - beta release'
               ];
               await github.rest.issues.createComment({
                 owner,
@@ -161,7 +160,7 @@ jobs:
             const releaseTypeLabel = prereleaseTag ? `${releaseType} (${prereleaseTag})` : releaseType;
 
             const lines = [
-              `🚀 @${actor} release command accepted: \`python\` \`${releaseTypeLabel}\`.`,
+              `🚀 @${actor} release command accepted: \`go\` \`${releaseTypeLabel}\`.`,
               '',
               'The release workflow is queued; results will be posted here.'
             ];
@@ -171,7 +170,7 @@ jobs:
             }
 
             if (prereleaseTag) {
-              lines.splice(2, 0, `📦 Prerelease tag: \`${prereleaseTag}\` (will publish to PyPI with pre-release version)`);
+              lines.splice(2, 0, `📦 Prerelease tag: \`${prereleaseTag}\``);
             }
 
             await github.rest.issues.createComment({
@@ -201,10 +200,9 @@ jobs:
         (github.event_name == 'workflow_dispatch')
       )
     concurrency:
-      group: release-python-${{ github.event_name == 'workflow_dispatch' && inputs.ref || needs.parse.outputs.ref }}
+      group: release-go-${{ github.event_name == 'workflow_dispatch' && inputs.ref || needs.parse.outputs.ref }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
-    environment: pypi
     env:
       RELEASE_TYPE: ${{ github.event_name == 'workflow_dispatch' && inputs.release_type || needs.parse.outputs.release_type }}
       PRERELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || needs.parse.outputs.prerelease }}
@@ -247,76 +245,42 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          python-version: '3.12'
-
-      - name: Install build tools
-        run: pip install build
+          go-version-file: go/go.mod
 
       - name: Bump version
         id: bump
-        run: python scripts/bump-python-version.py "$RELEASE_TYPE" "$PRERELEASE"
+        run: bash scripts/bump-go-version.sh "$RELEASE_TYPE" "$PRERELEASE"
 
       - name: Export version metadata
         run: |
           echo "NEW_VERSION=${{ steps.bump.outputs.version }}" >> "$GITHUB_ENV"
-          echo "TAG_NAME=python-v${{ steps.bump.outputs.version }}" >> "$GITHUB_ENV"
+          echo "TAG_NAME=sdks/go/v${{ steps.bump.outputs.version }}" >> "$GITHUB_ENV"
 
-      - name: Run lint and format check
-        working-directory: python
+      - name: Run checks
+        working-directory: go
         run: |
-          pip install "ruff>=0.12,<1"
-          ruff format --check .
-          ruff check .
+          gofmt -l . | tee /tmp/gofmt_output
+          if [ -s /tmp/gofmt_output ]; then
+            echo "gofmt found unformatted files"
+            exit 1
+          fi
+          go vet ./...
 
       - name: Run tests
-        working-directory: python
-        run: |
-          pip install -e ".[dev]"
-          pytest -q -m "not e2e"
-
-      - name: Build package
-        working-directory: python
-        run: python -m build
-
-      - name: Inspect package contents
-        id: pack_info
-        working-directory: python
-        run: |
-          pip install twine
-          twine check dist/*
-
-          # Get package info
-          whl_file=$(ls dist/*.whl 2>/dev/null | head -1)
-          tar_file=$(ls dist/*.tar.gz 2>/dev/null | head -1)
-
-          if [ -n "$whl_file" ]; then
-            whl_size=$(du -h "$whl_file" | cut -f1)
-            echo "whl_size=${whl_size}" >> "$GITHUB_OUTPUT"
-            echo "whl_file=$(basename "$whl_file")" >> "$GITHUB_OUTPUT"
-          fi
-
-          if [ -n "$tar_file" ]; then
-            tar_size=$(du -h "$tar_file" | cut -f1)
-            echo "tar_size=${tar_size}" >> "$GITHUB_OUTPUT"
-            echo "tar_file=$(basename "$tar_file")" >> "$GITHUB_OUTPUT"
-          fi
+        working-directory: go
+        run: go test -count=1 ./...
 
       - name: Commit version change
         run: |
-          git add python/pyproject.toml
+          git add go/version.go
           if git diff --cached --quiet; then
             echo "No changes to commit"
             exit 1
           fi
-          git commit -m "chore(python): release v${NEW_VERSION}"
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: python/dist/
+          git commit -m "chore(go): release v${NEW_VERSION}"
 
       - name: Create tag
         run: git tag "$TAG_NAME"
@@ -327,7 +291,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ "$SOURCE_REF" = "main" ]; then
-            RELEASE_BRANCH="release/python-v${NEW_VERSION}"
+            RELEASE_BRANCH="release/go-v${NEW_VERSION}"
             git checkout -b "$RELEASE_BRANCH"
             git push origin "$RELEASE_BRANCH"
             git push origin "$TAG_NAME"
@@ -335,8 +299,8 @@ jobs:
             PR_URL=$(gh pr create \
               --base main \
               --head "$RELEASE_BRANCH" \
-              --title "chore(python): release v${NEW_VERSION}" \
-              --body "Automated release PR for python v${NEW_VERSION}. Updates pyproject.toml. The package has already been published to PyPI.")
+              --title "chore(go): release v${NEW_VERSION}" \
+              --body "Automated release PR for Go SDK v${NEW_VERSION}. Updates version.go. The module is published via git tag \`${TAG_NAME}\`.")
 
             echo "release_pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
             echo "used_release_branch=true" >> "$GITHUB_OUTPUT"
@@ -352,15 +316,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          MODULE_PATH="github.com/Phala-Network/phala-cloud/sdks/go"
           {
-            echo "Release python v${NEW_VERSION}"
+            echo "Release Go SDK v${NEW_VERSION}"
             echo ""
             echo "---"
             echo ""
-            echo "**PyPI**: [phala-cloud@${NEW_VERSION}](https://pypi.org/project/phala-cloud/${NEW_VERSION}/)"
+            echo "**Go module**: [\`${MODULE_PATH}\`](https://pkg.go.dev/${MODULE_PATH}@v${NEW_VERSION})"
             echo ""
             echo '```bash'
-            echo "pip install phala-cloud==${NEW_VERSION}"
+            echo "go get ${MODULE_PATH}@v${NEW_VERSION}"
             echo '```'
           } > release_body.md
 
@@ -370,10 +335,9 @@ jobs:
           fi
 
           RELEASE_URL=$(gh release create "$TAG_NAME" \
-            --title "phala-cloud v${NEW_VERSION}" \
+            --title "Go SDK v${NEW_VERSION}" \
             --notes-file release_body.md \
-            $PRERELEASE_FLAG \
-            python/dist/*)
+            $PRERELEASE_FLAG)
 
           echo "html_url=$RELEASE_URL" >> "$GITHUB_OUTPUT"
 
@@ -386,12 +350,13 @@ jobs:
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const usedReleaseBranch = '${{ steps.push.outputs.used_release_branch }}' === 'true';
             const releasePrUrl = '${{ steps.push.outputs.release_pr_url }}';
+            const modulePath = 'github.com/Phala-Network/phala-cloud/sdks/go';
 
             const body = [
-              `🎉 Release completed: \`python\` v${process.env.NEW_VERSION}`,
+              `🎉 Release completed: \`go\` v${process.env.NEW_VERSION}`,
               '',
               `- Branch: \`${process.env.SOURCE_REF}\``,
-              `- PyPI: [phala-cloud@${process.env.NEW_VERSION}](https://pypi.org/project/phala-cloud/${process.env.NEW_VERSION}/)`,
+              `- Go module: [\`${modulePath}\`](https://pkg.go.dev/${modulePath}@v${process.env.NEW_VERSION})`,
               `- GitHub Release: [link](${{ steps.release.outputs.html_url }})`,
               `- Workflow logs: ${runUrl}`,
             ];
@@ -403,9 +368,10 @@ jobs:
 
             body.push(
               '',
-              '### 📦 Package Info',
-              `- Wheel: **${{ steps.pack_info.outputs.whl_file }}** (${{ steps.pack_info.outputs.whl_size }})`,
-              `- Source: **${{ steps.pack_info.outputs.tar_file }}** (${{ steps.pack_info.outputs.tar_size }})`,
+              '### 📦 Install',
+              '```bash',
+              `go get ${modulePath}@v${process.env.NEW_VERSION}`,
+              '```'
             );
 
             await github.rest.issues.createComment({
@@ -425,7 +391,7 @@ jobs:
             const actor = process.env.REQUESTED_BY ? `@${process.env.REQUESTED_BY}` : 'Requester';
             const version = process.env.NEW_VERSION || 'unknown version';
             const body = [
-              `❌ ${actor} release failed: \`python\` ${version}`,
+              `❌ ${actor} release failed: \`go\` ${version}`,
               '',
               `Branch: \`${process.env.SOURCE_REF}\``,
               `Please review the workflow logs: ${runUrl}`
