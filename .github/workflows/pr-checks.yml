@@ -280,6 +280,9 @@ jobs:
         working-directory: js
         run: bun add -d playwright
 
+      - name: Install Playwright system dependencies
+        run: bunx playwright install-deps
+
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         id: playwright-cache
@@ -289,9 +292,8 @@ jobs:
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: |
-          npx playwright install-deps
-          npx playwright install chromium firefox webkit
+        working-directory: js
+        run: bunx playwright install chromium firefox webkit
 
       - name: Test browser compatibility  
         working-directory: js
