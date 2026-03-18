@@ -1048,33 +1048,25 @@ const updateCvm = async (
 			}
 		}
 
-		// Add compose hash if not already registered
-		let transactionHash: string;
-		if (prereqs.data.composeHashAllowed) {
-			logger.info(
-				"Compose hash already registered on-chain, skipping transaction",
+		// Register compose hash on-chain (idempotent — always send to get a real tx hash)
+		const receipt_result = await safeAddComposeHash({
+			chain: cvm.kms_info?.chain,
+			rpcUrl: validatedOptions.rpcUrl,
+			appId: cvm.app_id as `0x${string}`,
+			composeHash: result.composeHash,
+			privateKey: validatedOptions.privateKey as `0x${string}`,
+		});
+		if (!receipt_result.success) {
+			// biome-ignore lint/suspicious/noExplicitAny: type narrowing issue with safe result union
+			const errDetail = (receipt_result as any).error;
+			throw new Error(
+				`Failed to register compose hash on-chain (hash: ${result.composeHash.slice(0, 10)}...): ${errDetail.message}`,
 			);
-			transactionHash = "already-registered";
-		} else {
-			const receipt_result = await safeAddComposeHash({
-				chain: cvm.kms_info?.chain,
-				rpcUrl: validatedOptions.rpcUrl,
-				appId: cvm.app_id as `0x${string}`,
-				composeHash: result.composeHash,
-				privateKey: validatedOptions.privateKey as `0x${string}`,
-			});
-			if (!receipt_result.success) {
-				// biome-ignore lint/suspicious/noExplicitAny: type narrowing issue with safe result union
-				const errDetail = (receipt_result as any).error;
-				throw new Error(
-					`Failed to register compose hash on-chain (hash: ${result.composeHash.slice(0, 10)}...): ${errDetail.message}`,
-				);
-			}
-
-			// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
-			const txResult = receipt_result.data as any;
-			transactionHash = txResult.transactionHash;
 		}
+
+		// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
+		const txResult = receipt_result.data as any;
+		const transactionHash: string = txResult.transactionHash;
 
 		if (validatedOptions.debug) {
 			console.log("[DEBUG] transactionHash:", transactionHash);
