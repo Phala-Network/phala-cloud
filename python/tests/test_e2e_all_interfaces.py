@@ -733,3 +733,122 @@ async def test_e2e_async_all_interfaces() -> None:
         if cvm_id:
             await _cleanup_async(client, cvm_id)
         await client.aclose()
+
+
+# ---------------------------------------------------------------------------
+# patch_cvm E2E — deploy → patch (various combos) → verify → cleanup
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.e2e
+def test_e2e_patch_cvm() -> None:
+    base_url = _must_env("PHALA_CLOUD_E2E_BASE_URL", "https://cloud-api.phala.com/api/v1")
+    api_key = _must_env("PHALA_CLOUD_E2E_API_KEY")
+    client = create_client(api_key=api_key, base_url=base_url)
+    cvm_id: str | None = None
+
+    print(f"\n=== E2E patch_cvm ({base_url}) ===", flush=True)
+
+    try:
+        # Deploy
+        cvm_id, app_id, encrypt_pubkey = _deploy(client)
+        req = {"id": cvm_id}
+
+        # 1. Visibility-only patch
+        _assert_idle(client, cvm_id, "patch: visibility")
+        print("  patch: visibility ...", flush=True)
+        result = client.patch_cvm(
+            {
+                "id": cvm_id,
+                "public_logs": True,
+                "public_sysinfo": True,
+            }
+        )
+        assert not result["requires_on_chain_hash"]
+        assert result["correlation_id"]
+        print(f"  [ok] correlation_id={result['correlation_id']}", flush=True)
+        _wait_idle(client, cvm_id)
+
+        # Verify visibility was applied
+        info = client.get_cvm_info(req)
+        assert getattr(info, "public_logs", None) is True
+        assert getattr(info, "public_sysinfo", None) is True
+        print("  [verified] visibility applied", flush=True)
+
+        # 2. Docker compose patch
+        _assert_idle(client, cvm_id, "patch: docker_compose")
+        print("  patch: docker_compose ...", flush=True)
+        result = client.patch_cvm(
+            {
+                "id": cvm_id,
+                "docker_compose_file": TEST_COMPOSE,
+            }
+        )
+        assert not result["requires_on_chain_hash"]
+        assert result["correlation_id"]
+        print(f"  [ok] correlation_id={result['correlation_id']}", flush=True)
+        _wait_idle(client, cvm_id)
+
+        # 3. Pre-launch script patch
+        _assert_idle(client, cvm_id, "patch: pre_launch_script")
+        print("  patch: pre_launch_script ...", flush=True)
+        result = client.patch_cvm(
+            {
+                "id": cvm_id,
+                "pre_launch_script": "#!/bin/sh\necho patched",
+            }
+        )
+        assert not result["requires_on_chain_hash"]
+        assert result["correlation_id"]
+        print(f"  [ok] correlation_id={result['correlation_id']}", flush=True)
+        _wait_idle(client, cvm_id)
+
+        # 4. Encrypted env patch
+        if encrypt_pubkey:
+            _assert_idle(client, cvm_id, "patch: encrypted_env")
+            print("  patch: encrypted_env ...", flush=True)
+            encrypted = asyncio.run(_encrypt_envs(encrypt_pubkey))
+            result = client.patch_cvm(
+                {
+                    "id": cvm_id,
+                    "encrypted_env": encrypted,
+                }
+            )
+            assert not result["requires_on_chain_hash"]
+            assert result["correlation_id"]
+            print(f"  [ok] correlation_id={result['correlation_id']}", flush=True)
+            _wait_idle(client, cvm_id)
+
+        # 5. Multi-field patch (visibility + compose together)
+        _assert_idle(client, cvm_id, "patch: multi-field")
+        print("  patch: multi-field (visibility + compose) ...", flush=True)
+        result = client.patch_cvm(
+            {
+                "id": cvm_id,
+                "public_logs": False,
+                "docker_compose_file": TEST_COMPOSE,
+            }
+        )
+        assert not result["requires_on_chain_hash"]
+        assert result["correlation_id"]
+        print(f"  [ok] correlation_id={result['correlation_id']}", flush=True)
+        _wait_idle(client, cvm_id)
+
+        # Verify multi-field was applied
+        info = client.get_cvm_info(req)
+        assert getattr(info, "public_logs", None) is False
+        print("  [verified] multi-field applied", flush=True)
+
+        # 6. safe_patch_cvm
+        _assert_idle(client, cvm_id, "safe_patch_cvm")
+        print("  safe_patch_cvm ...", flush=True)
+        r = client.safe_patch_cvm({"id": cvm_id, "public_sysinfo": False})
+        assert r.ok, r.error
+        print("  [ok]", flush=True)
+        _wait_idle(client, cvm_id)
+
+        print("=== patch_cvm test done ===", flush=True)
+
+    finally:
+        if cvm_id:
+            _cleanup(client, cvm_id)

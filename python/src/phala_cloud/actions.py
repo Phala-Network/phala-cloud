@@ -73,6 +73,10 @@ __all__ = [
     "safe_get_available_os_images",
     "update_os_image",
     "safe_update_os_image",
+    "patch_cvm",
+    "safe_patch_cvm",
+    "confirm_cvm_patch",
+    "safe_confirm_cvm_patch",
     "get_cvm_state",
     "safe_get_cvm_state",
     "watch_cvm_state",
@@ -399,6 +403,22 @@ def update_os_image(client: Any, *args: Any, **kwargs: Any) -> Any:
 
 def safe_update_os_image(client: Any, *args: Any, **kwargs: Any) -> Any:
     return client.safe_update_os_image(*args, **kwargs)
+
+
+def patch_cvm(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.patch_cvm(*args, **kwargs)
+
+
+def safe_patch_cvm(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.safe_patch_cvm(*args, **kwargs)
+
+
+def confirm_cvm_patch(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.confirm_cvm_patch(*args, **kwargs)
+
+
+def safe_confirm_cvm_patch(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.safe_confirm_cvm_patch(*args, **kwargs)
 
 
 def get_cvm_state(client: Any, *args: Any, **kwargs: Any) -> Any:

@@ -203,6 +203,30 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(204)
     if method == "PATCH" and any(path.endswith(s) for s in ["/resources", "/os-image"]):
         return httpx.Response(202)
+    # patch_cvm / confirm_cvm_patch: PATCH /cvms/{cvm_id} (no sub-path)
+    if (
+        method == "PATCH"
+        and "/cvms/" in path
+        and not any(
+            path.endswith(s)
+            for s in [
+                "/envs",
+                "/docker-compose",
+                "/pre-launch-script",
+                "/visibility",
+                "/instance-id",
+                "/resources",
+                "/os-image",
+                "/compose_file",
+                "/compose",
+                "/name",
+                "/listed",
+                "/scheduled-delete",
+            ]
+        )
+        and path != "/api/v1/cvms/instance-ids"
+    ):
+        return _json_response({"correlation_id": "corr-123"}, status=202)
     if method == "PATCH" and path.endswith("/visibility"):
         return _json_response({"status": "running"})
     if method == "PATCH" and path.endswith("/instance-id"):
@@ -362,6 +386,10 @@ def test_sync_action_matrix_and_safe() -> None:
             lambda: c.refresh_cvm_instance_id({"id": "c1"}),
             lambda: c.refresh_cvm_instance_ids({}),
             lambda: c.replicate_cvm({"id": "c1"}),
+            lambda: c.patch_cvm({"id": "c1", "vcpu": 2}),
+            lambda: c.confirm_cvm_patch(
+                {"id": "c1", "compose_hash": "h", "transaction_hash": "tx"}
+            ),
             lambda: c.get_app_list(),
             lambda: c.get_app_info({"appId": "a"}),
             lambda: c.get_app_cvms({"appId": "a"}),
@@ -438,6 +466,10 @@ def test_safe_matrix_sync_all_actions() -> None:
             "safe_refresh_cvm_instance_id": ({"id": "c1"},),
             "safe_refresh_cvm_instance_ids": ({},),
             "safe_replicate_cvm": ({"id": "c1"},),
+            "safe_patch_cvm": ({"id": "c1", "vcpu": 2},),
+            "safe_confirm_cvm_patch": (
+                {"id": "c1", "compose_hash": "h", "transaction_hash": "tx"},
+            ),
             "safe_get_app_list": (),
             "safe_get_app_info": ({"appId": "a"},),
             "safe_get_app_cvms": ({"appId": "a"},),

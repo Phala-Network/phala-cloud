@@ -46,6 +46,7 @@ from .blockchains import add_compose_hash as _add_compose_hash
 from .blockchains import deploy_app_auth as _deploy_app_auth
 from .client import AsyncPhalaCloud as _AsyncBase
 from .client import PhalaCloud as _SyncBase
+from .errors import ApiError
 from .models.apps import DeviceAllowlistResponse as _DeviceAllowlistResponse
 from .models.auth import CurrentUserV20251028, CurrentUserV20260121
 from .models.base import CloudModel
@@ -201,6 +202,31 @@ class WatchCvmStateRequest(CvmIdRequest):
     timeout: int = Field(default=300, ge=10, le=600)
     max_retries: int | None = Field(default=None, ge=0, alias="maxRetries")
     retry_delay: float = Field(default=5.0, ge=0, alias="retryDelay")
+
+
+class PatchCvmRequest(CvmIdRequest):
+    docker_compose_file: str | None = None
+    pre_launch_script: str | None = None
+    allowed_envs: list[str] | None = None
+    public_logs: bool | None = None
+    public_sysinfo: bool | None = None
+    public_tcbinfo: bool | None = None
+    encrypted_env: str | None = None
+    user_config: str | None = None
+    gpus: dict[str, Any] | None = None
+    vcpu: int | None = None
+    memory: int | None = None
+    disk_size: int | None = None
+    image: str | None = None
+    shutdown_timeout: int | None = None
+    allow_force_stop: bool | None = None
+
+
+class ConfirmCvmPatchRequest(CvmIdRequest):
+    compose_hash: str = Field(alias="composeHash")
+    transaction_hash: str = Field(alias="transactionHash")
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class _ExtMixin:
@@ -752,6 +778,69 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         self, request: UpdateOsImageRequest | Mapping[str, Any]
     ) -> SafeResult[None]:
         return self.safe(self.update_os_image, request)
+
+    def patch_cvm(self, request: PatchCvmRequest | Mapping[str, Any]) -> dict[str, Any]:
+        req = PatchCvmRequest.model_validate(request)
+        cvm_id = req.resolved
+        body = req.model_dump(
+            exclude={"id", "uuid", "app_id", "instance_id", "cvm_id", "cvmId"},
+            exclude_none=True,
+        )
+        try:
+            data = self._loose_validate(self.request("PATCH", f"/cvms/{cvm_id}", json=body))
+            correlation_id = ""
+            if isinstance(data, dict):
+                correlation_id = data.get("correlation_id", "")
+            elif data is not None:
+                correlation_id = str(getattr(data, "correlation_id", ""))
+            return {"requires_on_chain_hash": False, "correlation_id": correlation_id}
+        except ApiError as exc:
+            if exc.status_code == 465 and isinstance(exc.detail, dict):
+                details: dict[str, Any] = {}
+                for item in exc.detail.get("details") or []:
+                    if isinstance(item, dict) and "field" in item and "value" in item:
+                        details[item["field"]] = item["value"]
+                return {
+                    "requires_on_chain_hash": True,
+                    "compose_hash": details.get("compose_hash", ""),
+                    "app_id": str(details.get("app_id", "")),
+                    "device_id": details.get("device_id", ""),
+                    "kms_info": details.get("kms_info"),
+                }
+            raise
+
+    def safe_patch_cvm(
+        self, request: PatchCvmRequest | Mapping[str, Any]
+    ) -> SafeResult[dict[str, Any]]:
+        return self.safe(self.patch_cvm, request)
+
+    def confirm_cvm_patch(
+        self, request: ConfirmCvmPatchRequest | Mapping[str, Any]
+    ) -> dict[str, Any]:
+        req = ConfirmCvmPatchRequest.model_validate(request)
+        cvm_id = req.resolved
+        data = self._loose_validate(
+            self.request(
+                "PATCH",
+                f"/cvms/{cvm_id}",
+                json={},
+                headers={
+                    "X-Compose-Hash": req.compose_hash,
+                    "X-Transaction-Hash": req.transaction_hash,
+                },
+            )
+        )
+        correlation_id = ""
+        if isinstance(data, dict):
+            correlation_id = data.get("correlation_id", "")
+        elif data is not None:
+            correlation_id = str(getattr(data, "correlation_id", ""))
+        return {"correlation_id": correlation_id}
+
+    def safe_confirm_cvm_patch(
+        self, request: ConfirmCvmPatchRequest | Mapping[str, Any]
+    ) -> SafeResult[dict[str, Any]]:
+        return self.safe(self.confirm_cvm_patch, request)
 
     def get_cvm_state(self, request: CvmIdRequest | Mapping[str, Any]) -> Any:
         cvm_id = CvmIdRequest.model_validate(request).resolved
@@ -1460,6 +1549,69 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         self, request: UpdateOsImageRequest | Mapping[str, Any]
     ) -> SafeResult[None]:
         return await self.safe(self.update_os_image, request)
+
+    async def patch_cvm(self, request: PatchCvmRequest | Mapping[str, Any]) -> dict[str, Any]:
+        req = PatchCvmRequest.model_validate(request)
+        cvm_id = req.resolved
+        body = req.model_dump(
+            exclude={"id", "uuid", "app_id", "instance_id", "cvm_id", "cvmId"},
+            exclude_none=True,
+        )
+        try:
+            data = self._loose_validate(await self.request("PATCH", f"/cvms/{cvm_id}", json=body))
+            correlation_id = ""
+            if isinstance(data, dict):
+                correlation_id = data.get("correlation_id", "")
+            elif data is not None:
+                correlation_id = str(getattr(data, "correlation_id", ""))
+            return {"requires_on_chain_hash": False, "correlation_id": correlation_id}
+        except ApiError as exc:
+            if exc.status_code == 465 and isinstance(exc.detail, dict):
+                details: dict[str, Any] = {}
+                for item in exc.detail.get("details") or []:
+                    if isinstance(item, dict) and "field" in item and "value" in item:
+                        details[item["field"]] = item["value"]
+                return {
+                    "requires_on_chain_hash": True,
+                    "compose_hash": details.get("compose_hash", ""),
+                    "app_id": str(details.get("app_id", "")),
+                    "device_id": details.get("device_id", ""),
+                    "kms_info": details.get("kms_info"),
+                }
+            raise
+
+    async def safe_patch_cvm(
+        self, request: PatchCvmRequest | Mapping[str, Any]
+    ) -> SafeResult[dict[str, Any]]:
+        return await self.safe(self.patch_cvm, request)
+
+    async def confirm_cvm_patch(
+        self, request: ConfirmCvmPatchRequest | Mapping[str, Any]
+    ) -> dict[str, Any]:
+        req = ConfirmCvmPatchRequest.model_validate(request)
+        cvm_id = req.resolved
+        data = self._loose_validate(
+            await self.request(
+                "PATCH",
+                f"/cvms/{cvm_id}",
+                json={},
+                headers={
+                    "X-Compose-Hash": req.compose_hash,
+                    "X-Transaction-Hash": req.transaction_hash,
+                },
+            )
+        )
+        correlation_id = ""
+        if isinstance(data, dict):
+            correlation_id = data.get("correlation_id", "")
+        elif data is not None:
+            correlation_id = str(getattr(data, "correlation_id", ""))
+        return {"correlation_id": correlation_id}
+
+    async def safe_confirm_cvm_patch(
+        self, request: ConfirmCvmPatchRequest | Mapping[str, Any]
+    ) -> SafeResult[dict[str, Any]]:
+        return await self.safe(self.confirm_cvm_patch, request)
 
     async def get_cvm_state(self, request: CvmIdRequest | Mapping[str, Any]) -> Any:
         cvm_id = CvmIdRequest.model_validate(request).resolved
