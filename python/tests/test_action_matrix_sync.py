@@ -102,6 +102,8 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
                 "pages": 1,
             }
         )
+    if method == "GET" and path.startswith("/api/v1/kms/on-chain/"):
+        return _json_response({"chain_name": "base", "chain_id": 8453, "contracts": []})
     if method == "GET" and path.startswith("/api/v1/kms/") and "/pubkey/" in path:
         return _json_response({"public_key": "pk", "signature": "sig"})
     if method == "GET" and path == "/api/v1/kms/phala/next_app_id":
@@ -252,17 +254,50 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
         )
     if method == "GET" and path.endswith("/attestations"):
         return _json_response({"instances": []})
+    if method == "GET" and path.endswith("/device-allowlist"):
+        return _json_response({"is_onchain_kms": False, "allow_any_device": True, "devices": []})
     if method == "GET" and path.endswith("/cvms") and path.startswith("/api/v1/apps/"):
         return _json_response([])
     if method == "GET" and path.endswith("/revisions"):
-        return _json_response({"items": [], "total": 0, "page": 1, "page_size": 10, "pages": 0})
+        return _json_response(
+            {"revisions": [], "total": 0, "page": 1, "page_size": 10, "total_pages": 0}
+        )
     if method == "GET" and "/revisions/" in path:
-        return _json_response({"id": "rev_1"})
+        return _json_response(
+            {
+                "revision_id": "rev_1",
+                "app_id": "a",
+                "vm_uuid": "u",
+                "compose_hash": "h",
+                "created_at": "2025-01-01T00:00:00Z",
+                "operation_type": "deploy",
+            }
+        )
     if method == "GET" and path.startswith("/api/v1/apps/"):
         return _json_response({"id": "a", "name": "app"})
 
     if method == "POST" and path == "/api/v1/status/batch":
         return _json_response({"vm1": {"status": "running"}})
+
+    if method == "GET" and path == "/api/v1/os-images":
+        return _json_response(
+            {
+                "items": [
+                    {
+                        "name": "prod-0.3.0",
+                        "slug": "prod",
+                        "version": "0.3.0",
+                        "os_image_hash": "abc",
+                        "is_dev": False,
+                        "requires_gpu": False,
+                    }
+                ],
+                "total": 1,
+                "page": 1,
+                "page_size": 10,
+                "pages": 1,
+            }
+        )
 
     raise AssertionError(f"Unhandled route: {method} {path}")
 
@@ -334,6 +369,9 @@ def test_sync_action_matrix_and_safe() -> None:
             lambda: c.get_app_revision_detail({"appId": "a", "revisionId": "r"}),
             lambda: c.get_app_filter_options(),
             lambda: c.get_app_attestation({"appId": "a"}),
+            lambda: c.get_kms_on_chain_detail({"chain": "base"}),
+            lambda: c.get_os_images(),
+            lambda: c.get_app_device_allowlist({"appId": "a"}),
         ]
 
         for call in calls:
@@ -407,6 +445,9 @@ def test_safe_matrix_sync_all_actions() -> None:
             "safe_get_app_revision_detail": ({"appId": "a", "revisionId": "r"},),
             "safe_get_app_filter_options": (),
             "safe_get_app_attestation": ({"appId": "a"},),
+            "safe_get_kms_on_chain_detail": ({"chain": "base"},),
+            "safe_get_os_images": (),
+            "safe_get_app_device_allowlist": ({"appId": "a"},),
         }
 
         for method_name, args in cases.items():

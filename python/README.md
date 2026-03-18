@@ -9,6 +9,11 @@ Python SDK for Phala Cloud API, aligned with `@phala/cloud` action surface.
 - Pydantic request/response validation
 - Safe calls (`safe_*`) without exceptions
 
+## Requirements
+
+- Python >= 3.10
+- [uv](https://docs.astral.sh/uv/) (for development)
+
 ## Installation
 
 ```bash
@@ -76,29 +81,45 @@ else:
     print(result.error)
 ```
 
-## E2E Test (full interface matrix)
+## Development
 
-E2E only needs two variables:
+```bash
+cd python
 
-- `PHALA_CLOUD_E2E_BASE_URL`
-- `PHALA_CLOUD_E2E_API_KEY`
+# Install dependencies
+uv sync
 
-It covers sync + async, direct + safe styles, and full interface paths.
+# Run tests
+make test
+
+# Lint & format
+make check
+```
+
+## E2E Test
+
+E2E tests cover sync + async, direct + safe styles, and full interface paths.
+
+Required:
+
+- `PHALA_CLOUD_E2E_API_KEY` — your Phala Cloud API key
+
+Optional:
+
+- `PHALA_CLOUD_E2E_BASE_URL` — defaults to `https://cloud-api.phala.com/api/v1`
 
 ### Run
 
 ```bash
 cd python
-PHALA_CLOUD_E2E_BASE_URL="https://<your-test-api>/api/v1" \
-PHALA_CLOUD_E2E_API_KEY="<api-key>" \
-make e2e
+PHALA_CLOUD_E2E_API_KEY="<api-key>" make e2e
 ```
 
 Or put them in `python/.env.test`:
 
 ```dotenv
-PHALA_CLOUD_E2E_BASE_URL=https://<your-test-api>/api/v1
 PHALA_CLOUD_E2E_API_KEY=<api-key>
+# PHALA_CLOUD_E2E_BASE_URL=https://cloud-api.phala.com/api/v1
 ```
 
 Then simply:
@@ -106,13 +127,6 @@ Then simply:
 ```bash
 cd python
 make e2e
-```
-
-## Development
-
-```bash
-cd python
-make test
 ```
 
 ## License

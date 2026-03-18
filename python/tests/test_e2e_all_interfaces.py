@@ -1,477 +1,735 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import time
+import uuid
 from typing import Any
 
 import pytest
 
 from phala_cloud import create_async_client, create_client
 
+# ---------------------------------------------------------------------------
+# Docker Compose for test CVM
+# ---------------------------------------------------------------------------
 
-def _must_env(name: str) -> str:
+TEST_COMPOSE = """\
+services:
+  app:
+    image: ghcr.io/phala-network/phala-cloud-bun-starter:latest
+    restart: unless-stopped
+    ports:
+      - "80:3000"
+    volumes:
+      - /var/run/tappd.sock:/var/run/tappd.sock
+      - /var/run/dstack.sock:/var/run/dstack.sock
+"""
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _must_env(name: str, default: str | None = None) -> str:
     value = os.getenv(name)
     if not value or not value.strip():
+        if default is not None:
+            return default
         pytest.skip(f"Missing env: {name}")
-
     cleaned = value.strip().strip('"').strip("'")
     if name == "PHALA_CLOUD_E2E_BASE_URL" and not cleaned.startswith(("http://", "https://")):
         cleaned = f"https://{cleaned}"
     return cleaned
 
 
-def _cvm_candidates(cvm: Any) -> list[str]:
-    candidates: list[str] = []
-    for key in ("id", "vm_uuid", "instance_id", "app_id", "uuid", "cvm_id"):
-        value = getattr(cvm, key, None)
-        if value:
-            candidates.append(str(value))
-
-    hosted = getattr(cvm, "hosted", None)
-    if hosted:
-        for key in ("id", "instance_id", "app_id"):
-            value = getattr(hosted, key, None)
-            if value:
-                candidates.append(str(value))
-
-    # Deduplicate while preserving order
-    seen: set[str] = set()
-    result: list[str] = []
-    for c in candidates:
-        if c not in seen:
-            seen.add(c)
-            result.append(c)
-    return result
+def _gen_cvm_name() -> str:
+    return f"e2e-test-{uuid.uuid4().hex[:8]}"
 
 
-def _pick_cvm_id(cvm_list: Any) -> str:
-    items = getattr(cvm_list, "items", None) or []
-    assert items, "Need at least one CVM in account for full e2e coverage"
-    candidates = _cvm_candidates(items[0])
-    assert candidates, "Cannot resolve cvm id candidates from list"
-    return candidates[0]
+def _attr(obj: Any, key: str, default: Any = None) -> Any:
+    val = getattr(obj, key, None)
+    if val is None and isinstance(obj, dict):
+        val = obj.get(key)
+    return val if val is not None else default
 
 
-def _pick_app_id(app_list: Any, cvm_list: Any | None = None) -> str:
-    items = getattr(app_list, "items", None) or []
-    if items:
-        first = items[0]
-        for key in ("id", "app_id"):
-            value = getattr(first, key, None)
-            if value:
-                return str(value)
+# ---------------------------------------------------------------------------
+# CVM state
+# ---------------------------------------------------------------------------
 
-    # Some API versions return `dstack_apps` instead of `items`
-    dstack_apps = getattr(app_list, "dstack_apps", None) or []
-    if dstack_apps:
-        first = dstack_apps[0]
-        if isinstance(first, dict):
-            for key in ("id", "app_id"):
-                value = first.get(key)
-                if value:
-                    return str(value)
-        else:
-            for key in ("id", "app_id"):
-                value = getattr(first, key, None)
-                if value:
-                    return str(value)
-
-    # Fallback from CVM list
-    if cvm_list is not None:
-        cvm_items = getattr(cvm_list, "items", None) or []
-        if cvm_items:
-            first_cvm = cvm_items[0]
-            for key in ("app_id",):
-                value = getattr(first_cvm, key, None)
-                if value:
-                    return str(value)
-            hosted = getattr(first_cvm, "hosted", None)
-            if hosted and getattr(hosted, "app_id", None):
-                return str(hosted.app_id)
-
-    raise AssertionError("Cannot resolve app id from app list")
+_TRANSIENT = {
+    "starting",
+    "stopping",
+    "restarting",
+    "shutting_down",
+    "provisioning",
+    "in_progress",
+    "updating",
+}
 
 
-def _pick_workspace_slug(workspaces: Any) -> str:
-    data = getattr(workspaces, "data", None) or []
-    assert data, "Need at least one workspace for full e2e coverage"
-    slug = getattr(data[0], "slug", None)
-    assert slug, "Workspace slug is empty"
-    return str(slug)
+def _get_detail(client: Any, cvm_id: str) -> dict[str, Any]:
+    info = client.get_cvm_info({"id": cvm_id})
+    status = str(_attr(info, "status", "unknown")).lower()
+    progress = _attr(info, "progress")
+    p_target = _attr(progress, "target") if progress else None
+    return {
+        "status": status,
+        "app_id": _attr(info, "app_id"),
+        "has_progress": p_target is not None,
+        "progress_target": p_target,
+        "progress_started": _attr(progress, "started_at") if progress else None,
+    }
+
+
+async def _get_detail_async(client: Any, cvm_id: str) -> dict[str, Any]:
+    info = await client.get_cvm_info({"id": cvm_id})
+    status = str(_attr(info, "status", "unknown")).lower()
+    progress = _attr(info, "progress")
+    p_target = _attr(progress, "target") if progress else None
+    return {
+        "status": status,
+        "app_id": _attr(info, "app_id"),
+        "has_progress": p_target is not None,
+        "progress_target": p_target,
+        "progress_started": _attr(progress, "started_at") if progress else None,
+    }
+
+
+def _log_state(label: str, d: dict[str, Any]) -> None:
+    extra = (
+        f" progress.target={d['progress_target']} since={d['progress_started']}"
+        if d["has_progress"]
+        else ""
+    )
+    print(f"  [{label}] status={d['status']}{extra}", flush=True)
+
+
+def _is_idle(d: dict[str, Any]) -> bool:
+    return not d["has_progress"] and d["status"] not in _TRANSIENT
+
+
+def _wait_idle(client: Any, cvm_id: str, timeout: int = 600) -> dict[str, Any]:
+    deadline = time.time() + timeout
+    last_log = 0.0
+    d: dict[str, Any] = {}
+    while time.time() < deadline:
+        d = _get_detail(client, cvm_id)
+        now = time.time()
+        if now - last_log >= 30:
+            _log_state(f"waiting {int(deadline - now)}s left", d)
+            last_log = now
+        if _is_idle(d):
+            return d
+        time.sleep(5)
+    _log_state("timeout", d)
+    raise AssertionError(f"CVM {cvm_id} not idle within {timeout}s: {d['status']}")
+
+
+async def _wait_idle_async(client: Any, cvm_id: str, timeout: int = 600) -> dict[str, Any]:
+    deadline = time.time() + timeout
+    last_log = 0.0
+    d: dict[str, Any] = {}
+    while time.time() < deadline:
+        d = await _get_detail_async(client, cvm_id)
+        now = time.time()
+        if now - last_log >= 30:
+            _log_state(f"waiting {int(deadline - now)}s left", d)
+            last_log = now
+        if _is_idle(d):
+            return d
+        await asyncio.sleep(5)
+    _log_state("timeout", d)
+    raise AssertionError(f"CVM {cvm_id} not idle within {timeout}s: {d['status']}")
+
+
+def _assert_idle(client: Any, cvm_id: str, label: str) -> dict[str, Any]:
+    d = _get_detail(client, cvm_id)
+    _log_state(f"before {label}", d)
+    assert _is_idle(d), f"CVM not idle before {label}: status={d['status']}"
+    return d
+
+
+async def _assert_idle_async(client: Any, cvm_id: str, label: str) -> dict[str, Any]:
+    d = await _get_detail_async(client, cvm_id)
+    _log_state(f"before {label}", d)
+    assert _is_idle(d), f"CVM not idle before {label}: status={d['status']}"
+    return d
+
+
+# ---------------------------------------------------------------------------
+# Encrypt helper
+# ---------------------------------------------------------------------------
+
+
+async def _encrypt_envs(pubkey_hex: str) -> str:
+    from dstack_sdk import encrypt_env_vars
+    from dstack_sdk.encrypt_env_vars import EnvVar
+
+    envs = [EnvVar(key="E2E_TEST", value="1")]
+    return await encrypt_env_vars(envs, pubkey_hex)
+
+
+# ---------------------------------------------------------------------------
+# Deploy & cleanup
+# ---------------------------------------------------------------------------
+
+
+def _deploy(client: Any) -> tuple[str, str | None, str | None]:
+    """Deploy test CVM. Returns (cvm_id, app_id, encrypt_pubkey)."""
+    name = _gen_cvm_name()
+    print(f"deploy: provisioning {name} ...", flush=True)
+
+    provision = client.provision_cvm(
+        {
+            "name": name,
+            "instance_type": "tdx.small",
+            "compose_file": {
+                "docker_compose_file": TEST_COMPOSE,
+                "gateway_enabled": True,
+            },
+        }
+    )
+    app_id = _attr(provision, "app_id")
+    compose_hash = _attr(provision, "compose_hash")
+    encrypt_pubkey = _attr(provision, "app_env_encrypt_pubkey")
+    assert app_id, f"missing app_id: {provision}"
+    assert compose_hash, f"missing compose_hash: {provision}"
+    print(f"deploy: app_id={app_id} encrypt_pubkey={'yes' if encrypt_pubkey else 'no'}", flush=True)
+
+    print("deploy: committing ...", flush=True)
+    commit = client.commit_cvm_provision({"app_id": app_id, "compose_hash": compose_hash})
+    cvm_id = str(_attr(commit, "id") or _attr(commit, "cvm_id") or app_id)
+
+    print(f"deploy: cvm_id={cvm_id}, waiting for idle ...", flush=True)
+    d = _wait_idle(client, cvm_id)
+    _log_state("deployed", d)
+    return cvm_id, d.get("app_id") or app_id, encrypt_pubkey
+
+
+async def _deploy_async(client: Any) -> tuple[str, str | None, str | None]:
+    name = _gen_cvm_name()
+    print(f"deploy(async): provisioning {name} ...", flush=True)
+
+    provision = await client.provision_cvm(
+        {
+            "name": name,
+            "instance_type": "tdx.small",
+            "compose_file": {
+                "docker_compose_file": TEST_COMPOSE,
+                "gateway_enabled": True,
+            },
+        }
+    )
+    app_id = _attr(provision, "app_id")
+    compose_hash = _attr(provision, "compose_hash")
+    encrypt_pubkey = _attr(provision, "app_env_encrypt_pubkey")
+    assert app_id, f"missing app_id: {provision}"
+    assert compose_hash, f"missing compose_hash: {provision}"
+
+    print(f"deploy(async): committing app_id={app_id} ...", flush=True)
+    commit = await client.commit_cvm_provision({"app_id": app_id, "compose_hash": compose_hash})
+    cvm_id = str(_attr(commit, "id") or _attr(commit, "cvm_id") or app_id)
+
+    print(f"deploy(async): cvm_id={cvm_id}, waiting for idle ...", flush=True)
+    d = await _wait_idle_async(client, cvm_id)
+    _log_state("deployed", d)
+    return cvm_id, d.get("app_id") or app_id, encrypt_pubkey
+
+
+def _cleanup(client: Any, cvm_id: str) -> None:
+    print(f"cleanup: deleting {cvm_id} ...", flush=True)
+    r = client.safe_delete_cvm({"id": cvm_id})
+    print(f"cleanup: {'ok' if getattr(r, 'ok', True) else getattr(r, 'error', '?')}", flush=True)
+
+
+async def _cleanup_async(client: Any, cvm_id: str) -> None:
+    print(f"cleanup(async): deleting {cvm_id} ...", flush=True)
+    r = await client.safe_delete_cvm({"id": cvm_id})
+    print(
+        f"cleanup(async): {'ok' if getattr(r, 'ok', True) else getattr(r, 'error', '?')}",
+        flush=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# ID pickers
+# ---------------------------------------------------------------------------
 
 
 def _pick_kms_id(kms_list: Any) -> str:
     items = getattr(kms_list, "items", None) or []
-    assert items, "Need at least one KMS for full e2e coverage"
-    kms_id = getattr(items[0], "id", None)
-    assert kms_id, "KMS id is empty"
-    return str(kms_id)
+    assert items, "Need at least one KMS"
+    return str(items[0].id)
 
 
-def _resolve_cvm_id_sync(client: Any, cvm_list: Any) -> str:
-    items = getattr(cvm_list, "items", None) or []
-    assert items, "Need at least one CVM in account for full e2e coverage"
-
-    fallback: str | None = None
-    for cvm in items:
-        for candidate in _cvm_candidates(cvm):
-            result = client.safe_get_cvm_info({"id": candidate})
-            if not result.ok or result.data is None:
-                continue
-
-            if fallback is None:
-                fallback = candidate
-
-            status = _status_of(result.data)
-            in_progress = bool(getattr(result.data, "in_progress", False))
-            progress = getattr(result.data, "progress", None)
-            if status == "running" and not in_progress and progress in (None, "", {}):
-                return candidate
-
-    if fallback:
-        return fallback
-    raise AssertionError("Cannot find a resolvable CVM identifier for get_cvm_info")
+def _pick_workspace_slug(workspaces: Any) -> str:
+    data = getattr(workspaces, "data", None) or []
+    assert data, "Need at least one workspace"
+    return str(data[0].slug)
 
 
-async def _resolve_cvm_id_async(client: Any, cvm_list: Any) -> str:
-    items = getattr(cvm_list, "items", None) or []
-    assert items, "Need at least one CVM in account for full e2e coverage"
-
-    fallback: str | None = None
-    for cvm in items:
-        for candidate in _cvm_candidates(cvm):
-            result = await client.safe_get_cvm_info({"id": candidate})
-            if not result.ok or result.data is None:
-                continue
-
-            if fallback is None:
-                fallback = candidate
-
-            status = _status_of(result.data)
-            in_progress = bool(getattr(result.data, "in_progress", False))
-            progress = getattr(result.data, "progress", None)
-            if status == "running" and not in_progress and progress in (None, "", {}):
-                return candidate
-
-    if fallback:
-        return fallback
-    raise AssertionError("Cannot find a resolvable CVM identifier for get_cvm_info")
-
-
-def _status_of(state: Any) -> str:
-    status = getattr(state, "status", None)
-    if status is None and isinstance(state, dict):
-        status = state.get("status")
-    return str(status or "").lower()
-
-
-def _is_in_progress_error(result: Any) -> bool:
-    if result.ok:
-        return False
-    message = str(result.error).lower() if getattr(result, "error", None) else ""
-    return "in progress" in message or "already in progress" in message
-
-
-def _run_with_retry(call: Any, retries: int = 30, delay: float = 2.0) -> Any:
-    last = call()
-    for _ in range(retries):
-        if getattr(last, "ok", False):
-            return last
-        if not _is_in_progress_error(last):
-            return last
-        time.sleep(delay)
-        last = call()
-    return last
-
-
-def _wait_status_sync(client: Any, req: dict[str, Any], target: str, timeout: int = 180) -> None:
-    deadline = time.time() + timeout
-    target = target.lower()
-    aliases = {
-        "running": {"running"},
-        "stopped": {"stopped", "shutdown", "shutoff", "exited"},
-    }.get(target, {target})
-
-    while time.time() < deadline:
-        state = client.get_cvm_state(req)
-        status = _status_of(state)
-        if status in aliases:
-            return
-        time.sleep(2)
-
-    raise AssertionError(f"CVM status did not reach {target} within {timeout}s")
-
-
-def _wait_idle_sync(client: Any, req: dict[str, Any], timeout: int = 180) -> bool:
-    deadline = time.time() + timeout
-    transient = {
-        "starting",
-        "stopping",
-        "restarting",
-        "shutting_down",
-        "provisioning",
-        "in_progress",
-        "updating",
-    }
-
-    while time.time() < deadline:
-        info = client.safe_get_cvm_info(req)
-        if info.ok and info.data is not None:
-            status = _status_of(info.data)
-            in_progress = bool(getattr(info.data, "in_progress", False))
-            progress = getattr(info.data, "progress", None)
-            if not in_progress and progress in (None, "", {}):
-                if status not in transient:
-                    return True
-        time.sleep(3)
-
-    return False
+# ---------------------------------------------------------------------------
+# Sync E2E
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.e2e
 def test_e2e_sync_all_interfaces() -> None:
-    base_url = _must_env("PHALA_CLOUD_E2E_BASE_URL")
+    base_url = _must_env("PHALA_CLOUD_E2E_BASE_URL", "https://cloud-api.phala.com/api/v1")
     api_key = _must_env("PHALA_CLOUD_E2E_API_KEY")
-
     client = create_client(api_key=api_key, base_url=base_url)
+    cvm_id: str | None = None
 
-    # Generic request styles
-    client.request("GET", "/kms")
-    assert client.safe_request_method("GET", "/kms").ok
-    assert client.request_full("GET", "/kms")["status"] >= 200
-    assert client.safe_request_full("GET", "/kms").ok
+    print(f"\n=== E2E sync ({base_url}) ===", flush=True)
 
-    # Core bootstrap
-    client.get_current_user()
-    assert client.safe_get_current_user().ok
-
-    client.get_available_nodes()
-    assert client.safe_get_available_nodes().ok
-
-    cvm_list = client.get_cvm_list()
-    app_list = client.get_app_list()
-    kms_list = client.get_kms_list()
-    workspaces = client.list_workspaces()
-
-    cvm_id = _resolve_cvm_id_sync(client, cvm_list)
-    app_id = _pick_app_id(app_list, cvm_list)
-    kms_id = _pick_kms_id(kms_list)
-    workspace_slug = _pick_workspace_slug(workspaces)
-
-    # Instance types
-    client.list_all_instance_type_families()
-    assert client.safe_list_all_instance_type_families().ok
-    client.list_family_instance_types({"family": "cpu"})
-    assert client.safe_list_family_instance_types({"family": "cpu"}).ok
-
-    # Workspace
-    client.get_workspace(workspace_slug)
-    assert client.safe_get_workspace(workspace_slug).ok
-    client.get_workspace_nodes({"teamSlug": workspace_slug})
-    assert client.safe_get_workspace_nodes({"teamSlug": workspace_slug}).ok
-    client.get_workspace_quotas(workspace_slug)
-    assert client.safe_get_workspace_quotas(workspace_slug).ok
-
-    # KMS
-    client.get_kms_info({"kms_id": kms_id})
-    assert client.safe_get_kms_info({"kms_id": kms_id}).ok
-    client.next_app_ids()
-    assert client.safe_next_app_ids().ok
-
-    # SSH
-    client.list_ssh_keys()
-    assert client.safe_list_ssh_keys().ok
     try:
-        client.sync_github_ssh_keys()
-    except Exception:
-        # Account may not have linked GitHub; safe API still exercises interface.
-        pass
-    client.safe_sync_github_ssh_keys()
+        # ================================================================
+        # 1. Read-only APIs (no CVM)
+        # ================================================================
 
-    # Apps
-    try:
-        client.get_app_info({"appId": app_id})
-        client.get_app_cvms({"appId": app_id})
-        client.get_app_revisions({"appId": app_id})
-        client.get_app_attestation({"appId": app_id})
-    except Exception:
-        pass
-    client.safe_get_app_info({"appId": app_id})
-    client.safe_get_app_cvms({"appId": app_id})
-    client.safe_get_app_revisions({"appId": app_id})
-    client.safe_get_app_attestation({"appId": app_id})
-    client.get_app_filter_options()
-    client.safe_get_app_filter_options()
+        # generic request styles
+        print("generic requests ...", flush=True)
+        client.request("GET", "/kms")
+        assert client.safe_request_method("GET", "/kms").ok
+        assert client.request_full("GET", "/kms")["status"] >= 200
+        assert client.safe_request_full("GET", "/kms").ok
 
-    # CVM read
-    req = {"id": cvm_id}
-    client.get_cvm_info(req)
-    assert client.safe_get_cvm_info(req).ok
-    client.get_cvm_compose_file(req)
-    assert client.safe_get_cvm_compose_file(req).ok
-    client.get_cvm_pre_launch_script(req)
-    assert client.safe_get_cvm_pre_launch_script(req).ok
-    client.get_cvm_state(req)
-    assert client.safe_get_cvm_state(req).ok
-    client.get_cvm_stats(req)
-    assert client.safe_get_cvm_stats(req).ok
-    client.get_cvm_network(req)
-    assert client.safe_get_cvm_network(req).ok
-    client.get_cvm_docker_compose(req)
-    assert client.safe_get_cvm_docker_compose(req).ok
-    client.get_cvm_containers_stats(req)
-    assert client.safe_get_cvm_containers_stats(req).ok
-    client.get_cvm_attestation(req)
-    assert client.safe_get_cvm_attestation(req).ok
-    client.get_cvm_user_config(req)
-    assert client.safe_get_cvm_user_config(req).ok
-    client.get_available_os_images(req)
-    assert client.safe_get_available_os_images(req).ok
-    client.get_cvm_status_batch({"vmUuids": [str(cvm_id)]})
-    assert client.safe_get_cvm_status_batch({"vmUuids": [str(cvm_id)]}).ok
+        # user
+        print("user ...", flush=True)
+        client.get_current_user()
+        assert client.safe_get_current_user().ok
 
-    # watch via SSE
-    state = client.get_cvm_state(req)
-    target = str(getattr(state, "status", "running"))
-    client.watch_cvm_state({"id": cvm_id, "target": target, "timeout": 20, "maxRetries": 0})
+        # nodes
+        print("nodes ...", flush=True)
+        client.get_available_nodes()
+        assert client.safe_get_available_nodes().ok
 
-    # Mutation paths with readiness/waiting
-    is_idle = _wait_idle_sync(client, req, timeout=60)
+        # cvm list
+        print("cvm list ...", flush=True)
+        client.get_cvm_list()
+        assert client.safe_get_cvm_list().ok
 
-    if is_idle:
-        curr = _status_of(client.get_cvm_state(req))
-        if curr == "running":
-            r = _run_with_retry(lambda: client.safe_restart_cvm(req))
+        # kms list
+        print("kms list ...", flush=True)
+        kms_list = client.get_kms_list()
+        assert client.safe_get_kms_list().ok
+        kms_id = _pick_kms_id(kms_list)
+
+        # kms info
+        print("kms info ...", flush=True)
+        client.get_kms_info({"kms_id": kms_id})
+        assert client.safe_get_kms_info({"kms_id": kms_id}).ok
+
+        # next_app_ids
+        print("next_app_ids ...", flush=True)
+        client.next_app_ids()
+        assert client.safe_next_app_ids().ok
+
+        # kms on-chain (may not exist, safe call only)
+        print("kms on-chain ...", flush=True)
+        client.safe_get_kms_on_chain_detail({"chain": "base"})
+
+        # workspaces
+        print("workspaces ...", flush=True)
+        workspaces = client.list_workspaces()
+        workspace_slug = _pick_workspace_slug(workspaces)
+        assert client.safe_get_workspace(workspace_slug).ok
+        assert client.safe_get_workspace_nodes({"teamSlug": workspace_slug}).ok
+        assert client.safe_get_workspace_quotas(workspace_slug).ok
+
+        # instance types
+        print("instance types ...", flush=True)
+        assert client.safe_list_all_instance_type_families().ok
+        assert client.safe_list_family_instance_types({"family": "cpu"}).ok
+
+        # ssh keys (list, create, delete)
+        print("ssh keys ...", flush=True)
+        assert client.safe_list_ssh_keys().ok
+        client.safe_sync_github_ssh_keys()
+
+        ssh_result = client.safe_create_ssh_key(
+            {
+                "name": f"e2e-test-{uuid.uuid4().hex[:8]}",
+                "public_key": (
+                    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKeyForE2E"
+                    "000000000000000000000000000000 e2e@test"
+                ),
+            }
+        )
+        if ssh_result.ok and ssh_result.data:
+            key_id = _attr(ssh_result.data, "id") or _attr(ssh_result.data, "key_id")
+            if key_id:
+                client.safe_delete_ssh_key({"keyId": str(key_id)})
+
+        # os images
+        print("os images ...", flush=True)
+        client.get_os_images()
+        assert client.safe_get_os_images().ok
+
+        # app list & filter options
+        print("app list ...", flush=True)
+        client.get_app_list()
+        assert client.safe_get_app_list().ok
+        client.get_app_filter_options()
+        client.safe_get_app_filter_options()
+
+        # ================================================================
+        # 2. Deploy test CVM
+        # ================================================================
+
+        cvm_id, app_id, encrypt_pubkey = _deploy(client)
+        req = {"id": cvm_id}
+
+        # ================================================================
+        # 3. CVM read APIs
+        # ================================================================
+
+        print("cvm reads ...", flush=True)
+        d = _get_detail(client, cvm_id)
+        _log_state("reads", d)
+
+        assert client.safe_get_cvm_info(req).ok
+        assert client.safe_get_cvm_compose_file(req).ok
+        assert client.safe_get_cvm_pre_launch_script(req).ok
+        assert client.safe_get_cvm_state(req).ok
+        assert client.safe_get_cvm_stats(req).ok
+        assert client.safe_get_cvm_network(req).ok
+        assert client.safe_get_cvm_docker_compose(req).ok
+        assert client.safe_get_cvm_containers_stats(req).ok
+        assert client.safe_get_cvm_attestation(req).ok
+        assert client.safe_get_cvm_user_config(req).ok
+        assert client.safe_get_available_os_images(req).ok
+        assert client.safe_get_cvm_status_batch({"vmUuids": [cvm_id]}).ok
+
+        # ================================================================
+        # 4. App read APIs
+        # ================================================================
+
+        if app_id:
+            print(f"app reads ({app_id}) ...", flush=True)
+            client.safe_get_app_info({"appId": app_id})
+            client.safe_get_app_cvms({"appId": app_id})
+
+            revisions_result = client.safe_get_app_revisions({"appId": app_id})
+            if revisions_result.ok and revisions_result.data:
+                items = _attr(revisions_result.data, "items") or []
+                if items:
+                    rev_id = _attr(items[0], "id")
+                    if rev_id:
+                        client.safe_get_app_revision_detail(
+                            {
+                                "appId": app_id,
+                                "revisionId": str(rev_id),
+                            }
+                        )
+
+            client.safe_get_app_attestation({"appId": app_id})
+            client.safe_get_app_device_allowlist({"appId": app_id})
+
+        # kms pubkey for the app
+        if app_id:
+            print("kms pubkey ...", flush=True)
+            client.safe_get_app_env_encrypt_pub_key({"kms": "phala", "app_id": app_id})
+
+        # ================================================================
+        # 5. Watch SSE
+        # ================================================================
+
+        print("watch cvm state ...", flush=True)
+        state = client.get_cvm_state(req)
+        target = str(_attr(state, "status", "running"))
+        client.watch_cvm_state({"id": cvm_id, "target": target, "timeout": 20, "maxRetries": 0})
+
+        # ================================================================
+        # 6. CVM mutations (check idle → mutate → wait idle)
+        # ================================================================
+
+        # -- update_cvm_visibility --
+        _assert_idle(client, cvm_id, "update_cvm_visibility")
+        print("  update_cvm_visibility ...", flush=True)
+        r = client.safe_update_cvm_visibility(
+            {"id": cvm_id, "public_sysinfo": True, "public_logs": True}
+        )
+        assert r.ok, r.error
+        print("  [ok]", flush=True)
+        _wait_idle(client, cvm_id)
+
+        # -- update_cvm_envs (with proper encryption) --
+        if encrypt_pubkey:
+            _assert_idle(client, cvm_id, "update_cvm_envs")
+            print("  update_cvm_envs (encrypted) ...", flush=True)
+            encrypted = asyncio.run(_encrypt_envs(encrypt_pubkey))
+            r = client.safe_update_cvm_envs({"id": cvm_id, "encrypted_env": encrypted})
             assert r.ok, r.error
-            _wait_status_sync(client, req, "running")
+            print("  [ok]", flush=True)
+            _wait_idle(client, cvm_id)
         else:
-            r = _run_with_retry(lambda: client.safe_start_cvm(req))
-            assert r.ok, r.error
-            _wait_status_sync(client, req, "running")
+            print("  [skip] update_cvm_envs: no encrypt_pubkey from provision", flush=True)
 
-        r = _run_with_retry(lambda: client.safe_update_cvm_resources({"id": cvm_id, "vcpu": 1}))
+        # -- update_docker_compose --
+        _assert_idle(client, cvm_id, "update_docker_compose")
+        print("  update_docker_compose ...", flush=True)
+        r = client.safe_update_docker_compose({"id": cvm_id, "docker_compose_file": TEST_COMPOSE})
         assert r.ok, r.error
-    else:
-        # Busy CVM in shared env: still cover interfaces via safe calls
-        assert hasattr(client.safe_restart_cvm(req), "ok")
-        assert hasattr(client.safe_update_cvm_resources({"id": cvm_id, "vcpu": 1}), "ok")
-    if is_idle:
-        r = _run_with_retry(
-            lambda: client.safe_update_cvm_visibility(
-                {"id": cvm_id, "public_sysinfo": True, "public_logs": True}
-            )
+        print("  [ok]", flush=True)
+        _wait_idle(client, cvm_id)
+
+        # -- update_pre_launch_script --
+        _assert_idle(client, cvm_id, "update_pre_launch_script")
+        print("  update_pre_launch_script ...", flush=True)
+        r = client.safe_update_pre_launch_script(
+            {"id": cvm_id, "pre_launch_script": "#!/bin/sh\ntrue"}
         )
         assert r.ok, r.error
+        print("  [ok]", flush=True)
+        _wait_idle(client, cvm_id)
 
-        # Choose a valid os image dynamically when available
-        images = client.get_available_os_images(req)
-        image_name = None
-        if isinstance(images, list):
-            for group in images:
-                prod = getattr(group, "prod", None)
-                dev = getattr(group, "dev", None)
-                if prod and getattr(prod, "name", None):
-                    image_name = prod.name
-                    break
-                if dev and getattr(dev, "name", None):
-                    image_name = dev.name
-                    break
-        if image_name:
-            r = _run_with_retry(
-                lambda: client.safe_update_os_image({"id": cvm_id, "os_image_name": image_name})
-            )
-            assert r.ok, r.error
+        # -- refresh_cvm_instance_id --
+        _assert_idle(client, cvm_id, "refresh_cvm_instance_id")
+        print("  refresh_cvm_instance_id ...", flush=True)
+        r = client.safe_refresh_cvm_instance_id(req)
+        assert r.ok, r.error
+        print("  [ok]", flush=True)
+        _wait_idle(client, cvm_id)
 
-        # Two-phase style endpoints: success may be in_progress or precondition_required
-        r = _run_with_retry(
-            lambda: client.safe_update_cvm_envs({"id": cvm_id, "encrypted_env": "00"})
-        )
+        # -- refresh_cvm_instance_ids (global, no cvm_id needed) --
+        print("  refresh_cvm_instance_ids ...", flush=True)
+        r = client.safe_refresh_cvm_instance_ids({})
         assert r.ok, r.error
-        r = _run_with_retry(
-            lambda: client.safe_update_docker_compose(
-                {"id": cvm_id, "docker_compose_file": "services: {}"}
-            )
-        )
-        assert r.ok, r.error
-        r = _run_with_retry(
-            lambda: client.safe_update_pre_launch_script(
-                {"id": cvm_id, "pre_launch_script": "#!/bin/sh"}
-            )
-        )
-        assert r.ok, r.error
+        print("  [ok]", flush=True)
 
-        r = _run_with_retry(lambda: client.safe_refresh_cvm_instance_id(req))
-        assert r.ok, r.error
-        r = _run_with_retry(lambda: client.safe_refresh_cvm_instance_ids({}))
-        assert r.ok, r.error
-        r = _run_with_retry(lambda: client.safe_replicate_cvm(req))
-        assert r.ok, r.error
-    else:
-        # Busy shared env fallback: still invoke interfaces without asserting business success.
-        busy_results = [
-            client.safe_update_cvm_visibility(
-                {"id": cvm_id, "public_sysinfo": True, "public_logs": True}
-            ),
-            client.safe_update_os_image({"id": cvm_id, "os_image_name": "prod-0.3.0"}),
-            client.safe_update_cvm_envs({"id": cvm_id, "encrypted_env": "00"}),
-            client.safe_update_docker_compose(
-                {"id": cvm_id, "docker_compose_file": "services: {}"}
-            ),
-            client.safe_update_pre_launch_script({"id": cvm_id, "pre_launch_script": "#!/bin/sh"}),
-            client.safe_refresh_cvm_instance_id(req),
-            client.safe_refresh_cvm_instance_ids({}),
-            client.safe_replicate_cvm(req),
-        ]
-        assert all(hasattr(x, "ok") for x in busy_results)
+        # ================================================================
+        # 7. Lifecycle: restart → stop → start
+        # ================================================================
 
-    # Cover remaining lifecycle interfaces (result may depend on runtime window)
-    lifecycle_results = [
-        client.safe_start_cvm(req),
-        client.safe_stop_cvm(req),
-        client.safe_shutdown_cvm(req),
-        client.safe_restart_cvm(req),
-    ]
-    assert all(hasattr(r, "ok") for r in lifecycle_results)
+        # restart
+        _assert_idle(client, cvm_id, "restart_cvm")
+        print("  restart_cvm ...", flush=True)
+        r = client.safe_restart_cvm(req)
+        assert r.ok, r.error
+        print("  [ok]", flush=True)
+        d = _wait_idle(client, cvm_id)
+        _log_state("after restart", d)
+        assert d["status"] == "running"
+
+        # stop
+        _assert_idle(client, cvm_id, "stop_cvm")
+        print("  stop_cvm ...", flush=True)
+        r = client.safe_stop_cvm(req)
+        assert r.ok, r.error
+        print("  [ok]", flush=True)
+        d = _wait_idle(client, cvm_id)
+        _log_state("after stop", d)
+
+        # start
+        _assert_idle(client, cvm_id, "start_cvm")
+        print("  start_cvm ...", flush=True)
+        r = client.safe_start_cvm(req)
+        assert r.ok, r.error
+        print("  [ok]", flush=True)
+        d = _wait_idle(client, cvm_id)
+        _log_state("after start", d)
+        assert d["status"] == "running"
+
+        # shutdown (coverage call, then start again for cleanup)
+        _assert_idle(client, cvm_id, "shutdown_cvm")
+        print("  shutdown_cvm ...", flush=True)
+        r = client.safe_shutdown_cvm(req)
+        assert r.ok, r.error
+        print("  [ok]", flush=True)
+        _wait_idle(client, cvm_id)
+
+        # ================================================================
+        # 8. Delete (tested via cleanup in finally)
+        # ================================================================
+
+        print("=== sync test done ===", flush=True)
+
+    finally:
+        if cvm_id:
+            _cleanup(client, cvm_id)
+
+
+# ---------------------------------------------------------------------------
+# Async E2E
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.e2e
 @pytest.mark.asyncio
 async def test_e2e_async_all_interfaces() -> None:
-    base_url = _must_env("PHALA_CLOUD_E2E_BASE_URL")
+    base_url = _must_env("PHALA_CLOUD_E2E_BASE_URL", "https://cloud-api.phala.com/api/v1")
     api_key = _must_env("PHALA_CLOUD_E2E_API_KEY")
-
     client = create_async_client(api_key=api_key, base_url=base_url)
+    cvm_id: str | None = None
 
-    await client.request("GET", "/kms")
-    assert (await client.safe_request_method("GET", "/kms")).ok
-    assert (await client.request_full("GET", "/kms"))["status"] >= 200
-    assert (await client.safe_request_full("GET", "/kms")).ok
+    print(f"\n=== E2E async ({base_url}) ===", flush=True)
 
-    await client.get_current_user()
-    assert (await client.safe_get_current_user()).ok
-
-    cvm_list = await client.get_cvm_list()
-    app_list = await client.get_app_list()
-    kms_list = await client.get_kms_list()
-
-    cvm_id = await _resolve_cvm_id_async(client, cvm_list)
-    app_id = _pick_app_id(app_list, cvm_list)
-    kms_id = _pick_kms_id(kms_list)
-
-    await client.get_kms_info({"kms_id": kms_id})
-    assert (await client.safe_get_kms_info({"kms_id": kms_id})).ok
-
-    req = {"id": cvm_id}
-    await client.get_cvm_info(req)
-    assert (await client.safe_get_cvm_info(req)).ok
     try:
-        await client.get_app_info({"appId": app_id})
-    except Exception:
-        pass
-    await client.safe_get_app_info({"appId": app_id})
+        # ---- Read-only ----
 
-    state = await client.get_cvm_state(req)
-    target = str(getattr(state, "status", "running"))
-    await client.watch_cvm_state({"id": cvm_id, "target": target, "timeout": 20, "maxRetries": 0})
+        print("generic requests ...", flush=True)
+        await client.request("GET", "/kms")
+        assert (await client.safe_request_method("GET", "/kms")).ok
+        assert (await client.request_full("GET", "/kms"))["status"] >= 200
+        assert (await client.safe_request_full("GET", "/kms")).ok
 
-    await client.aclose()
+        print("user ...", flush=True)
+        assert (await client.safe_get_current_user()).ok
+
+        print("nodes ...", flush=True)
+        assert (await client.safe_get_available_nodes()).ok
+
+        print("cvm list ...", flush=True)
+        assert (await client.safe_get_cvm_list()).ok
+
+        print("kms ...", flush=True)
+        kms_list = await client.get_kms_list()
+        kms_id = _pick_kms_id(kms_list)
+        assert (await client.safe_get_kms_info({"kms_id": kms_id})).ok
+        assert (await client.safe_next_app_ids()).ok
+        await client.safe_get_kms_on_chain_detail({"chain": "base"})
+
+        print("workspaces ...", flush=True)
+        workspaces = await client.list_workspaces()
+        ws = _pick_workspace_slug(workspaces)
+        assert (await client.safe_get_workspace(ws)).ok
+        assert (await client.safe_get_workspace_nodes({"teamSlug": ws})).ok
+        assert (await client.safe_get_workspace_quotas(ws)).ok
+
+        print("instance types ...", flush=True)
+        assert (await client.safe_list_all_instance_type_families()).ok
+        assert (await client.safe_list_family_instance_types({"family": "cpu"})).ok
+
+        print("ssh keys ...", flush=True)
+        assert (await client.safe_list_ssh_keys()).ok
+        await client.safe_sync_github_ssh_keys()
+
+        print("os images ...", flush=True)
+        assert (await client.safe_get_os_images()).ok
+
+        print("app list ...", flush=True)
+        assert (await client.safe_get_app_list()).ok
+        await client.get_app_filter_options()
+
+        # ---- Deploy ----
+
+        cvm_id, app_id, encrypt_pubkey = await _deploy_async(client)
+        req = {"id": cvm_id}
+
+        # ---- CVM reads ----
+
+        print("cvm reads ...", flush=True)
+        d = await _get_detail_async(client, cvm_id)
+        _log_state("reads", d)
+
+        assert (await client.safe_get_cvm_info(req)).ok
+        assert (await client.safe_get_cvm_compose_file(req)).ok
+        assert (await client.safe_get_cvm_pre_launch_script(req)).ok
+        assert (await client.safe_get_cvm_state(req)).ok
+        assert (await client.safe_get_cvm_stats(req)).ok
+        assert (await client.safe_get_cvm_network(req)).ok
+        assert (await client.safe_get_cvm_docker_compose(req)).ok
+        assert (await client.safe_get_cvm_containers_stats(req)).ok
+        assert (await client.safe_get_cvm_attestation(req)).ok
+        assert (await client.safe_get_cvm_user_config(req)).ok
+        assert (await client.safe_get_available_os_images(req)).ok
+        assert (await client.safe_get_cvm_status_batch({"vmUuids": [cvm_id]})).ok
+
+        # ---- App reads ----
+
+        if app_id:
+            print(f"app reads ({app_id}) ...", flush=True)
+            await client.safe_get_app_info({"appId": app_id})
+            await client.safe_get_app_cvms({"appId": app_id})
+            await client.safe_get_app_revisions({"appId": app_id})
+            await client.safe_get_app_attestation({"appId": app_id})
+            await client.safe_get_app_device_allowlist({"appId": app_id})
+            await client.safe_get_app_env_encrypt_pub_key({"kms": "phala", "app_id": app_id})
+
+        # ---- Watch SSE ----
+
+        print("watch cvm state ...", flush=True)
+        state = await client.get_cvm_state(req)
+        target = str(_attr(state, "status", "running"))
+        await client.watch_cvm_state(
+            {"id": cvm_id, "target": target, "timeout": 20, "maxRetries": 0}
+        )
+
+        # ---- Mutations ----
+
+        # update_cvm_visibility
+        await _assert_idle_async(client, cvm_id, "update_cvm_visibility")
+        print("  update_cvm_visibility ...", flush=True)
+        r = await client.safe_update_cvm_visibility(
+            {"id": cvm_id, "public_sysinfo": True, "public_logs": True}
+        )
+        assert r.ok, r.error
+        print("  [ok]", flush=True)
+        await _wait_idle_async(client, cvm_id)
+
+        # update_cvm_envs
+        if encrypt_pubkey:
+            await _assert_idle_async(client, cvm_id, "update_cvm_envs")
+            print("  update_cvm_envs (encrypted) ...", flush=True)
+            encrypted = await _encrypt_envs(encrypt_pubkey)
+            r = await client.safe_update_cvm_envs({"id": cvm_id, "encrypted_env": encrypted})
+            assert r.ok, r.error
+            print("  [ok]", flush=True)
+            await _wait_idle_async(client, cvm_id)
+        else:
+            print("  [skip] update_cvm_envs: no encrypt_pubkey", flush=True)
+
+        # update_docker_compose
+        await _assert_idle_async(client, cvm_id, "update_docker_compose")
+        print("  update_docker_compose ...", flush=True)
+        r = await client.safe_update_docker_compose(
+            {"id": cvm_id, "docker_compose_file": TEST_COMPOSE}
+        )
+        assert r.ok, r.error
+        print("  [ok]", flush=True)
+        await _wait_idle_async(client, cvm_id)
+
+        # update_pre_launch_script
+        await _assert_idle_async(client, cvm_id, "update_pre_launch_script")
+        print("  update_pre_launch_script ...", flush=True)
+        r = await client.safe_update_pre_launch_script(
+            {"id": cvm_id, "pre_launch_script": "#!/bin/sh\ntrue"}
+        )
+        assert r.ok, r.error
+        print("  [ok]", flush=True)
+        await _wait_idle_async(client, cvm_id)
+
+        # ---- Lifecycle ----
+
+        await _assert_idle_async(client, cvm_id, "restart_cvm")
+        print("  restart_cvm ...", flush=True)
+        r = await client.safe_restart_cvm(req)
+        assert r.ok, r.error
+        print("  [ok]", flush=True)
+        d = await _wait_idle_async(client, cvm_id)
+        assert d["status"] == "running"
+
+        await _assert_idle_async(client, cvm_id, "stop_cvm")
+        print("  stop_cvm ...", flush=True)
+        r = await client.safe_stop_cvm(req)
+        assert r.ok, r.error
+        print("  [ok]", flush=True)
+        await _wait_idle_async(client, cvm_id)
+
+        await _assert_idle_async(client, cvm_id, "start_cvm")
+        print("  start_cvm ...", flush=True)
+        r = await client.safe_start_cvm(req)
+        assert r.ok, r.error
+        print("  [ok]", flush=True)
+        d = await _wait_idle_async(client, cvm_id)
+        assert d["status"] == "running"
+
+        print("=== async test done ===", flush=True)
+
+    finally:
+        if cvm_id:
+            await _cleanup_async(client, cvm_id)
+        await client.aclose()
