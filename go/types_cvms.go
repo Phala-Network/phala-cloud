@@ -151,6 +151,7 @@ type ProvisionCVMRequest struct {
 	DiskSize          *int     `json:"disk_size,omitempty"`
 	TeepodID          *int     `json:"teepod_id,omitempty"`
 	Image             *string  `json:"image,omitempty"`
+	Region            *string  `json:"region,omitempty"`
 	KMSType           *string  `json:"kms_type,omitempty"`
 	Listed            *bool    `json:"listed,omitempty"`
 	Encrypted         *bool    `json:"encrypted,omitempty"`
