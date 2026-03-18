@@ -494,6 +494,12 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         return self.safe(self.provision_cvm, request)
 
     def commit_cvm_provision(self, request: Mapping[str, Any]) -> Any:
+        """Commit a provisioned CVM, creating the actual instance.
+
+        This endpoint is idempotent: submitting the same app_id + compose_hash
+        again returns the existing CVM. A different compose_hash for the same
+        app_id raises ResourceError with error_code CVM_APP_ID_CONFLICT (409).
+        """
         return self._loose_validate(self.post("/cvms", json=dict(request)))
 
     def safe_commit_cvm_provision(self, request: Mapping[str, Any]) -> SafeResult[Any]:
@@ -1251,6 +1257,12 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         return await self.safe(self.provision_cvm, request)
 
     async def commit_cvm_provision(self, request: Mapping[str, Any]) -> Any:
+        """Commit a provisioned CVM, creating the actual instance.
+
+        This endpoint is idempotent: submitting the same app_id + compose_hash
+        again returns the existing CVM. A different compose_hash for the same
+        app_id raises ResourceError with error_code CVM_APP_ID_CONFLICT (409).
+        """
         return self._loose_validate(await self.post("/cvms", json=dict(request)))
 
     async def safe_commit_cvm_provision(self, request: Mapping[str, Any]) -> SafeResult[Any]:

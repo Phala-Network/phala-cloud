@@ -38,6 +38,9 @@ export {
   formatErrorMessage,
   formatStructuredError,
   getErrorMessage,
+  // Conflict helpers
+  isConflictError,
+  isAppIdConflictError,
   // Deprecated utilities
   getValidationFields,
   // Types
@@ -48,6 +51,9 @@ export {
   ApiErrorSchema,
   type ApiError,
 } from "./errors";
+
+// Error code constants
+export { ErrorCodes, type ErrorCode } from "./error_codes";
 
 // Network utilities
 export {

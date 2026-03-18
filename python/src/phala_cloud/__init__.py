@@ -1,3 +1,4 @@
+from . import error_codes
 from .actions import *  # noqa: F403
 from .blockchains import add_compose_hash, deploy_app_auth
 from .client import DEFAULT_API_VERSION, SUPPORTED_API_VERSIONS, ApiVersion
@@ -5,6 +6,7 @@ from .errors import (
     ApiError,
     AuthError,
     BusinessError,
+    ConflictError,
     PhalaCloudError,
     RequestError,
     ResourceError,
@@ -28,6 +30,7 @@ __all__ = [
     "AsyncPhalaCloud",
     "AuthError",
     "BusinessError",
+    "ConflictError",
     "DEFAULT_API_VERSION",
     "PhalaCloud",
     "PhalaCloudError",
@@ -40,6 +43,7 @@ __all__ = [
     "add_compose_hash",
     "deploy_app_auth",
     "encrypt_env_vars",
+    "error_codes",
     "get_compose_hash",
     "parse_env",
     "parse_env_vars",

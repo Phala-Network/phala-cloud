@@ -4,17 +4,34 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
+// ErrorDetail represents a field-level validation error detail.
+type ErrorDetail struct {
+	Field   string `json:"field"`
+	Value   string `json:"value"`
+	Message string `json:"message"`
+}
+
+// ErrorLink represents a reference link attached to an API error.
+type ErrorLink struct {
+	URL   string `json:"url"`
+	Label string `json:"label"`
+}
+
 // APIError represents an error response from the Phala Cloud API.
 type APIError struct {
-	StatusCode int
-	Message    string
-	Detail     any
-	Body       string
-	Headers    http.Header
-	ErrorCode  string
+	StatusCode  int
+	Message     string
+	Detail      any
+	Body        string
+	Headers     http.Header
+	ErrorCode   string
+	Details     []ErrorDetail
+	Suggestions []string
+	Links       []ErrorLink
 }
 
 func (e *APIError) Error() string {
@@ -45,10 +62,20 @@ func (e *APIError) IsServer() bool {
 }
 
 // IsRetryable returns true if the error is retryable (409/429/503).
+// A 409 Conflict with a structured ErrorCode is a deterministic business error
+// and is not retryable.
 func (e *APIError) IsRetryable() bool {
+	if e.StatusCode == http.StatusConflict && e.ErrorCode != "" {
+		return false
+	}
 	return e.StatusCode == http.StatusConflict ||
 		e.StatusCode == http.StatusTooManyRequests ||
 		e.StatusCode == http.StatusServiceUnavailable
+}
+
+// IsConflict returns true if the error is a 409 Conflict.
+func (e *APIError) IsConflict() bool {
+	return e.StatusCode == http.StatusConflict
 }
 
 // IsComposePrecondition returns true if the error is a compose hash precondition failure (465).
@@ -78,4 +105,58 @@ func (e *APIError) RetryAfter() time.Duration {
 		}
 	}
 	return 0
+}
+
+// IsStructured returns true when the error includes a structured ErrorCode.
+func (e *APIError) IsStructured() bool {
+	return e.ErrorCode != ""
+}
+
+// HasErrorCode returns true if the error has the given error code.
+func (e *APIError) HasErrorCode(code string) bool {
+	return e.ErrorCode == code
+}
+
+// FormatError returns a human-readable formatted representation of the error,
+// including details, suggestions, and links when available.
+func (e *APIError) FormatError() string {
+	var b strings.Builder
+	if e.ErrorCode != "" {
+		fmt.Fprintf(&b, "[%s] ", e.ErrorCode)
+	}
+	b.WriteString(e.Message)
+
+	if len(e.Details) > 0 {
+		b.WriteString("\n\nDetails:")
+		for _, d := range e.Details {
+			fmt.Fprintf(&b, "\n  - %s", d.Message)
+			if d.Field != "" {
+				fmt.Fprintf(&b, " (field: %s", d.Field)
+				if d.Value != "" {
+					fmt.Fprintf(&b, ", value: %s", d.Value)
+				}
+				b.WriteString(")")
+			}
+		}
+	}
+
+	if len(e.Suggestions) > 0 {
+		b.WriteString("\n\nSuggestions:")
+		for _, s := range e.Suggestions {
+			fmt.Fprintf(&b, "\n  - %s", s)
+		}
+	}
+
+	if len(e.Links) > 0 {
+		b.WriteString("\n\nReferences:")
+		for _, l := range e.Links {
+			if l.Label != "" {
+				fmt.Fprintf(&b, "\n  - %s: %s", l.Label, l.URL)
+			} else {
+				fmt.Fprintf(&b, "\n  - %s", l.URL)
+			}
+		}
+	}
+
+	return b.String()
 }
