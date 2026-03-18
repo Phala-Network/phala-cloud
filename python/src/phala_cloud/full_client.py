@@ -1558,9 +1558,7 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
             exclude_none=True,
         )
         try:
-            data = self._loose_validate(
-                await self.request("PATCH", f"/cvms/{cvm_id}", json=body)
-            )
+            data = self._loose_validate(await self.request("PATCH", f"/cvms/{cvm_id}", json=body))
             correlation_id = ""
             if isinstance(data, dict):
                 correlation_id = data.get("correlation_id", "")

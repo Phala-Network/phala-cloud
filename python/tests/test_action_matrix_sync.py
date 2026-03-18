@@ -204,14 +204,28 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
     if method == "PATCH" and any(path.endswith(s) for s in ["/resources", "/os-image"]):
         return httpx.Response(202)
     # patch_cvm / confirm_cvm_patch: PATCH /cvms/{cvm_id} (no sub-path)
-    if method == "PATCH" and "/cvms/" in path and not any(
-        path.endswith(s)
-        for s in [
-            "/envs", "/docker-compose", "/pre-launch-script", "/visibility",
-            "/instance-id", "/resources", "/os-image", "/compose_file",
-            "/compose", "/name", "/listed", "/scheduled-delete",
-        ]
-    ) and path != "/api/v1/cvms/instance-ids":
+    if (
+        method == "PATCH"
+        and "/cvms/" in path
+        and not any(
+            path.endswith(s)
+            for s in [
+                "/envs",
+                "/docker-compose",
+                "/pre-launch-script",
+                "/visibility",
+                "/instance-id",
+                "/resources",
+                "/os-image",
+                "/compose_file",
+                "/compose",
+                "/name",
+                "/listed",
+                "/scheduled-delete",
+            ]
+        )
+        and path != "/api/v1/cvms/instance-ids"
+    ):
         return _json_response({"correlation_id": "corr-123"}, status=202)
     if method == "PATCH" and path.endswith("/visibility"):
         return _json_response({"status": "running"})
