@@ -169,6 +169,11 @@ type ComposeFile struct {
 	PreLaunchScript   *string `json:"pre_launch_script,omitempty"`
 	EncryptedEnv      *string `json:"encrypted_env,omitempty"`
 	EnvKeys           *string `json:"env_keys,omitempty"`
+	PublicLogs        *bool   `json:"public_logs,omitempty"`
+	PublicSysinfo     *bool   `json:"public_sysinfo,omitempty"`
+	PublicTcbinfo     *bool   `json:"public_tcbinfo,omitempty"`
+	SecureTime        *bool   `json:"secure_time,omitempty"`
+	StorageFS         *string `json:"storage_fs,omitempty"`
 }
 
 // ProvisionCVMResponse is the response from provisioning a CVM.
