@@ -1,6 +1,6 @@
 //go:build e2e
 
-package phala
+package e2e
 
 import (
 	"context"
@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	phala "github.com/Phala-Network/phala-cloud-sdk-go"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -33,13 +34,13 @@ const testCompose = `services:
 
 // transientStates are CVM states that indicate an operation is in progress.
 var transientStates = map[string]bool{
-	"starting":     true,
-	"stopping":     true,
-	"restarting":   true,
+	"starting":      true,
+	"stopping":      true,
+	"restarting":    true,
 	"shutting_down": true,
-	"provisioning": true,
-	"in_progress":  true,
-	"updating":     true,
+	"provisioning":  true,
+	"in_progress":   true,
+	"updating":      true,
 }
 
 func mustEnv(t *testing.T, key, fallback string) string {
@@ -131,13 +132,13 @@ func encryptEnvVars(t *testing.T, serverPubkeyHex string, envs map[string]string
 	return hex.EncodeToString(result)
 }
 
-func newE2EClient(t *testing.T) *Client {
+func newE2EClient(t *testing.T) *phala.Client {
 	t.Helper()
 	apiKey := mustEnv(t, "PHALA_CLOUD_E2E_API_KEY", "")
-	baseURL := mustEnv(t, "PHALA_CLOUD_E2E_BASE_URL", "https://cloud.phala.network/api/v1")
-	client, err := NewClient(
-		WithAPIKey(apiKey),
-		WithBaseURL(baseURL),
+	baseURL := mustEnv(t, "PHALA_CLOUD_E2E_BASE_URL", "https://cloud-api.phala.com/api/v1")
+	client, err := phala.NewClient(
+		phala.WithAPIKey(apiKey),
+		phala.WithBaseURL(baseURL),
 	)
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
@@ -145,7 +146,7 @@ func newE2EClient(t *testing.T) *Client {
 	return client
 }
 
-func waitIdle(t *testing.T, client *Client, cvmID string, timeout time.Duration) {
+func waitIdle(t *testing.T, client *phala.Client, cvmID string, timeout time.Duration) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -183,7 +184,7 @@ func waitIdle(t *testing.T, client *Client, cvmID string, timeout time.Duration)
 	}
 }
 
-func assertIdle(t *testing.T, client *Client, cvmID, label string) {
+func assertIdle(t *testing.T, client *phala.Client, cvmID, label string) {
 	t.Helper()
 	ctx := context.Background()
 	info, err := client.GetCVMInfo(ctx, cvmID)
@@ -195,18 +196,18 @@ func assertIdle(t *testing.T, client *Client, cvmID, label string) {
 	}
 }
 
-func deploy(t *testing.T, client *Client) (cvmID, appID, encryptPubkey string) {
+func deploy(t *testing.T, client *phala.Client) (cvmID, appID, encryptPubkey string) {
 	t.Helper()
 	ctx := context.Background()
 	name := genCVMName()
 	t.Logf("deploying CVM: %s", name)
 
-	provResp, err := client.ProvisionCVM(ctx, &ProvisionCVMRequest{
+	provResp, err := client.ProvisionCVM(ctx, &phala.ProvisionCVMRequest{
 		Name:         name,
 		InstanceType: "tdx.small",
-		ComposeFile: &ComposeFile{
+		ComposeFile: &phala.ComposeFile{
 			DockerComposeFile: testCompose,
-			GatewayEnabled:    Bool(true),
+			GatewayEnabled:    phala.Bool(true),
 		},
 	})
 	if err != nil {
@@ -214,7 +215,7 @@ func deploy(t *testing.T, client *Client) (cvmID, appID, encryptPubkey string) {
 	}
 	t.Logf("provisioned: app_id=%s encrypt_pubkey=%v", provResp.AppID, provResp.AppEnvEncryptPubkey != "")
 
-	commitResp, err := client.CommitCVMProvision(ctx, &CommitCVMProvisionRequest{
+	commitResp, err := client.CommitCVMProvision(ctx, &phala.CommitCVMProvisionRequest{
 		AppID:       provResp.AppID,
 		ComposeHash: provResp.ComposeHash,
 	})
@@ -338,7 +339,7 @@ func TestE2EAllInterfaces(t *testing.T) {
 		_, privKey, _ := ed25519.GenerateKey(rand.Reader)
 		sshPub, _ := ssh.NewPublicKey(privKey.Public())
 		pubKeyStr := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sshPub))) + " e2e-test"
-		created, err := client.CreateSSHKey(ctx, &CreateSSHKeyRequest{
+		created, err := client.CreateSSHKey(ctx, &phala.CreateSSHKeyRequest{
 			Name:      "e2e-test-" + hex.EncodeToString([]byte(genCVMName())[:4]),
 			PublicKey: pubKeyStr,
 		})
@@ -454,7 +455,7 @@ func TestE2EAllInterfaces(t *testing.T) {
 		watchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
-		ch, err := client.WatchCVMState(watchCtx, cvmID, &WatchCVMStateOptions{
+		ch, err := client.WatchCVMState(watchCtx, cvmID, &phala.WatchCVMStateOptions{
 			Target:     status,
 			Timeout:    20,
 			MaxRetries: 0,
@@ -477,9 +478,9 @@ func TestE2EAllInterfaces(t *testing.T) {
 		assertIdle(t, client, cvmID, "before mutations")
 
 		// Visibility
-		_, err := client.UpdateCVMVisibility(ctx, cvmID, &UpdateVisibilityRequest{
-			PublicSysinfo: Bool(true),
-			PublicLogs:    Bool(true),
+		_, err := client.UpdateCVMVisibility(ctx, cvmID, &phala.UpdateVisibilityRequest{
+			PublicSysinfo: phala.Bool(true),
+			PublicLogs:    phala.Bool(true),
 		})
 		if err != nil {
 			t.Fatalf("UpdateCVMVisibility: %v", err)
@@ -515,7 +516,7 @@ func TestE2EAllInterfaces(t *testing.T) {
 		if encryptPubkey != "" {
 			assertIdle(t, client, cvmID, "before update_cvm_envs")
 			encrypted := encryptEnvVars(t, encryptPubkey, map[string]string{"E2E_TEST": "1"})
-			_, err = client.UpdateCVMEnvs(ctx, cvmID, &UpdateEnvsRequest{
+			_, err = client.UpdateCVMEnvs(ctx, cvmID, &phala.UpdateEnvsRequest{
 				EncryptedEnv: encrypted,
 			})
 			if err != nil {
@@ -576,9 +577,9 @@ func TestE2EAllInterfaces(t *testing.T) {
 		waitIdle(t, client, cvmID, 10*time.Minute)
 
 		// Visibility-only patch
-		_, err = client.PatchCVM(ctx, cvmID, &PatchCVMRequest{
-			PublicSysinfo: Bool(true),
-			PublicLogs:    Bool(true),
+		_, err = client.PatchCVM(ctx, cvmID, &phala.PatchCVMRequest{
+			PublicSysinfo: phala.Bool(true),
+			PublicLogs:    phala.Bool(true),
 		})
 		if err != nil {
 			t.Logf("PatchCVM visibility: %v", err)
@@ -587,7 +588,7 @@ func TestE2EAllInterfaces(t *testing.T) {
 
 		// Docker compose patch
 		compose := testCompose
-		_, err = client.PatchCVM(ctx, cvmID, &PatchCVMRequest{
+		_, err = client.PatchCVM(ctx, cvmID, &phala.PatchCVMRequest{
 			DockerComposeFile: &compose,
 		})
 		if err != nil {
@@ -597,7 +598,7 @@ func TestE2EAllInterfaces(t *testing.T) {
 
 		// Pre-launch script patch
 		script := "#!/bin/sh\ntrue"
-		_, err = client.PatchCVM(ctx, cvmID, &PatchCVMRequest{
+		_, err = client.PatchCVM(ctx, cvmID, &phala.PatchCVMRequest{
 			PreLaunchScript: &script,
 		})
 		if err != nil {
@@ -606,8 +607,8 @@ func TestE2EAllInterfaces(t *testing.T) {
 		waitIdle(t, client, cvmID, 10*time.Minute)
 
 		// Multi-field patch
-		_, err = client.PatchCVM(ctx, cvmID, &PatchCVMRequest{
-			PublicSysinfo:     Bool(true),
+		_, err = client.PatchCVM(ctx, cvmID, &phala.PatchCVMRequest{
+			PublicSysinfo:     phala.Bool(true),
 			DockerComposeFile: &compose,
 		})
 		if err != nil {
@@ -635,33 +636,33 @@ func TestE2EPatchCVM(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		patch *PatchCVMRequest
+		patch *phala.PatchCVMRequest
 		skip  bool
 	}{
 		{
 			name: "visibility_only",
-			patch: &PatchCVMRequest{
-				PublicSysinfo: Bool(true),
-				PublicLogs:    Bool(true),
+			patch: &phala.PatchCVMRequest{
+				PublicSysinfo: phala.Bool(true),
+				PublicLogs:    phala.Bool(true),
 			},
 		},
 		{
 			name: "docker_compose",
-			patch: func() *PatchCVMRequest {
+			patch: func() *phala.PatchCVMRequest {
 				c := testCompose
-				return &PatchCVMRequest{DockerComposeFile: &c}
+				return &phala.PatchCVMRequest{DockerComposeFile: &c}
 			}(),
 		},
 		{
 			name: "pre_launch_script",
-			patch: func() *PatchCVMRequest {
+			patch: func() *phala.PatchCVMRequest {
 				s := "#!/bin/sh\ntrue"
-				return &PatchCVMRequest{PreLaunchScript: &s}
+				return &phala.PatchCVMRequest{PreLaunchScript: &s}
 			}(),
 		},
 		{
 			name: "encrypted_env",
-			patch: func() *PatchCVMRequest {
+			patch: func() *phala.PatchCVMRequest {
 				if encryptPubkey == "" {
 					return nil
 				}
@@ -672,10 +673,10 @@ func TestE2EPatchCVM(t *testing.T) {
 		},
 		{
 			name: "multi_field",
-			patch: func() *PatchCVMRequest {
+			patch: func() *phala.PatchCVMRequest {
 				c := testCompose
-				return &PatchCVMRequest{
-					PublicSysinfo:     Bool(true),
+				return &phala.PatchCVMRequest{
+					PublicSysinfo:     phala.Bool(true),
 					DockerComposeFile: &c,
 				}
 			}(),
@@ -694,7 +695,7 @@ func TestE2EPatchCVM(t *testing.T) {
 			// Build encrypted_env patch dynamically (needs *testing.T for encryptEnvVars).
 			if tt.name == "encrypted_env" {
 				encrypted := encryptEnvVars(t, encryptPubkey, map[string]string{"E2E_TEST": "1"})
-				patch = &PatchCVMRequest{EncryptedEnv: &encrypted}
+				patch = &phala.PatchCVMRequest{EncryptedEnv: &encrypted}
 			}
 
 			resp, err := client.PatchCVM(ctx, cvmID, patch)
