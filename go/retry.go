@@ -27,6 +27,11 @@ func (c *Client) doWithRetry(ctx context.Context, fn func() error) error {
 		}
 		lastErr = err
 
+		// Don't delay after the final attempt.
+		if attempt == c.maxRetries {
+			break
+		}
+
 		// Calculate delay.
 		delay := apiErr.RetryAfter()
 		if delay == 0 {
