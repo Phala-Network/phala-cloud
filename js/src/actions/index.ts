@@ -104,6 +104,19 @@ export {
   type CheckDeviceAllowedRequest,
 } from "./blockchains/check_device_allowed";
 
+export {
+  checkComposeHashAllowed,
+  safeCheckComposeHashAllowed,
+  type CheckComposeHashAllowedRequest,
+} from "./blockchains/check_compose_hash_allowed";
+
+export {
+  checkOnChainPrerequisites,
+  safeCheckOnChainPrerequisites,
+  type CheckOnChainPrerequisitesRequest,
+  type OnChainPrerequisites,
+} from "./blockchains/check_on_chain_prerequisites";
+
 export { dstackAppAbi } from "./blockchains/abi/dstack_app";
 
 export {
@@ -374,6 +387,26 @@ export {
   GetCvmDockerComposeRequestSchema,
   type GetCvmDockerComposeRequest,
 } from "./cvms/get_cvm_docker_compose";
+
+// CVM Unified Patch
+export {
+  patchCvm,
+  safePatchCvm,
+  PatchCvmRequestSchema,
+  PatchCvmResultSchema,
+  type PatchCvmRequest,
+  type PatchCvmResult,
+  type PatchCvmAccepted,
+  type PatchCvmHashRequired,
+} from "./cvms/patch_cvm";
+
+export {
+  confirmCvmPatch,
+  safeConfirmCvmPatch,
+  ConfirmCvmPatchRequestSchema,
+  type ConfirmCvmPatchRequest,
+  type ConfirmCvmPatchResult,
+} from "./cvms/confirm_cvm_patch";
 
 // CVM Update Operations
 export {

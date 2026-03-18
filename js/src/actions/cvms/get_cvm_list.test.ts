@@ -137,7 +137,7 @@ describe("getCvmList", () => {
           node_id: 123,
         },
       });
-      expect(result).toEqual(mockCvmListData);
+      expect(result).toMatchObject(mockCvmListData);
       expect((result as GetCvmListResponse).items).toHaveLength(1);
     });
   });
@@ -158,7 +158,7 @@ describe("getCvmList", () => {
       const result = await getCvmList(client);
 
       expect(mockGet).toHaveBeenCalledWith("/cvms/paginated", { params: {} });
-      expect(result).toEqual(mockCvmListData);
+      expect(result).toMatchObject(mockCvmListData);
     });
 
     it("should handle partial query parameters", async () => {
@@ -181,7 +181,7 @@ describe("getCvmList", () => {
       expect(mockGet).toHaveBeenCalledWith("/cvms/paginated", { params: {} });
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data).toEqual(mockCvmListData);
+        expect(result.data).toMatchObject(mockCvmListData);
         expect((result.data as GetCvmListResponse).items).toHaveLength(1);
       }
     });

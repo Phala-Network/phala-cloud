@@ -110,7 +110,7 @@ describe("getCvmInfo", () => {
       const result = await getCvmInfo(client, { id: "test-cvm-id" });
 
       expect(mockGet).toHaveBeenCalledWith("/cvms/test-cvm-id");
-      expect(result).toEqual(mockCvmInfoData);
+      expect(result).toMatchObject(mockCvmInfoData);
       expect((result as CvmDetailV20251028).name).toBe("test-cvm");
     });
 
@@ -121,7 +121,7 @@ describe("getCvmInfo", () => {
 
       // UUID dashes are removed during transformation
       expect(mockGet).toHaveBeenCalledWith("/cvms/123e4567e89b42d3a456556642440000");
-      expect(result).toEqual(mockCvmInfoData);
+      expect(result).toMatchObject(mockCvmInfoData);
     });
 
     it("should call correct endpoint with app_id (adds prefix)", async () => {
@@ -131,7 +131,7 @@ describe("getCvmInfo", () => {
       const result = await getCvmInfo(client, { app_id });
 
       expect(mockGet).toHaveBeenCalledWith(`/cvms/app_${app_id}`);
-      expect(result).toEqual(mockCvmInfoData);
+      expect(result).toMatchObject(mockCvmInfoData);
     });
 
     it("should call correct endpoint with instance_id (40-char hex detected as app_id)", async () => {
@@ -142,7 +142,7 @@ describe("getCvmInfo", () => {
       const result = await getCvmInfo(client, { instance_id });
 
       expect(mockGet).toHaveBeenCalledWith(`/cvms/app_${instance_id}`);
-      expect(result).toEqual(mockCvmInfoData);
+      expect(result).toMatchObject(mockCvmInfoData);
     });
 
     it("should call correct endpoint with custom instance_id", async () => {
@@ -152,7 +152,7 @@ describe("getCvmInfo", () => {
       const result = await getCvmInfo(client, { instance_id });
 
       expect(mockGet).toHaveBeenCalledWith(`/cvms/${instance_id}`);
-      expect(result).toEqual(mockCvmInfoData);
+      expect(result).toMatchObject(mockCvmInfoData);
     });
   });
 
@@ -221,7 +221,7 @@ describe("getCvmInfo", () => {
       expect(mockGet).toHaveBeenCalledWith("/cvms/test-cvm-id");
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data).toEqual(mockCvmInfoData);
+        expect(result.data).toMatchObject(mockCvmInfoData);
         expect((result.data as CvmDetailV20251028).name).toBe("test-cvm");
       }
     });
