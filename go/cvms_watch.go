@@ -19,9 +19,9 @@ type CVMStateEvent struct {
 // WatchCVMStateOptions holds options for watching CVM state.
 type WatchCVMStateOptions struct {
 	Target     string
-	Interval   int // 5-30 seconds
-	Timeout    int // 10-600 seconds
-	MaxRetries int
+	Interval   int  // 5-30 seconds
+	Timeout    int  // 10-600 seconds
+	MaxRetries *int // nil = unlimited retries, 0 = no retries
 	RetryDelay time.Duration
 }
 
@@ -58,7 +58,7 @@ func (c *Client) WatchCVMState(ctx context.Context, cvmID string, opts *WatchCVM
 				return
 			}
 
-			if opts.MaxRetries >= 0 && retries >= opts.MaxRetries {
+			if opts.MaxRetries != nil && retries >= *opts.MaxRetries {
 				ch <- CVMStateEvent{Event: "error", Error: err}
 				return
 			}

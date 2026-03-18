@@ -458,7 +458,7 @@ func TestE2EAllInterfaces(t *testing.T) {
 		ch, err := client.WatchCVMState(watchCtx, cvmID, &phala.WatchCVMStateOptions{
 			Target:     status,
 			Timeout:    20,
-			MaxRetries: 0,
+			MaxRetries: phala.Int(0),
 		})
 		if err != nil {
 			t.Fatalf("WatchCVMState: %v", err)

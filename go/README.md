@@ -178,7 +178,7 @@ ch, err := client.WatchCVMState(ctx, "cvm-id", &phala.WatchCVMStateOptions{
 	Target:     "running",
 	Interval:   5,
 	Timeout:    300,
-	MaxRetries: 3,
+	MaxRetries: phala.Int(3), // nil = unlimited retries
 })
 if err != nil {
 	log.Fatal(err)
