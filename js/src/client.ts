@@ -141,8 +141,20 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
       ...(useCookieAuth ? { credentials: "include" } : {}),
       ...fetchOptions,
 
-      // Log request in cURL format
+      // Strip Content-Type for FormData so the browser/runtime sets
+      // the correct multipart/form-data boundary automatically.
+      // This runs after ofetch merges instance and per-request headers,
+      // so deleting here is final.
       onRequest({ request, options }) {
+        if (options.body instanceof FormData) {
+          const h = options.headers;
+          if (h instanceof Headers) {
+            h.delete("content-type");
+          } else if (h && typeof h === "object" && !Array.isArray(h)) {
+            delete (h as Record<string, string>)["Content-Type"];
+            delete (h as Record<string, string>)["content-type"];
+          }
+        }
         if (logger.enabled) {
           const method = options.method || "GET";
           const url = typeof request === "string" ? request : request.url;
@@ -350,6 +362,29 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
   }
 
   /**
+   * Build request options, stripping Content-Type when body is FormData
+   * so the browser/runtime sets the correct multipart boundary automatically.
+   */
+  // biome-ignore lint/suspicious/noExplicitAny: ofetch generic variance
+  private buildRequestOptions<T = any>(
+    method: string,
+    body: RequestInit["body"] | Record<string, unknown> | undefined,
+    options?: Omit<FetchOptions, "method" | "body">,
+  ): Parameters<typeof this.fetchInstance<T>>[1] {
+    const opts = { ...options, method, body } as Parameters<typeof this.fetchInstance<T>>[1];
+    if (body instanceof FormData) {
+      const existing = (opts as Record<string, unknown>).headers as
+        | Record<string, string>
+        | undefined;
+      (opts as Record<string, unknown>).headers = {
+        ...existing,
+        "Content-Type": "",
+      };
+    }
+    return opts;
+  }
+
+  /**
    * Perform POST request (throws PhalaCloudError on error)
    */
   async post<T = unknown>(
@@ -358,11 +393,7 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
     options?: Omit<FetchOptions, "method" | "body">,
   ): Promise<T> {
     try {
-      return await this.fetchInstance<T>(request, {
-        ...options,
-        method: "POST",
-        body,
-      } as Parameters<typeof this.fetchInstance<T>>[1]);
+      return await this.fetchInstance<T>(request, this.buildRequestOptions("POST", body, options));
     } catch (error) {
       const requestError = this.convertToRequestError(error);
       const phalaCloudError = this.emitError(requestError);
@@ -379,11 +410,7 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
     options?: Omit<FetchOptions, "method" | "body">,
   ): Promise<T> {
     try {
-      return await this.fetchInstance<T>(request, {
-        ...options,
-        method: "PUT",
-        body,
-      } as Parameters<typeof this.fetchInstance<T>>[1]);
+      return await this.fetchInstance<T>(request, this.buildRequestOptions("PUT", body, options));
     } catch (error) {
       const requestError = this.convertToRequestError(error);
       const phalaCloudError = this.emitError(requestError);
@@ -400,11 +427,7 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
     options?: Omit<FetchOptions, "method" | "body">,
   ): Promise<T> {
     try {
-      return await this.fetchInstance<T>(request, {
-        ...options,
-        method: "PATCH",
-        body,
-      } as Parameters<typeof this.fetchInstance<T>>[1]);
+      return await this.fetchInstance<T>(request, this.buildRequestOptions("PATCH", body, options));
     } catch (error) {
       const requestError = this.convertToRequestError(error);
       const phalaCloudError = this.emitError(requestError);
