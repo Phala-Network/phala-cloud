@@ -143,6 +143,14 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
 
       // Log request in cURL format
       onRequest({ request, options }) {
+        // Remove Content-Type for FormData so the browser sets the multipart boundary
+        if (options.body instanceof FormData) {
+          const h = options.headers as unknown as Record<string, string> | undefined;
+          if (h) {
+            delete h["Content-Type"];
+            delete h["content-type"];
+          }
+        }
         if (logger.enabled) {
           const method = options.method || "GET";
           const url = typeof request === "string" ? request : request.url;
