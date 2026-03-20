@@ -1018,6 +1018,7 @@ const updateCvm = async (
 		} else {
 			logger.warn(msg);
 		}
+		return;
 	}
 
 	// Two-phase flow: on-chain KMS requires compose hash registration
