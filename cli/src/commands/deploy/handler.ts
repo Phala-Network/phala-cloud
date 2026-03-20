@@ -1007,6 +1007,19 @@ const updateCvm = async (
 
 	const result = patchResult.data;
 
+	// --prepare-only on a CVM that doesn't require on-chain hash
+	if (validatedOptions.prepareOnly && !result.requiresOnChainHash) {
+		const msg =
+			"--prepare-only has no effect on this CVM: it does not use on-chain KMS. The update was applied directly.";
+		if (validatedOptions.json !== false) {
+			stdout.write(
+				`${JSON.stringify({ success: true, prepare_only: false, message: msg }, null, 2)}\n`,
+			);
+		} else {
+			logger.warn(msg);
+		}
+	}
+
 	// Two-phase flow: on-chain KMS requires compose hash registration
 	if (result.requiresOnChainHash) {
 		// --prepare-only mode: output commit info and stop

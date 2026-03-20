@@ -1,0 +1,244 @@
+---
+title: "Webhooks"
+description: "Receive real-time HTTP notifications for CVM lifecycle events"
+---
+
+## Overview
+
+Phala Cloud can send HTTP POST requests (webhooks) to your endpoint when events occur in your workspace — such as a CVM finishing deployment, failing to start, or being deleted.
+
+Each webhook request includes an HMAC-SHA256 signature so you can verify it came from Phala Cloud and was not tampered with.
+
+## Supported Events
+
+| Event | Description |
+|-------|-------------|
+| `cvm.created` | CVM deployment completed and is running |
+| `cvm.create_failed` | CVM deployment failed (boot error, timeout, etc.) |
+| `cvm.updated` | CVM update completed and is running again |
+| `cvm.restarted` | CVM restart completed |
+| `cvm.stopped` | CVM stopped |
+| `cvm.deleted` | CVM deleted |
+| `cvm.update.pending_approval` | On-chain KMS CVM update requires multisig approval |
+
+## Payload Format
+
+Every webhook request is a JSON POST with this envelope:
+
+```json
+{
+  "id": "evt_a1b2c3d4e5f67890",
+  "event": "cvm.created",
+  "version": "1",
+  "created_at": "2026-03-19T10:30:00Z",
+  "workspace": {
+    "id": "my-team-slug",
+    "name": "My Team"
+  },
+  "data": {
+    "cvm_id": "1a09d706-2686-4e0a-8b1d-323ff0e3504b",
+    "cvm_name": "my-app",
+    "app_id": "0xabc...",
+    "status": "running"
+  }
+}
+```
+
+For `cvm.create_failed`, the `data` includes an `error` field:
+
+```json
+{
+  "data": {
+    "cvm_id": "...",
+    "cvm_name": "my-app",
+    "app_id": "0xabc...",
+    "status": "error",
+    "error": "CVM 82: Failed to request app keys: ..."
+  }
+}
+```
+
+## HTTP Headers
+
+Every webhook request includes these headers:
+
+| Header | Description |
+|--------|-------------|
+| `Content-Type` | `application/json` |
+| `User-Agent` | `PhalaCloud-Webhook/1.0` |
+| `X-Webhook-Id` | Unique event ID (e.g. `evt_a1b2c3d4e5f67890`) |
+| `X-Webhook-Event` | Event type (e.g. `cvm.created`) |
+| `X-Webhook-Timestamp` | Unix timestamp of the request |
+| `X-Webhook-Signature` | HMAC-SHA256 signature (see below) |
+
+## Verifying Signatures
+
+Each webhook has a signing secret (starts with `whsec_`), generated when you create the webhook. Use it to verify that requests are authentic.
+
+### Signature Computation
+
+The signature is computed as:
+
+```
+HMAC-SHA256(secret, "{timestamp}.{raw_body}")
+```
+
+Where:
+- `timestamp` is the value of the `X-Webhook-Timestamp` header
+- `raw_body` is the raw JSON request body (not parsed, not re-serialized)
+- The result is prefixed with `sha256=`
+
+### Verification Examples
+
+<CodeGroup>
+
+```python Python
+import hmac
+import hashlib
+
+def verify_webhook(secret: str, timestamp: str, body: bytes, signature: str) -> bool:
+    message = f"{timestamp}.{body.decode('utf-8')}".encode("utf-8")
+    expected = "sha256=" + hmac.new(
+        secret.encode("utf-8"),
+        message,
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+# In your webhook handler:
+secret = "whsec_..."  # your webhook secret
+timestamp = request.headers["X-Webhook-Timestamp"]
+signature = request.headers["X-Webhook-Signature"]
+body = request.body  # raw bytes
+
+if not verify_webhook(secret, timestamp, body, signature):
+    return Response(status_code=401)
+```
+
+```javascript Node.js
+const crypto = require("crypto");
+
+function verifyWebhook(secret, timestamp, body, signature) {
+  const message = `${timestamp}.${body}`;
+  const expected =
+    "sha256=" +
+    crypto.createHmac("sha256", secret).update(message).digest("hex");
+  return crypto.timingSafeEqual(
+    Buffer.from(expected),
+    Buffer.from(signature),
+  );
+}
+
+// In your webhook handler:
+const secret = "whsec_...";
+const timestamp = req.headers["x-webhook-timestamp"];
+const signature = req.headers["x-webhook-signature"];
+const body = req.rawBody; // raw string, not parsed JSON
+
+if (!verifyWebhook(secret, timestamp, body, signature)) {
+  res.status(401).send("Invalid signature");
+}
+```
+
+</CodeGroup>
+
+### Replay Protection
+
+To prevent replay attacks, verify that the timestamp is recent (e.g. within 5 minutes):
+
+```python
+import time
+
+webhook_ts = int(request.headers["X-Webhook-Timestamp"])
+if abs(time.time() - webhook_ts) > 300:  # 5 minutes
+    return Response(status_code=401)
+```
+
+## Delivery Behavior
+
+### Success Criteria
+
+A delivery is considered **successful** if your endpoint returns an HTTP status code in the `2xx` range (`200`, `201`, `202`, etc.).
+
+Any other status code (`3xx`, `4xx`, `5xx`) or a network error is treated as a **failure**.
+
+### Redirects
+
+Webhook delivery does **not** follow HTTP redirects (`301`, `302`, `307`, `308`). A redirect response is treated as a delivery failure. Make sure your webhook URL points directly to the final endpoint.
+
+### Timeout
+
+Your endpoint must respond within **10 seconds**. If the connection or response takes longer, the delivery is marked as failed and will be retried.
+
+### Retry Policy
+
+Failed deliveries are retried up to **3 times** with increasing delays:
+
+| Attempt | Delay After Failure |
+|---------|-------------------|
+| 1st retry | 1 minute |
+| 2nd retry | 10 minutes |
+| 3rd retry | 1 hour |
+
+After 4 total attempts (1 initial + 3 retries), the delivery is permanently marked as failed. The webhook remains active for future events.
+
+Each event produces exactly **one** delivery record — either `success` with the attempt count, or `failed` after all retries are exhausted.
+
+### Response Body
+
+Your endpoint's response body is captured (truncated to 4 KB) for debugging purposes. It is visible in the delivery log in the dashboard.
+
+## Managing Webhooks
+
+### Dashboard
+
+Navigate to **Settings → Webhooks** in your workspace dashboard to:
+
+- Create, edit, enable/disable, and delete webhooks
+- Select which events to subscribe to
+- Send a test event to verify your endpoint
+- View delivery history with status, HTTP code, attempt count, and errors
+
+### API
+
+All webhook management is available via the REST API:
+
+```bash
+# List webhooks
+GET /api/v1/workspace/webhooks
+
+# Create webhook
+POST /api/v1/workspace/webhooks
+{
+  "url": "https://example.com/webhook",
+  "events": ["cvm.created", "cvm.create_failed"],
+  "name": "My Webhook"
+}
+
+# Send test event
+POST /api/v1/workspace/webhooks/{id}/test
+
+# View delivery history
+GET /api/v1/workspace/webhooks/{id}/deliveries
+
+# Update webhook
+PUT /api/v1/workspace/webhooks/{id}
+{ "enabled": false }
+
+# Delete webhook
+DELETE /api/v1/workspace/webhooks/{id}
+```
+
+### Test Events
+
+Use the **Send test** button in the dashboard or `POST /workspace/webhooks/{id}/test` to send a `webhook.test` event. This verifies your endpoint is reachable and your signature verification works correctly.
+
+Test events are always delivered regardless of which events the webhook is subscribed to.
+
+## Best Practices
+
+1. **Always verify signatures** — do not trust webhook requests without checking `X-Webhook-Signature`
+2. **Respond quickly** — return `200` immediately and process the event asynchronously if needed (you have 10 seconds)
+3. **Be idempotent** — use the `id` field to deduplicate events in case of retries
+4. **Check timestamps** — reject events older than 5 minutes to prevent replay attacks
+5. **Use HTTPS** — always use HTTPS endpoints for webhook URLs
