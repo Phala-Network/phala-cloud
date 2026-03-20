@@ -39,6 +39,7 @@ import {
 	safePatchCvm,
 	safeProvisionCvm,
 	safeUpdateCvmVisibility,
+	safeCommitCvmUpdate,
 	convertToHostname,
 	isValidHostname,
 } from "@phala/cloud";
@@ -85,6 +86,11 @@ interface Options {
 	publicLogs?: boolean;
 	publicSysinfo?: boolean;
 	listed?: boolean;
+	prepareOnly?: boolean;
+	commit?: boolean;
+	token?: string;
+	composeHash?: string;
+	transactionHash?: string;
 	[key: string]: unknown;
 }
 
@@ -982,6 +988,11 @@ const updateCvm = async (
 		patchBody.public_sysinfo = validatedOptions.publicSysinfo;
 	}
 
+	// Add prepareOnly flag if set
+	if (validatedOptions.prepareOnly) {
+		patchBody.prepareOnly = true;
+	}
+
 	logger.info(`Updating CVM ${validatedOptions.uuid}...`);
 	// biome-ignore lint/suspicious/noExplicitAny: dynamic patch body
 	const patchResult = await safePatchCvm(client, patchBody as any);
@@ -998,6 +1009,45 @@ const updateCvm = async (
 
 	// Two-phase flow: on-chain KMS requires compose hash registration
 	if (result.requiresOnChainHash) {
+		// --prepare-only mode: output commit info and stop
+		if (validatedOptions.prepareOnly) {
+			const output = {
+				success: true,
+				prepare_only: true,
+				compose_hash: result.composeHash,
+				app_id: cvm.app_id,
+				device_id: result.deviceId,
+				kms_info: result.kmsInfo,
+				commit_token: result.commitToken,
+				commit_url: result.commitUrl,
+				api_commit_url: result.apiCommitUrl,
+			};
+
+			if (validatedOptions.json !== false) {
+				stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+			} else {
+				stdout.write(
+					`${dedent`
+						CVM update prepared successfully (pending on-chain approval).
+
+						Compose Hash:    ${result.composeHash}
+						App ID:          ${cvm.app_id}
+						Device ID:       ${result.deviceId}
+						Commit Token:    ${result.commitToken || "N/A"}
+						Commit URL:      ${result.commitUrl || "N/A"}
+						API Commit URL:  ${result.apiCommitUrl || "N/A"}
+
+						To complete the update after on-chain approval:
+						  phala deploy --cvm-id ${validatedOptions.uuid} --commit \\
+						    --token ${result.commitToken || "<token>"} \\
+						    --compose-hash ${result.composeHash} \\
+						    --transaction-hash <tx-hash>
+					`}\n`,
+				);
+			}
+			return;
+		}
+
 		if (!validatedOptions.privateKey) {
 			throw new Error("Private key is required for contract DstackApp");
 		}
@@ -1139,11 +1189,85 @@ const updateCvm = async (
 	}
 };
 
+/**
+ * Commit a previously prepared CVM update using a commit token.
+ * Skips compose file reading and env processing — goes straight to the API.
+ */
+const commitCvmUpdate = async (
+	validatedOptions: Options,
+	client: Client<typeof API_VERSION>,
+	stdout: NodeJS.WriteStream,
+) => {
+	if (!validatedOptions.token) {
+		throw new Error("--token is required for --commit mode");
+	}
+	if (!validatedOptions.composeHash) {
+		throw new Error("--compose-hash is required for --commit mode");
+	}
+	if (!validatedOptions.transactionHash) {
+		throw new Error("--transaction-hash is required for --commit mode");
+	}
+	if (!validatedOptions.uuid) {
+		throw new Error("--cvm-id is required for --commit mode");
+	}
+
+	logger.info(`Committing CVM update for ${validatedOptions.uuid}...`);
+
+	const commitResult = await safeCommitCvmUpdate(client, {
+		id: validatedOptions.uuid,
+		token: validatedOptions.token,
+		composeHash: validatedOptions.composeHash,
+		transactionHash: validatedOptions.transactionHash,
+	});
+
+	if (!commitResult.success) {
+		const errMsg =
+			commitResult.error instanceof Error
+				? commitResult.error.message
+				: String(commitResult.error);
+		throw new Error(`Failed to commit CVM update: ${errMsg}`);
+	}
+
+	if (validatedOptions.json !== false) {
+		stdout.write(
+			`${JSON.stringify(
+				{
+					success: true,
+					vm_uuid: validatedOptions.uuid,
+					correlation_id: commitResult.data.correlationId,
+					status: commitResult.data.status,
+				},
+				null,
+				2,
+			)}\n`,
+		);
+	} else {
+		stdout.write(
+			`CVM update committed successfully! Correlation ID: ${commitResult.data.correlationId}\n`,
+		);
+	}
+};
+
 export async function runDeploy(
 	input: DeployCommandInput,
 	context: CommandContext,
 ): Promise<void> {
 	try {
+		// Handle --commit mode: skip compose file reading entirely
+		if (input.commit) {
+			const client = await getApiClient({
+				apiToken: input.apiToken,
+				interactive: input.interactive,
+			});
+
+			const uuid = context.cvmId
+				? CvmIdSchema.parse(context.cvmId).cvmId
+				: undefined;
+
+			await commitCvmUpdate({ ...input, uuid }, client, context.stdout);
+			return;
+		}
+
 		// Use positional argument if provided, otherwise use the --compose option
 		// Fallback to phala.toml compose_file if not specified
 		const dockerComposePath =
