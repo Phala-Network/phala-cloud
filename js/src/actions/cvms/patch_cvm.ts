@@ -84,6 +84,9 @@ export const PatchCvmRequestSchema = refineCvmId(
     // Shutdown behavior
     shutdown_timeout: z.number().optional(),
     allow_force_stop: z.boolean().optional(),
+
+    // Prepare-only mode (for multisig workflows)
+    prepareOnly: z.boolean().optional(),
   }),
 );
 
@@ -102,6 +105,9 @@ const PatchCvmHashRequiredSchema = z.object({
   appId: z.string(),
   deviceId: z.string(),
   kmsInfo: KmsInfoSchema,
+  commitToken: z.string().optional(),
+  commitUrl: z.string().optional(),
+  apiCommitUrl: z.string().optional(),
 });
 
 export const PatchCvmResultSchema = z.discriminatedUnion("requiresOnChainHash", [
@@ -139,11 +145,15 @@ const { action: patchCvm, safeAction: safePatchCvm } = defineAction<
   const parsed = PatchCvmRequestSchema.parse(request);
   const { cvmId } = CvmIdSchema.parse(parsed);
 
-  // Build request body excluding CVM identifier fields
-  const { id, uuid, app_id, instance_id, name, ...body } = parsed;
+  // Build request body excluding CVM identifier and meta fields
+  const { id, uuid, app_id, instance_id, name, prepareOnly, ...body } = parsed;
 
   try {
-    const response = await client.patch<{ correlation_id: string }>(`/cvms/${cvmId}`, body);
+    const response = prepareOnly
+      ? await client.patch<{ correlation_id: string }>(`/cvms/${cvmId}`, body, {
+          headers: { "X-Prepare-Only": "true" },
+        })
+      : await client.patch<{ correlation_id: string }>(`/cvms/${cvmId}`, body);
     return {
       requiresOnChainHash: false as const,
       correlationId: response.correlation_id,
@@ -157,6 +167,9 @@ const { action: patchCvm, safeAction: safePatchCvm } = defineAction<
         appId: String(details.app_id),
         deviceId: details.device_id as string,
         kmsInfo: details.kms_info,
+        commitToken: details.commit_token as string | undefined,
+        commitUrl: details.commit_url as string | undefined,
+        apiCommitUrl: details.api_commit_url as string | undefined,
       };
     }
     throw error;
