@@ -1268,10 +1268,16 @@ export async function runDeploy(
 ): Promise<void> {
 	try {
 		// Handle --commit mode: skip compose file reading entirely
+		// commit-update endpoint is token-based (no API key required),
+		// but we still need a client with the correct base URL.
 		if (input.commit) {
-			const client = await getApiClient({
+			const resolved = resolveAuthForContext(undefined, {
 				apiToken: input.apiToken,
-				interactive: input.interactive,
+			});
+			const client = createClient({
+				apiKey: resolved.apiKey,
+				baseURL: resolved.baseURL,
+				version: API_VERSION,
 			});
 
 			const uuid = context.cvmId
