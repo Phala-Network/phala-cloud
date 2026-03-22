@@ -50,7 +50,13 @@ from .errors import ApiError
 from .models.apps import DeviceAllowlistResponse as _DeviceAllowlistResponse
 from .models.auth import CurrentUserV20251028, CurrentUserV20260121
 from .models.base import CloudModel
-from .models.cvms import PaginatedCvmInfosV20251028, PaginatedCvmInfosV20260121
+from .models.cvms import (
+    CheckAppCvmsIsAllowedRequest,
+    CheckAppIsAllowedRequest,
+    CheckCvmIsAllowedRequest,
+    PaginatedCvmInfosV20251028,
+    PaginatedCvmInfosV20260121,
+)
 from .models.kms import GetKmsListResponse, GetKmsOnChainDetailResponse, KmsInfo
 from .models.nodes import AvailableNodes
 from .models.os_images import GetOsImagesRequest, GetOsImagesResponse
@@ -1140,6 +1146,37 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     ) -> SafeResult[Any]:
         return self.safe(self.get_app_device_allowlist, request)
 
+    def check_cvm_is_allowed(self, request: CheckCvmIsAllowedRequest | Mapping[str, Any]) -> Any:
+        req = CheckCvmIsAllowedRequest.model_validate(request)
+        body = req.model_dump(exclude={"cvm_id"}, exclude_none=True)
+        return self._loose_validate(self.post(f"/cvms/{req.cvm_id}/is-allowed", json=body))
+
+    def safe_check_cvm_is_allowed(
+        self, request: CheckCvmIsAllowedRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
+        return self.safe(self.check_cvm_is_allowed, request)
+
+    def check_app_is_allowed(self, request: CheckAppIsAllowedRequest | Mapping[str, Any]) -> Any:
+        req = CheckAppIsAllowedRequest.model_validate(request)
+        body = req.model_dump(exclude={"app_id"}, exclude_none=True)
+        return self._loose_validate(self.post(f"/apps/{req.app_id}/is-allowed", json=body))
+
+    def safe_check_app_is_allowed(
+        self, request: CheckAppIsAllowedRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
+        return self.safe(self.check_app_is_allowed, request)
+
+    def check_app_cvms_is_allowed(
+        self, request: CheckAppCvmsIsAllowedRequest | Mapping[str, Any]
+    ) -> Any:
+        req = CheckAppCvmsIsAllowedRequest.model_validate(request)
+        return self._loose_validate(self.post(f"/apps/{req.app_id}/cvms/is-allowed", json={}))
+
+    def safe_check_app_cvms_is_allowed(
+        self, request: CheckAppCvmsIsAllowedRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
+        return self.safe(self.check_app_cvms_is_allowed, request)
+
     def add_compose_hash(self, *args: Any, **kwargs: Any) -> Any:
         return _add_compose_hash(*args, **kwargs)
 
@@ -1936,6 +1973,41 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         self, request: GetAppDeviceAllowlistRequest | Mapping[str, Any]
     ) -> SafeResult[Any]:
         return await self.safe(self.get_app_device_allowlist, request)
+
+    async def check_cvm_is_allowed(
+        self, request: CheckCvmIsAllowedRequest | Mapping[str, Any]
+    ) -> Any:
+        req = CheckCvmIsAllowedRequest.model_validate(request)
+        body = req.model_dump(exclude={"cvm_id"}, exclude_none=True)
+        return self._loose_validate(await self.post(f"/cvms/{req.cvm_id}/is-allowed", json=body))
+
+    async def safe_check_cvm_is_allowed(
+        self, request: CheckCvmIsAllowedRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
+        return await self.safe(self.check_cvm_is_allowed, request)
+
+    async def check_app_is_allowed(
+        self, request: CheckAppIsAllowedRequest | Mapping[str, Any]
+    ) -> Any:
+        req = CheckAppIsAllowedRequest.model_validate(request)
+        body = req.model_dump(exclude={"app_id"}, exclude_none=True)
+        return self._loose_validate(await self.post(f"/apps/{req.app_id}/is-allowed", json=body))
+
+    async def safe_check_app_is_allowed(
+        self, request: CheckAppIsAllowedRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
+        return await self.safe(self.check_app_is_allowed, request)
+
+    async def check_app_cvms_is_allowed(
+        self, request: CheckAppCvmsIsAllowedRequest | Mapping[str, Any]
+    ) -> Any:
+        req = CheckAppCvmsIsAllowedRequest.model_validate(request)
+        return self._loose_validate(await self.post(f"/apps/{req.app_id}/cvms/is-allowed", json={}))
+
+    async def safe_check_app_cvms_is_allowed(
+        self, request: CheckAppCvmsIsAllowedRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
+        return await self.safe(self.check_app_cvms_is_allowed, request)
 
     async def add_compose_hash(self, *args: Any, **kwargs: Any) -> Any:
         return _add_compose_hash(*args, **kwargs)

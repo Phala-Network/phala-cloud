@@ -327,6 +327,45 @@ type CVMVisibility struct {
 	PublicTcbinfo *bool `json:"public_tcbinfo,omitempty"`
 }
 
+// IsAllowedResult represents the result of an on-chain allowance check.
+type IsAllowedResult struct {
+	CvmID              int     `json:"cvm_id,omitempty"`
+	AppContractAddress string  `json:"app_contract_address"`
+	ComposeHash        string  `json:"compose_hash"`
+	DeviceID           string  `json:"device_id"`
+	ComposeHashAllowed bool    `json:"compose_hash_allowed"`
+	AllowAnyDevice     bool    `json:"allow_any_device"`
+	DeviceIDAllowed    *bool   `json:"device_id_allowed,omitempty"`
+	IsAllowed          bool    `json:"is_allowed"`
+	Error              *string `json:"error,omitempty"`
+}
+
+// CheckCvmIsAllowedRequest is the request for checking CVM on-chain allowance.
+type CheckCvmIsAllowedRequest struct {
+	ComposeHash *string `json:"compose_hash,omitempty"`
+	NodeID      *int    `json:"node_id,omitempty"`
+	DeviceID    *string `json:"device_id,omitempty"`
+}
+
+// CheckAppIsAllowedRequest is the request for checking app contract allowance.
+type CheckAppIsAllowedRequest struct {
+	ComposeHash string  `json:"compose_hash"`
+	NodeID      *int    `json:"node_id,omitempty"`
+	DeviceID    *string `json:"device_id,omitempty"`
+	ChainID     *int    `json:"chain_id,omitempty"`
+}
+
+// AppCvmsBatchIsAllowedResponse is the batch response for app CVMs allowance check.
+type AppCvmsBatchIsAllowedResponse struct {
+	IsOnchain     bool              `json:"is_onchain"`
+	Results       []IsAllowedResult `json:"results"`
+	Total         int               `json:"total"`
+	AllowedCount  int               `json:"allowed_count"`
+	DeniedCount   int               `json:"denied_count"`
+	ErrorCount    int               `json:"error_count"`
+	SkippedCvmIDs []int             `json:"skipped_cvm_ids"`
+}
+
 // OSImage represents an available OS image.
 type OSImage struct {
 	Name        string  `json:"name"`
