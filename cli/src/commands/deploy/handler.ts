@@ -1060,23 +1060,26 @@ const updateCvm = async (
 			if (validatedOptions.json !== false) {
 				stdout.write(`${JSON.stringify(output, null, 2)}\n`);
 			} else {
-				const commitCmd = [
-					`phala deploy --cvm-id ${validatedOptions.uuid}`,
-					"  --commit",
-					`  --token ${result.commitToken || "<token>"}`,
-					`  --compose-hash ${composeHashHex}`,
-					"  --transaction-hash <tx-hash>",
-				].join(" \\\n");
-
-				const chainLine = chainId
-					? `Chain:           ${chain?.name || "Unknown"} (ID: ${chainId})`
-					: "";
-				const explorerLine = contractExplorerUrl
-					? `Contract:        ${contractExplorerUrl}`
-					: "";
-
-				// On-chain status
-				let onchainLines = "";
+				const lines = [
+					"CVM update prepared successfully (pending on-chain approval).",
+					"",
+					`Compose Hash:    ${composeHashHex}`,
+					`App ID:          ${cvm.app_id}`,
+					`Device ID:       ${result.deviceId}`,
+				];
+				if (chainId) {
+					lines.push(
+						`Chain:           ${chain?.name || "Unknown"} (ID: ${chainId})`,
+					);
+				}
+				if (contractExplorerUrl) {
+					lines.push(`Contract:        ${contractExplorerUrl}`);
+				}
+				lines.push(
+					`Commit Token:    ${result.commitToken || "N/A"}`,
+					`Commit URL:      ${result.commitUrl || "N/A"}`,
+					`API Commit URL:  ${result.apiCommitUrl || "N/A"} (POST)`,
+				);
 				if (onchain) {
 					const hashStatus = onchain.compose_hash_allowed
 						? "registered"
@@ -1084,30 +1087,28 @@ const updateCvm = async (
 					const deviceStatus = onchain.device_id_allowed
 						? "registered"
 						: "NOT registered";
-					onchainLines = `\nOn-chain Status:\n  Compose Hash:  ${hashStatus}\n  Device ID:     ${deviceStatus}`;
+					lines.push(
+						"",
+						"On-chain Status:",
+						`  Compose Hash:  ${hashStatus}`,
+						`  Device ID:     ${deviceStatus}`,
+					);
 					if (onchain.is_allowed) {
-						onchainLines +=
-							"\n  All prerequisites met. You can commit with --transaction-hash already-registered.";
+						lines.push(
+							"  All prerequisites met. You can commit with --transaction-hash already-registered.",
+						);
 					}
 				}
-
-				stdout.write(
-					`${dedent`
-						CVM update prepared successfully (pending on-chain approval).
-
-						Compose Hash:    ${composeHashHex}
-						App ID:          ${cvm.app_id}
-						Device ID:       ${result.deviceId}
-						${chainLine}
-						${explorerLine}
-						Commit Token:    ${result.commitToken || "N/A"}
-						Commit URL:      ${result.commitUrl || "N/A"}
-						API Commit URL:  ${result.apiCommitUrl || "N/A"} (POST)
-						${onchainLines}
-
-						To complete the update after on-chain approval:
-					`}\n${commitCmd}\n`,
+				lines.push(
+					"",
+					"To complete the update after on-chain approval:",
+					`  phala deploy --cvm-id ${validatedOptions.uuid} \\`,
+					"    --commit \\",
+					`    --token ${result.commitToken || "<token>"} \\`,
+					`    --compose-hash ${composeHashHex} \\`,
+					"    --transaction-hash <tx-hash>",
 				);
+				stdout.write(`${lines.join("\n")}\n`);
 			}
 			return;
 		}
@@ -1265,14 +1266,13 @@ const commitCvmUpdate = async (
 	if (!validatedOptions.token) {
 		throw new Error("--token is required for --commit mode");
 	}
-	if (!validatedOptions.composeHash) {
-		throw new Error("--compose-hash is required for --commit mode");
-	}
-	if (!validatedOptions.transactionHash) {
-		throw new Error("--transaction-hash is required for --commit mode");
-	}
 	if (!validatedOptions.uuid) {
 		throw new Error("--cvm-id is required for --commit mode");
+	}
+	if (!validatedOptions.transactionHash) {
+		logger.info(
+			"No --transaction-hash provided, using 'already-registered' (state-only check)",
+		);
 	}
 
 	logger.info(`Committing CVM update for ${validatedOptions.uuid}...`);
@@ -1280,8 +1280,8 @@ const commitCvmUpdate = async (
 	const commitResult = await safeCommitCvmUpdate(client, {
 		id: validatedOptions.uuid,
 		token: validatedOptions.token,
-		composeHash: validatedOptions.composeHash,
-		transactionHash: validatedOptions.transactionHash,
+		composeHash: validatedOptions.composeHash || "",
+		transactionHash: validatedOptions.transactionHash || "",
 	});
 
 	if (!commitResult.success) {
