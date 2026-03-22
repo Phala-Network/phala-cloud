@@ -1037,10 +1037,14 @@ const updateCvm = async (
 					? `${explorerUrl}/address/${contractAddress}`
 					: undefined;
 
+			const composeHashHex = result.composeHash.startsWith("0x")
+				? result.composeHash
+				: `0x${result.composeHash}`;
+
 			const output = {
 				success: true,
 				prepare_only: true,
-				compose_hash: result.composeHash,
+				compose_hash: composeHashHex,
 				app_id: cvm.app_id,
 				device_id: result.deviceId,
 				kms_info: result.kmsInfo,
@@ -1058,7 +1062,7 @@ const updateCvm = async (
 					`phala deploy --cvm-id ${validatedOptions.uuid}`,
 					"  --commit",
 					`  --token ${result.commitToken || "<token>"}`,
-					`  --compose-hash ${result.composeHash}`,
+					`  --compose-hash ${composeHashHex}`,
 					"  --transaction-hash <tx-hash>",
 				].join(" \\\n");
 
@@ -1073,7 +1077,7 @@ const updateCvm = async (
 					`${dedent`
 						CVM update prepared successfully (pending on-chain approval).
 
-						Compose Hash:    ${result.composeHash}
+						Compose Hash:    ${composeHashHex}
 						App ID:          ${cvm.app_id}
 						Device ID:       ${result.deviceId}
 						${chainLine}
