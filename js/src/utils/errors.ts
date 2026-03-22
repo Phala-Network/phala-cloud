@@ -796,3 +796,18 @@ export function formatStructuredError(
 
   return parts.join("\n");
 }
+
+/**
+ * Check if an error is a conflict error (409).
+ */
+export function isConflictError(error: PhalaCloudError): boolean {
+  return error.status === 409;
+}
+
+/**
+ * Check if an error is an app_id conflict from idempotent CVM creation.
+ * This means the app_id already has an active CVM with a different compose_hash.
+ */
+export function isAppIdConflictError(error: PhalaCloudError): error is ResourceError {
+  return error instanceof ResourceError && error.errorCode === "ERR-03-007";
+}

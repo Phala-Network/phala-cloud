@@ -33,6 +33,18 @@ func (c *Client) GetAppCVMs(ctx context.Context, appID string) ([]GenericObject,
 	return result, nil
 }
 
+// ReplicateAppCVM creates a replica of a CVM within an application context.
+// This uses the app-scoped endpoint POST /apps/{appID}/cvms/{vmUUID}/replicas
+// to ensure the new replica is associated with the correct app.
+func (c *Client) ReplicateAppCVM(ctx context.Context, appID, vmUUID string, opts *ReplicateCVMOptions) (*CVMActionResponse, error) {
+	var result CVMActionResponse
+	path := "/apps/" + appID + "/cvms/" + vmUUID + "/replicas"
+	if err := c.doJSON(ctx, "POST", path, opts, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // GetAppRevisions returns revisions for an application.
 func (c *Client) GetAppRevisions(ctx context.Context, appID string, opts *PaginationOptions) (*AppRevisionsResponse, error) {
 	path := "/apps/" + appID + "/revisions"

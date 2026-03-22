@@ -9,14 +9,14 @@ type CurrentUser struct {
 
 // UserInfo contains user profile information.
 type UserInfo struct {
-	Username        string `json:"username"`
-	Email           string `json:"email"`
-	Role            string `json:"role"`
-	Avatar          string `json:"avatar"`
-	EmailVerified   bool   `json:"email_verified"`
-	TOTPEnabled     bool   `json:"totp_enabled"`
-	HasBackupCodes  bool   `json:"has_backup_codes"`
-	FlagHasPassword bool   `json:"flag_has_password"`
+	Username        string  `json:"username"`
+	Email           string  `json:"email"`
+	Role            string  `json:"role"`
+	Avatar          *string `json:"avatar,omitempty"`
+	EmailVerified   *bool   `json:"email_verified,omitempty"`
+	TOTPEnabled     *bool   `json:"totp_enabled,omitempty"`
+	HasBackupCodes  *bool   `json:"has_backup_codes,omitempty"`
+	FlagHasPassword *bool   `json:"flag_has_password,omitempty"`
 }
 
 // WorkspaceInfo contains workspace information for the current user.
@@ -31,8 +31,8 @@ type WorkspaceInfo struct {
 
 // CreditsInfo contains credit balance information.
 type CreditsInfo struct {
-	Balance           any  `json:"balance"`
-	GrantedBalance    any  `json:"granted_balance"`
-	IsPostPaid        bool `json:"is_post_paid"`
-	OutstandingAmount any  `json:"outstanding_amount,omitempty"`
+	Balance           *string `json:"balance,omitempty"`
+	GrantedBalance    *string `json:"granted_balance,omitempty"`
+	IsPostPaid        *bool   `json:"is_post_paid,omitempty"`
+	OutstandingAmount *string `json:"outstanding_amount,omitempty"`
 }

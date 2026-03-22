@@ -107,10 +107,10 @@ func (c *Client) RefreshCVMInstanceIDs(ctx context.Context, req *RefreshInstance
 
 // UpdateEnvsRequest is the request for updating CVM environment variables.
 type UpdateEnvsRequest struct {
-	EncryptedEnv    string  `json:"encrypted_env"`
-	EnvKeys         *string `json:"env_keys,omitempty"`
-	ComposeHash     *string `json:"compose_hash,omitempty"`
-	TransactionHash *string `json:"transaction_hash,omitempty"`
+	EncryptedEnv    string   `json:"encrypted_env"`
+	EnvKeys         []string `json:"env_keys,omitempty"`
+	ComposeHash     *string  `json:"compose_hash,omitempty"`
+	TransactionHash *string  `json:"transaction_hash,omitempty"`
 }
 
 // UpdateCVMEnvs updates the encrypted environment variables for a CVM.

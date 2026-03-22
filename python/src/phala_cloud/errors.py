@@ -36,6 +36,15 @@ class BusinessError(ApiError):
     """Business logic error (400, 409, etc.)."""
 
 
+class ConflictError(BusinessError):
+    """409 Conflict — transient, may be retryable.
+
+    A 409 without a structured error_code typically indicates a transient
+    conflict (e.g., operation in progress). A 409 WITH an error_code
+    (returned as ResourceError) is a deterministic business error.
+    """
+
+
 class ServerError(ApiError):
     """Server-side error (500+)."""
 

@@ -11,6 +11,7 @@ from .errors import (
     ApiError,
     AuthError,
     BusinessError,
+    ConflictError,
     PhalaCloudError,
     RequestError,
     ResourceError,
@@ -262,6 +263,8 @@ class AsyncPhalaCloud:
             return AuthError(**base_kwargs)
         if status >= 500:
             return ServerError(**base_kwargs)
+        if status == 409:
+            return ConflictError(**base_kwargs)
         if status >= 400:
             return BusinessError(**base_kwargs)
 
@@ -479,6 +482,8 @@ class PhalaCloud:
             return AuthError(**base_kwargs)
         if status >= 500:
             return ServerError(**base_kwargs)
+        if status == 409:
+            return ConflictError(**base_kwargs)
         if status >= 400:
             return BusinessError(**base_kwargs)
 

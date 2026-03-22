@@ -67,6 +67,45 @@ func (c *Client) do(ctx context.Context, req *http.Request) (*http.Response, err
 		if code, ok := parsed["error_code"].(string); ok {
 			apiErr.ErrorCode = code
 		}
+		// Parse structured error fields.
+		if details, ok := parsed["details"].([]any); ok {
+			for _, d := range details {
+				if dm, ok := d.(map[string]any); ok {
+					ed := ErrorDetail{}
+					if f, ok := dm["field"].(string); ok {
+						ed.Field = f
+					}
+					if v, ok := dm["value"]; ok {
+						ed.Value = v
+					}
+					if m, ok := dm["message"].(string); ok {
+						ed.Message = m
+					}
+					apiErr.Details = append(apiErr.Details, ed)
+				}
+			}
+		}
+		if suggestions, ok := parsed["suggestions"].([]any); ok {
+			for _, s := range suggestions {
+				if str, ok := s.(string); ok {
+					apiErr.Suggestions = append(apiErr.Suggestions, str)
+				}
+			}
+		}
+		if links, ok := parsed["links"].([]any); ok {
+			for _, l := range links {
+				if lm, ok := l.(map[string]any); ok {
+					el := ErrorLink{}
+					if u, ok := lm["url"].(string); ok {
+						el.URL = u
+					}
+					if lb, ok := lm["label"].(string); ok {
+						el.Label = lb
+					}
+					apiErr.Links = append(apiErr.Links, el)
+				}
+			}
+		}
 	}
 
 	if apiErr.Message == "" {

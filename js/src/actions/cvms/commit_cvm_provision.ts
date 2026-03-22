@@ -86,6 +86,25 @@ import { defineAction } from "../../utils/define-action";
  * - **contract_address**: On-chain KMS contract address (required for ETHEREUM/BASE KMS)
  * - **deployer_address**: Deployer address for on-chain verification (required for ETHEREUM/BASE KMS)
  *
+ * ## Idempotency
+ *
+ * This endpoint is idempotent: submitting the same `app_id` + `compose_hash`
+ * again returns the existing CVM (safe retry after network timeout). A different
+ * `compose_hash` for the same `app_id` throws a `ResourceError` with error code
+ * `ERR-03-007` (`CVM_APP_ID_CONFLICT`, HTTP 409).
+ *
+ * ```typescript
+ * import { isAppIdConflictError } from '@phala/cloud'
+ *
+ * try {
+ *   const cvm = await commitCvmProvision(client, payload)
+ * } catch (error) {
+ *   if (isAppIdConflictError(error)) {
+ *     // app_id already used with a different compose_hash
+ *   }
+ * }
+ * ```
+ *
  * ## Schema Parameter
  *
  * - **Type:** `ZodSchema | false`

@@ -27,11 +27,17 @@ func (c *Client) GetCVMPreLaunchScript(ctx context.Context, cvmID string) (strin
 
 // ProvisionComposeUpdateRequest is the request for provisioning a compose file update.
 type ProvisionComposeUpdateRequest struct {
-	DockerComposeFile string  `json:"docker_compose_file"`
-	GatewayEnabled    *bool   `json:"gateway_enabled,omitempty"`
-	PreLaunchScript   *string `json:"pre_launch_script,omitempty"`
-	EncryptedEnv      *string `json:"encrypted_env,omitempty"`
-	EnvKeys           *string `json:"env_keys,omitempty"`
+	Name              string   `json:"name"`
+	DockerComposeFile string   `json:"docker_compose_file"`
+	GatewayEnabled    *bool    `json:"gateway_enabled,omitempty"`
+	PreLaunchScript   *string  `json:"pre_launch_script,omitempty"`
+	EncryptedEnv      *string  `json:"encrypted_env,omitempty"`
+	AllowedEnvs       []string `json:"allowed_envs,omitempty"`
+	PublicLogs        *bool    `json:"public_logs,omitempty"`
+	PublicSysinfo     *bool    `json:"public_sysinfo,omitempty"`
+	PublicTcbinfo     *bool    `json:"public_tcbinfo,omitempty"`
+	SecureTime        *bool    `json:"secure_time,omitempty"`
+	UpdateEnvVars     *bool    `json:"update_env_vars,omitempty"`
 }
 
 // ProvisionCVMComposeFileUpdate provisions a compose file update.
@@ -48,10 +54,10 @@ func (c *Client) ProvisionCVMComposeFileUpdate(ctx context.Context, cvmID string
 
 // CommitComposeUpdateRequest is the request for committing a compose file update.
 type CommitComposeUpdateRequest struct {
-	ComposeHash   string  `json:"compose_hash"`
-	EncryptedEnv  *string `json:"encrypted_env,omitempty"`
-	EnvKeys       *string `json:"env_keys,omitempty"`
-	UpdateEnvVars *bool   `json:"update_env_vars,omitempty"`
+	ComposeHash   string   `json:"compose_hash"`
+	EncryptedEnv  *string  `json:"encrypted_env,omitempty"`
+	EnvKeys       []string `json:"env_keys,omitempty"`
+	UpdateEnvVars *bool    `json:"update_env_vars,omitempty"`
 }
 
 // CommitCVMComposeFileUpdate commits a compose file update.
