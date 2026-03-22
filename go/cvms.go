@@ -223,3 +223,12 @@ func (c *Client) ConfirmCVMPatch(ctx context.Context, cvmID string, req *Confirm
 	}
 	return &result, nil
 }
+
+// CheckCvmIsAllowed checks if a CVM deployment is allowed by its on-chain contract.
+func (c *Client) CheckCvmIsAllowed(ctx context.Context, cvmID string, req *CheckCvmIsAllowedRequest) (*IsAllowedResult, error) {
+	var result IsAllowedResult
+	if err := c.doJSON(ctx, "POST", cvmPath(cvmID, "is-allowed"), req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}

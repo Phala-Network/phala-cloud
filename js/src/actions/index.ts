@@ -556,6 +556,32 @@ export {
   type SyncGithubSshKeysResponse,
 } from "./ssh_keys/sync_github_ssh_keys";
 
+// CVM Is-Allowed Check
+export {
+  checkCvmIsAllowed,
+  safeCheckCvmIsAllowed,
+  IsAllowedResultSchema,
+  CheckCvmIsAllowedRequestSchema,
+  type IsAllowedResult,
+  type CheckCvmIsAllowedRequest,
+} from "./cvms/check_cvm_is_allowed";
+
+export {
+  checkAppIsAllowed,
+  safeCheckAppIsAllowed,
+  CheckAppIsAllowedRequestSchema,
+  type CheckAppIsAllowedRequest,
+} from "./apps/check_app_is_allowed";
+
+export {
+  checkAppCvmsIsAllowed,
+  safeCheckAppCvmsIsAllowed,
+  AppCvmsBatchIsAllowedResponseSchema,
+  CheckAppCvmsIsAllowedRequestSchema,
+  type AppCvmsBatchIsAllowedResponse,
+  type CheckAppCvmsIsAllowedRequest,
+} from "./apps/check_app_cvms_is_allowed";
+
 // App Operations
 export {
   getAppList,

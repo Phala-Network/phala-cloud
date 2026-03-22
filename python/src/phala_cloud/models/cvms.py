@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from .base import CloudModel
+from .base import AliasModel, CloudModel
 from .kms import KmsInfo
 
 BillingPeriod = Literal["skip", "hourly", "monthly"]
@@ -223,3 +223,47 @@ class CvmAttestation(CloudModel):
 
 
 PaginatedCvmInfos = PaginatedCvmInfosV20260121 | PaginatedCvmInfosV20251028
+
+
+# Is-Allowed types
+
+
+class CheckCvmIsAllowedRequest(AliasModel):
+    cvm_id: str = Field(..., alias="cvmId")
+    compose_hash: str | None = None
+    node_id: int | None = None
+    device_id: str | None = None
+
+
+class IsAllowedResult(CloudModel):
+    cvm_id: int | None = None
+    app_contract_address: str
+    compose_hash: str
+    device_id: str
+    compose_hash_allowed: bool
+    allow_any_device: bool
+    device_id_allowed: bool | None = None
+    is_allowed: bool
+    error: str | None = None
+
+
+class CheckAppIsAllowedRequest(AliasModel):
+    app_id: str = Field(..., alias="appId")
+    compose_hash: str
+    node_id: int | None = None
+    device_id: str | None = None
+    chain_id: int | None = None
+
+
+class CheckAppCvmsIsAllowedRequest(AliasModel):
+    app_id: str = Field(..., alias="appId")
+
+
+class AppCvmsBatchIsAllowedResponse(CloudModel):
+    is_onchain: bool
+    results: list[IsAllowedResult] = Field(default_factory=list)
+    total: int = 0
+    allowed_count: int = 0
+    denied_count: int = 0
+    error_count: int = 0
+    skipped_cvm_ids: list[int] = Field(default_factory=list)

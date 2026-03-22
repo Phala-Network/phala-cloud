@@ -103,3 +103,21 @@ func (c *Client) GetAppFilterOptions(ctx context.Context) (*AppFilterOptions, er
 	}
 	return &result, nil
 }
+
+// CheckAppIsAllowed checks if a deployment is allowed by an on-chain app contract.
+func (c *Client) CheckAppIsAllowed(ctx context.Context, appID string, req *CheckAppIsAllowedRequest) (*IsAllowedResult, error) {
+	var result IsAllowedResult
+	if err := c.doJSON(ctx, "POST", fmt.Sprintf("/apps/%s/is-allowed", appID), req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// CheckAppCvmsIsAllowed batch checks on-chain allowance for all CVMs under an app.
+func (c *Client) CheckAppCvmsIsAllowed(ctx context.Context, appID string) (*AppCvmsBatchIsAllowedResponse, error) {
+	var result AppCvmsBatchIsAllowedResponse
+	if err := c.doJSON(ctx, "POST", fmt.Sprintf("/apps/%s/cvms/is-allowed", appID), struct{}{}, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
