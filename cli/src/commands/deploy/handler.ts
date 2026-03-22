@@ -1025,6 +1025,18 @@ const updateCvm = async (
 	if (result.requiresOnChainHash) {
 		// --prepare-only mode: output commit info and stop
 		if (validatedOptions.prepareOnly) {
+			// Build explorer link for the contract address
+			const chainId = result.kmsInfo?.chain_id;
+			const chain = result.kmsInfo?.chain as
+				| { name?: string; blockExplorers?: { default?: { url?: string } } }
+				| undefined;
+			const contractAddress = cvm.app_id;
+			const explorerUrl = chain?.blockExplorers?.default?.url;
+			const contractExplorerUrl =
+				explorerUrl && contractAddress
+					? `${explorerUrl}/address/${contractAddress}`
+					: undefined;
+
 			const output = {
 				success: true,
 				prepare_only: true,
@@ -1032,6 +1044,8 @@ const updateCvm = async (
 				app_id: cvm.app_id,
 				device_id: result.deviceId,
 				kms_info: result.kmsInfo,
+				chain_id: chainId,
+				contract_explorer_url: contractExplorerUrl,
 				commit_token: result.commitToken,
 				commit_url: result.commitUrl,
 				api_commit_url: result.apiCommitUrl,
@@ -1047,6 +1061,14 @@ const updateCvm = async (
 					`  --compose-hash ${result.composeHash}`,
 					"  --transaction-hash <tx-hash>",
 				].join(" \\\n");
+
+				const chainLine = chainId
+					? `Chain:           ${chain?.name || "Unknown"} (ID: ${chainId})`
+					: "";
+				const explorerLine = contractExplorerUrl
+					? `Contract:        ${contractExplorerUrl}`
+					: "";
+
 				stdout.write(
 					`${dedent`
 						CVM update prepared successfully (pending on-chain approval).
@@ -1054,9 +1076,11 @@ const updateCvm = async (
 						Compose Hash:    ${result.composeHash}
 						App ID:          ${cvm.app_id}
 						Device ID:       ${result.deviceId}
+						${chainLine}
+						${explorerLine}
 						Commit Token:    ${result.commitToken || "N/A"}
 						Commit URL:      ${result.commitUrl || "N/A"}
-						API Commit URL:  ${result.apiCommitUrl || "N/A"}
+						API Commit URL:  ${result.apiCommitUrl || "N/A"} (POST)
 
 						To complete the update after on-chain approval:
 					`}\n${commitCmd}\n`,
