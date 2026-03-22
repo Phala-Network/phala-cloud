@@ -195,6 +195,44 @@ export const deployCommandMeta: CommandMeta = {
 			group: "basic",
 		},
 		{
+			name: "prepare-only",
+			description:
+				"Only prepare the update (generate commit token) without performing on-chain operations. For multisig workflows.",
+			type: "boolean",
+			target: "prepareOnly",
+			group: "advanced",
+		},
+		{
+			name: "commit",
+			description:
+				"Commit a previously prepared update using a commit token. Requires --token, --compose-hash, and --transaction-hash.",
+			type: "boolean",
+			target: "commit",
+			group: "advanced",
+		},
+		{
+			name: "token",
+			description: "Commit token from a prepare-only update",
+			type: "string",
+			target: "token",
+			group: "advanced",
+		},
+		{
+			name: "compose-hash",
+			description: "Compose hash from a prepare-only update",
+			type: "string",
+			target: "composeHash",
+			group: "advanced",
+		},
+		{
+			name: "transaction-hash",
+			description:
+				"Transaction hash proving on-chain compose hash registration",
+			type: "string",
+			target: "transactionHash",
+			group: "advanced",
+		},
+		{
 			name: "public-logs",
 			description: "Make CVM logs publicly accessible (default: true)",
 			type: "boolean",
@@ -273,6 +311,17 @@ export const deployCommandMeta: CommandMeta = {
 			name: "Update existing CVM to disable logs",
 			value: "phala deploy --cvm-id app_123 --no-public-logs",
 		},
+		// --- Multisig / Prepare-Only Examples ---
+		{
+			name: "Prepare update for multisig approval",
+			value:
+				"phala deploy --cvm-id app_123 --prepare-only -c docker-compose.yml",
+		},
+		{
+			name: "Commit a prepared update",
+			value:
+				"phala deploy --cvm-id app_123 --commit --token <token> --compose-hash 0x... --transaction-hash 0x...",
+		},
 	],
 };
 
@@ -307,6 +356,11 @@ export const deployCommandSchema = z.object({
 	publicLogs: z.boolean().optional(),
 	publicSysinfo: z.boolean().optional(),
 	listed: z.boolean().optional(),
+	prepareOnly: z.boolean().default(false),
+	commit: z.boolean().default(false),
+	token: z.string().optional(),
+	composeHash: z.string().optional(),
+	transactionHash: z.string().optional(),
 });
 
 export type DeployCommandInput = z.infer<typeof deployCommandSchema>;

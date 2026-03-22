@@ -39,6 +39,7 @@ import {
 	safePatchCvm,
 	safeProvisionCvm,
 	safeUpdateCvmVisibility,
+	safeCommitCvmUpdate,
 	convertToHostname,
 	isValidHostname,
 } from "@phala/cloud";
@@ -85,6 +86,11 @@ interface Options {
 	publicLogs?: boolean;
 	publicSysinfo?: boolean;
 	listed?: boolean;
+	prepareOnly?: boolean;
+	commit?: boolean;
+	token?: string;
+	composeHash?: string;
+	transactionHash?: string;
 	[key: string]: unknown;
 }
 
@@ -982,6 +988,11 @@ const updateCvm = async (
 		patchBody.public_sysinfo = validatedOptions.publicSysinfo;
 	}
 
+	// Add prepareOnly flag if set
+	if (validatedOptions.prepareOnly) {
+		patchBody.prepareOnly = true;
+	}
+
 	logger.info(`Updating CVM ${validatedOptions.uuid}...`);
 	// biome-ignore lint/suspicious/noExplicitAny: dynamic patch body
 	const patchResult = await safePatchCvm(client, patchBody as any);
@@ -996,8 +1007,112 @@ const updateCvm = async (
 
 	const result = patchResult.data;
 
+	// --prepare-only on a CVM that doesn't require on-chain hash
+	if (validatedOptions.prepareOnly && !result.requiresOnChainHash) {
+		const msg =
+			"--prepare-only has no effect on this CVM: it does not use on-chain KMS. The update was applied directly.";
+		if (validatedOptions.json !== false) {
+			stdout.write(
+				`${JSON.stringify({ success: true, prepare_only: false, message: msg }, null, 2)}\n`,
+			);
+		} else {
+			logger.warn(msg);
+		}
+		return;
+	}
+
 	// Two-phase flow: on-chain KMS requires compose hash registration
 	if (result.requiresOnChainHash) {
+		// --prepare-only mode: output commit info and stop
+		if (validatedOptions.prepareOnly) {
+			// Build explorer link for the contract address
+			const chainId = result.kmsInfo?.chain_id;
+			const chain = result.kmsInfo?.chain as
+				| { name?: string; blockExplorers?: { default?: { url?: string } } }
+				| undefined;
+			const contractAddress = cvm.app_id;
+			const explorerUrl = chain?.blockExplorers?.default?.url;
+			const contractExplorerUrl =
+				explorerUrl && contractAddress
+					? `${explorerUrl}/address/${contractAddress.startsWith("0x") ? contractAddress : `0x${contractAddress}`}`
+					: undefined;
+
+			const composeHashHex = result.composeHash.startsWith("0x")
+				? result.composeHash
+				: `0x${result.composeHash}`;
+
+			const onchain = result.onchainStatus;
+			const output = {
+				success: true,
+				prepare_only: true,
+				compose_hash: composeHashHex,
+				app_id: cvm.app_id,
+				device_id: result.deviceId,
+				kms_info: result.kmsInfo,
+				chain_id: chainId,
+				contract_explorer_url: contractExplorerUrl,
+				onchain_status: onchain,
+				commit_token: result.commitToken,
+				commit_url: result.commitUrl,
+				api_commit_url: result.apiCommitUrl,
+			};
+
+			if (validatedOptions.json !== false) {
+				stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+			} else {
+				const lines = [
+					"CVM update prepared successfully (pending on-chain approval).",
+					"",
+					`Compose Hash:    ${composeHashHex}`,
+					`App ID:          ${cvm.app_id}`,
+					`Device ID:       ${result.deviceId}`,
+				];
+				if (chainId) {
+					lines.push(
+						`Chain:           ${chain?.name || "Unknown"} (ID: ${chainId})`,
+					);
+				}
+				if (contractExplorerUrl) {
+					lines.push(`Contract:        ${contractExplorerUrl}`);
+				}
+				lines.push(
+					`Commit Token:    ${result.commitToken || "N/A"}`,
+					`Commit URL:      ${result.commitUrl || "N/A"}`,
+					`API Commit URL:  ${result.apiCommitUrl || "N/A"} (POST)`,
+				);
+				if (onchain) {
+					const hashStatus = onchain.compose_hash_allowed
+						? "registered"
+						: "NOT registered";
+					const deviceStatus = onchain.device_id_allowed
+						? "registered"
+						: "NOT registered";
+					lines.push(
+						"",
+						"On-chain Status:",
+						`  Compose Hash:  ${hashStatus}`,
+						`  Device ID:     ${deviceStatus}`,
+					);
+					if (onchain.is_allowed) {
+						lines.push(
+							"  All prerequisites met. You can commit with --transaction-hash already-registered.",
+						);
+					}
+				}
+				lines.push(
+					"",
+					"To complete the update after on-chain approval:",
+					`  phala deploy --cvm-id ${validatedOptions.uuid} \\`,
+					"    --commit \\",
+					`    --token ${result.commitToken || "<token>"} \\`,
+					`    --compose-hash ${composeHashHex} \\`,
+					"    --transaction-hash <tx-hash>",
+				);
+				stdout.write(`${lines.join("\n")}\n`);
+			}
+			return;
+		}
+
 		if (!validatedOptions.privateKey) {
 			throw new Error("Private key is required for contract DstackApp");
 		}
@@ -1139,11 +1254,94 @@ const updateCvm = async (
 	}
 };
 
+/**
+ * Commit a previously prepared CVM update using a commit token.
+ * Skips compose file reading and env processing — goes straight to the API.
+ */
+const commitCvmUpdate = async (
+	validatedOptions: Options,
+	client: Client<typeof API_VERSION>,
+	stdout: NodeJS.WriteStream,
+) => {
+	if (!validatedOptions.token) {
+		throw new Error("--token is required for --commit mode");
+	}
+	if (!validatedOptions.uuid) {
+		throw new Error("--cvm-id is required for --commit mode");
+	}
+	if (!validatedOptions.transactionHash) {
+		logger.info(
+			"No --transaction-hash provided, using 'already-registered' (state-only check)",
+		);
+	}
+
+	logger.info(`Committing CVM update for ${validatedOptions.uuid}...`);
+
+	const commitResult = await safeCommitCvmUpdate(client, {
+		id: validatedOptions.uuid,
+		token: validatedOptions.token,
+		composeHash: validatedOptions.composeHash || "",
+		transactionHash: validatedOptions.transactionHash || "",
+	});
+
+	if (!commitResult.success) {
+		const errMsg =
+			commitResult.error instanceof Error
+				? commitResult.error.message
+				: String(commitResult.error);
+		const isExpired = errMsg.includes("expired") || errMsg.includes("Invalid");
+		const hint = isExpired
+			? " Run --prepare-only again to get a new commit token."
+			: "";
+		throw new Error(`Failed to commit CVM update: ${errMsg}${hint}`);
+	}
+
+	if (validatedOptions.json !== false) {
+		stdout.write(
+			`${JSON.stringify(
+				{
+					success: true,
+					vm_uuid: validatedOptions.uuid,
+					correlation_id: commitResult.data.correlationId,
+					status: commitResult.data.status,
+				},
+				null,
+				2,
+			)}\n`,
+		);
+	} else {
+		stdout.write(
+			`CVM update committed successfully! Correlation ID: ${commitResult.data.correlationId}\n`,
+		);
+	}
+};
+
 export async function runDeploy(
 	input: DeployCommandInput,
 	context: CommandContext,
 ): Promise<void> {
 	try {
+		// Handle --commit mode: skip compose file reading entirely
+		// commit-update endpoint is token-based (no API key required),
+		// but we still need a client with the correct base URL.
+		if (input.commit) {
+			const resolved = resolveAuthForContext(undefined, {
+				apiToken: input.apiToken,
+			});
+			const client = createClient({
+				apiKey: resolved.apiKey,
+				baseURL: resolved.baseURL,
+				version: API_VERSION,
+			});
+
+			const uuid = context.cvmId
+				? CvmIdSchema.parse(context.cvmId).cvmId
+				: undefined;
+
+			await commitCvmUpdate({ ...input, uuid }, client, context.stdout);
+			return;
+		}
+
 		// Use positional argument if provided, otherwise use the --compose option
 		// Fallback to phala.toml compose_file if not specified
 		const dockerComposePath =

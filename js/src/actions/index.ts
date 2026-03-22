@@ -408,6 +408,15 @@ export {
   type ConfirmCvmPatchResult,
 } from "./cvms/confirm_cvm_patch";
 
+// CVM Commit Update (token-based, for multisig workflows)
+export {
+  commitCvmUpdate,
+  safeCommitCvmUpdate,
+  CommitCvmUpdateRequestSchema,
+  type CommitCvmUpdateRequest,
+  type CommitCvmUpdateResult,
+} from "./cvms/commit_cvm_update";
+
 // CVM Update Operations
 export {
   updateCvmResources,
