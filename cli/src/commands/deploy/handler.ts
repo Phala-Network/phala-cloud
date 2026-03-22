@@ -1041,6 +1041,7 @@ const updateCvm = async (
 				? result.composeHash
 				: `0x${result.composeHash}`;
 
+			const onchain = result.onchainStatus;
 			const output = {
 				success: true,
 				prepare_only: true,
@@ -1050,6 +1051,7 @@ const updateCvm = async (
 				kms_info: result.kmsInfo,
 				chain_id: chainId,
 				contract_explorer_url: contractExplorerUrl,
+				onchain_status: onchain,
 				commit_token: result.commitToken,
 				commit_url: result.commitUrl,
 				api_commit_url: result.apiCommitUrl,
@@ -1073,6 +1075,22 @@ const updateCvm = async (
 					? `Contract:        ${contractExplorerUrl}`
 					: "";
 
+				// On-chain status
+				let onchainLines = "";
+				if (onchain) {
+					const hashStatus = onchain.compose_hash_allowed
+						? "registered"
+						: "NOT registered";
+					const deviceStatus = onchain.device_id_allowed
+						? "registered"
+						: "NOT registered";
+					onchainLines = `\nOn-chain Status:\n  Compose Hash:  ${hashStatus}\n  Device ID:     ${deviceStatus}`;
+					if (onchain.is_allowed) {
+						onchainLines +=
+							"\n  All prerequisites met. You can commit with --transaction-hash already-registered.";
+					}
+				}
+
 				stdout.write(
 					`${dedent`
 						CVM update prepared successfully (pending on-chain approval).
@@ -1085,6 +1103,7 @@ const updateCvm = async (
 						Commit Token:    ${result.commitToken || "N/A"}
 						Commit URL:      ${result.commitUrl || "N/A"}
 						API Commit URL:  ${result.apiCommitUrl || "N/A"} (POST)
+						${onchainLines}
 
 						To complete the update after on-chain approval:
 					`}\n${commitCmd}\n`,

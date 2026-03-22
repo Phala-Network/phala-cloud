@@ -108,6 +108,13 @@ const PatchCvmHashRequiredSchema = z.object({
   commitToken: z.string().optional(),
   commitUrl: z.string().optional(),
   apiCommitUrl: z.string().optional(),
+  onchainStatus: z
+    .object({
+      compose_hash_allowed: z.boolean(),
+      device_id_allowed: z.boolean(),
+      is_allowed: z.boolean(),
+    })
+    .optional(),
 });
 
 export const PatchCvmResultSchema = z.discriminatedUnion("requiresOnChainHash", [
@@ -170,6 +177,9 @@ const { action: patchCvm, safeAction: safePatchCvm } = defineAction<
         commitToken: details.commit_token as string | undefined,
         commitUrl: details.commit_url as string | undefined,
         apiCommitUrl: details.api_commit_url as string | undefined,
+        onchainStatus: details.onchain_status as
+          | { compose_hash_allowed: boolean; device_id_allowed: boolean; is_allowed: boolean }
+          | undefined,
       };
     }
     throw error;
