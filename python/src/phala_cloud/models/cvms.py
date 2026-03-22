@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from .base import CloudModel
+from .base import AliasModel, CloudModel
 from .kms import KmsInfo
 
 BillingPeriod = Literal["skip", "hourly", "monthly"]
@@ -228,7 +228,7 @@ PaginatedCvmInfos = PaginatedCvmInfosV20260121 | PaginatedCvmInfosV20251028
 # Is-Allowed types
 
 
-class CheckCvmIsAllowedRequest(CloudModel):
+class CheckCvmIsAllowedRequest(AliasModel):
     cvm_id: str = Field(..., alias="cvmId")
     compose_hash: str | None = None
     node_id: int | None = None
@@ -247,7 +247,7 @@ class IsAllowedResult(CloudModel):
     error: str | None = None
 
 
-class CheckAppIsAllowedRequest(CloudModel):
+class CheckAppIsAllowedRequest(AliasModel):
     app_id: str = Field(..., alias="appId")
     compose_hash: str
     node_id: int | None = None
@@ -255,7 +255,7 @@ class CheckAppIsAllowedRequest(CloudModel):
     chain_id: int | None = None
 
 
-class CheckAppCvmsIsAllowedRequest(CloudModel):
+class CheckAppCvmsIsAllowedRequest(AliasModel):
     app_id: str = Field(..., alias="appId")
 
 
