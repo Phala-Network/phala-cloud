@@ -1040,6 +1040,13 @@ const updateCvm = async (
 			if (validatedOptions.json !== false) {
 				stdout.write(`${JSON.stringify(output, null, 2)}\n`);
 			} else {
+				const commitCmd = [
+					`phala deploy --cvm-id ${validatedOptions.uuid}`,
+					"  --commit",
+					`  --token ${result.commitToken || "<token>"}`,
+					`  --compose-hash ${result.composeHash}`,
+					"  --transaction-hash <tx-hash>",
+				].join(" \\\n");
 				stdout.write(
 					`${dedent`
 						CVM update prepared successfully (pending on-chain approval).
@@ -1052,11 +1059,7 @@ const updateCvm = async (
 						API Commit URL:  ${result.apiCommitUrl || "N/A"}
 
 						To complete the update after on-chain approval:
-						  phala deploy --cvm-id ${validatedOptions.uuid} --commit \\
-						    --token ${result.commitToken || "<token>"} \\
-						    --compose-hash ${result.composeHash} \\
-						    --transaction-hash <tx-hash>
-					`}\n`,
+					`}\n${commitCmd}\n`,
 				);
 			}
 			return;
