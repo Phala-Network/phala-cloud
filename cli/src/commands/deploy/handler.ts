@@ -1034,7 +1034,7 @@ const updateCvm = async (
 			const explorerUrl = chain?.blockExplorers?.default?.url;
 			const contractExplorerUrl =
 				explorerUrl && contractAddress
-					? `${explorerUrl}/address/${contractAddress}`
+					? `${explorerUrl}/address/${contractAddress.startsWith("0x") ? contractAddress : `0x${contractAddress}`}`
 					: undefined;
 
 			const composeHashHex = result.composeHash.startsWith("0x")
@@ -1270,7 +1270,11 @@ const commitCvmUpdate = async (
 			commitResult.error instanceof Error
 				? commitResult.error.message
 				: String(commitResult.error);
-		throw new Error(`Failed to commit CVM update: ${errMsg}`);
+		const isExpired = errMsg.includes("expired") || errMsg.includes("Invalid");
+		const hint = isExpired
+			? " Run --prepare-only again to get a new commit token."
+			: "";
+		throw new Error(`Failed to commit CVM update: ${errMsg}${hint}`);
 	}
 
 	if (validatedOptions.json !== false) {
