@@ -2,3 +2,6 @@
 	path = terraform
 	url = ../terraform-provider-phala
 	branch = main
+[submodule "phala-docs"]
+	path = phala-docs
+	url = git@github.com:Phala-Network/phala-docs.git
