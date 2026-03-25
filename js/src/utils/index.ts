@@ -105,6 +105,6 @@ export {
   addNetwork,
 } from "./client-factories";
 
-// Webhook verification
-export { verifyWebhookSignature, parseWebhookEvent } from "./verify-webhook";
-export type { WebhookEvent } from "./verify-webhook";
+// Webhook verification — exported via "@phala/cloud/webhook" subpath
+// to avoid bundling node:crypto into browser builds.
+// Do NOT re-export here; it would break Next.js / webpack client builds.
