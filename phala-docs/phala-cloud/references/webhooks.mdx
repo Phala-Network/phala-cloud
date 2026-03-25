@@ -88,7 +88,57 @@ Where:
 - `raw_body` is the raw JSON request body (not parsed, not re-serialized)
 - The result is prefixed with `sha256=`
 
-### Verification Examples
+### Using SDKs (Recommended)
+
+The Phala Cloud SDKs provide built-in verification with timestamp tolerance checks and constant-time comparison.
+
+<CodeGroup>
+
+```typescript JavaScript / TypeScript
+import { verifyWebhookSignature, parseWebhookEvent } from "@phala/cloud";
+
+// Option 1: Verify signature manually
+const isValid = verifyWebhookSignature({
+  secret: "whsec_...",
+  timestamp: req.headers["x-webhook-timestamp"],
+  body: rawBody,
+  signature: req.headers["x-webhook-signature"],
+});
+
+// Option 2: Parse and verify in one step (throws on failure)
+try {
+  const event = parseWebhookEvent({
+    headers: req.headers,
+    body: rawBody,
+    secret: "whsec_...",
+  });
+  console.log(event.event, event.data);
+} catch (err) {
+  // Invalid signature or expired timestamp
+  res.status(401).send("Invalid signature");
+}
+```
+
+```go Go
+import phala "github.com/Phala-Network/phala-cloud-sdk-go"
+
+// Option 1: Verify signature
+ok := phala.VerifyWebhookSignature(secret, timestamp, string(body), signature)
+
+// Option 2: Parse and verify (returns error on failure)
+event, err := phala.ParseWebhookEvent(r.Header, body, secret)
+if err != nil {
+    http.Error(w, "Invalid signature", http.StatusUnauthorized)
+    return
+}
+fmt.Println(event.Event, string(event.Data))
+```
+
+</CodeGroup>
+
+Both SDKs automatically check that the timestamp is within 5 minutes (configurable) and use constant-time comparison to prevent timing attacks.
+
+<Accordion title="Manual Verification (Python / Node.js)">
 
 <CodeGroup>
 
@@ -123,10 +173,10 @@ function verifyWebhook(secret, timestamp, body, signature) {
   const expected =
     "sha256=" +
     crypto.createHmac("sha256", secret).update(message).digest("hex");
-  return crypto.timingSafeEqual(
-    Buffer.from(expected),
-    Buffer.from(signature),
-  );
+  const expectedBuf = Buffer.from(expected);
+  const actualBuf = Buffer.from(signature);
+  if (expectedBuf.length !== actualBuf.length) return false;
+  return crypto.timingSafeEqual(expectedBuf, actualBuf);
 }
 
 // In your webhook handler:
@@ -142,9 +192,7 @@ if (!verifyWebhook(secret, timestamp, body, signature)) {
 
 </CodeGroup>
 
-### Replay Protection
-
-To prevent replay attacks, verify that the timestamp is recent (e.g. within 5 minutes):
+**Replay Protection**: Verify that the timestamp is recent (e.g. within 5 minutes):
 
 ```python
 import time
@@ -153,6 +201,8 @@ webhook_ts = int(request.headers["X-Webhook-Timestamp"])
 if abs(time.time() - webhook_ts) > 300:  # 5 minutes
     return Response(status_code=401)
 ```
+
+</Accordion>
 
 ## Delivery Behavior
 
@@ -187,6 +237,50 @@ Each event produces exactly **one** delivery record — either `success` with th
 ### Response Body
 
 Your endpoint's response body is captured (truncated to 4 KB) for debugging purposes. It is visible in the delivery log in the dashboard.
+
+## Secret Management
+
+Webhook signing secrets follow a strict security model:
+
+- **Shown once at creation** — the full secret is returned only in the `POST /workspace/webhooks` response
+- **Masked afterward** — subsequent `GET`/`LIST` responses return a masked value (e.g. `whsec_****...xxxx`)
+- **Reveal requires 2FA** — to view the full secret again, your account must have two-factor authentication enabled and recently verified
+- **Rotation requires 2FA** — generating a new secret also requires 2FA verification
+
+### Reveal Secret
+
+```
+POST /api/v1/workspace/webhooks/{id}/reveal-secret
+```
+
+Returns the full signing secret. Requires:
+- Account with 2FA enabled (returns `403` if not)
+- Recent 2FA step-up verification (returns `428` if not verified)
+
+### Rotate Secret
+
+```
+POST /api/v1/workspace/webhooks/{id}/rotate-secret
+```
+
+Generates a new signing secret and invalidates the previous one. Same 2FA requirements as reveal.
+
+<Warning>
+After rotation, update your webhook consumer with the new secret immediately. Events signed with the old secret will fail verification.
+</Warning>
+
+## URL Requirements
+
+Webhook URLs must meet the following requirements:
+
+- **HTTPS only** — HTTP URLs are rejected
+- **Public addresses only** — URLs resolving to private or reserved IP ranges are blocked:
+  - `127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` (private)
+  - `169.254.0.0/16` including `169.254.169.254` (cloud metadata)
+  - `::1`, `fc00::/7`, `fe80::/10` (IPv6 private/loopback)
+- **No localhost** — `localhost` and `.local` domains are not allowed
+
+These restrictions apply both at webhook creation and at delivery time to prevent DNS rebinding attacks.
 
 ## Managing Webhooks
 
