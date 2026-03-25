@@ -11,11 +11,16 @@
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
     },
+    "./webhook": {
+      "types": "./dist/webhook.d.ts",
+      "import": "./dist/webhook.mjs",
+      "require": "./dist/webhook.js"
+    },
     "./package.json": "./package.json"
   },
   "files": ["dist/**/*", "!dist/**/*.map", "README.md", "LICENSE"],
   "scripts": {
-    "build": "tsup src/index.ts --format cjs,esm && tsc --emitDeclarationOnly --declaration --outDir dist",
+    "build": "tsup src/index.ts src/webhook.ts --format cjs,esm && tsc --emitDeclarationOnly --declaration --outDir dist",
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
     "fmt": "biome format --write",
     "test": "vitest --run --exclude '**/*.e2e.test.ts'",
