@@ -104,3 +104,7 @@ export {
   switchToNetwork,
   addNetwork,
 } from "./client-factories";
+
+// Webhook verification
+export { verifyWebhookSignature, parseWebhookEvent } from "./verify-webhook";
+export type { WebhookEvent } from "./verify-webhook";
