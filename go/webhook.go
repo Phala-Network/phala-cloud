@@ -28,8 +28,24 @@ type WebhookWorkspace struct {
 	Name string `json:"name"`
 }
 
-// VerifyWebhookSignature verifies an HMAC-SHA256 webhook signature.
-func VerifyWebhookSignature(secret, timestamp, body, signature string) bool {
+// VerifyWebhookSignature verifies an HMAC-SHA256 webhook signature and checks
+// timestamp freshness. Default tolerance is 300 seconds (5 minutes).
+//
+// Returns true if the signature is valid and the timestamp is within tolerance.
+func VerifyWebhookSignature(secret, timestamp, body, signature string, toleranceSeconds ...int) bool {
+	tolerance := 300
+	if len(toleranceSeconds) > 0 && toleranceSeconds[0] > 0 {
+		tolerance = toleranceSeconds[0]
+	}
+
+	ts, err := strconv.ParseInt(timestamp, 10, 64)
+	if err != nil {
+		return false
+	}
+	if math.Abs(float64(time.Now().Unix()-ts)) > float64(tolerance) {
+		return false
+	}
+
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(fmt.Sprintf("%s.%s", timestamp, body)))
 	expected := "sha256=" + hex.EncodeToString(mac.Sum(nil))
@@ -50,18 +66,8 @@ func ParseWebhookEvent(headers http.Header, body []byte, secret string, toleranc
 		return nil, fmt.Errorf("missing required webhook headers: X-Webhook-Timestamp and X-Webhook-Signature")
 	}
 
-	ts, err := strconv.ParseInt(timestamp, 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("invalid timestamp: %w", err)
-	}
-
-	now := time.Now().Unix()
-	if math.Abs(float64(now-ts)) > float64(tolerance) {
-		return nil, fmt.Errorf("webhook timestamp expired")
-	}
-
-	if !VerifyWebhookSignature(secret, timestamp, string(body), signature) {
-		return nil, fmt.Errorf("invalid webhook signature")
+	if !VerifyWebhookSignature(secret, timestamp, string(body), signature, tolerance) {
+		return nil, fmt.Errorf("invalid webhook signature or expired timestamp")
 	}
 
 	var event WebhookEvent

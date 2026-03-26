@@ -36,6 +36,14 @@ func TestVerifyWebhookSignature_WrongSecret(t *testing.T) {
 	}
 }
 
+func TestVerifyWebhookSignature_ExpiredTimestamp(t *testing.T) {
+	ts := strconv.FormatInt(time.Now().Unix()-600, 10)
+	sig := computeTestSignature(testSecret, ts, testBody)
+	if VerifyWebhookSignature(testSecret, ts, testBody, sig) {
+		t.Fatal("expected invalid for expired timestamp")
+	}
+}
+
 func TestVerifyWebhookSignature_TamperedBody(t *testing.T) {
 	ts := strconv.FormatInt(time.Now().Unix(), 10)
 	sig := computeTestSignature(testSecret, ts, testBody)
