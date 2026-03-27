@@ -36,6 +36,14 @@ dev = [
   "mypy>=1.10.0",
 ]
 
+[dependency-groups]
+dev = [
+  "pytest>=8.0.0",
+  "pytest-asyncio>=0.23.0",
+  "ruff>=0.6.0",
+  "mypy>=1.10.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/Phala-Network/phala-cloud"
 Repository = "https://github.com/Phala-Network/phala-cloud"
