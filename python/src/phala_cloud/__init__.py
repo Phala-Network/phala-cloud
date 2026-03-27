@@ -23,6 +23,7 @@ from .utils import (
     parse_env_vars,
     verify_env_encrypt_public_key,
 )
+from .webhook import WebhookEvent, parse_webhook_event, verify_webhook_signature
 
 __all__ = [
     "ApiError",
@@ -48,6 +49,9 @@ __all__ = [
     "parse_env",
     "parse_env_vars",
     "verify_env_encrypt_public_key",
+    "verify_webhook_signature",
+    "parse_webhook_event",
+    "WebhookEvent",
     "create_async_client",
     "create_client",
 ]

@@ -4,4 +4,4 @@
 	branch = main
 [submodule "phala-docs"]
 	path = phala-docs
-	url = git@github.com:Phala-Network/phala-docs.git
+	url = https://github.com/Phala-Network/phala-docs.git
