@@ -1,3 +1,23 @@
+## [1.1.14](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.13...cli-v1.1.14) (2026-03-27)
+
+### feat
+
+* **cli:** add --prepare-only and --commit flags for multisig CVM updates ([99edfc0](https://github.com/Phala-Network/phala-cloud/commit/99edfc0f0a472bc8c92dc81dc1bebe26ac174ae0))
+* **cli:** show chain ID and block explorer URL in --prepare-only output ([6de7e4a](https://github.com/Phala-Network/phala-cloud/commit/6de7e4aec4a8e0be258ff1db4638f2bd4e961441))
+* display on-chain status in --prepare-only output ([f98f614](https://github.com/Phala-Network/phala-cloud/commit/f98f6149f13b9452099e23409964dcedbfb82ff7))
+* **js,cli:** add on-chain prerequisite checks and improve update flow ([d3209e1](https://github.com/Phala-Network/phala-cloud/commit/d3209e1fd2b0be61455f5ec69de64a7919b1b7e2))
+* **js:** add patchCvm and confirmCvmPatch for unified PATCH /cvms/{id} ([30cabaf](https://github.com/Phala-Network/phala-cloud/commit/30cabaf7084e72dbda656504d9f4359db95e2a16))
+
+### fix
+
+* **cli:** --commit mode no longer requires API key ([39bdd7a](https://github.com/Phala-Network/phala-cloud/commit/39bdd7ae98cfb39579a471e0abda3ba86cd56fb4))
+* **cli:** 0x prefix on explorer URL, expired token hint ([4cb7398](https://github.com/Phala-Network/phala-cloud/commit/4cb73980850cab2a9f95f08ba0d1433c39a1faab))
+* **cli:** add 0x prefix to compose hash in --prepare-only output ([62e4122](https://github.com/Phala-Network/phala-cloud/commit/62e4122486c281b82de0b538839ae3cff2ca6671))
+* **cli:** add missing return after --prepare-only warning on non-on-chain CVM ([6a4abb8](https://github.com/Phala-Network/phala-cloud/commit/6a4abb8fc27fadcd90f3dc27f3cc5dc9b0a5755b))
+* **cli:** fix --prepare-only output formatting for shell continuation ([732cbb8](https://github.com/Phala-Network/phala-cloud/commit/732cbb82787b04479db04d0d29f760bae78ca895))
+* **cli:** fix --prepare-only output indentation, make --transaction-hash optional ([79e695f](https://github.com/Phala-Network/phala-cloud/commit/79e695f3402e38ba0c7233c30a517c63472157b2))
+* **cli:** warn when --prepare-only used on non-on-chain KMS CVM ([f874b65](https://github.com/Phala-Network/phala-cloud/commit/f874b6526bcfe130e2078e5ecf4a7a64a429869c))
+* **js,cli:** add missing files and fix compose hash tx verification ([7656a45](https://github.com/Phala-Network/phala-cloud/commit/7656a459ced2843a03146d6757fd019ede2f1f53))
 ## [1.1.13](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.12...cli-v1.1.13) (2026-03-14)
 
 ### feat

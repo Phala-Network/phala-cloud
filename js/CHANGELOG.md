@@ -1,3 +1,21 @@
+## [0.2.6](https://github.com/Phala-Network/phala-cloud/compare/js-v0.2.5...js-v0.2.6) (2026-03-27)
+
+### feat
+
+* add is-allowed API to JS, Python, and Go SDKs ([1fa61f0](https://github.com/Phala-Network/phala-cloud/commit/1fa61f0581ce111213f721f1c2d2f4744c3c2f00))
+* add structured error codes and idempotency support across all SDKs ([2dd6d0b](https://github.com/Phala-Network/phala-cloud/commit/2dd6d0bae4d5fd7acdef551c3c9bf507ac1b0e4e)), closes [#1041](https://github.com/Phala-Network/phala-cloud/issues/1041)
+* display on-chain status in --prepare-only output ([f98f614](https://github.com/Phala-Network/phala-cloud/commit/f98f6149f13b9452099e23409964dcedbfb82ff7))
+* **js-sdk:** add webhook signature verification via @phala/cloud/webhook ([3544694](https://github.com/Phala-Network/phala-cloud/commit/3544694efbd70a7f2cbd123b2ca92ccbf3c99428))
+* **js,cli:** add on-chain prerequisite checks and improve update flow ([d3209e1](https://github.com/Phala-Network/phala-cloud/commit/d3209e1fd2b0be61455f5ec69de64a7919b1b7e2))
+* **js:** add patchCvm and confirmCvmPatch for unified PATCH /cvms/{id} ([30cabaf](https://github.com/Phala-Network/phala-cloud/commit/30cabaf7084e72dbda656504d9f4359db95e2a16))
+* **sdk:** add prepareOnly support to patchCvm and new commitCvmUpdate action ([38d6bf4](https://github.com/Phala-Network/phala-cloud/commit/38d6bf40b9209f4fcfae70fcc4c5db2d0de379e8))
+
+### fix
+
+* **js,cli:** add missing files and fix compose hash tx verification ([7656a45](https://github.com/Phala-Network/phala-cloud/commit/7656a459ced2843a03146d6757fd019ede2f1f53))
+* **js:** handle FormData Content-Type in post/put/patch methods ([68d77ef](https://github.com/Phala-Network/phala-cloud/commit/68d77ef29a865c4cf8fb8dd91afc703064dac416))
+* **js:** send empty body in confirmCvmPatch instead of undefined ([a228001](https://github.com/Phala-Network/phala-cloud/commit/a22800121b6d4db6fa719864f8775cd70c28801d))
+* **js:** use toMatchObject for viem Chain comparisons in tests ([5b5d00c](https://github.com/Phala-Network/phala-cloud/commit/5b5d00c0b8f32d8147e2d784e9a10ad7fcaf152e))
 ## [0.2.5](https://github.com/Phala-Network/phala-cloud/compare/js-v0.2.4...js-v0.2.5) (2026-03-14)
 
 ### docs

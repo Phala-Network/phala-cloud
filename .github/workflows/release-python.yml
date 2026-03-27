@@ -247,13 +247,16 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
 
-      - name: Install build tools
-        run: pip install build
+      - name: Setup Python
+        working-directory: python
+        run: uv python install
+
+      - name: Install dependencies
+        working-directory: python
+        run: uv sync
 
       - name: Bump version
         id: bump
@@ -267,26 +270,22 @@ jobs:
       - name: Run lint and format check
         working-directory: python
         run: |
-          pip install "ruff>=0.12,<1"
-          ruff format --check .
-          ruff check .
+          uv run ruff format --check .
+          uv run ruff check .
 
       - name: Run tests
         working-directory: python
-        run: |
-          pip install -e ".[dev]"
-          pytest -q -m "not e2e"
+        run: uv run pytest -q -m "not e2e"
 
       - name: Build package
         working-directory: python
-        run: python -m build
+        run: uv build
 
       - name: Inspect package contents
         id: pack_info
         working-directory: python
         run: |
-          pip install twine
-          twine check dist/*
+          uvx twine check dist/*
 
           # Get package info
           whl_file=$(ls dist/*.whl 2>/dev/null | head -1)
