@@ -1,32 +1,17 @@
-import fs from "node:fs";
-import path from "node:path";
-import { CvmIdSchema, encryptEnvVars, safeGetCvmInfo } from "@phala/cloud";
-import { replicateCvm } from "@/src/api/cvms";
+import { CvmIdSchema, encryptEnvVars } from "@phala/cloud";
+import { getReplicaEnvEncryptPubkey, replicateCvm } from "@/src/api/cvms";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
 
+import { resolveCvmForInput } from "@/src/utils/cvms";
 import { logger } from "@/src/utils/logger";
-import { getEncryptPubkey } from "../../envs/get-encrypt-pubkey";
+import { resolveEnvInputs } from "../../envs/resolve-envs";
 import {
 	cvmsReplicateCommandMeta,
 	cvmsReplicateCommandSchema,
 	type CvmsReplicateCommandInput,
 } from "./command";
-
-function parseEnvFile(filePath: string): { key: string; value: string }[] {
-	const envContent = fs.readFileSync(filePath, "utf-8");
-	return envContent
-		.split("\n")
-		.filter((line) => line.trim() !== "" && !line.trim().startsWith("#"))
-		.map((line) => {
-			const [key, ...value] = line.split("=");
-			return {
-				key: key.trim(),
-				value: value.join("=").trim(),
-			};
-		});
-}
 
 async function runCvmsReplicateCommand(
 	input: CvmsReplicateCommandInput,
@@ -42,24 +27,19 @@ async function runCvmsReplicateCommand(
 
 		const { cvmId: normalizedCvmId } = CvmIdSchema.parse(context.cvmId);
 		const client = await getClient();
-		const cvmResult = await safeGetCvmInfo(client, context.cvmId);
-		if (!cvmResult.success) {
-			throw new Error(cvmResult.error.message);
-		}
-		const cvm = cvmResult.data;
+		const cvm = await resolveCvmForInput(client, context.cvmId);
 		const replicateIdentifier = cvm.id || normalizedCvmId;
 		let encryptedEnv: string | undefined;
 
 		if (input.envFile) {
-			const envPath = path.resolve(process.cwd(), input.envFile);
-			if (!fs.existsSync(envPath)) {
-				throw new Error(`Environment file not found: ${envPath}`);
-			}
-
-			const envVars = parseEnvFile(envPath);
+			const envVars = resolveEnvInputs([input.envFile]);
 
 			logger.info("Encrypting environment variables...");
-			const pubkey = await getEncryptPubkey(client, cvm);
+			const pubkey = await getReplicaEnvEncryptPubkey(replicateIdentifier, {
+				teepod_id: input.teepodId
+					? Number.parseInt(input.teepodId, 10)
+					: undefined,
+			});
 			encryptedEnv = await encryptEnvVars(envVars, pubkey);
 		}
 

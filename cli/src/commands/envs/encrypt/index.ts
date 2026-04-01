@@ -1,7 +1,8 @@
-import { encryptEnvVars, safeGetCvmInfo } from "@phala/cloud";
+import { encryptEnvVars } from "@phala/cloud";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
+import { resolveCvmForInput } from "@/src/utils/cvms";
 import { resolveEnvInputs } from "../resolve-envs";
 import { getEncryptPubkey } from "../get-encrypt-pubkey";
 import {
@@ -30,14 +31,7 @@ async function runEnvsEncryptCommand(
 		}
 
 		const client = await getClient();
-		const result = await safeGetCvmInfo(client, context.cvmId);
-
-		if (!result.success) {
-			context.fail(result.error.message);
-			return 1;
-		}
-
-		const cvm = result.data;
+		const cvm = await resolveCvmForInput(client, context.cvmId);
 		const pubkey = await getEncryptPubkey(client, cvm);
 		const encrypted = await encryptEnvVars(envs, pubkey);
 

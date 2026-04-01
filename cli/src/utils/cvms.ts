@@ -1,6 +1,53 @@
-import { safeGetCvmInfo } from "@phala/cloud";
+import {
+	safeGetAppCvms,
+	safeGetCvmInfo,
+	type Client,
+	type CvmIdInput,
+} from "@phala/cloud";
 import { getClient } from "@/src/lib/client";
 import { logger } from "./logger";
+
+function extractAppId(identifier: CvmIdInput): string | undefined {
+	if (identifier.app_id) {
+		return identifier.app_id.replace(/^app_/, "");
+	}
+	if (identifier.id && /^[0-9a-f]{40}$/i.test(identifier.id)) {
+		return identifier.id;
+	}
+	if (identifier.id?.startsWith("app_")) {
+		return identifier.id.slice(4);
+	}
+	return undefined;
+}
+
+export async function resolveCvmForInput(
+	client: Client,
+	identifier: CvmIdInput,
+) {
+	const appId = extractAppId(identifier);
+	if (appId) {
+		const appCvmsResult = await safeGetAppCvms(client, { appId });
+		if (!appCvmsResult.success) {
+			throw new Error(appCvmsResult.error.message);
+		}
+		if (appCvmsResult.data.length === 0) {
+			throw new Error("No CVM found in this workspace");
+		}
+		if (appCvmsResult.data.length > 1) {
+			logger.warn(
+				"Multiple CVMs found for this app. Using the oldest CVM as the source.",
+			);
+			return appCvmsResult.data.at(-1) as (typeof appCvmsResult.data)[number];
+		}
+		return appCvmsResult.data[0];
+	}
+
+	const cvmResult = await safeGetCvmInfo(client, identifier);
+	if (!cvmResult.success) {
+		throw new Error(cvmResult.error.message);
+	}
+	return cvmResult.data;
+}
 
 /**
  * Wait for CVM to complete any in-progress operations and reach running state

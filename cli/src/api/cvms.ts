@@ -171,6 +171,20 @@ export interface ResizeCvmPayload {
  * Replicate a CVM
  * @param appId App ID (with or without app_ prefix)
  */
+export async function getReplicaEnvEncryptPubkey(
+	cvmId: string,
+	payload: {
+		teepod_id?: number;
+	},
+): Promise<string> {
+	const client = await getClient();
+	const response = await client.post<{ env_encrypt_pubkey: string }>(
+		`cvms/${cvmId}/replicas/env-pubkey`,
+		payload,
+	);
+	return response.env_encrypt_pubkey;
+}
+
 export async function replicateCvm(
 	appId: string,
 	payload: {

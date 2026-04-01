@@ -1,12 +1,12 @@
 import {
 	encryptEnvVars,
 	safeAddComposeHash,
-	safeGetCvmInfo,
 	safeUpdateCvmEnvs,
 } from "@phala/cloud";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
+import { resolveCvmForInput } from "@/src/utils/cvms";
 import { logger } from "@/src/utils/logger";
 import { resolveEnvInputs } from "../resolve-envs";
 import { getEncryptPubkey } from "../get-encrypt-pubkey";
@@ -44,14 +44,7 @@ async function runEnvsUpdateCommand(
 
 	try {
 		const client = await getClient();
-		const cvmResult = await safeGetCvmInfo(client, context.cvmId);
-
-		if (!cvmResult.success) {
-			context.fail(cvmResult.error.message);
-			return 1;
-		}
-
-		const cvm = cvmResult.data;
+		const cvm = await resolveCvmForInput(client, context.cvmId);
 		let encryptedEnv: string;
 		let envKeys: string[] | undefined;
 
