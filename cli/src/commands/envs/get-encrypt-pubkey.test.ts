@@ -87,6 +87,8 @@ describe("getEncryptPubkey", () => {
 				app_id: "abc123def456abc123def456abc123def456abc1",
 				kms_type: "ethereum",
 				kms_info: {
+					id: "kms_abc123",
+					slug: "test-kms",
 					chain_id: 1,
 					encrypted_env_pubkey: null,
 				},
@@ -94,9 +96,61 @@ describe("getEncryptPubkey", () => {
 
 			const result = await getEncryptPubkey(mockClient, cvm);
 			expect(result).toBe("decentralized_pubkey_hex");
+			expect(safeGetAppEnvEncryptPubKey).toHaveBeenCalledWith(mockClient, {
+				app_id: "abc123def456abc123def456abc123def456abc1",
+				kms: "test-kms",
+			});
 		});
 
-		test("throws when kms_type is missing", async () => {
+		test("falls back to legacy compose env_pubkey when kms slug and id are missing", async () => {
+			const fallbackClient = {
+				get: mock(async () => ({ env_pubkey: "legacy_pubkey_hex" })),
+			} as Parameters<typeof getEncryptPubkey>[0];
+			const cvm = {
+				id: "cvm_abc123",
+				app_id: "abc123def456abc123def456abc123def456abc1",
+				kms_type: "base",
+				kms_info: {
+					chain_id: 8453,
+					encrypted_env_pubkey: null,
+				},
+			};
+
+			const result = await getEncryptPubkey(fallbackClient, cvm);
+			expect(result).toBe("legacy_pubkey_hex");
+			expect(fallbackClient.get).toHaveBeenCalledWith(
+				"/cvms/cvm_abc123/compose",
+			);
+		});
+
+		test("falls back to kms id when slug is missing", async () => {
+			(safeGetAppEnvEncryptPubKey as ReturnType<typeof mock>).mockResolvedValue(
+				{
+					success: true,
+					data: { public_key: "decentralized_pubkey_hex" },
+				},
+			);
+
+			const cvm = {
+				app_id: "abc123def456abc123def456abc123def456abc1",
+				kms_type: "base",
+				kms_info: {
+					id: "kms_xyz789",
+					slug: null,
+					chain_id: 8453,
+					encrypted_env_pubkey: null,
+				},
+			};
+
+			const result = await getEncryptPubkey(mockClient, cvm);
+			expect(result).toBe("decentralized_pubkey_hex");
+			expect(safeGetAppEnvEncryptPubKey).toHaveBeenCalledWith(mockClient, {
+				app_id: "abc123def456abc123def456abc123def456abc1",
+				kms: "kms_xyz789",
+			});
+		});
+
+		test("throws when kms slug and id are missing", async () => {
 			const cvm = {
 				app_id: "abc123",
 				kms_type: null,
@@ -107,7 +161,7 @@ describe("getEncryptPubkey", () => {
 			};
 
 			await expect(getEncryptPubkey(mockClient, cvm)).rejects.toThrow(
-				"KMS type is required",
+				"KMS slug or id is required",
 			);
 		});
 
@@ -116,6 +170,8 @@ describe("getEncryptPubkey", () => {
 				app_id: null,
 				kms_type: "ethereum",
 				kms_info: {
+					id: "kms_abc123",
+					slug: "test-kms",
 					chain_id: 1,
 					encrypted_env_pubkey: null,
 				},
@@ -138,6 +194,8 @@ describe("getEncryptPubkey", () => {
 				app_id: "abc123def456abc123def456abc123def456abc1",
 				kms_type: "base",
 				kms_info: {
+					id: "kms_base123",
+					slug: "kms-base-prod5",
 					chain_id: 8453,
 					encrypted_env_pubkey: null,
 				},

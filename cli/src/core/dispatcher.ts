@@ -27,6 +27,29 @@ export interface DispatchOptions {
 	readonly stdin: NodeJS.ReadStream;
 }
 
+function parseRawCvmId(rawValue: string): CvmIdInput {
+	const uuidRegex =
+		/^[0-9a-f]{8}[-]?[0-9a-f]{4}[-]?4[0-9a-f]{3}[-]?[89ab][0-9a-f]{3}[-]?[0-9a-f]{12}$/i;
+	const appIdRegex = /^[0-9a-f]{40}$/i;
+
+	if (rawValue.startsWith("app_")) {
+		return { app_id: rawValue.slice(4) };
+	}
+	if (rawValue.startsWith("instance_")) {
+		return { instance_id: rawValue.slice(9) };
+	}
+	if (rawValue.startsWith("uuid_")) {
+		return { uuid: rawValue.slice(5) };
+	}
+	if (appIdRegex.test(rawValue)) {
+		return { app_id: rawValue };
+	}
+	if (uuidRegex.test(rawValue)) {
+		return { uuid: rawValue };
+	}
+	return { id: rawValue };
+}
+
 export async function dispatchCommand(
 	options: DispatchOptions,
 ): Promise<number> {
@@ -222,14 +245,14 @@ export async function dispatchCommand(
 
 		// Priority 2: User-specified --cvm-id (if not in interactive or no selection)
 		if (!cvmId && rawCvmId && typeof rawCvmId === "string") {
-			cvmId = { id: rawCvmId };
+			cvmId = parseRawCvmId(rawCvmId);
 		}
 
 		// Priority 3: phala.toml configuration (if nothing specified above)
 		if (!cvmId) {
 			const projectCvmId = getProjectConfig().cvm_id;
 			if (projectCvmId) {
-				cvmId = { id: projectCvmId };
+				cvmId = parseRawCvmId(projectCvmId);
 			}
 		}
 

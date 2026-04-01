@@ -1,11 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
-import { CvmIdSchema, encryptEnvVars } from "@phala/cloud";
-import { getCvmComposeConfig, replicateCvm } from "@/src/api/cvms";
+import { CvmIdSchema, encryptEnvVars, safeGetCvmInfo } from "@phala/cloud";
+import { replicateCvm } from "@/src/api/cvms";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
+import { getClient } from "@/src/lib/client";
 
 import { logger } from "@/src/utils/logger";
+import { getEncryptPubkey } from "../../envs/get-encrypt-pubkey";
 import {
 	cvmsReplicateCommandMeta,
 	cvmsReplicateCommandSchema,
@@ -39,6 +41,13 @@ async function runCvmsReplicateCommand(
 		}
 
 		const { cvmId: normalizedCvmId } = CvmIdSchema.parse(context.cvmId);
+		const client = await getClient();
+		const cvmResult = await safeGetCvmInfo(client, context.cvmId);
+		if (!cvmResult.success) {
+			throw new Error(cvmResult.error.message);
+		}
+		const cvm = cvmResult.data;
+		const replicateIdentifier = cvm.id || normalizedCvmId;
 		let encryptedEnv: string | undefined;
 
 		if (input.envFile) {
@@ -48,10 +57,10 @@ async function runCvmsReplicateCommand(
 			}
 
 			const envVars = parseEnvFile(envPath);
-			const cvmConfig = await getCvmComposeConfig(normalizedCvmId);
 
 			logger.info("Encrypting environment variables...");
-			encryptedEnv = await encryptEnvVars(envVars, cvmConfig.env_pubkey);
+			const pubkey = await getEncryptPubkey(client, cvm);
+			encryptedEnv = await encryptEnvVars(envVars, pubkey);
 		}
 
 		const requestBody: { teepod_id?: number; encrypted_env?: string } = {};
@@ -63,7 +72,7 @@ async function runCvmsReplicateCommand(
 			requestBody.encrypted_env = encryptedEnv;
 		}
 
-		const replica = await replicateCvm(normalizedCvmId, requestBody);
+		const replica = await replicateCvm(replicateIdentifier, requestBody);
 
 		logger.success(
 			`Successfully created replica of CVM UUID: ${normalizedCvmId} with App ID: ${replica.app_id}`,

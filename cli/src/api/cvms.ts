@@ -181,7 +181,7 @@ export async function replicateCvm(
 	const client = await getClient();
 	const cleanAppId = appId.replace(/^app_/, "");
 	const response = await client.post<ReplicateCvmResponse>(
-		`cvms/app_${cleanAppId}/replicas`,
+		`cvms/${cleanAppId}/replicas`,
 		payload,
 	);
 	return replicateCvmResponseSchema.parse(response);

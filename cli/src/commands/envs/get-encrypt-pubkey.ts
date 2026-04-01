@@ -11,9 +11,12 @@ import { logger } from "@/src/utils/logger";
 export async function getEncryptPubkey(
 	client: Client,
 	cvm: {
+		id?: string | null;
 		app_id?: string | null;
 		kms_type?: string | null;
 		kms_info?: {
+			id?: string | null;
+			slug?: string | null;
 			chain_id?: number | null;
 			encrypted_env_pubkey?: string | null;
 		} | null;
@@ -22,9 +25,22 @@ export async function getEncryptPubkey(
 	const isDecentralized = cvm.kms_info?.chain_id != null;
 
 	if (isDecentralized) {
-		const kmsSlug = cvm.kms_type;
-		if (!kmsSlug) {
-			throw new Error("KMS type is required for decentralized KMS");
+		const kmsIdentifier = cvm.kms_info?.slug || cvm.kms_info?.id;
+		if (!kmsIdentifier) {
+			const fallbackCvmId = cvm.id || cvm.app_id;
+			if (fallbackCvmId) {
+				try {
+					const legacyCompose = await client.get<{
+						env_pubkey?: string | null;
+					}>(`/cvms/${fallbackCvmId}/compose`);
+					if (legacyCompose.env_pubkey) {
+						return legacyCompose.env_pubkey;
+					}
+				} catch {
+					// Ignore legacy fallback failures and surface the primary error below.
+				}
+			}
+			throw new Error("KMS slug or id is required for decentralized KMS");
 		}
 		if (!cvm.app_id) {
 			throw new Error("app_id is required for decentralized KMS");
@@ -32,7 +48,7 @@ export async function getEncryptPubkey(
 
 		const resp = await safeGetAppEnvEncryptPubKey(client, {
 			app_id: cvm.app_id,
-			kms: kmsSlug,
+			kms: kmsIdentifier,
 		});
 
 		if (!resp.success) {

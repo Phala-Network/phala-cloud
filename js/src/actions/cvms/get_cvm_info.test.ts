@@ -124,24 +124,23 @@ describe("getCvmInfo", () => {
       expect(result).toMatchObject(mockCvmInfoData);
     });
 
-    it("should call correct endpoint with app_id (adds prefix)", async () => {
+    it("should call correct endpoint with app_id", async () => {
       mockGet.mockResolvedValue(mockCvmInfoData);
 
       const app_id = "a".repeat(40);
       const result = await getCvmInfo(client, { app_id });
 
-      expect(mockGet).toHaveBeenCalledWith(`/cvms/app_${app_id}`);
+      expect(mockGet).toHaveBeenCalledWith(`/cvms/${app_id}`);
       expect(result).toMatchObject(mockCvmInfoData);
     });
 
-    it("should call correct endpoint with instance_id (40-char hex detected as app_id)", async () => {
+    it("should call correct endpoint with instance_id", async () => {
       mockGet.mockResolvedValue(mockCvmInfoData);
 
-      // 40-char hex will be auto-detected as app_id regardless of field name
       const instance_id = "b".repeat(40);
       const result = await getCvmInfo(client, { instance_id });
 
-      expect(mockGet).toHaveBeenCalledWith(`/cvms/app_${instance_id}`);
+      expect(mockGet).toHaveBeenCalledWith(`/cvms/instance_${instance_id}`);
       expect(result).toMatchObject(mockCvmInfoData);
     });
 
@@ -151,7 +150,7 @@ describe("getCvmInfo", () => {
       const instance_id = "custom-instance-123";
       const result = await getCvmInfo(client, { instance_id });
 
-      expect(mockGet).toHaveBeenCalledWith(`/cvms/${instance_id}`);
+      expect(mockGet).toHaveBeenCalledWith(`/cvms/instance_${instance_id}`);
       expect(result).toMatchObject(mockCvmInfoData);
     });
   });
@@ -195,11 +194,11 @@ describe("getCvmInfo", () => {
 
       // app_id takes precedence over instance_id
       await getCvmInfo(client, { app_id, instance_id });
-      expect(mockGet).toHaveBeenCalledWith(`/cvms/app_${app_id}`);
+      expect(mockGet).toHaveBeenCalledWith(`/cvms/${app_id}`);
 
-      // instance_id when it's the only one (40-char hex detected as app_id)
+      // instance_id when it's the only one
       await getCvmInfo(client, { instance_id });
-      expect(mockGet).toHaveBeenCalledWith(`/cvms/app_${instance_id}`);
+      expect(mockGet).toHaveBeenCalledWith(`/cvms/instance_${instance_id}`);
     });
 
     it("should handle CVM ID with special characters", async () => {

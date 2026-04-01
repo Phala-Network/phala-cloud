@@ -44,6 +44,8 @@ export const CvmOsInfoV20260121Schema = z.object({
 export type CvmOsInfoV20260121 = z.infer<typeof CvmOsInfoV20260121Schema>;
 
 export const CvmKmsInfoV20260121Schema = z.object({
+  id: z.string().nullable().optional(),
+  slug: z.string().nullable().optional(),
   chain_id: z.number().int().nullable().optional(),
   dstack_kms_address: z.string().nullable().optional(),
   dstack_app_address: z.string().nullable().optional(),
