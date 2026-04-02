@@ -5,6 +5,7 @@ import { replicateCvm } from "@/src/api/cvms";
 import { getClient } from "@/src/lib/client";
 import { getEncryptPubkey } from "@/src/commands/envs/get-encrypt-pubkey";
 import { defineCommand } from "@/src/core/define-command";
+import { isInJsonMode } from "@/src/core/json-mode";
 import type { CommandContext } from "@/src/core/types";
 
 import { logger } from "@/src/utils/logger";
@@ -58,7 +59,15 @@ async function runCvmsReplicateCommand(
 			}
 			const pubkey = await getEncryptPubkey(client, result.data);
 
-			logger.info("Encrypting environment variables...");
+			if (!isInJsonMode()) {
+				context.stdout.write(`app_id: ${result.data.app_id}\n`);
+				context.stdout.write(`kms_type: ${result.data.kms_type}\n`);
+				context.stdout.write(
+					`kms_contract: ${result.data.kms_info?.dstack_kms_address ?? "-"}\n`,
+				);
+				context.stdout.write(`env_pubkey: ${pubkey}\n`);
+				context.stdout.write("Encrypting environment variables...\n");
+			}
 			encryptedEnv = await encryptEnvVars(envVars, pubkey);
 		}
 
@@ -73,32 +82,33 @@ async function runCvmsReplicateCommand(
 
 		const replica = await replicateCvm(normalizedCvmId, requestBody);
 
-		logger.success(
-			`Successfully created replica of CVM UUID: ${normalizedCvmId} with App ID: ${replica.app_id}`,
-		);
+		if (isInJsonMode()) {
+			context.success(replica);
+			return 0;
+		}
 
 		const vmUuid = replica.vm_uuid?.replace(/-/g, "") ?? "";
-		logger.keyValueTable(
-			{
-				"CVM UUID": vmUuid,
-				"App ID": replica.app_id,
-				Name: replica.name,
-				Status: replica.status,
-				TEEPod: `${replica.teepod.name} (ID: ${replica.teepod_id})`,
-				vCPUs: replica.vcpu,
-				Memory: `${replica.memory} MB`,
-				"Disk Size": `${replica.disk_size} GB`,
-				"App URL":
-					replica.app_url ||
-					`${process.env.CLOUD_URL || "https://cloud.phala.com"}/dashboard/cvms/${vmUuid}`,
-			},
-			{ borderStyle: "rounded" },
-		);
-
-		logger.success(
-			`Your CVM replica is being created. You can check its status with:
-phala cvms get ${replica.app_id}`,
-		);
+		const appUrl =
+			replica.app_url ||
+			`${process.env.CLOUD_URL || "https://cloud.phala.com"}/dashboard/cvms/${vmUuid}`;
+		const lines = [
+			"CVM replica created successfully.",
+			"",
+			`Source CVM UUID: ${normalizedCvmId}`,
+			`CVM UUID:        ${vmUuid || "-"}`,
+			`App ID:          ${replica.app_id}`,
+			`Name:            ${replica.name}`,
+			`Status:          ${replica.status}`,
+			`TEEPod:          ${replica.teepod.name} (ID: ${replica.teepod_id})`,
+			`vCPUs:           ${replica.vcpu}`,
+			`Memory:          ${replica.memory} MB`,
+			`Disk Size:       ${replica.disk_size} GB`,
+			`App URL:         ${appUrl}`,
+			"",
+			"Your CVM replica is being created. You can check its status with:",
+			`phala cvms get ${replica.app_id}`,
+		];
+		context.stdout.write(`${lines.join("\n")}\n`);
 		return 0;
 	} catch (error) {
 		logger.error("Failed to create CVM replica");
