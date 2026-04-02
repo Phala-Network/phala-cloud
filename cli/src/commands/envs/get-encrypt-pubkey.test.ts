@@ -105,7 +105,7 @@ describe("getEncryptPubkey", () => {
 		test("falls back to legacy compose env_pubkey when kms slug and id are missing", async () => {
 			const fallbackClient = {
 				get: mock(async () => ({ env_pubkey: "legacy_pubkey_hex" })),
-			} as Parameters<typeof getEncryptPubkey>[0];
+			} as unknown as Parameters<typeof getEncryptPubkey>[0];
 			const cvm = {
 				id: "cvm_abc123",
 				app_id: "abc123def456abc123def456abc123def456abc1",

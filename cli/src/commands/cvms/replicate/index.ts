@@ -13,6 +13,14 @@ import {
 	type CvmsReplicateCommandInput,
 } from "./command";
 
+export function requireReplicaVmUuid(vmUuid: string | null): string {
+	const normalizedVmUuid = vmUuid?.replace(/-/g, "");
+	if (!normalizedVmUuid) {
+		throw new Error("Replica response missing vm_uuid");
+	}
+	return normalizedVmUuid;
+}
+
 async function runCvmsReplicateCommand(
 	input: CvmsReplicateCommandInput,
 	context: CommandContext,
@@ -53,6 +61,7 @@ async function runCvmsReplicateCommand(
 		}
 
 		const replica = await replicateCvm(replicateIdentifier, requestBody);
+		const replicaVmUuid = requireReplicaVmUuid(replica.vm_uuid);
 
 		logger.success(
 			`Successfully created replica of CVM UUID: ${normalizedCvmId} with App ID: ${replica.app_id}`,
@@ -60,7 +69,7 @@ async function runCvmsReplicateCommand(
 
 		logger.keyValueTable(
 			{
-				"CVM UUID": replica.vm_uuid.replace(/-/g, ""),
+				"CVM UUID": replicaVmUuid,
 				"App ID": replica.app_id,
 				Name: replica.name,
 				Status: replica.status,
@@ -70,7 +79,7 @@ async function runCvmsReplicateCommand(
 				"Disk Size": `${replica.disk_size} GB`,
 				"App URL":
 					replica.app_url ||
-					`${process.env.CLOUD_URL || "https://cloud.phala.com"}/dashboard/cvms/${replica.vm_uuid.replace(/-/g, "")}`,
+					`${process.env.CLOUD_URL || "https://cloud.phala.com"}/dashboard/cvms/${replicaVmUuid}`,
 			},
 			{ borderStyle: "rounded" },
 		);
