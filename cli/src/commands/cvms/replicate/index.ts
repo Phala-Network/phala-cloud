@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { CvmIdSchema, safeGetCvmInfo, encryptEnvVars } from "@phala/cloud";
+import { safeGetCvmInfo, encryptEnvVars } from "@phala/cloud";
 import { replicateCvm } from "@/src/api/cvms";
 import { getClient } from "@/src/lib/client";
 import { getEncryptPubkey } from "@/src/commands/envs/get-encrypt-pubkey";
@@ -41,8 +41,13 @@ async function runCvmsReplicateCommand(
 			return 1;
 		}
 
-		const { cvmId: normalizedCvmId } = CvmIdSchema.parse(context.cvmId);
 		let encryptedEnv: string | undefined;
+		const client = await getClient();
+		const result = await safeGetCvmInfo(client, context.cvmId);
+		if (!result.success) {
+			throw new Error(result.error.message);
+		}
+		const sourceCvm = result.data;
 
 		if (input.envFile) {
 			const envPath = path.resolve(process.cwd(), input.envFile);
@@ -51,19 +56,13 @@ async function runCvmsReplicateCommand(
 			}
 
 			const envVars = parseEnvFile(envPath);
-
-			const client = await getClient();
-			const result = await safeGetCvmInfo(client, { id: normalizedCvmId });
-			if (!result.success) {
-				throw new Error(result.error.message);
-			}
-			const pubkey = await getEncryptPubkey(client, result.data);
+			const pubkey = await getEncryptPubkey(client, sourceCvm);
 
 			if (!isInJsonMode()) {
-				context.stdout.write(`app_id: ${result.data.app_id}\n`);
-				context.stdout.write(`kms_type: ${result.data.kms_type}\n`);
+				context.stdout.write(`app_id: ${sourceCvm.app_id}\n`);
+				context.stdout.write(`kms_type: ${sourceCvm.kms_type}\n`);
 				context.stdout.write(
-					`kms_contract: ${result.data.kms_info?.dstack_kms_address ?? "-"}\n`,
+					`kms_contract: ${sourceCvm.kms_info?.dstack_kms_address ?? "-"}\n`,
 				);
 				context.stdout.write(`env_pubkey: ${pubkey}\n`);
 				context.stdout.write("Encrypting environment variables...\n");
@@ -80,7 +79,7 @@ async function runCvmsReplicateCommand(
 			requestBody.encrypted_env = encryptedEnv;
 		}
 
-		const replica = await replicateCvm(normalizedCvmId, requestBody);
+		const replica = await replicateCvm(sourceCvm.app_id, requestBody);
 
 		if (isInJsonMode()) {
 			context.success(replica);
@@ -94,7 +93,7 @@ async function runCvmsReplicateCommand(
 		const lines = [
 			"CVM replica created successfully.",
 			"",
-			`Source CVM UUID: ${normalizedCvmId}`,
+			`Source CVM ID:   ${context.cvmId.id}`,
 			`CVM UUID:        ${vmUuid || "-"}`,
 			`App ID:          ${replica.app_id}`,
 			`Name:            ${replica.name}`,
