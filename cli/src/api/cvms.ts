@@ -150,11 +150,13 @@ export interface ResizeCvmPayload {
 }
 
 /**
- * Replicate a CVM
+ * Replicate a CVM instance
  * @param appId App ID (with or without app_ prefix)
+ * @param vmUuid Source CVM UUID (with or without dashes)
  */
 export async function replicateCvm(
 	appId: string,
+	vmUuid: string,
 	payload: {
 		teepod_id?: number;
 		encrypted_env?: string;
@@ -163,7 +165,7 @@ export async function replicateCvm(
 	const client = await getClient();
 	const cleanAppId = appId.replace(/^app_/, "");
 	const response = await client.post<ReplicateCvmResponse>(
-		`cvms/app_${cleanAppId}/replicas`,
+		`apps/${cleanAppId}/cvms/${vmUuid}/replicas`,
 		payload,
 	);
 	return replicateCvmResponseSchema.parse(response);

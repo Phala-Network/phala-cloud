@@ -1,6 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
-import { safeGetCvmInfo, encryptEnvVars } from "@phala/cloud";
+import {
+	type PhalaCloudError,
+	ResourceError,
+	formatErrorMessage,
+	formatStructuredError,
+	safeGetCvmInfo,
+	safeGetCurrentUser,
+	encryptEnvVars,
+} from "@phala/cloud";
 import { replicateCvm } from "@/src/api/cvms";
 import { getClient } from "@/src/lib/client";
 import { getEncryptPubkey } from "@/src/commands/envs/get-encrypt-pubkey";
@@ -8,6 +16,7 @@ import { defineCommand } from "@/src/core/define-command";
 import { isInJsonMode } from "@/src/core/json-mode";
 import type { CommandContext } from "@/src/core/types";
 
+import { CLOUD_URL } from "@/src/utils/constants";
 import { logger } from "@/src/utils/logger";
 import {
 	cvmsReplicateCommandMeta,
@@ -42,12 +51,19 @@ async function runCvmsReplicateCommand(
 		}
 
 		let encryptedEnv: string | undefined;
-		const client = await getClient();
-		const result = await safeGetCvmInfo(client, context.cvmId);
-		if (!result.success) {
-			throw new Error(result.error.message);
+		const client = await getClient(context);
+		const [cvmResult, currentUserResult] = await Promise.all([
+			safeGetCvmInfo(client, context.cvmId),
+			safeGetCurrentUser(client),
+		]);
+		if (!cvmResult.success) {
+			throw new Error(cvmResult.error.message);
 		}
-		const sourceCvm = result.data;
+		if (!currentUserResult.success) {
+			throw new Error(currentUserResult.error.message);
+		}
+		const sourceCvm = cvmResult.data;
+		const workspace = currentUserResult.data.workspace;
 
 		if (input.envFile) {
 			const envPath = path.resolve(process.cwd(), input.envFile);
@@ -57,16 +73,6 @@ async function runCvmsReplicateCommand(
 
 			const envVars = parseEnvFile(envPath);
 			const pubkey = await getEncryptPubkey(client, sourceCvm);
-
-			if (!isInJsonMode()) {
-				context.stdout.write(`app_id: ${sourceCvm.app_id}\n`);
-				context.stdout.write(`kms_type: ${sourceCvm.kms_type}\n`);
-				context.stdout.write(
-					`kms_contract: ${sourceCvm.kms_info?.dstack_kms_address ?? "-"}\n`,
-				);
-				context.stdout.write(`env_pubkey: ${pubkey}\n`);
-				context.stdout.write("Encrypting environment variables...\n");
-			}
 			encryptedEnv = await encryptEnvVars(envVars, pubkey);
 		}
 
@@ -79,7 +85,15 @@ async function runCvmsReplicateCommand(
 			requestBody.encrypted_env = encryptedEnv;
 		}
 
-		const replica = await replicateCvm(sourceCvm.app_id, requestBody);
+		if (!sourceCvm.vm_uuid) {
+			throw new Error("Source CVM has no vm_uuid");
+		}
+
+		const replica = await replicateCvm(
+			sourceCvm.app_id,
+			sourceCvm.vm_uuid,
+			requestBody,
+		);
 
 		if (isInJsonMode()) {
 			context.success(replica);
@@ -87,13 +101,17 @@ async function runCvmsReplicateCommand(
 		}
 
 		const vmUuid = replica.vm_uuid?.replace(/-/g, "") ?? "";
+		const teamLabel =
+			workspace.slug && workspace.slug !== workspace.name
+				? `${workspace.name} (${workspace.slug})`
+				: workspace.slug || workspace.name;
 		const appUrl =
-			replica.app_url ||
-			`${process.env.CLOUD_URL || "https://cloud.phala.com"}/dashboard/cvms/${vmUuid}`;
+			workspace.slug && vmUuid
+				? `${CLOUD_URL}/${workspace.slug}/apps/${replica.app_id}/instances/${vmUuid}`
+				: replica.app_url || "-";
 		const lines = [
-			"CVM replica created successfully.",
-			"",
 			`Source CVM ID:   ${context.cvmId.id}`,
+			`Team:            ${teamLabel}`,
 			`CVM UUID:        ${vmUuid || "-"}`,
 			`App ID:          ${replica.app_id}`,
 			`Name:            ${replica.name}`,
@@ -103,14 +121,22 @@ async function runCvmsReplicateCommand(
 			`Memory:          ${replica.memory} MB`,
 			`Disk Size:       ${replica.disk_size} GB`,
 			`App URL:         ${appUrl}`,
-			"",
-			"Your CVM replica is being created. You can check its status with:",
-			`phala cvms get ${replica.app_id}`,
 		];
 		context.stdout.write(`${lines.join("\n")}\n`);
 		return 0;
 	} catch (error) {
 		logger.error("Failed to create CVM replica");
+		if (error instanceof ResourceError) {
+			process.stderr.write(`${formatStructuredError(error)}\n`);
+			process.stderr.write(
+				"Reference the error code above in the handbook for remediation details.\n",
+			);
+			return 1;
+		}
+		if (error instanceof Error) {
+			process.stderr.write(`${formatErrorMessage(error as PhalaCloudError)}\n`);
+			return 1;
+		}
 		logger.logDetailedError(error);
 		return 1;
 	}
