@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import { CvmIdSchema, encryptEnvVars } from "@phala/cloud";
-import { getCvmComposeConfig, replicateCvm } from "@/src/api/cvms";
+import { CvmIdSchema, safeGetCvmInfo, encryptEnvVars } from "@phala/cloud";
+import { replicateCvm } from "@/src/api/cvms";
+import { getClient } from "@/src/lib/client";
+import { getEncryptPubkey } from "@/src/commands/envs/get-encrypt-pubkey";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 
@@ -48,10 +50,16 @@ async function runCvmsReplicateCommand(
 			}
 
 			const envVars = parseEnvFile(envPath);
-			const cvmConfig = await getCvmComposeConfig(normalizedCvmId);
+
+			const client = await getClient();
+			const result = await safeGetCvmInfo(client, { id: normalizedCvmId });
+			if (!result.success) {
+				throw new Error(result.error.message);
+			}
+			const pubkey = await getEncryptPubkey(client, result.data);
 
 			logger.info("Encrypting environment variables...");
-			encryptedEnv = await encryptEnvVars(envVars, cvmConfig.env_pubkey);
+			encryptedEnv = await encryptEnvVars(envVars, pubkey);
 		}
 
 		const requestBody: { teepod_id?: number; encrypted_env?: string } = {};
@@ -69,9 +77,10 @@ async function runCvmsReplicateCommand(
 			`Successfully created replica of CVM UUID: ${normalizedCvmId} with App ID: ${replica.app_id}`,
 		);
 
+		const vmUuid = replica.vm_uuid?.replace(/-/g, "") ?? "";
 		logger.keyValueTable(
 			{
-				"CVM UUID": replica.vm_uuid.replace(/-/g, ""),
+				"CVM UUID": vmUuid,
 				"App ID": replica.app_id,
 				Name: replica.name,
 				Status: replica.status,
@@ -81,7 +90,7 @@ async function runCvmsReplicateCommand(
 				"Disk Size": `${replica.disk_size} GB`,
 				"App URL":
 					replica.app_url ||
-					`${process.env.CLOUD_URL || "https://cloud.phala.com"}/dashboard/cvms/${replica.vm_uuid.replace(/-/g, "")}`,
+					`${process.env.CLOUD_URL || "https://cloud.phala.com"}/dashboard/cvms/${vmUuid}`,
 			},
 			{ borderStyle: "rounded" },
 		);

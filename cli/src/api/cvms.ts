@@ -1,7 +1,6 @@
 import {
 	safeGetCvmList,
 	safeGetCvmInfo,
-	safeGetCvmComposeFile,
 	type Client,
 	type CvmInfoDetailV20260121,
 } from "@phala/cloud";
@@ -20,7 +19,6 @@ import type {
 	GetCvmNetworkResponse,
 	TeepodResponse,
 	PubkeyResponse,
-	CvmComposeConfigResponse,
 	UpgradeResponse,
 } from "./types";
 import inquirer from "inquirer";
@@ -43,22 +41,6 @@ export async function getCvmByAppId(
 	}
 
 	return result.data;
-}
-
-/**
- * Get CVM compose configuration
- */
-export async function getCvmComposeConfig(
-	cvmId: string,
-): Promise<CvmComposeConfigResponse> {
-	const client = await getClient();
-	const result = await safeGetCvmComposeFile(client, { id: cvmId });
-
-	if (!result.success) {
-		throw new Error(result.error.message);
-	}
-
-	return result.data as CvmComposeConfigResponse;
 }
 
 /**
