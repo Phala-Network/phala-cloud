@@ -308,43 +308,28 @@ async function runCvmsReplicateCommand(
 				typeof cvmResult.error === "object" &&
 				"errorCode" in cvmResult.error &&
 				cvmResult.error.errorCode === "ERR-03-010";
-			if (isMultiple && input.composeHash) {
+			if (isMultiple) {
 				const rawId = (context.cvmId?.id ?? "")
 					.replace(/^app_/, "")
 					.replace(/^0x/, "")
 					.toLowerCase();
-				const cleanHash = input.composeHash.replace(/^0x/, "").toLowerCase();
 				const appCvmsResult = await safeGetAppCvms(client, { appId: rawId });
-				if (!appCvmsResult.success) {
+				if (!appCvmsResult.success || appCvmsResult.data.length === 0) {
 					throw cvmResult.error;
 				}
-				const matched = appCvmsResult.data.filter((cvm) => {
-					const cvmHash = (cvm.compose_hash ?? "")
-						.replace(/^0x/, "")
-						.toLowerCase();
-					return cvmHash === cleanHash;
+				// Pick first instance as source; compose_hash is passed to the
+				// replicate API and the backend resolves the revision.
+				const first = appCvmsResult.data[0];
+				if (!first.vm_uuid) {
+					throw cvmResult.error;
+				}
+				const resolved = await safeGetCvmInfo(client, {
+					id: first.vm_uuid,
 				});
-				if (matched.length === 1 && matched[0].vm_uuid) {
-					const resolved = await safeGetCvmInfo(client, {
-						id: matched[0].vm_uuid,
-					});
-					if (!resolved.success) {
-						throw resolved.error;
-					}
-					sourceCvm = resolved.data;
-				} else if (matched.length === 0) {
-					const available = [
-						...new Set(
-							appCvmsResult.data.map((c) => c.compose_hash).filter(Boolean),
-						),
-					];
-					throw new Error(
-						`No CVM instance with compose_hash ${input.composeHash} found for app ${rawId}. ` +
-							`Available compose hashes: ${available.length > 0 ? available.join(", ") : "none"}`,
-					);
-				} else {
-					throw cvmResult.error;
+				if (!resolved.success) {
+					throw resolved.error;
 				}
+				sourceCvm = resolved.data;
 			} else {
 				throw cvmResult.error;
 			}
@@ -419,13 +404,17 @@ async function runCvmsReplicateCommand(
 					"Replica prepare response did not include a commit token",
 				);
 			}
-			const kmsInfo = (preparePayload.kmsInfo ?? {}) as {
-				chain?: Parameters<typeof safeCheckOnChainPrerequisites>[0]["chain"];
-			};
-			if (!kmsInfo.chain) {
-				throw new Error(
-					"Replica prepare response is missing chain info required for on-chain approval",
-				);
+			const chain = (
+				sourceCvm as {
+					kms_info?: {
+						chain?: Parameters<
+							typeof safeCheckOnChainPrerequisites
+						>[0]["chain"];
+					};
+				}
+			).kms_info?.chain;
+			if (!chain) {
+				throw new Error("Source CVM kms_info is missing chain configuration");
 			}
 			if (!sourceCvm.app_id) {
 				throw new Error(
@@ -434,7 +423,7 @@ async function runCvmsReplicateCommand(
 			}
 
 			const prereqs = await safeCheckOnChainPrerequisites({
-				chain: kmsInfo.chain,
+				chain: chain,
 				rpcUrl: input.rpcUrl,
 				appAddress: sourceCvm.app_id as `0x${string}`,
 				deviceId: preparePayload.deviceId,
@@ -471,7 +460,7 @@ async function runCvmsReplicateCommand(
 
 				if (needsDevice) {
 					const deviceResult = await safeAddDevice({
-						chain: kmsInfo.chain,
+						chain: chain,
 						rpcUrl: input.rpcUrl,
 						appAddress: sourceCvm.app_id as `0x${string}`,
 						deviceId: preparePayload.deviceId,
@@ -488,7 +477,7 @@ async function runCvmsReplicateCommand(
 
 				if (needsCompose) {
 					const receiptResult = await safeAddComposeHash({
-						chain: kmsInfo.chain,
+						chain: chain,
 						rpcUrl: input.rpcUrl,
 						appId: sourceCvm.app_id as `0x${string}`,
 						composeHash: preparePayload.composeHash,

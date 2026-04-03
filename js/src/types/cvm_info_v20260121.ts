@@ -1,5 +1,7 @@
+import type { Chain } from "viem";
 import { z } from "zod";
 import { CvmNetworkUrlsV20251028Schema } from "./cvm_info_v20251028";
+import { SUPPORTED_CHAINS } from "./supported_chains";
 
 export const BillingPeriodSchema = z.enum(["skip", "hourly", "monthly"]);
 export type BillingPeriod = z.infer<typeof BillingPeriodSchema>;
@@ -43,13 +45,23 @@ export const CvmOsInfoV20260121Schema = z.object({
 });
 export type CvmOsInfoV20260121 = z.infer<typeof CvmOsInfoV20260121Schema>;
 
-export const CvmKmsInfoV20260121Schema = z.object({
+const CvmKmsInfoV20260121BaseSchema = z.object({
   chain_id: z.number().int().nullable().optional(),
   dstack_kms_address: z.string().nullable().optional(),
   dstack_app_address: z.string().nullable().optional(),
   deployer_address: z.string().nullable().optional(),
   rpc_endpoint: z.string().nullable().optional(),
   encrypted_env_pubkey: z.string().nullable().optional(),
+});
+
+export const CvmKmsInfoV20260121Schema = CvmKmsInfoV20260121BaseSchema.transform((data) => {
+  if (data.chain_id != null) {
+    const chain: Chain | undefined = SUPPORTED_CHAINS[data.chain_id];
+    if (chain) {
+      return { ...data, chain } as typeof data & { chain: Chain };
+    }
+  }
+  return data as typeof data;
 });
 export type CvmKmsInfoV20260121 = z.infer<typeof CvmKmsInfoV20260121Schema>;
 

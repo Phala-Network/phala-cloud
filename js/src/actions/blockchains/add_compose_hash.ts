@@ -498,6 +498,27 @@ export async function addComposeHash<T extends z.ZodTypeAny | false | undefined 
     }
   }
 
+  // Pre-check: verify sender is the contract owner before submitting tx
+  const contractOwner = (await publicClient.readContract({
+    address: appAuthAddress,
+    abi: [
+      {
+        inputs: [],
+        name: "owner",
+        outputs: [{ type: "address" }],
+        stateMutability: "view",
+        type: "function",
+      },
+    ] as const,
+    functionName: "owner",
+  })) as Address;
+  if (contractOwner.toLowerCase() !== address.toLowerCase()) {
+    throw new Error(
+      `Sender ${address} is not the owner of contract ${appAuthAddress}. ` +
+        `Contract owner is ${contractOwner}.`,
+    );
+  }
+
   // Define the blockchain operation
   const addComposeHashOperation = async (clients: NetworkClients): Promise<Hash> => {
     const hash = await clients.walletClient.writeContract({

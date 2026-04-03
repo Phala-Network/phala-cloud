@@ -60,6 +60,18 @@ export const dstackAppAbi = [
     type: "function",
   },
 
+  // ── Errors ───────────────────────────────────────────────────────
+  {
+    inputs: [{ internalType: "address", name: "owner", type: "address" }],
+    name: "OwnableInvalidOwner",
+    type: "error",
+  },
+  {
+    inputs: [{ internalType: "address", name: "account", type: "address" }],
+    name: "OwnableUnauthorizedAccount",
+    type: "error",
+  },
+
   // ── Events ───────────────────────────────────────────────────────
   {
     anonymous: false,
