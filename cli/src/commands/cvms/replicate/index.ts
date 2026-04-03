@@ -11,6 +11,7 @@ import {
 	safeCheckOnChainPrerequisites,
 	safeGetAvailableNodes,
 	safeGetCvmInfo,
+	safeGetCvmList,
 	encryptEnvVars,
 	formatErrorMessage,
 	formatStructuredError,
@@ -293,11 +294,52 @@ async function runCvmsReplicateCommand(
 		}
 
 		const client = await getClient(context);
+		let sourceCvm: Awaited<
+			ReturnType<typeof safeGetCvmInfo<"2026-01-21">>
+		>["data"] extends infer T
+			? NonNullable<T>
+			: never;
 		const cvmResult = await safeGetCvmInfo(client, context.cvmId);
 		if (!cvmResult.success) {
-			throw cvmResult.error;
+			// When identifier matches multiple CVMs and --compose-hash is given,
+			// resolve by listing CVMs and picking the one with matching compose_hash.
+			const isMultiple =
+				cvmResult.error &&
+				typeof cvmResult.error === "object" &&
+				"errorCode" in cvmResult.error &&
+				cvmResult.error.errorCode === "ERR-03-010";
+			if (isMultiple && input.composeHash) {
+				const listResult = await safeGetCvmList(client);
+				if (!listResult.success) {
+					throw cvmResult.error;
+				}
+				const cleanHash = input.composeHash.replace(/^0x/, "").toLowerCase();
+				const matched = listResult.data.items.filter(
+					(cvm) =>
+						cvm.app_id === context.cvmId?.id &&
+						cvm.compose_hash?.toLowerCase() === cleanHash,
+				);
+				if (matched.length === 1 && matched[0].vm_uuid) {
+					const resolved = await safeGetCvmInfo(client, {
+						id: matched[0].vm_uuid,
+					});
+					if (!resolved.success) {
+						throw resolved.error;
+					}
+					sourceCvm = resolved.data;
+				} else if (matched.length === 0) {
+					throw new Error(
+						`No CVM found with app_id ${context.cvmId.id} and compose_hash ${input.composeHash}`,
+					);
+				} else {
+					throw cvmResult.error;
+				}
+			} else {
+				throw cvmResult.error;
+			}
+		} else {
+			sourceCvm = cvmResult.data;
 		}
-		const sourceCvm = cvmResult.data;
 
 		if (!sourceCvm.vm_uuid) {
 			throw new Error("Source CVM has no vm_uuid");
