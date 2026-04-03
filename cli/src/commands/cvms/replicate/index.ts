@@ -401,20 +401,17 @@ async function runCvmsReplicateCommand(
 			if (needsDevice || needsCompose) {
 				const missing: string[] = [];
 				if (needsCompose) {
-					missing.push(
-						`compose hash (${preparePayload.composeHash.slice(0, 12)}...)`,
-					);
+					missing.push("compose hash");
 				}
 				if (needsDevice) {
-					missing.push(`device (${preparePayload.deviceId.slice(0, 12)}...)`);
+					missing.push("device");
 				}
-				logger.info(`On-chain registration required: ${missing.join(", ")}`);
 
 				const privateKey = input.privateKey || process.env.PRIVATE_KEY;
 				if (!privateKey) {
 					formatPrepareOutput(preparePayload, context);
 					throw new Error(
-						`On-chain registration required (${missing.join(", ")}). Pass --private-key or set PRIVATE_KEY to register automatically, or use --prepare-only to handle registration separately.`,
+						`On-chain registration required: ${missing.join(", ")} not registered. Pass --private-key or set PRIVATE_KEY to register automatically, or use --prepare-only to handle registration separately.`,
 					);
 				}
 				const typedKey = privateKey as `0x${string}`;
