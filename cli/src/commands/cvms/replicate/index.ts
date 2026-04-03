@@ -10,8 +10,8 @@ import {
 	safeAddDevice,
 	safeCheckOnChainPrerequisites,
 	safeGetAvailableNodes,
+	safeGetAppCvms,
 	safeGetCvmInfo,
-	safeGetCvmList,
 	encryptEnvVars,
 	formatErrorMessage,
 	formatStructuredError,
@@ -309,17 +309,21 @@ async function runCvmsReplicateCommand(
 				"errorCode" in cvmResult.error &&
 				cvmResult.error.errorCode === "ERR-03-010";
 			if (isMultiple && input.composeHash) {
-				const listResult = await safeGetCvmList(client);
-				if (!listResult.success) {
+				const rawId = (context.cvmId?.id ?? "")
+					.replace(/^app_/, "")
+					.replace(/^0x/, "")
+					.toLowerCase();
+				const cleanHash = input.composeHash.replace(/^0x/, "").toLowerCase();
+				const appCvmsResult = await safeGetAppCvms(client, { appId: rawId });
+				if (!appCvmsResult.success) {
 					throw cvmResult.error;
 				}
-				const cleanHash = input.composeHash.replace(/^0x/, "").toLowerCase();
-				const rawId = (context.cvmId?.id ?? "").replace(/^app_/, "");
-				const matched = listResult.data.items.filter(
-					(cvm) =>
-						cvm.app_id === rawId &&
-						cvm.compose_hash?.toLowerCase() === cleanHash,
-				);
+				const matched = appCvmsResult.data.filter((cvm) => {
+					const cvmHash = (cvm.compose_hash ?? "")
+						.replace(/^0x/, "")
+						.toLowerCase();
+					return cvmHash === cleanHash;
+				});
 				if (matched.length === 1 && matched[0].vm_uuid) {
 					const resolved = await safeGetCvmInfo(client, {
 						id: matched[0].vm_uuid,
@@ -329,8 +333,14 @@ async function runCvmsReplicateCommand(
 					}
 					sourceCvm = resolved.data;
 				} else if (matched.length === 0) {
+					const available = [
+						...new Set(
+							appCvmsResult.data.map((c) => c.compose_hash).filter(Boolean),
+						),
+					];
 					throw new Error(
-						`No CVM found with app_id ${rawId} and compose_hash ${input.composeHash}`,
+						`No CVM instance with compose_hash ${input.composeHash} found for app ${rawId}. ` +
+							`Available compose hashes: ${available.length > 0 ? available.join(", ") : "none"}`,
 					);
 				} else {
 					throw cvmResult.error;
