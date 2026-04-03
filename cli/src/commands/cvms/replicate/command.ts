@@ -9,10 +9,17 @@ export const cvmsReplicateCommandMeta: CommandMeta = {
 	arguments: [cvmIdArgument],
 	options: [
 		{
-			name: "teepod-id",
-			description: "TEEPod ID for replica",
+			name: "node-id",
+			description: "Node ID for replica",
 			type: "string",
-			target: "teepodId",
+			target: "nodeId",
+		},
+		{
+			name: "compose-hash",
+			description:
+				"Explicit compose hash to replicate. Required when the source app has multiple live instances",
+			type: "string",
+			target: "composeHash",
 		},
 		{
 			name: "env-file",
@@ -21,20 +28,82 @@ export const cvmsReplicateCommandMeta: CommandMeta = {
 			type: "string",
 			target: "envFile",
 		},
+		{
+			name: "private-key",
+			description: "Private key for signing transactions.",
+			type: "string",
+			target: "privateKey",
+			group: "advanced",
+		},
+		{
+			name: "rpc-url",
+			description: "RPC URL for the blockchain.",
+			type: "string",
+			target: "rpcUrl",
+			group: "advanced",
+		},
+		{
+			name: "prepare-only",
+			description:
+				"Only prepare the replica (generate commit token) without performing on-chain operations.",
+			type: "boolean",
+			target: "prepareOnly",
+			group: "advanced",
+		},
+		{
+			name: "commit",
+			description:
+				"Commit a previously prepared replica using a commit token. Requires --token and --compose-hash.",
+			type: "boolean",
+			target: "commit",
+			group: "advanced",
+		},
+		{
+			name: "token",
+			description: "Commit token from a prepare-only replica request",
+			type: "string",
+			target: "token",
+			group: "advanced",
+		},
+		{
+			name: "transaction-hash",
+			description:
+				"Transaction hash proving on-chain compose hash registration. Use already-registered for state-only verification.",
+			type: "string",
+			target: "transactionHash",
+			group: "advanced",
+		},
 		interactiveOption,
 	],
 	examples: [
 		{
 			name: "Replicate a CVM",
-			value: "phala cvms replicate 1234 --teepod-id 5",
+			value: "phala cvms replicate 1234 --node-id 5",
+		},
+		{
+			name: "Prepare a replica for multisig approval",
+			value:
+				"phala cvms replicate 1234 --node-id 5 --compose-hash <hash> --prepare-only",
+		},
+		{
+			name: "Commit a prepared replica",
+			value:
+				"phala cvms replicate 1234 --commit --token <token> --compose-hash <hash> --transaction-hash <tx-hash>",
 		},
 	],
 };
 
 export const cvmsReplicateCommandSchema = z.object({
 	cvmId: z.string().optional(),
-	teepodId: z.string().optional(),
+	nodeId: z.string().optional(),
+	composeHash: z.string().optional(),
 	envFile: z.string().optional(),
+	privateKey: z.string().optional(),
+	rpcUrl: z.string().optional(),
+	prepareOnly: z.boolean().default(false),
+	commit: z.boolean().default(false),
+	token: z.string().optional(),
+	transactionHash: z.string().optional(),
 	interactive: z.boolean().default(false),
 });
 
