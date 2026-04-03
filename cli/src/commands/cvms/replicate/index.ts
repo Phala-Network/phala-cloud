@@ -395,42 +395,68 @@ async function runCvmsReplicateCommand(
 			}
 
 			let transactionHash = input.transactionHash || "already-registered";
-			if (!prereqs.data.deviceAllowed) {
-				const deviceResult = await safeAddDevice({
-					chain: kmsInfo.chain,
-					rpcUrl: input.rpcUrl,
-					appAddress: sourceCvm.app_id as `0x${string}`,
-					deviceId: preparePayload.deviceId,
-					privateKey: readPrivateKey(input),
-				});
-				if (!deviceResult.success) {
-					const deviceError =
-						"error" in deviceResult ? deviceResult.error : undefined;
-					throw new Error(
-						deviceError?.message || "Failed to register device on-chain",
-					);
-				}
-			}
+			const needsDevice = !prereqs.data.deviceAllowed;
+			const needsCompose = !prereqs.data.composeHashAllowed;
 
-			if (!prereqs.data.composeHashAllowed) {
-				const receiptResult = await safeAddComposeHash({
-					chain: kmsInfo.chain,
-					rpcUrl: input.rpcUrl,
-					appId: sourceCvm.app_id as `0x${string}`,
-					composeHash: preparePayload.composeHash,
-					privateKey: readPrivateKey(input),
-				});
-				if (!receiptResult.success) {
-					const receiptError =
-						"error" in receiptResult ? receiptResult.error : undefined;
-					throw new Error(
-						receiptError?.message || "Failed to register compose hash on-chain",
+			if (needsDevice || needsCompose) {
+				const missing: string[] = [];
+				if (needsCompose) {
+					missing.push(
+						`compose hash (${preparePayload.composeHash.slice(0, 12)}...)`,
 					);
 				}
-				transactionHash = String(
-					(receiptResult.data as { transactionHash?: string })
-						.transactionHash || "already-registered",
-				);
+				if (needsDevice) {
+					missing.push(`device (${preparePayload.deviceId.slice(0, 12)}...)`);
+				}
+				logger.info(`On-chain registration required: ${missing.join(", ")}`);
+
+				const privateKey = input.privateKey || process.env.PRIVATE_KEY;
+				if (!privateKey) {
+					formatPrepareOutput(preparePayload, context);
+					throw new Error(
+						`On-chain registration required (${missing.join(", ")}). Pass --private-key or set PRIVATE_KEY to register automatically, or use --prepare-only to handle registration separately.`,
+					);
+				}
+				const typedKey = privateKey as `0x${string}`;
+
+				if (needsDevice) {
+					const deviceResult = await safeAddDevice({
+						chain: kmsInfo.chain,
+						rpcUrl: input.rpcUrl,
+						appAddress: sourceCvm.app_id as `0x${string}`,
+						deviceId: preparePayload.deviceId,
+						privateKey: typedKey,
+					});
+					if (!deviceResult.success) {
+						const deviceError =
+							"error" in deviceResult ? deviceResult.error : undefined;
+						throw new Error(
+							deviceError?.message || "Failed to register device on-chain",
+						);
+					}
+				}
+
+				if (needsCompose) {
+					const receiptResult = await safeAddComposeHash({
+						chain: kmsInfo.chain,
+						rpcUrl: input.rpcUrl,
+						appId: sourceCvm.app_id as `0x${string}`,
+						composeHash: preparePayload.composeHash,
+						privateKey: typedKey,
+					});
+					if (!receiptResult.success) {
+						const receiptError =
+							"error" in receiptResult ? receiptResult.error : undefined;
+						throw new Error(
+							receiptError?.message ||
+								"Failed to register compose hash on-chain",
+						);
+					}
+					transactionHash = String(
+						(receiptResult.data as { transactionHash?: string })
+							.transactionHash || "already-registered",
+					);
+				}
 			}
 
 			const replica = (await commitReplica(client, sourceCvm.vm_uuid, {
