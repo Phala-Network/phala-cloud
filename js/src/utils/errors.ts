@@ -135,13 +135,22 @@ export class RequestError extends PhalaCloudError implements ApiError {
     const parseResult = ApiErrorSchema.safeParse(error.data);
 
     if (parseResult.success) {
+      // If ApiErrorSchema matched but detail is undefined, the response may use
+      // StructuredError format (error_code, details array, etc). Fall back to
+      // the raw response data so parseStructuredError can handle it downstream.
+      const detail =
+        parseResult.data.detail ??
+        (error.data && typeof error.data === "object" && "error_code" in error.data
+          ? error.data
+          : undefined);
+
       return new RequestError(error.message, {
         status: error.status ?? undefined,
         statusText: error.statusText ?? undefined,
         data: error.data,
         request: error.request ?? undefined,
         response: error.response ?? undefined,
-        detail: parseResult.data.detail as
+        detail: detail as
           | string
           | Record<string, unknown>
           | Array<{
