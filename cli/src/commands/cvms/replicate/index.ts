@@ -314,9 +314,10 @@ async function runCvmsReplicateCommand(
 					throw cvmResult.error;
 				}
 				const cleanHash = input.composeHash.replace(/^0x/, "").toLowerCase();
+				const rawId = (context.cvmId?.id ?? "").replace(/^app_/, "");
 				const matched = listResult.data.items.filter(
 					(cvm) =>
-						cvm.app_id === context.cvmId?.id &&
+						cvm.app_id === rawId &&
 						cvm.compose_hash?.toLowerCase() === cleanHash,
 				);
 				if (matched.length === 1 && matched[0].vm_uuid) {
@@ -329,7 +330,7 @@ async function runCvmsReplicateCommand(
 					sourceCvm = resolved.data;
 				} else if (matched.length === 0) {
 					throw new Error(
-						`No CVM found with app_id ${context.cvmId.id} and compose_hash ${input.composeHash}`,
+						`No CVM found with app_id ${rawId} and compose_hash ${input.composeHash}`,
 					);
 				} else {
 					throw cvmResult.error;
