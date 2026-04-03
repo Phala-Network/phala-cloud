@@ -20,7 +20,12 @@ import { nodesCommands } from "./commands/nodes";
 import { osImagesCommand } from "./commands/os-images";
 import { simulatorCommands } from "./commands/simulator";
 import { statusCommand } from "./commands/status";
-import { profilesCommand } from "./commands/profiles";
+import {
+	profilesCommand,
+	profilesUseCommand,
+	profilesRenameCommand,
+	profilesDeleteCommand,
+} from "./commands/profiles";
 import { switchCommand } from "./commands/switch";
 import { completionCommand } from "./commands/completion";
 import { sshCommand } from "./commands/ssh";
@@ -63,6 +68,9 @@ registry.registerCommand(cvmsRuntimeConfigCommand);
 registry.registerCommand(loginCommand);
 registry.registerCommand(logoutCommand);
 registry.registerCommand(profilesCommand);
+registry.registerCommand(profilesUseCommand);
+registry.registerCommand(profilesRenameCommand);
+registry.registerCommand(profilesDeleteCommand);
 registry.registerCommand(switchCommand);
 registry.registerCommand(apiCommand);
 registry.registerCommand(statusCommand);
