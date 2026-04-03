@@ -156,32 +156,28 @@ async function resolveNodeId(
 function formatReplicaOutput(
 	replica: Record<string, unknown>,
 	context: CommandContext,
+	sourceCvm?: {
+		workspace?: { slug?: string | null; name?: string } | null;
+		kms_type?: string | null;
+	},
 ): void {
 	if (isInJsonMode()) {
 		context.success(replica);
 		return;
 	}
 
-	const workspace = context.projectConfig;
-	const vmUuid =
-		typeof replica.vm_uuid === "string"
-			? replica.vm_uuid.replace(/-/g, "")
-			: "";
+	const vmUuid = typeof replica.vm_uuid === "string" ? replica.vm_uuid : "";
 	const workspaceSlug =
-		typeof replica.workspace_slug === "string"
-			? replica.workspace_slug
-			: workspace.slug;
-	const workspaceName =
-		typeof replica.workspace_name === "string"
-			? replica.workspace_name
-			: workspaceSlug || "-";
+		sourceCvm?.workspace?.slug || context.projectConfig.slug || "";
+	const workspaceName = sourceCvm?.workspace?.name || workspaceSlug || "-";
 	const teamLabel =
 		workspaceSlug && workspaceSlug !== workspaceName
 			? `${workspaceName} (${workspaceSlug})`
 			: workspaceSlug || workspaceName;
+	const vmUuidCompact = vmUuid.replace(/-/g, "");
 	const appUrl =
-		workspaceSlug && vmUuid && typeof replica.app_id === "string"
-			? `${CLOUD_URL}/${workspaceSlug}/apps/${replica.app_id}/instances/${vmUuid}`
+		workspaceSlug && vmUuidCompact && typeof replica.app_id === "string"
+			? `${CLOUD_URL}/${workspaceSlug}/apps/${replica.app_id}/instances/${vmUuidCompact}`
 			: typeof replica.app_url === "string"
 				? replica.app_url
 				: "-";
@@ -194,6 +190,7 @@ function formatReplicaOutput(
 			: typeof replica.teepod_name === "string"
 				? replica.teepod_name
 				: "-";
+	const kmsType = sourceCvm?.kms_type || "-";
 	const lines = [
 		`Source CVM ID:   ${context.cvmId?.id || replica.source_cvm_id || "-"}`,
 		`Team:            ${teamLabel}`,
@@ -201,6 +198,7 @@ function formatReplicaOutput(
 		`App ID:          ${replica.app_id}`,
 		`Name:            ${replica.name}`,
 		`Status:          ${replica.status}`,
+		`KMS:             ${kmsType}`,
 		`Node:            ${teepodName} (ID: ${replica.teepod_id})`,
 		`vCPUs:           ${replica.vcpu}`,
 		`Memory:          ${replica.memory} MB`,
@@ -219,12 +217,13 @@ function formatPrepareOutput(
 		return;
 	}
 
+	const ensureHex = (v: string) => (v && !v.startsWith("0x") ? `0x${v}` : v);
 	const lines = [
 		"CVM replica prepared successfully (pending on-chain approval).",
 		"",
-		`Compose Hash:    ${payload.composeHash}`,
-		`App ID:          ${payload.appId}`,
-		`Device ID:       ${payload.deviceId}`,
+		`Compose Hash:    ${ensureHex(payload.composeHash)}`,
+		`App ID:          ${ensureHex(payload.appId)}`,
+		`Device ID:       ${ensureHex(payload.deviceId)}`,
 	];
 	if (payload.commitToken) {
 		lines.push(`Commit Token:    ${payload.commitToken}`);
@@ -296,7 +295,7 @@ async function runCvmsReplicateCommand(
 		const client = await getClient(context);
 		const cvmResult = await safeGetCvmInfo(client, context.cvmId);
 		if (!cvmResult.success) {
-			throw new Error(cvmResult.error.message);
+			throw cvmResult.error;
 		}
 		const sourceCvm = cvmResult.data;
 
@@ -316,7 +315,7 @@ async function runCvmsReplicateCommand(
 				composeHash: input.composeHash,
 				transactionHash: input.transactionHash || "already-registered",
 			})) as Record<string, unknown>;
-			formatReplicaOutput(replica, context);
+			formatReplicaOutput(replica, context, sourceCvm);
 			return 0;
 		}
 
@@ -345,7 +344,7 @@ async function runCvmsReplicateCommand(
 					headers: input.prepareOnly ? { "X-Prepare-Only": "true" } : undefined,
 				},
 			)) as Record<string, unknown>;
-			formatReplicaOutput(replica, context);
+			formatReplicaOutput(replica, context, sourceCvm);
 			return 0;
 		} catch (error) {
 			if (!(error instanceof ResourceError)) {
@@ -439,7 +438,7 @@ async function runCvmsReplicateCommand(
 				composeHash: preparePayload.composeHash,
 				transactionHash,
 			})) as Record<string, unknown>;
-			formatReplicaOutput(replica, context);
+			formatReplicaOutput(replica, context, sourceCvm);
 			return 0;
 		}
 	} catch (error) {
