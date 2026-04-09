@@ -15,6 +15,7 @@ export const profilesDeleteCommandMeta: CommandMeta = {
 		},
 	],
 	options: [],
+	aliases: ["rm"],
 };
 
 export const profilesDeleteCommandSchema = z.object({

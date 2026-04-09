@@ -21,6 +21,7 @@ export const profilesRenameCommandMeta: CommandMeta = {
 		},
 	],
 	options: [],
+	aliases: ["mv"],
 };
 
 export const profilesRenameCommandSchema = z.object({

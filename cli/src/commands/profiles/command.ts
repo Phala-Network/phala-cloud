@@ -8,6 +8,7 @@ export const profilesCommandMeta: CommandMeta = {
 	stability: "stable",
 	arguments: [],
 	options: [],
+	aliases: ["list"],
 };
 
 export const profilesCommandSchema = z.object({});
