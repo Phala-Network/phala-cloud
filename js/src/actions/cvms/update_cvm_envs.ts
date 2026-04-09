@@ -214,15 +214,31 @@ const { action: updateCvmEnvs, safeAction: safeUpdateCvmEnvs } = defineAction<
       if (detail && typeof detail === "object") {
         const detailObj = detail as Record<string, unknown>;
 
-        // Return the 465 data as a successful response with status: "precondition_required"
-        return {
-          status: "precondition_required" as const,
-          message: (detailObj.message as string) || "Compose hash verification required",
-          compose_hash: detailObj.compose_hash as string,
-          app_id: detailObj.app_id as string,
-          device_id: detailObj.device_id as string,
-          kms_info: detailObj.kms_info,
-        };
+        // Backend returns StructuredError format with fields in a details array:
+        // { error_code, message, details: [{ field, value }, ...], suggestions, links }
+        // Extract field values from the details array
+        const detailsArray = detailObj.details as
+          | Array<{ field: string; value: unknown }>
+          | undefined;
+
+        if (detailsArray && Array.isArray(detailsArray)) {
+          const fieldMap = new Map(detailsArray.map((d) => [d.field, d.value]));
+          const composeHash = fieldMap.get("compose_hash");
+          const appId = fieldMap.get("app_id");
+          const deviceId = fieldMap.get("device_id");
+          const kmsInfo = fieldMap.get("kms_info");
+
+          if (composeHash && appId) {
+            return {
+              status: "precondition_required" as const,
+              message: (detailObj.message as string) || "Compose hash verification required",
+              compose_hash: composeHash as string,
+              app_id: appId as string,
+              device_id: (deviceId as string) || "",
+              kms_info: kmsInfo,
+            };
+          }
+        }
       }
     }
 

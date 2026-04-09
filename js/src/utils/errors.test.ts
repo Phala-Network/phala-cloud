@@ -3,6 +3,7 @@ import {
   parseApiError,
   PhalaCloudError,
   RequestError,
+  ResourceError,
   ValidationError,
   AuthError,
   BusinessError,
@@ -457,5 +458,73 @@ describe("Error type discriminator properties", () => {
     expect(error.isBusinessError).toBeUndefined();
     expect(error.isServerError).toBeUndefined();
     expect(error.isUnknownError).toBeUndefined();
+  });
+});
+
+describe("RequestError.fromFetchError with StructuredError responses", () => {
+  function makeStructuredFetchError(status: number) {
+    return {
+      message: `[PATCH] "/api/cvms/abc123/envs": ${status} <none>`,
+      status,
+      statusText: "",
+      data: {
+        error_code: "ERR-01-005",
+        message: "Compose hash registration required on-chain",
+        details: [
+          { field: "compose_hash", value: "0xhash123", message: null },
+          { field: "app_id", value: "0xapp456", message: null },
+          { field: "device_id", value: "0xdevice789", message: null },
+          {
+            field: "kms_info",
+            value: {
+              id: "kms_test",
+              slug: "kms-base-prod9",
+              url: "https://kms.example.com",
+              version: "v0.5.7",
+              chain_id: 8453,
+              kms_contract_address: "0xkms123",
+              gateway_app_id: "0xgateway456",
+            },
+            message: null,
+          },
+        ],
+        suggestions: ["Register the compose hash on-chain"],
+        links: [{ url: "https://docs.example.com", label: "Docs" }],
+      },
+      request: "/api/cvms/abc123/envs",
+      response: {} as Response,
+    } as unknown;
+  }
+
+  it("should preserve StructuredError data as detail when ApiErrorSchema.detail is undefined", () => {
+    const fetchError = makeStructuredFetchError(465);
+    const requestError = RequestError.fromFetchError(fetchError as never);
+
+    // detail should be the full StructuredError object, not undefined or a string
+    expect(requestError.detail).toBeDefined();
+    expect(typeof requestError.detail).toBe("object");
+
+    const detail = requestError.detail as Record<string, unknown>;
+    expect(detail.error_code).toBe("ERR-01-005");
+    expect(detail.details).toBeDefined();
+    expect(Array.isArray(detail.details)).toBe(true);
+  });
+
+  it("should produce ResourceError when parsed through parseApiError", () => {
+    const fetchError = makeStructuredFetchError(465);
+    const requestError = RequestError.fromFetchError(fetchError as never);
+    const error = parseApiError(requestError);
+
+    expect(error).toBeInstanceOf(ResourceError);
+    expect(error).toBeInstanceOf(BusinessError);
+    expect(error).toBeInstanceOf(PhalaCloudError);
+    expect(error.status).toBe(465);
+
+    // detail should still contain the StructuredError object
+    expect(error.detail).toBeDefined();
+    expect(typeof error.detail).toBe("object");
+    const detail = error.detail as Record<string, unknown>;
+    expect(detail.error_code).toBe("ERR-01-005");
+    expect(Array.isArray(detail.details)).toBe(true);
   });
 });
