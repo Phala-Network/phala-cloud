@@ -229,6 +229,19 @@ export async function addDevice<T extends z.ZodTypeAny | false | undefined = und
     }
   }
 
+  // Pre-check: verify sender is the contract owner before submitting tx
+  const contractOwner = (await publicClient.readContract({
+    address: contractAddress,
+    abi: dstackAppAbi,
+    functionName: "owner",
+  })) as Address;
+  if (contractOwner.toLowerCase() !== address.toLowerCase()) {
+    throw new Error(
+      `Sender ${address} is not the owner of contract ${contractAddress}. ` +
+        `Contract owner is ${contractOwner}.`,
+    );
+  }
+
   const addDeviceOperation = async (clients: NetworkClients): Promise<Hash> => {
     return clients.walletClient.writeContract({
       address: contractAddress,
