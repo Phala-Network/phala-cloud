@@ -126,6 +126,7 @@ export const ProvisionCvmComposeFileUpdateResultSchema = z
     device_id: z.string().nullable(),
     compose_hash: z.string(),
     kms_info: KmsInfoSchema.nullable().optional(),
+    compose_hash_registered: z.boolean().optional().default(false),
   })
   .passthrough();
 
