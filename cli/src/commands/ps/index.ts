@@ -35,7 +35,7 @@ async function runPsCommand(
 	}
 
 	try {
-		const client = await getClient();
+		const client = await getClient(context);
 		const result = await safeGetCvmContainersStats(client, context.cvmId);
 
 		if (!result.success) {

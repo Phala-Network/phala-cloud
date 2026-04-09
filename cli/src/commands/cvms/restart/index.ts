@@ -24,7 +24,8 @@ async function runCvmsRestartCommand(
 	}
 
 	try {
-		const client = await getClient();
+		const client = await getClient(context);
+		const isJson = context.globalOptions?.json === true;
 
 		// Check if CVM is ready before restarting (not in_progress)
 		const infoResult = await safeGetCvmInfo(client, context.cvmId);
@@ -42,7 +43,7 @@ async function runCvmsRestartCommand(
 			);
 
 			// Wait for CVM to be ready using existing utility
-			await waitForCvmReady(cvmInfo.vm_uuid, 300000);
+			await waitForCvmReady(cvmInfo.vm_uuid, 300000, context);
 		}
 
 		const spinner = logger.startSpinner("Restarting CVM");
@@ -56,11 +57,19 @@ async function runCvmsRestartCommand(
 		spinner.stop(true);
 
 		if (!result.success) {
-			logger.error(`Failed to restart CVM: ${result.error.message}`);
+			context.fail(`Failed to restart CVM: ${result.error.message}`);
 			return 1;
 		}
 
 		const response = result.data as VM;
+		if (isJson) {
+			context.success({
+				cvm: response,
+				dashboardUrl: `${CLOUD_URL}/dashboard/cvms/app_${response.app_id}`,
+				message: "CVM restart requested",
+			});
+			return 0;
+		}
 		logger.break();
 
 		logger.keyValueTable(
@@ -83,7 +92,7 @@ ${CLOUD_URL}/dashboard/cvms/app_${response.app_id}`,
 		);
 		return 0;
 	} catch (error) {
-		logger.error("Failed to restart CVM");
+		context.fail("Failed to restart CVM");
 		logger.logDetailedError(error);
 		return 1;
 	}

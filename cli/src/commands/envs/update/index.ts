@@ -43,7 +43,7 @@ async function runEnvsUpdateCommand(
 	}
 
 	try {
-		const client = await getClient();
+		const client = await getClient(context);
 		const cvmResult = await safeGetCvmInfo(client, context.cvmId);
 
 		if (!cvmResult.success) {

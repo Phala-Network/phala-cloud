@@ -13,7 +13,10 @@ export interface ClientWithAuth {
 	readonly auth: ResolvedAuth;
 }
 
-type AuthContextLike = Pick<CommandContext, "env" | "projectConfig">;
+type AuthContextLike = Pick<
+	CommandContext,
+	"env" | "projectConfig" | "globalOptions"
+>;
 
 function getDefaultContext(): AuthContextLike {
 	return {
@@ -32,8 +35,8 @@ export function resolveAuthForContext(
 	const ctx = context ?? getDefaultContext();
 	return resolveAuth({
 		env: ctx.env,
-		apiToken: options?.apiToken,
-		profile: options?.profile,
+		apiToken: options?.apiToken ?? ctx.globalOptions?.apiToken,
+		profile: options?.profile ?? ctx.globalOptions?.profile,
 		projectProfile: ctx.projectConfig.profile,
 	});
 }

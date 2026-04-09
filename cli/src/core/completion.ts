@@ -1,5 +1,6 @@
+import { globalCommandOptions } from "./common-flags";
 import type { CommandRegistry } from "./registry";
-import type { CommandPath } from "./types";
+import type { CommandOption, CommandPath } from "./types";
 
 export interface CompletionContext {
 	readonly registry: CommandRegistry;
@@ -104,31 +105,43 @@ function getFlagCompletions(
 
 	const node = registry.getNode(commandPath);
 	if (!node?.command) {
-		// Global flags
 		return {
-			suggestions: ["--help", "--version"].filter((flag) =>
-				flag.startsWith(fragment),
+			suggestions: collectOptionCompletions(globalCommandOptions).filter(
+				(flag) => flag.startsWith(fragment),
 			),
 		};
 	}
 
-	// Get command-specific flags
-	const options = node.command.meta.options || [];
-	const flags: string[] = [];
-
-	// Add long flags
-	for (const option of options) {
-		if (!option.hidden) {
-			flags.push(`--${option.name}`);
-		}
-	}
-
-	// Add global flags
-	flags.push("--help", "--version");
+	const flags = Array.from(
+		new Set([
+			...collectOptionCompletions(globalCommandOptions),
+			...collectOptionCompletions(node.command.meta.options || []),
+		]),
+	);
 
 	const suggestions = flags.filter((flag) => flag.startsWith(fragment));
 
 	return { suggestions };
+}
+
+function collectOptionCompletions(options: readonly CommandOption[]): string[] {
+	const flags: string[] = [];
+
+	for (const option of options) {
+		if (option.hidden) continue;
+		flags.push(`--${option.name}`);
+		if (option.shorthand) {
+			flags.push(`-${option.shorthand}`);
+		}
+		for (const alias of option.aliases ?? []) {
+			flags.push(`--${alias}`);
+		}
+		if (option.type === "boolean" && option.negatedName) {
+			flags.push(`--${option.negatedName}`);
+		}
+	}
+
+	return flags;
 }
 
 /**

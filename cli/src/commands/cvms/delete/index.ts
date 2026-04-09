@@ -22,7 +22,8 @@ async function runCvmsDeleteCommand(
 	}
 
 	try {
-		const client = await getClient();
+		const client = await getClient(context);
+		const isJson = context.globalOptions?.json === true;
 
 		// Get CVM details for confirmation message
 		const infoResult = await safeGetCvmInfo(client, context.cvmId);
@@ -52,6 +53,14 @@ async function runCvmsDeleteCommand(
 			]);
 
 			if (!confirm) {
+				if (isJson) {
+					context.success({
+						deleted: false,
+						cancelled: true,
+						cvm: cvmIdentifier,
+					});
+					return 0;
+				}
 				logger.info("Deletion cancelled");
 				return 0;
 			}
@@ -62,16 +71,21 @@ async function runCvmsDeleteCommand(
 		spinner.stop(true);
 
 		if (!result.success) {
-			logger.error(
+			context.fail(
 				`Failed to delete CVM ${cvmIdentifier}: ${result.error.message}`,
 			);
 			return 1;
 		}
 
+		if (isJson) {
+			context.success({ deleted: true, cvm: cvmIdentifier });
+			return 0;
+		}
+
 		logger.success(`CVM ${cvmIdentifier} deleted successfully`);
 		return 0;
 	} catch (error) {
-		logger.error("Failed to delete CVM");
+		context.fail("Failed to delete CVM");
 		logger.logDetailedError(error);
 		return 1;
 	}

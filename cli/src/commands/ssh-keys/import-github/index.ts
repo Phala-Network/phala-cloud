@@ -15,7 +15,7 @@ async function runSshKeysImportGithubCommand(
 	context: CommandContext,
 ): Promise<number> {
 	try {
-		const client = await getClient();
+		const client = await getClient(context);
 		const spinner = logger.startSpinner(
 			`Importing SSH keys from github.com/${input.githubUsername}`,
 		);

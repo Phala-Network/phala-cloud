@@ -223,11 +223,28 @@ export function formatCommandHelp(options: CommandHelpOptions): string {
 	}
 
 	const allOptions = [...(definition.meta.options ?? [])];
-	const visibleGlobalOptions = globalCommandOptions.filter((o) => !o.hidden);
+	const hiddenGlobalOptionNames = new Set<string>();
+	if (
+		(definition.path.length === 1 &&
+			(definition.path[0] === "login" || definition.path[0] === "api")) ||
+		(definition.path.length === 2 &&
+			definition.path[0] === "auth" &&
+			definition.path[1] === "login")
+	) {
+		hiddenGlobalOptionNames.add("profile");
+	}
+
 	const visibleCommandOptions = allOptions.filter((o) => !o.hidden);
-	const globalOptionNames = new Set(globalCommandOptions.map((o) => o.name));
+	const commandOptionsByName = new Map(
+		visibleCommandOptions.map((option) => [option.name, option]),
+	);
+	const visibleGlobalOptions = globalCommandOptions
+		.filter((option) => !option.hidden)
+		.filter((option) => !hiddenGlobalOptionNames.has(option.name))
+		.map((option) => commandOptionsByName.get(option.name) ?? option);
+	const globalOptionNames = new Set(visibleGlobalOptions.map((o) => o.name));
 	const visibleNonGlobalCommandOptions = visibleCommandOptions.filter(
-		(o) => !globalOptionNames.has(o.name),
+		(option) => !globalOptionNames.has(option.name),
 	);
 
 	if (visibleGlobalOptions.length > 0) {

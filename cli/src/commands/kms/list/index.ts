@@ -21,7 +21,7 @@ async function runKmsListCommand(
 	context: CommandContext,
 ): Promise<number> {
 	try {
-		const client = await getClient();
+		const client = await getClient(context);
 
 		const result = await safeGetKmsList(client, {
 			is_onchain: true,

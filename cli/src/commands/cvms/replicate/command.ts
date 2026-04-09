@@ -10,6 +10,7 @@ export const cvmsReplicateCommandMeta: CommandMeta = {
 	options: [
 		{
 			name: "node-id",
+			aliases: ["teepod-id"],
 			description: "Node ID for replica",
 			type: "string",
 			target: "nodeId",

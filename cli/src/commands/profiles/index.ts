@@ -15,12 +15,16 @@ import {
 
 async function runProfilesCommand(
 	_input: ProfilesCommandInput,
-	_context: CommandContext,
+	context: CommandContext,
 ): Promise<number> {
 	const profiles = listProfiles();
 	const currentProfile = getCurrentProfile();
 
 	if (profiles.length === 0) {
+		if (context.globalOptions?.json) {
+			context.success({ profiles: [] });
+			return 0;
+		}
 		logger.warn("No profiles found. Please login first.");
 		return 0;
 	}
@@ -38,6 +42,19 @@ async function runProfilesCommand(
 			"": isCurrent ? "*" : "",
 		};
 	});
+
+	if (context.globalOptions?.json) {
+		context.success({
+			profiles: profiles.map((profile) => ({
+				name: profile,
+				workspace: credentials?.profiles[profile]?.workspace?.name || null,
+				user: credentials?.profiles[profile]?.user?.username || null,
+				apiEndpoint: credentials?.profiles[profile]?.api_prefix || null,
+				current: currentProfile?.name === profile,
+			})),
+		});
+		return 0;
+	}
 
 	printTable(columns, rows);
 	return 0;

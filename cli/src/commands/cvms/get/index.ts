@@ -25,7 +25,7 @@ async function runCvmsGetCommand(
 	try {
 		const spinner = logger.startSpinner("Fetching CVM details");
 
-		const client = await getClient();
+		const client = await getClient(context);
 		const result = await safeGetCvmInfo(client, context.cvmId);
 
 		spinner.stop(true);

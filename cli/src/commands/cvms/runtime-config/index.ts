@@ -22,7 +22,7 @@ async function runCvmsRuntimeConfigCommand(
 	}
 
 	try {
-		const client = await getClient();
+		const client = await getClient(context);
 		const result = await safeGetCvmUserConfig(client, context.cvmId);
 
 		if (!result.success) {

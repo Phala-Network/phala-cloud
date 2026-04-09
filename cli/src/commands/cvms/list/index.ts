@@ -24,7 +24,7 @@ async function runCvmsListCommand(
 	context: CommandContext,
 ): Promise<number> {
 	try {
-		const client = await getClient();
+		const client = await getClient(context);
 		const result = await listAppsWithCvmStatus(client as never, {
 			page: input.page,
 			pageSize: input.pageSize,

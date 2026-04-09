@@ -198,12 +198,15 @@ function handleProvisionError(
 const API_VERSION = "2025-10-28" as const;
 
 async function getApiClient({
+	context,
 	apiToken,
 	interactive,
-}: Readonly<Pick<Options, "apiToken" | "interactive">>): Promise<
-	Client<typeof API_VERSION>
-> {
-	const resolved = resolveAuthForContext(undefined, { apiToken });
+}: Readonly<
+	Pick<Options, "apiToken" | "interactive"> & {
+		context?: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">;
+	}
+>): Promise<Client<typeof API_VERSION>> {
+	const resolved = resolveAuthForContext(context, { apiToken });
 	if (resolved.apiKey) {
 		return createClient({
 			apiKey: resolved.apiKey,
@@ -922,6 +925,7 @@ const updateCvm = async (
 	envs: EnvVar[] | undefined,
 	client: Client<typeof API_VERSION>,
 	stdout: NodeJS.WriteStream,
+	context?: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
 	preLaunchScriptContent?: string,
 ) => {
 	const cvm_result = await safeGetCvmInfo(client, {
@@ -1226,6 +1230,7 @@ const updateCvm = async (
 			await waitForCvmReady(
 				validatedOptions.uuid as string,
 				300000, // 5 minutes timeout
+				context,
 			);
 		} catch (error: unknown) {
 			logger.logDetailedError(error, "Wait for CVM Ready");
@@ -1325,7 +1330,7 @@ export async function runDeploy(
 		// commit-update endpoint is token-based (no API key required),
 		// but we still need a client with the correct base URL.
 		if (input.commit) {
-			const resolved = resolveAuthForContext(undefined, {
+			const resolved = resolveAuthForContext(context, {
 				apiToken: input.apiToken,
 			});
 			const client = createClient({
@@ -1348,6 +1353,7 @@ export async function runDeploy(
 			input.compose || context.projectConfig.compose_file;
 
 		const client = await getApiClient({
+			context,
 			apiToken: input.apiToken,
 			interactive: input.interactive,
 		});
@@ -1425,6 +1431,7 @@ export async function runDeploy(
 				envs,
 				client,
 				context.stdout,
+				context,
 				preLaunchScriptContent,
 			);
 		} else {

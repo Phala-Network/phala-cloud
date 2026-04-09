@@ -156,6 +156,7 @@ function resolvePrivateKey(input: { privateKey?: string }): `0x${string}` {
 
 async function resolveDeviceIdOrNodeName(
 	deviceInput: string,
+	context: CommandContext,
 ): Promise<`0x${string}`> {
 	if (isValidDeviceId(deviceInput)) {
 		return normalizeDeviceId(deviceInput);
@@ -167,7 +168,7 @@ async function resolveDeviceIdOrNodeName(
 		);
 	}
 
-	const client = await getClient();
+	const client = await getClient(context);
 	const nodesResult = await safeGetAvailableNodes(client);
 	if (!nodesResult.success) {
 		throw new Error(
@@ -202,7 +203,7 @@ async function resolveAppContract(
 	cvmIdentifier: string,
 	context: CommandContext,
 ) {
-	const client = await getClient();
+	const client = await getClient(context);
 
 	const infoResult = await safeGetCvmInfo(client, { id: cvmIdentifier });
 	if (!infoResult.success) {
@@ -270,7 +271,7 @@ async function runList(
 		const { chain, appContractAddress } = resolved;
 
 		// Get all platform nodes to build device_id → node_name map
-		const client = await getClient();
+		const client = await getClient(context);
 		const nodesResult = await safeGetAvailableNodes(client);
 		const nodesByDeviceId = new Map<string, string>();
 		if (nodesResult.success) {
@@ -353,7 +354,7 @@ async function runAdd(
 		let deviceIds: `0x${string}`[];
 
 		if (input.interactive && !input.deviceId) {
-			const client = await getClient();
+			const client = await getClient(context);
 			const nodesResult = await safeGetAvailableNodes(client);
 			if (!nodesResult.success) {
 				context.fail(nodesResult.error.message);
@@ -395,7 +396,7 @@ async function runAdd(
 
 			deviceIds = selected.map((id) => normalizeDeviceId(id));
 		} else if (input.deviceId) {
-			const deviceId = await resolveDeviceIdOrNodeName(input.deviceId);
+			const deviceId = await resolveDeviceIdOrNodeName(input.deviceId, context);
 			deviceIds = [deviceId];
 		} else {
 			context.fail("Device ID is required. Use -i to select interactively.");
@@ -534,7 +535,7 @@ async function runRemove(
 
 			deviceIds = selected.map((id) => normalizeDeviceId(id));
 		} else if (input.deviceId) {
-			const deviceId = await resolveDeviceIdOrNodeName(input.deviceId);
+			const deviceId = await resolveDeviceIdOrNodeName(input.deviceId, context);
 			deviceIds = [deviceId];
 		} else {
 			context.fail("Device ID is required. Use -i to select interactively.");

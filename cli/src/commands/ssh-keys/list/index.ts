@@ -16,7 +16,7 @@ async function runSshKeysListCommand(
 	context: CommandContext,
 ): Promise<number> {
 	try {
-		const client = await getClient();
+		const client = await getClient(context);
 		const result = await safeListSshKeys(client);
 
 		if (!result.success) {

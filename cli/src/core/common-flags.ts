@@ -25,6 +25,14 @@ export const interactiveOption: CommandOption = {
 	group: "basic",
 };
 
+export const globalInteractiveOption: CommandOption = {
+	name: "interactive",
+	description: "Enable interactive mode when supported",
+	type: "boolean",
+	target: "interactive",
+	group: "basic",
+};
+
 export const apiTokenOption: CommandOption = {
 	name: "api-token",
 	description: "API token used for authentication",
@@ -45,6 +53,15 @@ export const jsonOption: CommandOption = {
 	group: "basic",
 };
 
+export const profileOption: CommandOption = {
+	name: "profile",
+	description: "Temporarily use a different auth profile for this command",
+	type: "string",
+	target: "profile",
+	argumentName: "profile",
+	group: "basic",
+};
+
 export const apiVersionOption: CommandOption = {
 	name: "api-version",
 	description: "API version to use (e.g. 2025-10-28, 2026-01-21)",
@@ -52,14 +69,6 @@ export const apiVersionOption: CommandOption = {
 	target: "apiVersion",
 	group: "advanced",
 };
-
-export const globalCommandOptions: readonly CommandOption[] = [
-	helpOption,
-	versionOption,
-	apiTokenOption,
-	jsonOption,
-	apiVersionOption,
-];
 
 export const commonAuthOptions: readonly CommandOption[] = [apiTokenOption];
 
@@ -97,3 +106,14 @@ export const uuidOption: CommandOption = {
 	deprecated: true,
 	group: "deprecated",
 };
+
+export const globalCommandOptions: readonly CommandOption[] = [
+	helpOption,
+	versionOption,
+	apiTokenOption,
+	jsonOption,
+	globalInteractiveOption,
+	cvmIdOption,
+	profileOption,
+	apiVersionOption,
+];

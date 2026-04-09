@@ -94,7 +94,7 @@ async function runCpCommand(
 
 		if (!configGatewayDomain) {
 			try {
-				const client = await getClient();
+				const client = await getClient(context);
 				const cvmInfo = await fetchCvmInfo(client, cvmId);
 				instanceId = cvmInfo.appId;
 				gatewayDomain = cvmInfo.gatewayDomain;
