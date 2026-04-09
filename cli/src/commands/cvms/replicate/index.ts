@@ -1,10 +1,22 @@
 import fs from "node:fs";
 import path from "node:path";
-import { CvmIdSchema, encryptEnvVars } from "@phala/cloud";
-import { getCvmComposeConfig, replicateCvm } from "@/src/api/cvms";
+import {
+	type PhalaCloudError,
+	ResourceError,
+	formatErrorMessage,
+	formatStructuredError,
+	safeGetCvmInfo,
+	safeGetCurrentUser,
+	encryptEnvVars,
+} from "@phala/cloud";
+import { replicateCvm } from "@/src/api/cvms";
+import { getClient } from "@/src/lib/client";
+import { getEncryptPubkey } from "@/src/commands/envs/get-encrypt-pubkey";
 import { defineCommand } from "@/src/core/define-command";
+import { isInJsonMode } from "@/src/core/json-mode";
 import type { CommandContext } from "@/src/core/types";
 
+import { CLOUD_URL } from "@/src/utils/constants";
 import { logger } from "@/src/utils/logger";
 import {
 	cvmsReplicateCommandMeta,
@@ -38,8 +50,20 @@ async function runCvmsReplicateCommand(
 			return 1;
 		}
 
-		const { cvmId: normalizedCvmId } = CvmIdSchema.parse(context.cvmId);
 		let encryptedEnv: string | undefined;
+		const client = await getClient(context);
+		const [cvmResult, currentUserResult] = await Promise.all([
+			safeGetCvmInfo(client, context.cvmId),
+			safeGetCurrentUser(client),
+		]);
+		if (!cvmResult.success) {
+			throw new Error(cvmResult.error.message);
+		}
+		if (!currentUserResult.success) {
+			throw new Error(currentUserResult.error.message);
+		}
+		const sourceCvm = cvmResult.data;
+		const workspace = currentUserResult.data.workspace;
 
 		if (input.envFile) {
 			const envPath = path.resolve(process.cwd(), input.envFile);
@@ -48,10 +72,8 @@ async function runCvmsReplicateCommand(
 			}
 
 			const envVars = parseEnvFile(envPath);
-			const cvmConfig = await getCvmComposeConfig(normalizedCvmId);
-
-			logger.info("Encrypting environment variables...");
-			encryptedEnv = await encryptEnvVars(envVars, cvmConfig.env_pubkey);
+			const pubkey = await getEncryptPubkey(client, sourceCvm);
+			encryptedEnv = await encryptEnvVars(envVars, pubkey);
 		}
 
 		const requestBody: { teepod_id?: number; encrypted_env?: string } = {};
@@ -63,36 +85,58 @@ async function runCvmsReplicateCommand(
 			requestBody.encrypted_env = encryptedEnv;
 		}
 
-		const replica = await replicateCvm(normalizedCvmId, requestBody);
+		if (!sourceCvm.vm_uuid) {
+			throw new Error("Source CVM has no vm_uuid");
+		}
 
-		logger.success(
-			`Successfully created replica of CVM UUID: ${normalizedCvmId} with App ID: ${replica.app_id}`,
+		const replica = await replicateCvm(
+			sourceCvm.app_id,
+			sourceCvm.vm_uuid,
+			requestBody,
 		);
 
-		logger.keyValueTable(
-			{
-				"CVM UUID": replica.vm_uuid.replace(/-/g, ""),
-				"App ID": replica.app_id,
-				Name: replica.name,
-				Status: replica.status,
-				TEEPod: `${replica.teepod.name} (ID: ${replica.teepod_id})`,
-				vCPUs: replica.vcpu,
-				Memory: `${replica.memory} MB`,
-				"Disk Size": `${replica.disk_size} GB`,
-				"App URL":
-					replica.app_url ||
-					`${process.env.CLOUD_URL || "https://cloud.phala.com"}/dashboard/cvms/${replica.vm_uuid.replace(/-/g, "")}`,
-			},
-			{ borderStyle: "rounded" },
-		);
+		if (isInJsonMode()) {
+			context.success(replica);
+			return 0;
+		}
 
-		logger.success(
-			`Your CVM replica is being created. You can check its status with:
-phala cvms get ${replica.app_id}`,
-		);
+		const vmUuid = replica.vm_uuid?.replace(/-/g, "") ?? "";
+		const teamLabel =
+			workspace.slug && workspace.slug !== workspace.name
+				? `${workspace.name} (${workspace.slug})`
+				: workspace.slug || workspace.name;
+		const appUrl =
+			workspace.slug && vmUuid
+				? `${CLOUD_URL}/${workspace.slug}/apps/${replica.app_id}/instances/${vmUuid}`
+				: replica.app_url || "-";
+		const lines = [
+			`Source CVM ID:   ${context.cvmId.id}`,
+			`Team:            ${teamLabel}`,
+			`CVM UUID:        ${vmUuid || "-"}`,
+			`App ID:          ${replica.app_id}`,
+			`Name:            ${replica.name}`,
+			`Status:          ${replica.status}`,
+			`TEEPod:          ${replica.teepod.name} (ID: ${replica.teepod_id})`,
+			`vCPUs:           ${replica.vcpu}`,
+			`Memory:          ${replica.memory} MB`,
+			`Disk Size:       ${replica.disk_size} GB`,
+			`App URL:         ${appUrl}`,
+		];
+		context.stdout.write(`${lines.join("\n")}\n`);
 		return 0;
 	} catch (error) {
 		logger.error("Failed to create CVM replica");
+		if (error instanceof ResourceError) {
+			process.stderr.write(`${formatStructuredError(error)}\n`);
+			process.stderr.write(
+				"Reference the error code above in the handbook for remediation details.\n",
+			);
+			return 1;
+		}
+		if (error instanceof Error) {
+			process.stderr.write(`${formatErrorMessage(error as PhalaCloudError)}\n`);
+			return 1;
+		}
 		logger.logDetailedError(error);
 		return 1;
 	}

@@ -148,22 +148,22 @@ export const replicateCvmResponseSchema = z.object({
 		id: z.number(),
 		name: z.string(),
 	}),
-	user_id: z.number().nullable(),
+	user_id: z.number().nullable().optional(),
 	app_id: z.string(),
-	vm_uuid: z.string().nullable(),
-	instance_id: z.string().nullable(),
-	app_url: z.string().nullable(),
-	base_image: z.string().nullable(),
+	vm_uuid: z.string().nullable().optional(),
+	instance_id: z.string().nullable().optional(),
+	app_url: z.string().nullable().optional(),
+	base_image: z.string().nullable().optional(),
 	vcpu: z.number(),
 	memory: z.number(),
 	disk_size: z.number(),
-	manifest_version: z.number().nullable(),
-	version: z.string().nullable(),
-	runner: z.string().nullable(),
-	docker_compose_file: z.string().nullable(),
-	features: z.array(z.string()).nullable(),
+	manifest_version: z.number().nullable().optional(),
+	version: z.string().nullable().optional(),
+	runner: z.string().nullable().optional(),
+	docker_compose_file: z.string().nullable().optional(),
+	features: z.array(z.string()).nullable().optional(),
 	created_at: z.string(),
-	encrypted_env_pubkey: z.string().nullable(),
+	encrypted_env_pubkey: z.string().nullable().optional(),
 });
 
 export type ReplicateCvmResponse = z.infer<typeof replicateCvmResponseSchema>;
@@ -308,10 +308,4 @@ export interface CvmListResponse {
 export interface AvailableNodesResponse {
 	nodes: TEEPod[];
 	kms_list?: KmsListItem[];
-}
-
-// CVM Compose Config Response
-export interface CvmComposeConfigResponse {
-	env_pubkey: string;
-	[key: string]: unknown;
 }

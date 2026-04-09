@@ -50,4 +50,8 @@ export const profilesCommand = defineCommand({
 	handler: runProfilesCommand,
 });
 
+export { profilesUseCommand } from "./use";
+export { profilesRenameCommand } from "./rename";
+export { profilesDeleteCommand } from "./delete";
+
 export default profilesCommand;

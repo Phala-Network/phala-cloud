@@ -258,6 +258,39 @@ export function removeProfile(profileName?: string): void {
 	saveCredentialsFile(next);
 }
 
+export function renameProfile(oldName: string, newName: string): void {
+	const normalizedOld = normalizeProfileName(oldName);
+	const normalizedNew = normalizeProfileName(newName);
+	const current = loadCredentialsFile();
+
+	if (!current) {
+		throw new Error("No credentials file found. Please login first.");
+	}
+
+	if (!current.profiles[normalizedOld]) {
+		throw new Error(`Profile "${normalizedOld}" not found`);
+	}
+
+	if (current.profiles[normalizedNew]) {
+		throw new Error(`Profile "${normalizedNew}" already exists`);
+	}
+
+	const nextProfiles = { ...current.profiles };
+	nextProfiles[normalizedNew] = nextProfiles[normalizedOld];
+	delete nextProfiles[normalizedOld];
+
+	const nextCurrent =
+		current.current_profile === normalizedOld
+			? normalizedNew
+			: current.current_profile;
+
+	saveCredentialsFile({
+		...current,
+		current_profile: nextCurrent,
+		profiles: nextProfiles,
+	});
+}
+
 export function listProfiles(): string[] {
 	const current = loadCredentialsFile();
 	if (!current) return [];

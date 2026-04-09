@@ -1,7 +1,6 @@
 import {
 	safeGetCvmList,
 	safeGetCvmInfo,
-	safeGetCvmComposeFile,
 	type Client,
 	type CvmInfoDetailV20260121,
 } from "@phala/cloud";
@@ -20,7 +19,6 @@ import type {
 	GetCvmNetworkResponse,
 	TeepodResponse,
 	PubkeyResponse,
-	CvmComposeConfigResponse,
 	UpgradeResponse,
 } from "./types";
 import inquirer from "inquirer";
@@ -43,22 +41,6 @@ export async function getCvmByAppId(
 	}
 
 	return result.data;
-}
-
-/**
- * Get CVM compose configuration
- */
-export async function getCvmComposeConfig(
-	cvmId: string,
-): Promise<CvmComposeConfigResponse> {
-	const client = await getClient();
-	const result = await safeGetCvmComposeFile(client, { id: cvmId });
-
-	if (!result.success) {
-		throw new Error(result.error.message);
-	}
-
-	return result.data as CvmComposeConfigResponse;
 }
 
 /**
@@ -168,11 +150,13 @@ export interface ResizeCvmPayload {
 }
 
 /**
- * Replicate a CVM
+ * Replicate a CVM instance
  * @param appId App ID (with or without app_ prefix)
+ * @param vmUuid Source CVM UUID (with or without dashes)
  */
 export async function replicateCvm(
 	appId: string,
+	vmUuid: string,
 	payload: {
 		teepod_id?: number;
 		encrypted_env?: string;
@@ -181,7 +165,7 @@ export async function replicateCvm(
 	const client = await getClient();
 	const cleanAppId = appId.replace(/^app_/, "");
 	const response = await client.post<ReplicateCvmResponse>(
-		`cvms/app_${cleanAppId}/replicas`,
+		`apps/${cleanAppId}/cvms/${vmUuid}/replicas`,
 		payload,
 	);
 	return replicateCvmResponseSchema.parse(response);
