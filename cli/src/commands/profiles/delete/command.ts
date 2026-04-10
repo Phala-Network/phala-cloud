@@ -4,7 +4,7 @@ import type { CommandMeta } from "@/src/core/types";
 export const profilesDeleteCommandMeta: CommandMeta = {
 	name: "delete",
 	category: "profile",
-	description: "Delete a profile",
+	description: "Delete an auth profile",
 	stability: "stable",
 	arguments: [
 		{

@@ -15,9 +15,10 @@ called without explicit config.
 These variables apply to `deploy`, `allow-devices`, `cvms replicate`, and
 `envs update` when the CVM uses Ethereum or Base KMS:
 
-- `PRIVATE_KEY` — Private key used to sign on-chain transactions.
+- `PRIVATE_KEY` — Private key for signing on-chain transactions.
   Precedence: `--private-key` > `PRIVATE_KEY`.
-- `ETH_RPC_URL` — RPC endpoint (foundry / cast convention, reuse existing setup).
+- `ETH_RPC_URL` — RPC endpoint. Follows the foundry/cast convention, so an
+  existing `ETH_RPC_URL` from those tools works automatically.
   Precedence: `--rpc-url` > `ETH_RPC_URL` > chain default.
 
 Example:

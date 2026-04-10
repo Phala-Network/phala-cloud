@@ -27,7 +27,7 @@ export const interactiveOption: CommandOption = {
 
 export const globalInteractiveOption: CommandOption = {
 	name: "interactive",
-	description: "Enable interactive mode when supported",
+	description: "Enable interactive mode for commands that support it",
 	type: "boolean",
 	target: "interactive",
 	group: "basic",
@@ -35,7 +35,7 @@ export const globalInteractiveOption: CommandOption = {
 
 export const apiTokenOption: CommandOption = {
 	name: "api-token",
-	description: "API token used for authentication",
+	description: "API token for authenticating with Phala Cloud",
 	type: "string",
 	target: "apiToken",
 	aliases: ["api-key"],
@@ -129,9 +129,24 @@ export const privateKeyOption: CommandOption = {
 export const rpcUrlOption: CommandOption = {
 	name: "rpc-url",
 	description:
-		"RPC URL for the blockchain (or set ETH_RPC_URL env var, foundry/cast convention)",
+		"RPC URL for on-chain KMS transactions (or set ETH_RPC_URL env var)",
 	type: "string",
 	target: "rpcUrl",
+	group: "advanced",
+};
+
+/**
+ * Transaction hash option (--transaction-hash)
+ * Used by deploy and cvms replicate to prove on-chain compose hash registration.
+ * Accepts the literal sentinel `already-registered` to skip the proof and
+ * fall back to state-only verification.
+ */
+export const transactionHashOption: CommandOption = {
+	name: "transaction-hash",
+	description:
+		"Transaction hash proving on-chain compose hash registration. Pass `already-registered` to skip the proof and rely on state-only verification.",
+	type: "string",
+	target: "transactionHash",
 	group: "advanced",
 };
 

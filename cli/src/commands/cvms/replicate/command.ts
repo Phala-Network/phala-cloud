@@ -5,6 +5,7 @@ import {
 	interactiveOption,
 	privateKeyOption,
 	rpcUrlOption,
+	transactionHashOption,
 } from "@/src/core/common-flags";
 
 export const cvmsReplicateCommandMeta: CommandMeta = {
@@ -16,21 +17,21 @@ export const cvmsReplicateCommandMeta: CommandMeta = {
 		{
 			name: "node-id",
 			aliases: ["teepod-id"],
-			description: "Node ID for replica",
+			description: "Target node ID for the replica.",
 			type: "string",
 			target: "nodeId",
 		},
 		{
 			name: "compose-hash",
 			description:
-				"Explicit compose hash to replicate. Required when the source app has multiple live instances",
+				"Compose hash to replicate. Required when the source app has multiple live instances.",
 			type: "string",
 			target: "composeHash",
 		},
 		{
 			name: "env-file",
 			shorthand: "e",
-			description: "Path to environment file",
+			description: "Path to environment file.",
 			type: "string",
 			target: "envFile",
 		},
@@ -39,7 +40,7 @@ export const cvmsReplicateCommandMeta: CommandMeta = {
 		{
 			name: "prepare-only",
 			description:
-				"Only prepare the replica (generate commit token) without performing on-chain operations.",
+				"Prepare the replica and generate a commit token. Skips all on-chain operations.",
 			type: "boolean",
 			target: "prepareOnly",
 			group: "advanced",
@@ -47,26 +48,19 @@ export const cvmsReplicateCommandMeta: CommandMeta = {
 		{
 			name: "commit",
 			description:
-				"Commit a previously prepared replica using a commit token. Requires --token and --compose-hash.",
+				"Commit a previously prepared replica using a commit token. Requires --token, --compose-hash, and --transaction-hash.",
 			type: "boolean",
 			target: "commit",
 			group: "advanced",
 		},
 		{
 			name: "token",
-			description: "Commit token from a prepare-only replica request",
+			description: "Commit token from a prepare-only replica request.",
 			type: "string",
 			target: "token",
 			group: "advanced",
 		},
-		{
-			name: "transaction-hash",
-			description:
-				"Transaction hash proving on-chain compose hash registration. Use already-registered for state-only verification.",
-			type: "string",
-			target: "transactionHash",
-			group: "advanced",
-		},
+		transactionHashOption,
 		interactiveOption,
 	],
 	examples: [

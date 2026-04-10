@@ -10,6 +10,7 @@ import {
 	interactiveOption,
 	privateKeyOption,
 	rpcUrlOption,
+	transactionHashOption,
 	uuidOption,
 } from "@/src/core/common-flags";
 
@@ -187,7 +188,7 @@ export const deployCommandMeta: CommandMeta = {
 		{
 			name: "prepare-only",
 			description:
-				"Only prepare the update (generate commit token) without performing on-chain operations. For multisig workflows.",
+				"Prepare the update and generate a commit token. Skips all on-chain operations. Intended for multisig workflows.",
 			type: "boolean",
 			target: "prepareOnly",
 			group: "advanced",
@@ -202,26 +203,19 @@ export const deployCommandMeta: CommandMeta = {
 		},
 		{
 			name: "token",
-			description: "Commit token from a prepare-only update",
+			description: "Commit token from a prepare-only update.",
 			type: "string",
 			target: "token",
 			group: "advanced",
 		},
 		{
 			name: "compose-hash",
-			description: "Compose hash from a prepare-only update",
+			description: "Compose hash from a prepare-only update.",
 			type: "string",
 			target: "composeHash",
 			group: "advanced",
 		},
-		{
-			name: "transaction-hash",
-			description:
-				"Transaction hash proving on-chain compose hash registration",
-			type: "string",
-			target: "transactionHash",
-			group: "advanced",
-		},
+		transactionHashOption,
 		{
 			name: "public-logs",
 			description: "Make CVM logs publicly accessible (default: true)",

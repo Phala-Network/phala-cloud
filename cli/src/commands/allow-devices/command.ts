@@ -54,14 +54,14 @@ export type AllowDevicesListInput = z.infer<typeof allowDevicesListSchema>;
 
 export const allowDevicesAddMeta: CommandMeta = {
 	name: "add",
-	description: "Add device(s) to the on-chain allowlist",
+	description: "Add devices to the on-chain allowlist",
 	stability: "unstable",
 	arguments: [
 		cvmArgument,
 		{
 			name: "device_id",
 			description:
-				"Device ID (bytes32 hex) or node name to resolve device_id from available nodes",
+				"Device ID (bytes32 hex) or node name. Node names are resolved to device IDs from available nodes.",
 			required: false,
 			target: "deviceId",
 		},
@@ -108,14 +108,14 @@ export type AllowDevicesAddInput = z.infer<typeof allowDevicesAddSchema>;
 export const allowDevicesRemoveMeta: CommandMeta = {
 	name: "remove",
 	aliases: ["rm"],
-	description: "Remove device(s) from the on-chain allowlist",
+	description: "Remove devices from the on-chain allowlist",
 	stability: "unstable",
 	arguments: [
 		cvmArgument,
 		{
 			name: "device_id",
 			description:
-				"Device ID (bytes32 hex) or node name to resolve device_id from available nodes",
+				"Device ID (bytes32 hex) or node name. Node names are resolved to device IDs from available nodes.",
 			required: false,
 			target: "deviceId",
 		},
@@ -162,7 +162,8 @@ export type AllowDevicesRemoveInput = z.infer<typeof allowDevicesRemoveSchema>;
 
 export const allowDevicesAllowAnyMeta: CommandMeta = {
 	name: "allow-any",
-	description: "Set allow-any-device flag on the contract",
+	description:
+		"Set the allow-any-device flag on the contract. Requires --enable or --disable.",
 	stability: "unstable",
 	arguments: [cvmArgument],
 	options: [
@@ -221,7 +222,8 @@ export type AllowDevicesAllowAnyInput = z.infer<
 
 export const allowDevicesDisallowAnyMeta: CommandMeta = {
 	name: "disallow-any",
-	description: "Disable allow-any-device on the contract",
+	description:
+		"Disable allow-any-device on the contract. Equivalent to `allow-any --disable`.",
 	stability: "unstable",
 	arguments: [cvmArgument],
 	options: [
