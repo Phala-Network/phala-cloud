@@ -537,9 +537,14 @@ async function resolveAppContract(
 // ── list ────────────────────────────────────────────────────────────
 
 async function runList(
-	input: AllowDevicesListInput,
+	rawInput: AllowDevicesListInput,
 	context: CommandContext,
 ): Promise<number> {
+	// Fall back to ETH_RPC_URL env var (foundry/cast convention)
+	const input: AllowDevicesListInput = {
+		...rawInput,
+		rpcUrl: rawInput.rpcUrl || process.env.ETH_RPC_URL,
+	};
 	const say = (line = ""): void => {
 		if (!input.json) writeStderr(line);
 	};
@@ -639,9 +644,14 @@ async function runList(
 // ── add ─────────────────────────────────────────────────────────────
 
 async function runAdd(
-	input: AllowDevicesAddInput,
+	rawInput: AllowDevicesAddInput,
 	context: CommandContext,
 ): Promise<number> {
+	// Fall back to ETH_RPC_URL env var (foundry/cast convention)
+	const input: AllowDevicesAddInput = {
+		...rawInput,
+		rpcUrl: rawInput.rpcUrl || process.env.ETH_RPC_URL,
+	};
 	const say = (line = ""): void => {
 		if (!input.json) writeStderr(line);
 	};
@@ -821,9 +831,14 @@ async function runAdd(
 // ── remove ──────────────────────────────────────────────────────────
 
 async function runRemove(
-	input: AllowDevicesRemoveInput,
+	rawInput: AllowDevicesRemoveInput,
 	context: CommandContext,
 ): Promise<number> {
+	// Fall back to ETH_RPC_URL env var (foundry/cast convention)
+	const input: AllowDevicesRemoveInput = {
+		...rawInput,
+		rpcUrl: rawInput.rpcUrl || process.env.ETH_RPC_URL,
+	};
 	const say = (line = ""): void => {
 		if (!input.json) writeStderr(line);
 	};
@@ -1007,9 +1022,14 @@ async function runRemove(
 // ── allow-any ───────────────────────────────────────────────────────
 
 async function runAllowAny(
-	input: AllowDevicesAllowAnyInput,
+	rawInput: AllowDevicesAllowAnyInput,
 	context: CommandContext,
 ): Promise<number> {
+	// Fall back to ETH_RPC_URL env var (foundry/cast convention)
+	const input: AllowDevicesAllowAnyInput = {
+		...rawInput,
+		rpcUrl: rawInput.rpcUrl || process.env.ETH_RPC_URL,
+	};
 	const allow = resolveAllowAnyFlag(input);
 	if (allow === null) {
 		context.fail(
@@ -1043,9 +1063,14 @@ async function runAllowAny(
 }
 
 async function runDisallowAny(
-	input: AllowDevicesDisallowAnyInput,
+	rawInput: AllowDevicesDisallowAnyInput,
 	context: CommandContext,
 ): Promise<number> {
+	// Fall back to ETH_RPC_URL env var (foundry/cast convention)
+	const input: AllowDevicesDisallowAnyInput = {
+		...rawInput,
+		rpcUrl: rawInput.rpcUrl || process.env.ETH_RPC_URL,
+	};
 	let effectiveRpc: string | undefined;
 	let activeChain: SupportedChain | undefined;
 	try {
@@ -1069,9 +1094,14 @@ async function runDisallowAny(
 }
 
 async function runToggleAllowAny(
-	input: AllowDevicesToggleAllowAnyInput,
+	rawInput: AllowDevicesToggleAllowAnyInput,
 	context: CommandContext,
 ): Promise<number> {
+	// Fall back to ETH_RPC_URL env var (foundry/cast convention)
+	const input: AllowDevicesToggleAllowAnyInput = {
+		...rawInput,
+		rpcUrl: rawInput.rpcUrl || process.env.ETH_RPC_URL,
+	};
 	let effectiveRpc: string | undefined;
 	let activeChain: SupportedChain | undefined;
 	try {

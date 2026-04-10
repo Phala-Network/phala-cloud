@@ -8,6 +8,8 @@ import {
 import {
 	cvmIdOption,
 	interactiveOption,
+	privateKeyOption,
+	rpcUrlOption,
 	uuidOption,
 } from "@/src/core/common-flags";
 
@@ -158,20 +160,8 @@ export const deployCommandMeta: CommandMeta = {
 			target: "preLaunchScript",
 			group: "advanced",
 		},
-		{
-			name: "private-key",
-			description: "Private key for signing transactions.",
-			type: "string",
-			target: "privateKey",
-			group: "advanced",
-		},
-		{
-			name: "rpc-url",
-			description: "RPC URL for the blockchain.",
-			type: "string",
-			target: "rpcUrl",
-			group: "advanced",
-		},
+		privateKeyOption,
+		rpcUrlOption,
 		{
 			name: "wait",
 			description: "Wait for deployment/update completion",

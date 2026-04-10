@@ -1400,6 +1400,8 @@ export async function runDeploy(
 					: context.projectConfig.env_file
 						? [context.projectConfig.env_file]
 						: undefined,
+			// Fall back to ETH_RPC_URL env var (foundry/cast convention)
+			rpcUrl: input.rpcUrl || process.env.ETH_RPC_URL,
 		};
 
 		const envs = await resolveEnvVars(optionsWithEnvFile);

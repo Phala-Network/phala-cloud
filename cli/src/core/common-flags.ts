@@ -107,6 +107,34 @@ export const uuidOption: CommandOption = {
 	group: "deprecated",
 };
 
+/**
+ * Private key option (--private-key)
+ * Used by on-chain KMS commands for signing transactions.
+ * Falls back to PRIVATE_KEY env var.
+ */
+export const privateKeyOption: CommandOption = {
+	name: "private-key",
+	description:
+		"Private key for signing on-chain transactions (or set PRIVATE_KEY env var)",
+	type: "string",
+	target: "privateKey",
+	group: "advanced",
+};
+
+/**
+ * RPC URL option (--rpc-url)
+ * Used by on-chain KMS commands to override the default RPC endpoint.
+ * Falls back to ETH_RPC_URL env var (foundry/cast convention).
+ */
+export const rpcUrlOption: CommandOption = {
+	name: "rpc-url",
+	description:
+		"RPC URL for the blockchain (or set ETH_RPC_URL env var, foundry/cast convention)",
+	type: "string",
+	target: "rpcUrl",
+	group: "advanced",
+};
+
 export const globalCommandOptions: readonly CommandOption[] = [
 	helpOption,
 	versionOption,

@@ -1,6 +1,11 @@
 import { z } from "zod";
 import type { CommandMeta } from "@/src/core/types";
-import { cvmIdArgument, interactiveOption } from "@/src/core/common-flags";
+import {
+	cvmIdArgument,
+	interactiveOption,
+	privateKeyOption,
+	rpcUrlOption,
+} from "@/src/core/common-flags";
 
 export const cvmsReplicateCommandMeta: CommandMeta = {
 	name: "replicate",
@@ -29,20 +34,8 @@ export const cvmsReplicateCommandMeta: CommandMeta = {
 			type: "string",
 			target: "envFile",
 		},
-		{
-			name: "private-key",
-			description: "Private key for signing transactions.",
-			type: "string",
-			target: "privateKey",
-			group: "advanced",
-		},
-		{
-			name: "rpc-url",
-			description: "RPC URL for the blockchain.",
-			type: "string",
-			target: "rpcUrl",
-			group: "advanced",
-		},
+		privateKeyOption,
+		rpcUrlOption,
 		{
 			name: "prepare-only",
 			description:

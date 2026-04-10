@@ -1,6 +1,10 @@
 import { z } from "zod";
 import type { CommandMeta, CommandGroup } from "@/src/core/types";
-import { interactiveOption } from "@/src/core/common-flags";
+import {
+	interactiveOption,
+	privateKeyOption,
+	rpcUrlOption,
+} from "@/src/core/common-flags";
 import { jsonOption } from "@/src/commands/status/command";
 
 // Use a custom cvm argument that does NOT match "cvmId" target,
@@ -29,16 +33,7 @@ export const allowDevicesListMeta: CommandMeta = {
 	description: "List allowed devices from the on-chain contract",
 	stability: "unstable",
 	arguments: [cvmArgument],
-	options: [
-		{
-			name: "rpc-url",
-			description: "Custom RPC URL for the blockchain",
-			type: "string",
-			target: "rpcUrl",
-			group: "advanced",
-		},
-		jsonOption,
-	],
+	options: [rpcUrlOption, jsonOption],
 	examples: [
 		{
 			name: "List devices on-chain",
@@ -72,20 +67,8 @@ export const allowDevicesAddMeta: CommandMeta = {
 		},
 	],
 	options: [
-		{
-			name: "private-key",
-			description: "Private key for signing the transaction",
-			type: "string",
-			target: "privateKey",
-			group: "advanced",
-		},
-		{
-			name: "rpc-url",
-			description: "Custom RPC URL for the blockchain",
-			type: "string",
-			target: "rpcUrl",
-			group: "advanced",
-		},
+		privateKeyOption,
+		rpcUrlOption,
 		{
 			name: "wait",
 			description:
@@ -138,20 +121,8 @@ export const allowDevicesRemoveMeta: CommandMeta = {
 		},
 	],
 	options: [
-		{
-			name: "private-key",
-			description: "Private key for signing the transaction",
-			type: "string",
-			target: "privateKey",
-			group: "advanced",
-		},
-		{
-			name: "rpc-url",
-			description: "Custom RPC URL for the blockchain",
-			type: "string",
-			target: "rpcUrl",
-			group: "advanced",
-		},
+		privateKeyOption,
+		rpcUrlOption,
 		{
 			name: "wait",
 			description:
@@ -207,20 +178,8 @@ export const allowDevicesAllowAnyMeta: CommandMeta = {
 			type: "boolean",
 			target: "disable",
 		},
-		{
-			name: "private-key",
-			description: "Private key for signing the transaction",
-			type: "string",
-			target: "privateKey",
-			group: "advanced",
-		},
-		{
-			name: "rpc-url",
-			description: "Custom RPC URL for the blockchain",
-			type: "string",
-			target: "rpcUrl",
-			group: "advanced",
-		},
+		privateKeyOption,
+		rpcUrlOption,
 		{
 			name: "wait",
 			description:
@@ -266,20 +225,8 @@ export const allowDevicesDisallowAnyMeta: CommandMeta = {
 	stability: "unstable",
 	arguments: [cvmArgument],
 	options: [
-		{
-			name: "private-key",
-			description: "Private key for signing the transaction",
-			type: "string",
-			target: "privateKey",
-			group: "advanced",
-		},
-		{
-			name: "rpc-url",
-			description: "Custom RPC URL for the blockchain",
-			type: "string",
-			target: "rpcUrl",
-			group: "advanced",
-		},
+		privateKeyOption,
+		rpcUrlOption,
 		{
 			name: "wait",
 			description:
@@ -330,20 +277,8 @@ export const allowDevicesToggleAllowAnyMeta: CommandMeta = {
 			type: "boolean",
 			target: "disable",
 		},
-		{
-			name: "private-key",
-			description: "Private key for signing the transaction",
-			type: "string",
-			target: "privateKey",
-			group: "advanced",
-		},
-		{
-			name: "rpc-url",
-			description: "Custom RPC URL for the blockchain",
-			type: "string",
-			target: "rpcUrl",
-			group: "advanced",
-		},
+		privateKeyOption,
+		rpcUrlOption,
 		{
 			name: "wait",
 			description:
