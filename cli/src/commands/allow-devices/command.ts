@@ -7,7 +7,7 @@ import { jsonOption } from "@/src/commands/status/command";
 // so the dispatcher won't intercept -i for CVM interactive selection.
 const cvmArgument = {
 	name: "cvm",
-	description: "CVM identifier (UUID, app_id, instance_id, or name)",
+	description: "CVM or app identifier (UUID, app_id, instance_id, or name)",
 	required: true,
 	target: "cvm",
 };
@@ -16,7 +16,7 @@ export const allowDevicesGroup: CommandGroup = {
 	path: ["allow-devices"],
 	meta: {
 		name: "allow-devices",
-		description: "Manage on-chain device allowlist for a CVM's app contract",
+		description: "Manage on-chain device allowlist for an app contract",
 		stability: "unstable",
 	},
 };

@@ -43,6 +43,7 @@ import {
 // ── Helpers ─────────────────────────────────────────────────────────
 
 const DEVICE_ID_REGEX = /^(0x)?[0-9a-fA-F]{64}$/;
+const RAW_APP_ID_REGEX = /^[0-9a-fA-F]{40}$/;
 
 export function normalizeDeviceId(deviceId: string): `0x${string}` {
 	const normalized = deviceId.startsWith("0x") ? deviceId : `0x${deviceId}`;
@@ -51,6 +52,18 @@ export function normalizeDeviceId(deviceId: string): `0x${string}` {
 
 export function isValidDeviceId(deviceId: string): boolean {
 	return DEVICE_ID_REGEX.test(deviceId);
+}
+
+export function isAppAllowlistIdentifier(identifier: string): boolean {
+	return identifier.startsWith("app_") || RAW_APP_ID_REGEX.test(identifier);
+}
+
+export function normalizeAllowlistAppId(identifier: string): string {
+	const rawAppId = identifier.startsWith("app_")
+		? identifier.slice(4)
+		: identifier;
+
+	return RAW_APP_ID_REGEX.test(rawAppId) ? rawAppId.toLowerCase() : rawAppId;
 }
 
 export function txExplorerUrl(
@@ -205,25 +218,32 @@ async function resolveAppContract(
 ) {
 	const client = await getClient(context);
 
-	const infoResult = await safeGetCvmInfo(client, { id: cvmIdentifier });
-	if (!infoResult.success) {
-		context.fail(infoResult.error.message);
-		return null;
+	let appId: string;
+	if (isAppAllowlistIdentifier(cvmIdentifier)) {
+		appId = normalizeAllowlistAppId(cvmIdentifier);
+	} else {
+		const infoResult = await safeGetCvmInfo(client, { id: cvmIdentifier });
+		if (!infoResult.success) {
+			context.fail(infoResult.error.message);
+			return null;
+		}
+
+		const cvm = infoResult.data;
+		if (!cvm) {
+			context.fail("CVM not found");
+			return null;
+		}
+
+		appId = cvm.app_id;
+		if (!appId) {
+			context.fail("CVM has no app_id assigned yet.");
+			return null;
+		}
 	}
 
-	const cvm = infoResult.data;
-	if (!cvm) {
-		context.fail("CVM not found");
-		return null;
-	}
-
-	const appId = cvm.app_id;
-	if (!appId) {
-		context.fail("CVM has no app_id assigned yet.");
-		return null;
-	}
-
-	const allowlistResult = await safeGetAppDeviceAllowlist(client, { appId });
+	const allowlistResult = await safeGetAppDeviceAllowlist(client, {
+		appId: normalizeAllowlistAppId(appId),
+	});
 	if (!allowlistResult.success) {
 		context.fail(allowlistResult.error.message);
 		return null;
