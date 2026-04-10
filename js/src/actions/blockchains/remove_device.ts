@@ -162,13 +162,14 @@ export async function removeDevice<T extends z.ZodTypeAny | false | undefined = 
 
   if (privateKey) {
     const account = privateKeyToAccount(privateKey as Hex);
+    const transport = http(rpcUrl, { timeout: timeout as number });
     publicClient = providedPublicClient
       ? (providedPublicClient as PublicClient)
-      : createPublicClient({ chain: chain as Chain, transport: http(rpcUrl) });
+      : createPublicClient({ chain: chain as Chain, transport });
     walletClient = createWalletClient({
       account,
       chain: chain as Chain,
-      transport: http(rpcUrl),
+      transport,
     });
     address = account.address;
     chainId = (chain as Chain).id;
@@ -176,7 +177,10 @@ export async function removeDevice<T extends z.ZodTypeAny | false | undefined = 
     walletClient = providedWalletClient as WalletClient;
     publicClient = providedPublicClient
       ? (providedPublicClient as PublicClient)
-      : createPublicClient({ chain: chain as Chain, transport: http(rpcUrl) });
+      : createPublicClient({
+          chain: chain as Chain,
+          transport: http(rpcUrl, { timeout: timeout as number }),
+        });
     if (!walletClient.account?.address) {
       throw new Error("WalletClient must have an account with address");
     }

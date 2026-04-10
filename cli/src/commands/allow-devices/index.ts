@@ -76,6 +76,20 @@ export function txExplorerUrl(
 	return `${baseUrl}/tx/${txHash}`;
 }
 
+function logPendingTransaction(params: {
+	chain: (typeof SUPPORTED_CHAINS)[keyof typeof SUPPORTED_CHAINS];
+	description: string;
+	txHash: string;
+}) {
+	const { chain, description, txHash } = params;
+	logger.info(`${description} submitted: ${txHash}`);
+	const explorerUrl = txExplorerUrl(chain, txHash);
+	if (explorerUrl) {
+		logger.info(`Explorer:    ${explorerUrl}`);
+	}
+	logger.info("Waiting for 1 confirmation...");
+}
+
 /**
  * Determine the allow-any flag value for the `allow-any` command.
  * Returns null if neither --enable nor --disable was specified (caller should fail).
@@ -430,6 +444,7 @@ async function runAdd(
 		}[] = [];
 
 		for (const deviceId of deviceIds) {
+			logger.info(`Submitting add-device transaction for ${deviceId}...`);
 			const result = await safeAddDevice({
 				chain,
 				rpcUrl: input.rpcUrl,
@@ -437,6 +452,13 @@ async function runAdd(
 				deviceId,
 				privateKey,
 				skipPrerequisiteChecks: true,
+				onTransactionSubmitted: (txHash) => {
+					logPendingTransaction({
+						chain,
+						description: `Add-device transaction for ${deviceId}`,
+						txHash,
+					});
+				},
 			});
 
 			if (!result.success) {
@@ -569,6 +591,7 @@ async function runRemove(
 		}[] = [];
 
 		for (const deviceId of deviceIds) {
+			logger.info(`Submitting remove-device transaction for ${deviceId}...`);
 			const result = await safeRemoveDevice({
 				chain,
 				rpcUrl: input.rpcUrl,
@@ -576,6 +599,13 @@ async function runRemove(
 				deviceId,
 				privateKey,
 				skipPrerequisiteChecks: true,
+				onTransactionSubmitted: (txHash) => {
+					logPendingTransaction({
+						chain,
+						description: `Remove-device transaction for ${deviceId}`,
+						txHash,
+					});
+				},
 			});
 
 			if (!result.success) {
@@ -768,12 +798,22 @@ async function executeSetAllowAny(
 	const { chain, appContractAddress, allow } = params;
 	const privateKey = resolvePrivateKey(input);
 
+	logger.info(
+		`Submitting allow-any-device transaction (${allow ? "enable" : "disable"})...`,
+	);
 	const result = await safeSetAllowAnyDevice({
 		chain,
 		rpcUrl: input.rpcUrl,
 		appAddress: appContractAddress,
 		allow,
 		privateKey: privateKey as `0x${string}`,
+		onTransactionSubmitted: (txHash) => {
+			logPendingTransaction({
+				chain,
+				description: "Allow-any-device transaction",
+				txHash,
+			});
+		},
 	});
 
 	if (!result.success) {
