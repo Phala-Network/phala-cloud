@@ -588,10 +588,15 @@ async function runList(
 				chain: chain.name,
 				owner: onChain.owner,
 				allowAnyDevice: onChain.allowAnyDevice,
-				devices: onChain.devices.map((did) => ({
-					deviceId: did,
-					nodeName: nodesByDeviceId.get(did.toLowerCase()) ?? null,
-				})),
+				// When allowAnyDevice is on, the per-device allowlist is
+				// effectively empty (all devices are implicitly allowed) —
+				// getAllowedDevices just echoes the queried IDs back.
+				devices: onChain.allowAnyDevice
+					? []
+					: onChain.devices.map((did) => ({
+							deviceId: did,
+							nodeName: nodesByDeviceId.get(did.toLowerCase()) ?? null,
+						})),
 			});
 			return 0;
 		}
@@ -600,6 +605,13 @@ async function runList(
 		say(`Chain:    ${chain.name}`);
 		say(`Owner:    ${onChain.owner}`);
 		say(`Allow Any Device: ${onChain.allowAnyDevice ? "yes" : "no"}`);
+
+		// When allowAnyDevice is on, the per-device list from getAllowedDevices
+		// is just the queried IDs reflected back (all platform nodes), not a
+		// meaningful allowlist. Skip the table to avoid misleading the reader.
+		if (onChain.allowAnyDevice) {
+			return 0;
+		}
 
 		if (onChain.devices.length === 0) {
 			say("No devices found");
