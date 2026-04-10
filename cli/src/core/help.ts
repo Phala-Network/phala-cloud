@@ -1,3 +1,4 @@
+import { helpTopics } from "@/src/commands/help/topics.generated";
 import { globalCommandOptions } from "./common-flags";
 import type {
 	CommandDefinition,
@@ -11,6 +12,18 @@ function formatStabilityIndicator(stability: CommandStability): string {
 	if (stability === "unstable") return " [UNSTABLE]";
 	if (stability === "deprecated") return " [DEPRECATED]";
 	return "";
+}
+
+function appendHelpTopicsBlock(lines: string[], executableName: string): void {
+	const topics = Object.values(helpTopics);
+	if (topics.length === 0) return;
+	lines.push("Help topics:");
+	for (const topic of topics) {
+		lines.push(`  ${topic.name.padEnd(18)}${topic.description}`.trimEnd());
+	}
+	lines.push("");
+	lines.push(`Use "${executableName} help <topic>" to read a topic.`);
+	lines.push("");
 }
 
 interface GlobalHelpOptions {
@@ -139,7 +152,8 @@ export function formatGlobalHelp(options: GlobalHelpOptions): string {
 		lines.push("");
 	}
 
-	lines.push("");
+	appendHelpTopicsBlock(lines, executableName);
+
 	lines.push("Global options:");
 	for (const option of globalCommandOptions) {
 		const sig = formatOptionSignature(option);
