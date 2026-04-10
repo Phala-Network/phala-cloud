@@ -29,7 +29,16 @@ export const allowDevicesListMeta: CommandMeta = {
 	description: "List allowed devices from the on-chain contract",
 	stability: "unstable",
 	arguments: [cvmArgument],
-	options: [jsonOption],
+	options: [
+		{
+			name: "rpc-url",
+			description: "Custom RPC URL for the blockchain",
+			type: "string",
+			target: "rpcUrl",
+			group: "advanced",
+		},
+		jsonOption,
+	],
 	examples: [
 		{
 			name: "List devices on-chain",
@@ -40,6 +49,7 @@ export const allowDevicesListMeta: CommandMeta = {
 
 export const allowDevicesListSchema = z.object({
 	cvm: z.string(),
+	rpcUrl: z.string().optional(),
 	json: z.boolean().default(false),
 });
 
