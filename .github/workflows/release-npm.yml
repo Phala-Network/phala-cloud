@@ -474,6 +474,7 @@ jobs:
       - name: Publish to npm
         working-directory: ${{ env.PACKAGE }}
         run: |
+          set -o pipefail
           echo "🚀 Publishing @phala/cloud..."
           echo ""
           echo "Package info:"
