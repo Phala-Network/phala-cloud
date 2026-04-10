@@ -444,7 +444,10 @@ async function runAdd(
 		}[] = [];
 
 		for (const deviceId of deviceIds) {
+			const effectiveRpc = input.rpcUrl || chain.rpcUrls.default.http[0];
 			logger.info(`Submitting add-device transaction for ${deviceId}...`);
+			logger.info(`RPC URL: ${effectiveRpc}`);
+
 			const result = await safeAddDevice({
 				chain,
 				rpcUrl: input.rpcUrl,
@@ -591,7 +594,10 @@ async function runRemove(
 		}[] = [];
 
 		for (const deviceId of deviceIds) {
+			const effectiveRpc = input.rpcUrl || chain.rpcUrls.default.http[0];
 			logger.info(`Submitting remove-device transaction for ${deviceId}...`);
+			logger.info(`RPC URL: ${effectiveRpc}`);
+
 			const result = await safeRemoveDevice({
 				chain,
 				rpcUrl: input.rpcUrl,
@@ -798,9 +804,12 @@ async function executeSetAllowAny(
 	const { chain, appContractAddress, allow } = params;
 	const privateKey = resolvePrivateKey(input);
 
+	const effectiveRpc = input.rpcUrl || chain.rpcUrls.default.http[0];
 	logger.info(
 		`Submitting allow-any-device transaction (${allow ? "enable" : "disable"})...`,
 	);
+	logger.info(`RPC URL: ${effectiveRpc}`);
+
 	const result = await safeSetAllowAnyDevice({
 		chain,
 		rpcUrl: input.rpcUrl,
