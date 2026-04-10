@@ -11,9 +11,11 @@ import {
 	type SshKeysRemoveCommandInput,
 } from "./command";
 
-async function selectSshKey(): Promise<string | undefined> {
+async function selectSshKey(
+	context: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
+): Promise<string | undefined> {
 	const spinner = logger.startSpinner("Fetching SSH keys");
-	const client = await getClient();
+	const client = await getClient(context);
 	const result = await safeListSshKeys(client);
 	spinner.stop(true);
 
@@ -53,7 +55,7 @@ async function runSshKeysRemoveCommand(
 		let keyId = input.keyId;
 
 		if (!keyId && input.interactive) {
-			keyId = await selectSshKey();
+			keyId = await selectSshKey(context);
 			if (!keyId) {
 				return 0;
 			}
@@ -66,7 +68,7 @@ async function runSshKeysRemoveCommand(
 			return 1;
 		}
 
-		const client = await getClient();
+		const client = await getClient(context);
 		const result = await safeDeleteSshKey(client, { keyId });
 
 		if (!result.success) {

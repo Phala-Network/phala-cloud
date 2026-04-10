@@ -53,6 +53,11 @@ const mockValidateNetworkPrerequisites = validateNetworkPrerequisites as MockedF
 const mockCreateTransactionTracker = createTransactionTracker as MockedFunction<typeof createTransactionTracker>;
 const mockExecuteTransactionWithRetry = executeTransactionWithRetry as MockedFunction<typeof executeTransactionWithRetry>;
 
+// Address derived from validRequest.privateKey via privateKeyToAccount; the
+// addComposeHash owner pre-check compares this against the contract's owner()
+// return value, so the readContract mock below must return the same address.
+const TEST_SENDER_ADDRESS = "0x1Be31A94361a391bBaFB2a4CCd704F57dc04d4bb" as `0x${string}`;
+
 describe("addComposeHash", () => {
   let mockPublicClient: Partial<PublicClient>;
   let mockWalletClient: Partial<WalletClient>;
@@ -73,7 +78,7 @@ describe("addComposeHash", () => {
     contractAddress: null,
     cumulativeGasUsed: BigInt(21000),
     effectiveGasPrice: BigInt(1000000000),
-    from: "0xabcdef1234567890abcdef1234567890abcdef12" as `0x${string}`,
+    from: TEST_SENDER_ADDRESS,
     logsBloom: "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`,
     to: "0x1234567890abcdef1234567890abcdef12345678" as `0x${string}`,
     transactionIndex: 0,
@@ -85,14 +90,21 @@ describe("addComposeHash", () => {
     vi.clearAllMocks();
 
     // Mock PublicClient
+    // Pre-check reads owner() and compares to sender; all other readContract
+    // calls keep their historical tuple shape.
     mockPublicClient = {
-      readContract: vi.fn().mockResolvedValue([true, "0x1234567890abcdef1234567890abcdef12345678" as `0x${string}`]),
+      readContract: vi.fn().mockImplementation(async (args: any) => {
+        if (args?.functionName === "owner") {
+          return TEST_SENDER_ADDRESS;
+        }
+        return [true, "0x1234567890abcdef1234567890abcdef12345678" as `0x${string}`];
+      }),
     };
 
     // Mock WalletClient
     mockWalletClient = {
       account: {
-        address: "0xabcdef1234567890abcdef1234567890abcdef12" as `0x${string}`,
+        address: TEST_SENDER_ADDRESS,
       },
       chain: base,
       writeContract: vi.fn().mockResolvedValue("0x123...abc" as `0x${string}`),
@@ -123,7 +135,7 @@ describe("addComposeHash", () => {
       details: {
         currentChainId: base.id,
         balance: parseEther("1.0"),
-        address: "0xabcdef1234567890abcdef1234567890abcdef12" as `0x${string}`,
+        address: TEST_SENDER_ADDRESS,
       },
     });
 
@@ -238,7 +250,7 @@ describe("addComposeHash", () => {
         details: {
           currentChainId: base.id,
           balance: parseEther("0.1"), // Only 0.1 ETH
-          address: "0xabcdef1234567890abcdef1234567890abcdef12" as `0x${string}`,
+          address: TEST_SENDER_ADDRESS,
         },
       });
 
@@ -364,7 +376,7 @@ describe("addComposeHash", () => {
         details: {
           currentChainId: 999,
           balance: parseEther("1.0"),
-          address: "0xabcdef1234567890abcdef1234567890abcdef12" as `0x${string}`,
+          address: TEST_SENDER_ADDRESS,
         },
       });
 
@@ -379,7 +391,7 @@ describe("addComposeHash", () => {
         details: {
           currentChainId: base.id,
           balance: parseEther("0.0001"),
-          address: "0xabcdef1234567890abcdef1234567890abcdef12" as `0x${string}`,
+          address: TEST_SENDER_ADDRESS,
         },
       });
 

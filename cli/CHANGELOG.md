@@ -1,3 +1,46 @@
+## [1.1.16](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.15...cli-v1.1.16) (2026-04-10)
+
+### fix
+
+* **cli:** correct deploy --commit requirements in --help ([157f103](https://github.com/Phala-Network/phala-cloud/commit/157f103bb4033cc49abdacc6541d28db15b8a82b))
+
+### refactor
+
+* clarify --help strings and unify --transaction-hash option ([0749dc0](https://github.com/Phala-Network/phala-cloud/commit/0749dc0bc193697ef44d1ac86069d689838b9f58))
+## [1.1.15](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.14...cli-v1.1.15) (2026-04-10)
+
+### feat
+
+* **cli:** add profiles command aliases (list, rm, mv) ([b46dbc7](https://github.com/Phala-Network/phala-cloud/commit/b46dbc7c46ef30e5829edaee1e72ddaec9041b2b))
+* **cli:** add profiles use, rename, delete subcommands ([3a7ab22](https://github.com/Phala-Network/phala-cloud/commit/3a7ab22e5635aa4906cf0e22d41d07141ffdea86))
+* **cli:** add renameProfile utility to credentials ([1e07a24](https://github.com/Phala-Network/phala-cloud/commit/1e07a24f847d86b7c5c08050f4d91a7bc447e5fe))
+* **cli:** unify global option handling ([8dc77c1](https://github.com/Phala-Network/phala-cloud/commit/8dc77c19c5ddd241e4baeb568981563f670b857f))
+
+### fix
+
+* **cli:** add two-phase replicate flow with on-chain approval ([a77a011](https://github.com/Phala-Network/phala-cloud/commit/a77a011e47e34129c3a5b17c9adcd7f60ee3bec8))
+* **cli:** improve replicate output formatting and error display ([87cd7c8](https://github.com/Phala-Network/phala-cloud/commit/87cd7c8bff9c963219da4f03201f26ca2b57e966))
+* **cli:** resolve app_id ambiguity with --compose-hash in replicate ([15ff65d](https://github.com/Phala-Network/phala-cloud/commit/15ff65d20a86702c519df63df4b86989832152f1))
+* **cli:** show full values in on-chain registration error ([600cb66](https://github.com/Phala-Network/phala-cloud/commit/600cb66b9c8732a9e89fe296fc01d117a6d3f012))
+* **cli:** show on-chain status before requiring private key in replicate ([986f1ac](https://github.com/Phala-Network/phala-cloud/commit/986f1acd6b925e452a0608c8fc91717822363d0f))
+* **cli:** strip app_ prefix when matching cvm list by app_id ([fcfed6e](https://github.com/Phala-Network/phala-cloud/commit/fcfed6e7dab1a609ff09e52c2a1448ea1c3f4fc4))
+* **cli:** support universal cvm ids for replicate ([5fa84ba](https://github.com/Phala-Network/phala-cloud/commit/5fa84ba486cb3329e6b222bbc8a4edf03e1a41a3))
+* **cli:** use app CVMs endpoint for compose-hash disambiguation ([2f2266a](https://github.com/Phala-Network/phala-cloud/commit/2f2266a7ab0ffb93c94d458298ec5082111e402c))
+* **cli:** use correct pubkey source for CVM replicate env encryption ([2b3b98b](https://github.com/Phala-Network/phala-cloud/commit/2b3b98b9fdcd369f94887a05cea1827978cddeb1))
+* **cli:** use instance-level cvm replication ([fd0cb03](https://github.com/Phala-Network/phala-cloud/commit/fd0cb0352c35987606d1efe901fb6a6b305b6319))
+* **cli:** use plaintext output for cvm replicate ([1a9ba68](https://github.com/Phala-Network/phala-cloud/commit/1a9ba688895a3334cae4a69defc3f4d429062841))
+* **cli:** use sdk private key flow in allow-devices ([d697761](https://github.com/Phala-Network/phala-cloud/commit/d697761a30a7b19cbbefff61ed0b74d82ae94ae4))
+* **sdk:** chain resolution, owner pre-check, and ABI error definitions ([0c6a50c](https://github.com/Phala-Network/phala-cloud/commit/0c6a50c7fc57370ecb61359f34f04210c645ca18))
+
+### refactor
+
+* add `phala help <topic>` subcommand with bundled topics ([8880334](https://github.com/Phala-Network/phala-cloud/commit/88803342ad4a5506642d3d517be55361659b1b0e))
+* add RPC timeout + retry hint for allow-devices ([7a20577](https://github.com/Phala-Network/phala-cloud/commit/7a20577545e3da42bd37017574db962f5fc953f6))
+* add transaction progress logging and RPC transport timeouts ([29849a2](https://github.com/Phala-Network/phala-cloud/commit/29849a283025fe74543254e75afae888ab29f848))
+* allow direct app identifier in allow-devices to avoid CVM ambiguity ([a440bed](https://github.com/Phala-Network/phala-cloud/commit/a440bedb6334c87ed3b2bf82a6813421ee5204a4))
+* log RPC URL before blockchain operations ([c9956b2](https://github.com/Phala-Network/phala-cloud/commit/c9956b22b0fe1c7a66b13f9b7bc04051600fb1f4))
+* skip device list in allow-devices ls when allowAnyDevice is on ([597bbb4](https://github.com/Phala-Network/phala-cloud/commit/597bbb4be1e69d1832093ee167bf69eda801e3e2))
+* unify --private-key / --rpc-url and add ETH_RPC_URL fallback ([162ff8a](https://github.com/Phala-Network/phala-cloud/commit/162ff8a0451ca799061534d3eb9711a85aebd1af))
 ## [1.1.14](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.13...cli-v1.1.14) (2026-03-27)
 
 ### feat

@@ -54,7 +54,7 @@ async function runSshKeysAddCommand(
 		const keyName =
 			input.name ?? `${hostname()}-${basename(keyFilePath, ".pub")}`;
 
-		const client = await getClient();
+		const client = await getClient(context);
 		const result = await safeCreateSshKey(client, {
 			name: keyName,
 			public_key: publicKey,

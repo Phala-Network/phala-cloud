@@ -79,6 +79,14 @@ export interface CommandMeta {
 	readonly examples?: readonly CommandExample[];
 }
 
+export interface CommandGlobalOptions {
+	readonly apiToken?: string;
+	readonly json: boolean;
+	readonly interactive: boolean;
+	readonly profile?: string;
+	readonly apiVersion?: string;
+}
+
 export interface CommandContext {
 	readonly argv: readonly string[];
 	readonly rawFlags: Record<string, unknown>;
@@ -89,6 +97,7 @@ export interface CommandContext {
 	readonly stderr: NodeJS.WriteStream;
 	readonly stdin: NodeJS.ReadStream;
 	readonly projectConfig: RuntimeProjectConfig;
+	readonly globalOptions?: CommandGlobalOptions;
 	readonly cli?: {
 		readonly executableName: string;
 		readonly packageName: string;

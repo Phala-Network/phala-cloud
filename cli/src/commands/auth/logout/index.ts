@@ -11,7 +11,7 @@ import {
 
 async function runLogoutCommand(
 	_input: LogoutCommandInput,
-	_context: CommandContext,
+	context: CommandContext,
 ): Promise<number> {
 	// Show deprecation warning
 	logger.warn(
@@ -24,13 +24,20 @@ async function runLogoutCommand(
 		const current = loadCredentialsFile();
 		const profile = current?.current_profile;
 		removeProfile();
-		logger.success(
-			profile
-				? `Credentials removed successfully (profile: ${profile})`
-				: "Credentials removed successfully",
-		);
+		const message = profile
+			? `Credentials removed successfully (profile: ${profile})`
+			: "Credentials removed successfully";
+		if (context.globalOptions?.json) {
+			context.success({ message, profile: profile || null });
+			return 0;
+		}
+		logger.success(message);
 		return 0;
 	} catch (error) {
+		if (context.globalOptions?.json) {
+			context.fail("Failed to remove credentials");
+			return 1;
+		}
 		logger.error("Failed to remove credentials");
 		logger.logDetailedError(error);
 		return 1;

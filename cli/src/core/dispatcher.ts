@@ -113,6 +113,7 @@ export async function dispatchCommand(
 
 	const { definition, consumed } = resolved;
 	const commandArgv = argv.slice(consumed.length);
+	const projectConfig = getProjectConfig();
 
 	try {
 		const parsedArguments = parseCommandArguments(
@@ -173,6 +174,23 @@ export async function dispatchCommand(
 			parsedArguments,
 		);
 
+		const globalOptions = {
+			apiToken:
+				typeof schemaInput.options.apiToken === "string"
+					? schemaInput.options.apiToken
+					: undefined,
+			json: schemaInput.options.json === true,
+			interactive:
+				schemaInput.options.json === true
+					? false
+					: schemaInput.options.interactive === true,
+			profile:
+				typeof schemaInput.options.profile === "string"
+					? schemaInput.options.profile
+					: undefined,
+			apiVersion: typeof rawApiVersion === "string" ? rawApiVersion : undefined,
+		} as const;
+
 		const mergedInput = {
 			...schemaInput.options,
 			...schemaInput.positionals,
@@ -186,8 +204,7 @@ export async function dispatchCommand(
 
 		// Always check for cvmId, even if not explicitly in mergedInput
 		const rawCvmId = "cvmId" in mergedInput ? mergedInput.cvmId : undefined;
-		const isInteractive =
-			"interactive" in mergedInput && mergedInput.interactive === true;
+		const isInteractive = globalOptions.interactive;
 
 		// DEBUG
 		if (parsedArguments.flags["--debug"]) {
@@ -227,7 +244,7 @@ export async function dispatchCommand(
 
 		// Priority 3: phala.toml configuration (if nothing specified above)
 		if (!cvmId) {
-			const projectCvmId = getProjectConfig().cvm_id;
+			const projectCvmId = projectConfig.cvm_id;
 			if (projectCvmId) {
 				cvmId = { id: projectCvmId };
 			}
@@ -252,7 +269,8 @@ export async function dispatchCommand(
 			stdout,
 			stderr,
 			stdin,
-			projectConfig: getProjectConfig(),
+			projectConfig,
+			globalOptions,
 			cvmId,
 			cli: {
 				executableName,
@@ -316,6 +334,17 @@ export async function dispatchCommand(
 		}
 
 		const parsedInput = definition.schema.parse(mergedInput);
+		const handlerInput = Object.freeze({
+			...parsedInput,
+			json: globalOptions.json,
+			interactive: globalOptions.interactive,
+			...(globalOptions.apiToken !== undefined
+				? { apiToken: globalOptions.apiToken }
+				: {}),
+			...(globalOptions.profile !== undefined
+				? { profile: globalOptions.profile }
+				: {}),
+		});
 
 		// DEBUG: Check context.cvmId before calling handler
 		if (parsedArguments.flags["--debug"]) {
@@ -325,7 +354,7 @@ export async function dispatchCommand(
 			);
 		}
 
-		const result = await definition.run(parsedInput, context);
+		const result = await definition.run(handlerInput, context);
 		const updateNotice = await updateNoticePromise;
 		if (typeof result === "number") {
 			if (result === 0 && updateNotice && !isInJsonMode()) {

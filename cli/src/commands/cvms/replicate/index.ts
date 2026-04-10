@@ -282,9 +282,15 @@ async function commitReplica(
 }
 
 async function runCvmsReplicateCommand(
-	input: CvmsReplicateCommandInput,
+	rawInput: CvmsReplicateCommandInput,
 	context: CommandContext,
 ): Promise<number> {
+	// Fall back to ETH_RPC_URL env var (foundry/cast convention)
+	const input: CvmsReplicateCommandInput = {
+		...rawInput,
+		rpcUrl: rawInput.rpcUrl || process.env.ETH_RPC_URL,
+	};
+
 	try {
 		if (!context.cvmId) {
 			context.fail(

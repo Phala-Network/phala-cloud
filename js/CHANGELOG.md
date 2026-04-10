@@ -1,3 +1,19 @@
+## [0.2.7](https://github.com/Phala-Network/phala-cloud/compare/js-v0.2.6...js-v0.2.7) (2026-04-10)
+
+### feat
+
+* add compose_hash_registered to provision response schema ([be02cf9](https://github.com/Phala-Network/phala-cloud/commit/be02cf903d1219c63693d2e355ea86114bdf4841))
+
+### fix
+
+* **js:** update addComposeHash test mock for owner pre-check ([456ce00](https://github.com/Phala-Network/phala-cloud/commit/456ce0022f23e315e6e0b06341026fa1ec1a73c0))
+* parse StructuredError details array in 465 error handlers ([50129dc](https://github.com/Phala-Network/phala-cloud/commit/50129dcc87803e979fde0d624f3187e0547a5aca))
+* preserve StructuredError response body in error conversion ([ae7eecc](https://github.com/Phala-Network/phala-cloud/commit/ae7eecc487ea1c6f0892b383e2a22e41e0e6593d))
+* **sdk:** chain resolution, owner pre-check, and ABI error definitions ([0c6a50c](https://github.com/Phala-Network/phala-cloud/commit/0c6a50c7fc57370ecb61359f34f04210c645ca18))
+
+### refactor
+
+* add transaction progress logging and RPC transport timeouts ([29849a2](https://github.com/Phala-Network/phala-cloud/commit/29849a283025fe74543254e75afae888ab29f848))
 ## [0.2.6](https://github.com/Phala-Network/phala-cloud/compare/js-v0.2.5...js-v0.2.6) (2026-03-27)
 
 ### feat

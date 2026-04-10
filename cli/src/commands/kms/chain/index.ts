@@ -16,7 +16,7 @@ function createChainHandler(chain: string) {
 		context: CommandContext,
 	): Promise<number> {
 		try {
-			const client = await getClient();
+			const client = await getClient(context);
 
 			const result = await safeGetKmsOnChainDetail(client, {
 				chain,

@@ -23,7 +23,8 @@ async function runCvmsStopCommand(
 	}
 
 	try {
-		const client = await getClient();
+		const client = await getClient(context);
+		const isJson = context.globalOptions?.json === true;
 		const spinner = logger.startSpinner("Stopping CVM");
 
 		const cvmId = context.cvmId;
@@ -34,11 +35,19 @@ async function runCvmsStopCommand(
 		spinner.stop(true);
 
 		if (!result.success) {
-			logger.error(`Failed to stop CVM: ${result.error.message}`);
+			context.fail(`Failed to stop CVM: ${result.error.message}`);
 			return 1;
 		}
 
 		const response = result.data as VM;
+		if (isJson) {
+			context.success({
+				cvm: response,
+				dashboardUrl: `${CLOUD_URL}/dashboard/cvms/app_${response.app_id}`,
+				message: "CVM stop requested",
+			});
+			return 0;
+		}
 		logger.break();
 
 		logger.keyValueTable(
@@ -58,7 +67,7 @@ ${CLOUD_URL}/dashboard/cvms/app_${response.app_id}`,
 		);
 		return 0;
 	} catch (error) {
-		logger.error("Failed to stop CVM");
+		context.fail("Failed to stop CVM");
 		logger.logDetailedError(error);
 		return 1;
 	}

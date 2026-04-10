@@ -1,4 +1,5 @@
 import { safeGetCvmInfo } from "@phala/cloud";
+import type { CommandContext } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
 import { logger } from "./logger";
 
@@ -13,8 +14,9 @@ import { logger } from "./logger";
 export async function waitForCvmReady(
 	cvmId: string,
 	timeoutMs = 300000, // 5 minutes default
+	context?: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
 ): Promise<void> {
-	const client = await getClient();
+	const client = await getClient(context);
 	const startTime = Date.now();
 	const checkIntervalMs = 2000; // Check every 2 seconds
 

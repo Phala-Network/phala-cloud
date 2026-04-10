@@ -81,6 +81,34 @@ describe("credentials", () => {
 		expect(resolved.tokenSource).toBe("flag");
 	});
 
+	test("resolveAuth uses explicit profile over projectProfile and current_profile", () => {
+		upsertProfile({
+			profileName: "a",
+			token: "token-a",
+			apiPrefix: "https://a.example/api/v1",
+			workspaceName: "a",
+			user: { username: "u" },
+			setCurrent: true,
+		});
+		upsertProfile({
+			profileName: "b",
+			token: "token-b",
+			apiPrefix: "https://b.example/api/v1",
+			workspaceName: "b",
+			user: { username: "u" },
+			setCurrent: false,
+		});
+
+		const resolved = resolveAuth({
+			env: process.env,
+			profile: "b",
+			projectProfile: "a",
+		});
+		expect(resolved.profileName).toBe("b");
+		expect(resolved.apiKey).toBe("token-b");
+		expect(resolved.baseURL).toBe("https://b.example/api/v1");
+	});
+
 	test("resolveAuth uses projectProfile over current_profile", () => {
 		upsertProfile({
 			profileName: "a",

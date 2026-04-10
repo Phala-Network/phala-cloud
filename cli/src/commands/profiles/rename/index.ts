@@ -10,11 +10,19 @@ import {
 
 async function runProfilesRenameCommand(
 	input: ProfilesRenameCommandInput,
-	_context: CommandContext,
+	context: CommandContext,
 ): Promise<number> {
 	try {
 		const wasActive = getCurrentProfile()?.name === input.oldName;
 		renameProfile(input.oldName, input.newName);
+		if (context.globalOptions?.json) {
+			context.success({
+				oldName: input.oldName,
+				newName: input.newName,
+				wasActive,
+			});
+			return 0;
+		}
 		logger.success(`Renamed profile "${input.oldName}" to "${input.newName}"`);
 		if (wasActive) {
 			logger.info(`Current profile updated to "${input.newName}"`);
@@ -22,6 +30,10 @@ async function runProfilesRenameCommand(
 		return 0;
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
+		if (context.globalOptions?.json) {
+			context.fail(message);
+			return 1;
+		}
 		logger.error(message);
 		return 1;
 	}

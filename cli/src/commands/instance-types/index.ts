@@ -26,7 +26,7 @@ async function runInstanceTypesCommand(
 	context: CommandContext,
 ): Promise<number> {
 	try {
-		const client = await getClient();
+		const client = await getClient(context);
 
 		// If family is specified, list only that family
 		if (input.family) {

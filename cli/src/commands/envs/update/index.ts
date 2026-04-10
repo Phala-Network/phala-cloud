@@ -17,9 +17,15 @@ import {
 } from "./command";
 
 async function runEnvsUpdateCommand(
-	input: EnvsUpdateCommandInput,
+	rawInput: EnvsUpdateCommandInput,
 	context: CommandContext,
 ): Promise<number> {
+	// Fall back to ETH_RPC_URL env var (foundry/cast convention)
+	const input: EnvsUpdateCommandInput = {
+		...rawInput,
+		rpcUrl: rawInput.rpcUrl || process.env.ETH_RPC_URL,
+	};
+
 	if (!context.cvmId) {
 		context.fail(
 			"No CVM ID provided. Pass a CVM identifier or set it in phala.toml.",
@@ -43,7 +49,7 @@ async function runEnvsUpdateCommand(
 	}
 
 	try {
-		const client = await getClient();
+		const client = await getClient(context);
 		const cvmResult = await safeGetCvmInfo(client, context.cvmId);
 
 		if (!cvmResult.success) {

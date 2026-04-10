@@ -3,8 +3,9 @@
  * https://fig.io/docs
  */
 
+import { globalCommandOptions } from "./common-flags";
 import type { CommandRegistry } from "./registry";
-import type { CommandPath } from "./types";
+import type { CommandOption, CommandPath } from "./types";
 
 interface FigSpec {
 	name: string;
@@ -43,16 +44,7 @@ export function generateFigSpec(
 		name: executableName,
 		description: "CLI for Managing Phala Cloud Services",
 		subcommands: [],
-		options: [
-			{
-				name: ["-h", "--help"],
-				description: "Show help information",
-			},
-			{
-				name: ["-v", "--version"],
-				description: "Show CLI version",
-			},
-		],
+		options: globalCommandOptions.map(toFigOption),
 	};
 
 	// Generate subcommands recursively
@@ -88,40 +80,20 @@ function generateSubcommandSpec(
 		subcommands: [],
 	};
 
-	// Add command-specific options
-	if (node.command?.meta.options) {
-		for (const option of node.command.meta.options) {
-			if (option.hidden) continue;
-
-			const names: string[] = [`--${option.name}`];
-			if (option.shorthand) {
-				names.unshift(`-${option.shorthand}`);
-			}
-
-			spec.options?.push({
-				name: names,
-				description: option.description,
-				args:
-					option.type !== "boolean"
-						? {
-								name: option.argumentName || "value",
-							}
-						: undefined,
-			});
-		}
-	}
-
-	// Add global options
-	spec.options?.push(
-		{
-			name: ["-h", "--help"],
-			description: "Show help information",
-		},
-		{
-			name: ["-v", "--version"],
-			description: "Show CLI version",
-		},
+	const options = [
+		...globalCommandOptions,
+		...(node.command?.meta.options ?? []),
+	];
+	const uniqueOptions = Array.from(
+		new Map(
+			options
+				.filter((option) => !option.hidden)
+				.map((option) => [option.name, option]),
+		).values(),
 	);
+	if (uniqueOptions.length > 0) {
+		spec.options = uniqueOptions.map(toFigOption);
+	}
 
 	// Add arguments
 	if (node.command?.meta.arguments) {
@@ -148,6 +120,31 @@ function generateSubcommandSpec(
 	}
 
 	return spec;
+}
+
+function toFigOption(option: CommandOption): FigOption {
+	const names = [`--${option.name}`];
+	if (option.shorthand) {
+		names.unshift(`-${option.shorthand}`);
+	}
+	for (const alias of option.aliases ?? []) {
+		names.push(`--${alias}`);
+	}
+	if (option.type === "boolean" && option.negatedName) {
+		names.push(`--${option.negatedName}`);
+	}
+
+	return {
+		name: names,
+		description: option.description,
+		args:
+			option.type !== "boolean"
+				? {
+						name: option.argumentName || "value",
+					}
+				: undefined,
+		hidden: option.hidden,
+	};
 }
 
 /**

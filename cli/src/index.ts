@@ -12,6 +12,7 @@ import { cvmsCommands } from "./commands/cvms";
 import { deployCommand } from "./commands/deploy";
 import { envsCommands } from "./commands/envs";
 import { dockerCommands } from "./commands/docker";
+import { helpCommand } from "./commands/help";
 import { linkCommand } from "./commands/link";
 import { loginCommand } from "./commands/login";
 import { logoutCommand } from "./commands/logout";
@@ -77,6 +78,7 @@ registry.registerCommand(statusCommand);
 registry.registerCommand(whoamiCommand);
 registry.registerCommand(completionCommand);
 registry.registerCommand(osImagesCommand);
+registry.registerCommand(helpCommand);
 
 // Command groups + subcommands
 registry.registerGroup(selfCommands.group);

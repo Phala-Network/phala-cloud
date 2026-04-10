@@ -4,7 +4,7 @@ import type { CommandMeta } from "@/src/core/types";
 export const profilesRenameCommandMeta: CommandMeta = {
 	name: "rename",
 	category: "profile",
-	description: "Rename a profile",
+	description: "Rename an auth profile",
 	stability: "stable",
 	arguments: [
 		{
@@ -21,6 +21,7 @@ export const profilesRenameCommandMeta: CommandMeta = {
 		},
 	],
 	options: [],
+	aliases: ["mv"],
 };
 
 export const profilesRenameCommandSchema = z.object({

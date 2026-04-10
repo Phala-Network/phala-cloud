@@ -15,7 +15,7 @@ async function runOsImagesCommand(
 	context: CommandContext,
 ): Promise<number> {
 	try {
-		const client = await getClient();
+		const client = await getClient(context);
 
 		const isDev = input.dev ? true : input.prod ? false : undefined;
 

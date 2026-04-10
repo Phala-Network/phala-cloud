@@ -8,6 +8,9 @@ import {
 import {
 	cvmIdOption,
 	interactiveOption,
+	privateKeyOption,
+	rpcUrlOption,
+	transactionHashOption,
 	uuidOption,
 } from "@/src/core/common-flags";
 
@@ -158,20 +161,8 @@ export const deployCommandMeta: CommandMeta = {
 			target: "preLaunchScript",
 			group: "advanced",
 		},
-		{
-			name: "private-key",
-			description: "Private key for signing transactions.",
-			type: "string",
-			target: "privateKey",
-			group: "advanced",
-		},
-		{
-			name: "rpc-url",
-			description: "RPC URL for the blockchain.",
-			type: "string",
-			target: "rpcUrl",
-			group: "advanced",
-		},
+		privateKeyOption,
+		rpcUrlOption,
 		{
 			name: "wait",
 			description: "Wait for deployment/update completion",
@@ -197,7 +188,7 @@ export const deployCommandMeta: CommandMeta = {
 		{
 			name: "prepare-only",
 			description:
-				"Only prepare the update (generate commit token) without performing on-chain operations. For multisig workflows.",
+				"Prepare the update and generate a commit token. Skips all on-chain operations. Intended for multisig workflows.",
 			type: "boolean",
 			target: "prepareOnly",
 			group: "advanced",
@@ -205,33 +196,27 @@ export const deployCommandMeta: CommandMeta = {
 		{
 			name: "commit",
 			description:
-				"Commit a previously prepared update using a commit token. Requires --token, --compose-hash, and --transaction-hash.",
+				"Commit a previously prepared update using a commit token. Requires --token; --compose-hash and --transaction-hash are read from the token when omitted.",
 			type: "boolean",
 			target: "commit",
 			group: "advanced",
 		},
 		{
 			name: "token",
-			description: "Commit token from a prepare-only update",
+			description: "Commit token from a prepare-only update.",
 			type: "string",
 			target: "token",
 			group: "advanced",
 		},
 		{
 			name: "compose-hash",
-			description: "Compose hash from a prepare-only update",
+			description:
+				"Compose hash from a prepare-only update. Optional in --commit mode when the token can provide it.",
 			type: "string",
 			target: "composeHash",
 			group: "advanced",
 		},
-		{
-			name: "transaction-hash",
-			description:
-				"Transaction hash proving on-chain compose hash registration",
-			type: "string",
-			target: "transactionHash",
-			group: "advanced",
-		},
+		transactionHashOption,
 		{
 			name: "public-logs",
 			description: "Make CVM logs publicly accessible (default: true)",

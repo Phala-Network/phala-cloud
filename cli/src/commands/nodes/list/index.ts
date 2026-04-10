@@ -15,7 +15,7 @@ async function runNodesListCommand(
 	context: CommandContext,
 ): Promise<number> {
 	try {
-		const client = await getClient();
+		const client = await getClient(context);
 
 		// Get current workspace to obtain teamSlug
 		const userResult = await safeGetCurrentUser(client);

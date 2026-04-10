@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
 	normalizeDeviceId,
 	isValidDeviceId,
+	isAppAllowlistIdentifier,
+	normalizeAllowlistAppId,
 	txExplorerUrl,
 	resolveAllowAnyFlag,
 	resolveToggleAllowAny,
@@ -58,6 +60,42 @@ describe("isValidDeviceId", () => {
 
 	test("rejects node name", () => {
 		expect(isValidDeviceId("prod5")).toBe(false);
+	});
+});
+
+// ── app identifier helpers ─────────────────────────────────────────
+
+describe("isAppAllowlistIdentifier", () => {
+	test("accepts raw 40-char hex app IDs", () => {
+		expect(isAppAllowlistIdentifier("a".repeat(40))).toBe(true);
+	});
+
+	test("accepts app_-prefixed identifiers", () => {
+		expect(isAppAllowlistIdentifier(`app_${"b".repeat(40)}`)).toBe(true);
+	});
+
+	test("rejects UUIDs", () => {
+		expect(
+			isAppAllowlistIdentifier("550e8400-e29b-41d4-a716-446655440000"),
+		).toBe(false);
+	});
+});
+
+describe("normalizeAllowlistAppId", () => {
+	test("strips the app_ prefix", () => {
+		expect(normalizeAllowlistAppId(`app_${"c".repeat(40)}`)).toBe(
+			"c".repeat(40),
+		);
+	});
+
+	test("lowercases hex app IDs", () => {
+		expect(normalizeAllowlistAppId(`app_${"AB".repeat(20)}`)).toBe(
+			"ab".repeat(20),
+		);
+	});
+
+	test("keeps non-hex prefixed identifiers unchanged after prefix removal", () => {
+		expect(normalizeAllowlistAppId("app_custom-id")).toBe("custom-id");
 	});
 });
 

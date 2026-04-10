@@ -54,7 +54,7 @@ async function runCvmsUpgradeCommand(
 			return 1;
 		}
 
-		const client = await getClient();
+		const client = await getClient(context);
 		const infoResult = await safeGetCvmInfo(client, context.cvmId);
 
 		if (!infoResult.success) {

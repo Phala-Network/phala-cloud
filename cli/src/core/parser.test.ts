@@ -86,6 +86,25 @@ describe("parseCommandArguments", () => {
 		});
 	});
 
+	test("should parse newly supported global options", () => {
+		const result = parseCommandArguments(
+			[
+				"--api-token",
+				"tok",
+				"--profile",
+				"team",
+				"--interactive",
+				"--cvm-id",
+				"app_123",
+			],
+			[],
+		);
+		expect(result.flags["--api-token"]).toBe("tok");
+		expect(result.flags["--profile"]).toBe("team");
+		expect(result.flags["--interactive"]).toBe(true);
+		expect(result.flags["--cvm-id"]).toBe("app_123");
+	});
+
 	describe("boolean flags with negatedName", () => {
 		const booleanOptions = [
 			{

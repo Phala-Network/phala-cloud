@@ -9,9 +9,10 @@ import { getClient } from "@/src/lib/client";
  */
 export async function checkAndWarnIfLogsDisabled(
 	appId: string,
+	context?: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
 ): Promise<boolean> {
 	try {
-		const client = await getClient();
+		const client = await getClient(context);
 		const result = await safeGetCvmInfo(client, { id: appId });
 		if (result.success && result.data.public_logs === false) {
 			logger.warn("Logs are disabled for this CVM (public_logs=false).");
@@ -125,7 +126,7 @@ export function createLogsHandler<TInput extends BaseLogsInput, TOptions>(
 			if (logs.trim()) {
 				console.log(logs);
 			} else {
-				const logsDisabled = await checkAndWarnIfLogsDisabled(appId);
+				const logsDisabled = await checkAndWarnIfLogsDisabled(appId, context);
 				if (!logsDisabled) {
 					logger.info("No logs available");
 				}
@@ -138,7 +139,7 @@ export function createLogsHandler<TInput extends BaseLogsInput, TOptions>(
 					error instanceof Error ? error.message : String(error)
 				}`,
 			);
-			await checkAndWarnIfLogsDisabled(appId);
+			await checkAndWarnIfLogsDisabled(appId, context);
 			return 1;
 		}
 	};

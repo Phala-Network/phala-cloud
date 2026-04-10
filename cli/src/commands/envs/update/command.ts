@@ -1,6 +1,11 @@
 import { z } from "zod";
 import type { CommandMeta } from "@/src/core/types";
-import { cvmIdArgument, interactiveOption } from "@/src/core/common-flags";
+import {
+	cvmIdArgument,
+	interactiveOption,
+	privateKeyOption,
+	rpcUrlOption,
+} from "@/src/core/common-flags";
 
 export const envsUpdateCommandMeta: CommandMeta = {
 	name: "update",
@@ -27,21 +32,8 @@ export const envsUpdateCommandMeta: CommandMeta = {
 			target: "encryptedEnv",
 			group: "basic",
 		},
-		{
-			name: "private-key",
-			description:
-				"Private key for signing on-chain transactions (or set PRIVATE_KEY env var)",
-			type: "string",
-			target: "privateKey",
-			group: "advanced",
-		},
-		{
-			name: "rpc-url",
-			description: "RPC URL for the blockchain",
-			type: "string",
-			target: "rpcUrl",
-			group: "advanced",
-		},
+		privateKeyOption,
+		rpcUrlOption,
 	],
 	examples: [
 		{

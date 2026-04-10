@@ -4,7 +4,7 @@ import type { CommandMeta } from "@/src/core/types";
 export const profilesUseCommandMeta: CommandMeta = {
 	name: "use",
 	category: "profile",
-	description: "Switch to a profile",
+	description: "Switch to an auth profile",
 	stability: "stable",
 	arguments: [
 		{

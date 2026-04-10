@@ -1,3 +1,5 @@
+fail_fast: true
+
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.12.10
@@ -10,21 +12,84 @@ repos:
         files: ^python/
   - repo: local
     hooks:
+      # ── Go ──────────────────────────────────────────────────────────────
       - id: gofmt
         name: gofmt
         entry: bash -c 'cd go && files=$(gofmt -l .); [ -z "$files" ] || gofmt -l -w $files'
         language: system
         files: ^go/.*\.go$
         pass_filenames: false
+        priority: 10
       - id: govet
         name: go vet
         entry: bash -c 'cd go && go vet ./...'
         language: system
         files: ^go/.*\.go$
         pass_filenames: false
+        priority: 20
       - id: gotest
         name: go test
         entry: bash -c 'cd go && go test ./...'
         language: system
         files: ^go/.*\.go$
         pass_filenames: false
+        require_serial: true
+        priority: 30
+
+      # ── JS SDK (js/) ────────────────────────────────────────────────────
+      # Mirrors release-npm.yml: lint → type-check → test (build is covered by CI).
+      - id: biome-js
+        name: Biome (JS SDK)
+        entry: bash -c 'cd js && bun run lint'
+        language: system
+        files: ^js/
+        types_or: [javascript, ts, tsx, jsx]
+        pass_filenames: false
+        priority: 10
+      - id: typecheck-js
+        name: TypeScript (JS SDK)
+        entry: bash -c 'cd js && bun run type-check'
+        language: system
+        files: ^js/
+        types_or: [javascript, ts, tsx, jsx]
+        pass_filenames: false
+        priority: 20
+      - id: test-js
+        name: JS SDK tests
+        entry: bash -c 'cd js && bun run test'
+        language: system
+        files: ^js/
+        types_or: [javascript, ts, tsx, jsx]
+        pass_filenames: false
+        require_serial: true
+        priority: 30
+
+      # ── CLI (cli/) ──────────────────────────────────────────────────────
+      # Mirrors release-npm.yml: lint → type-check → test. CLI consumes
+      # @phala/cloud via workspace link to js/dist, so a stale js/dist can
+      # mask real issues; rebuild js before committing if you've changed it.
+      - id: biome-cli
+        name: Biome (CLI)
+        entry: bash -c 'cd cli && bun run lint'
+        language: system
+        files: ^cli/
+        types_or: [javascript, ts, tsx, jsx]
+        pass_filenames: false
+        priority: 10
+      - id: typecheck-cli
+        name: TypeScript (CLI)
+        entry: bash -c 'cd cli && bun run type-check'
+        language: system
+        files: ^cli/
+        types_or: [javascript, ts, tsx, jsx]
+        pass_filenames: false
+        priority: 20
+      - id: test-cli
+        name: CLI tests
+        entry: bash -c 'cd cli && bun run test'
+        language: system
+        files: ^cli/
+        types_or: [javascript, ts, tsx, jsx]
+        pass_filenames: false
+        require_serial: true
+        priority: 30

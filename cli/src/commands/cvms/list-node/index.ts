@@ -13,11 +13,12 @@ import {
 
 async function runCvmsListNodesCommand(
 	_input: CvmsListNodesCommandInput,
-	_context: CommandContext,
+	context: CommandContext,
 ): Promise<number> {
 	try {
-		const client = await getClient();
+		const client = await getClient(context);
 		const result = await safeGetAvailableNodes(client);
+		const isJson = context.globalOptions?.json === true;
 
 		if (!result.success) {
 			throw new Error(result.error.message);
@@ -25,6 +26,11 @@ async function runCvmsListNodesCommand(
 
 		const { nodes: teepods, kms_list: kmsList } =
 			result.data as AvailableNodesResponse;
+
+		if (isJson) {
+			context.success({ nodes: teepods ?? [], kmsList: kmsList ?? [] });
+			return 0;
+		}
 
 		if (!teepods || teepods.length === 0) {
 			logger.info("No available nodes found.");
@@ -66,7 +72,7 @@ async function runCvmsListNodesCommand(
 
 		return 0;
 	} catch (error) {
-		logger.error("Failed to list available nodes");
+		context.fail("Failed to list available nodes");
 		logger.logDetailedError(error);
 		return 1;
 	}
