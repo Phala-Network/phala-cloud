@@ -1,6 +1,6 @@
 {
   "name": "@phala/cloud",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "TypeScript SDK for Phala Cloud API",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
