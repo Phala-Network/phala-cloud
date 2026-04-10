@@ -1,3 +1,12 @@
+## [1.1.16](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.15...cli-v1.1.16) (2026-04-10)
+
+### fix
+
+* **cli:** correct deploy --commit requirements in --help ([157f103](https://github.com/Phala-Network/phala-cloud/commit/157f103bb4033cc49abdacc6541d28db15b8a82b))
+
+### refactor
+
+* clarify --help strings and unify --transaction-hash option ([0749dc0](https://github.com/Phala-Network/phala-cloud/commit/0749dc0bc193697ef44d1ac86069d689838b9f58))
 ## [1.1.15](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.14...cli-v1.1.15) (2026-04-10)
 
 ### feat
