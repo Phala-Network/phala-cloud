@@ -35,6 +35,8 @@ import { psCommand } from "./commands/ps";
 import { logsCommand } from "./commands/logs";
 import { selfCommands } from "./commands/self";
 import { appsCommand } from "./commands/apps";
+import { appsInstancesGroup } from "./commands/apps/instances/command";
+import { appsInstancesAddCommand } from "./commands/apps/instances/add";
 import { instanceTypesCommand } from "./commands/instance-types";
 import { cvmsRuntimeConfigCommand } from "./commands/cvms/runtime-config";
 import { sshKeysCommands } from "./commands/ssh-keys";
@@ -59,6 +61,8 @@ const registry = new CommandRegistry();
 // Top-level commands
 registry.registerCommand(deployCommand);
 registry.registerCommand(appsCommand);
+registry.registerGroup(appsInstancesGroup);
+registry.registerCommand(appsInstancesAddCommand);
 registry.registerCommand(instanceTypesCommand);
 registry.registerCommand(linkCommand);
 registry.registerCommand(sshCommand);

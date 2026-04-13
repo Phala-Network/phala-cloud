@@ -13,6 +13,7 @@ import type { CommandContext } from "@/src/core/types";
 import { getClient, resolveAuthForContext } from "@/src/lib/client";
 import { logger } from "@/src/utils/logger";
 import {
+	getProjectConfig,
 	projectConfigExists,
 	saveProjectConfig,
 } from "@/src/utils/project-config";
@@ -138,6 +139,7 @@ async function ensureAuthenticated(
  */
 function saveAndShowSummary(options: {
 	cvmName: string;
+	appId: string | undefined;
 	composeFile: string | undefined;
 	envFile: string | undefined;
 	profile: string;
@@ -147,6 +149,9 @@ function saveAndShowSummary(options: {
 		profile: options.profile,
 	};
 
+	if (options.appId) {
+		config.app_id = options.appId;
+	}
 	if (options.composeFile) {
 		config.compose_file = options.composeFile;
 	}
@@ -160,6 +165,9 @@ function saveAndShowSummary(options: {
 	console.log();
 	console.log(chalk.bold("Created phala.toml:"));
 	console.log(chalk.dim(`  name = "${options.cvmName}"`));
+	if (options.appId) {
+		console.log(chalk.dim(`  app_id = "${options.appId}"`));
+	}
 	console.log(chalk.dim(`  profile = "${options.profile}"`)); // TODO: switch to workspace slug when available
 	if (options.composeFile) {
 		console.log(chalk.dim(`  compose_file = "${options.composeFile}"`));
@@ -183,6 +191,14 @@ export async function runLinkCommand(
 			return await runDirectLink(input.cvmId, context);
 		}
 
+		// No CVM ID: if phala.toml exists with CVM info but no app_id, upgrade it
+		if (projectConfigExists()) {
+			const existingConfig = getProjectConfig();
+			if (existingConfig.cvm_id && !existingConfig.app_id) {
+				return await runUpgradeConfig(existingConfig, context);
+			}
+		}
+
 		// Interactive mode
 		return await runInteractiveLink(context);
 	} catch (error) {
@@ -194,6 +210,55 @@ export async function runLinkCommand(
 		}
 		throw error;
 	}
+}
+
+/**
+ * Upgrade existing phala.toml by backfilling app_id from CVM info
+ */
+async function runUpgradeConfig(
+	existingConfig: ReturnType<typeof getProjectConfig>,
+	context: CommandContext,
+): Promise<number> {
+	const auth = await ensureAuthenticated(context);
+	if (!auth) {
+		context.fail("Authentication failed.");
+		return 1;
+	}
+
+	const client = await getClient(context);
+	const cvmResult = await safeGetCvmInfo(client, {
+		id: existingConfig.cvm_id as string,
+	});
+
+	if (!cvmResult.success) {
+		context.fail(
+			`Failed to fetch CVM info for ${existingConfig.cvm_id}: ${cvmResult.error?.message || "Unknown error"}`,
+		);
+		return 1;
+	}
+
+	const cvm = cvmResult.data as { app_id?: string };
+	if (!cvm.app_id) {
+		logger.warn("CVM does not have an app_id. No upgrade needed.");
+		return 0;
+	}
+
+	// Merge app_id into existing config
+	const updatedConfig: Record<string, unknown> = {};
+	if (existingConfig.name) updatedConfig.name = existingConfig.name;
+	if (existingConfig.profile) updatedConfig.profile = existingConfig.profile;
+	updatedConfig.app_id = cvm.app_id;
+	if (existingConfig.compose_file)
+		updatedConfig.compose_file = existingConfig.compose_file;
+	if (existingConfig.env_file) updatedConfig.env_file = existingConfig.env_file;
+	if (existingConfig.gateway_domain)
+		updatedConfig.gateway_domain = existingConfig.gateway_domain;
+	if (existingConfig.gateway_port)
+		updatedConfig.gateway_port = existingConfig.gateway_port;
+
+	saveProjectConfig(updatedConfig);
+	logger.success(`Updated phala.toml with app_id = "${cvm.app_id}"`);
+	return 0;
 }
 
 /**
@@ -223,6 +288,7 @@ async function runDirectLink(
 
 	const cvm = cvmResult.data as { name?: string; app_id?: string };
 	const cvmName = cvm.name || cvmId;
+	const appId = cvm.app_id || undefined;
 
 	logger.success(`Found CVM: ${cvmName}`);
 
@@ -259,6 +325,7 @@ async function runDirectLink(
 
 	saveAndShowSummary({
 		cvmName,
+		appId,
 		composeFile,
 		envFile,
 		profile: workspaceName,
@@ -308,11 +375,13 @@ async function runInteractiveLink(context: CommandContext): Promise<number> {
 		const id = cvm.hosted?.app_id || cvm.hosted?.id || "";
 		const name = cvm.name || cvm.hosted?.name || "Unnamed";
 		const status = cvm.status || cvm.hosted?.status || "Unknown";
+		const appId = cvm.hosted?.app_id || undefined;
 
 		return {
 			name: `${name} (${id}) - Status: ${status}`,
 			value: name,
 			cvmName: name,
+			appId,
 		};
 	});
 
@@ -367,8 +436,10 @@ async function runInteractiveLink(context: CommandContext): Promise<number> {
 		console.log();
 	}
 
+	const selectedChoice = choices.find((c) => c.value === selectedCvm);
 	saveAndShowSummary({
 		cvmName: selectedCvm,
+		appId: selectedChoice?.appId,
 		composeFile,
 		envFile,
 		profile: workspaceName,

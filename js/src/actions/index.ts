@@ -605,6 +605,13 @@ export {
 } from "./apps/get_app_cvms";
 
 export {
+  createAppInstance,
+  safeCreateAppInstance,
+  CreateAppInstanceRequestSchema,
+  type CreateAppInstanceRequest,
+} from "./apps/create_app_instance";
+
+export {
   getAppDeviceAllowlist,
   safeGetAppDeviceAllowlist,
   GetAppDeviceAllowlistRequestSchema,
