@@ -243,18 +243,12 @@ async function runUpgradeConfig(
 		return 0;
 	}
 
-	// Merge app_id into existing config
-	const updatedConfig: Record<string, unknown> = {};
-	if (existingConfig.name) updatedConfig.name = existingConfig.name;
-	if (existingConfig.profile) updatedConfig.profile = existingConfig.profile;
-	updatedConfig.app_id = cvm.app_id;
-	if (existingConfig.compose_file)
-		updatedConfig.compose_file = existingConfig.compose_file;
-	if (existingConfig.env_file) updatedConfig.env_file = existingConfig.env_file;
-	if (existingConfig.gateway_domain)
-		updatedConfig.gateway_domain = existingConfig.gateway_domain;
-	if (existingConfig.gateway_port)
-		updatedConfig.gateway_port = existingConfig.gateway_port;
+	// Merge app_id into existing config, preserving all existing fields
+	const { cvm_id: _, ...existingFields } = existingConfig;
+	const updatedConfig: Record<string, unknown> = {
+		...existingFields,
+		app_id: cvm.app_id,
+	};
 
 	saveProjectConfig(updatedConfig);
 	logger.success(`Updated phala.toml with app_id = "${cvm.app_id}"`);
