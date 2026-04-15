@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import { safeGetAppCvms } from "@phala/cloud";
+import { safeGetAppCvms, safeGetCvmStatusBatch } from "@phala/cloud";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
@@ -48,8 +48,35 @@ async function runInstancesLsCommand(
 
 		const instances = result.data;
 
+		const vmUuids = instances
+			.map((item) => item.vm_uuid)
+			.filter(
+				(uuid): uuid is string => typeof uuid === "string" && uuid.length > 0,
+			);
+
+		const statusByUuid: Record<
+			string,
+			{ status: string; uptime?: string | null }
+		> = {};
+		if (vmUuids.length > 0) {
+			const batchResult = await safeGetCvmStatusBatch(client as never, {
+				vmUuids,
+			});
+			if (batchResult.success) {
+				for (const [uuid, info] of Object.entries(batchResult.data)) {
+					statusByUuid[uuid] = { status: info.status, uptime: info.uptime };
+				}
+			}
+		}
+
 		if (input.json) {
-			context.success(instances);
+			const enriched = instances.map((item) => ({
+				...item,
+				uptime: item.vm_uuid
+					? (statusByUuid[item.vm_uuid]?.uptime ?? null)
+					: null,
+			}));
+			context.success(enriched);
 			return 0;
 		}
 
@@ -59,12 +86,12 @@ async function runInstancesLsCommand(
 		}
 
 		const columns = [
-			"VM_UUID",
-			"NAME",
-			"STATUS",
-			"UPTIME",
+			"UUID",
 			"NODE",
 			"REGION",
+			"STATUS",
+			"NAME",
+			"UPTIME",
 		] as const;
 		const rows = instances.map((item) => {
 			const nodeName =
@@ -75,13 +102,14 @@ async function runInstancesLsCommand(
 				item.node_info && typeof item.node_info === "object"
 					? (item.node_info.region ?? "-")
 					: "-";
+			const batch = item.vm_uuid ? statusByUuid[item.vm_uuid] : undefined;
 			return {
-				VM_UUID: item.vm_uuid ?? "-",
-				NAME: item.name,
-				STATUS: formatStatus(item.status),
-				UPTIME: "-",
+				UUID: item.vm_uuid ?? "-",
 				NODE: nodeName,
 				REGION: region,
+				STATUS: formatStatus(batch?.status ?? item.status),
+				NAME: item.name,
+				UPTIME: batch?.uptime ?? "-",
 			};
 		});
 

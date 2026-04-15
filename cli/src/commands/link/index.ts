@@ -5,6 +5,7 @@ import inquirer from "inquirer";
 import {
 	safeGetCvmList,
 	safeGetCvmInfo,
+	safeGetAppInfo,
 	safeGetCurrentUser,
 } from "@phala/cloud";
 
@@ -73,12 +74,24 @@ function detectEnvFile(): string | undefined {
 	return undefined;
 }
 
+const APP_ID_RE = /^(0x)?[0-9a-f]{40}$/i;
+
+function isAppIdLike(value: string): boolean {
+	return APP_ID_RE.test(value);
+}
+
+function normalizeAppId(value: string): string {
+	return value.replace(/^0x/i, "").toLowerCase();
+}
+
 /**
  * Ensure user is authenticated, run login if needed
  */
-async function ensureAuthenticated(
-	context: CommandContext,
-): Promise<{ apiKey: string; workspaceName: string } | null> {
+async function ensureAuthenticated(context: CommandContext): Promise<{
+	apiKey: string;
+	workspaceName: string;
+	workspaceSlug: string | null;
+} | null> {
 	let apiKey = resolveAuthForContext(context).apiKey;
 
 	if (!apiKey) {
@@ -96,6 +109,17 @@ async function ensureAuthenticated(
 		}
 		console.log();
 	}
+
+	const printAuth = (data: {
+		user?: { username?: string };
+		workspace?: { name?: string; slug?: string | null };
+	}) => {
+		const wsName = data.workspace?.name || "default";
+		const wsSlug = data.workspace?.slug ? ` (${data.workspace.slug})` : "";
+		logger.success(`Authenticated as ${data.user?.username || "unknown"}`);
+		logger.info(`Workspace: ${wsName}${wsSlug}`);
+		console.log();
+	};
 
 	// Verify the API key is valid and discover current workspace
 	const apiClient = await getClient(context);
@@ -120,18 +144,21 @@ async function ensureAuthenticated(
 		if (!refreshedUser.success) {
 			return null;
 		}
-		logger.success(`Authenticated as ${refreshedUser.data.user.username}`);
-		console.log();
+		printAuth(refreshedUser.data);
 		return {
 			apiKey,
 			workspaceName: refreshedUser.data.workspace.name || "default",
+			workspaceSlug: refreshedUser.data.workspace.slug,
 		};
 	}
 
-	logger.success(`Authenticated as ${userResult.data.user.username}`);
-	console.log();
+	printAuth(userResult.data);
 
-	return { apiKey, workspaceName: userResult.data.workspace.name || "default" };
+	return {
+		apiKey,
+		workspaceName: userResult.data.workspace.name || "default",
+		workspaceSlug: userResult.data.workspace.slug,
+	};
 }
 
 /**
@@ -271,20 +298,39 @@ async function runDirectLink(
 
 	const { workspaceName } = auth;
 
-	// Step 2: Verify CVM exists
+	// Step 2: Verify the identifier resolves. 40-char hex (with optional 0x prefix)
+	// is treated as an app_id; everything else falls back to the CVM lookup so a
+	// raw cvm_id / uuid / name still works.
 	const client = await getClient(context);
-	const cvmResult = await safeGetCvmInfo(client, { id: cvmId });
+	let cvmName: string;
+	let appId: string | undefined;
 
-	if (!cvmResult.success) {
-		context.fail(`CVM not found: ${cvmId}`);
-		return 1;
+	if (isAppIdLike(cvmId)) {
+		const normalizedAppId = normalizeAppId(cvmId);
+		const appResult = await safeGetAppInfo(client, { appId: normalizedAppId });
+		if (!appResult.success) {
+			context.fail(`App not found: ${normalizedAppId}`);
+			return 1;
+		}
+		const app = appResult.data as {
+			name?: string | null;
+			app_id: string;
+			current_cvm?: { name?: string | null } | null;
+		};
+		appId = app.app_id;
+		cvmName = app.current_cvm?.name || app.name || path.basename(process.cwd());
+		logger.success(`Found app: ${appId}`);
+	} else {
+		const cvmResult = await safeGetCvmInfo(client, { id: cvmId });
+		if (!cvmResult.success) {
+			context.fail(`CVM not found: ${cvmId}`);
+			return 1;
+		}
+		const cvm = cvmResult.data as { name?: string; app_id?: string };
+		cvmName = cvm.name || cvmId;
+		appId = cvm.app_id || undefined;
+		logger.success(`Found CVM: ${cvmName}`);
 	}
-
-	const cvm = cvmResult.data as { name?: string; app_id?: string };
-	const cvmName = cvm.name || cvmId;
-	const appId = cvm.app_id || undefined;
-
-	logger.success(`Found CVM: ${cvmName}`);
 
 	// Step 3: Check for existing phala.toml
 	if (projectConfigExists()) {

@@ -410,10 +410,10 @@ async function runInstancesAddCommand(
 
 				const privateKey = input.privateKey || process.env.PRIVATE_KEY;
 				if (!privateKey) {
+					// No signing key available — fall back to prepare/commit mode so the
+					// user can register on-chain manually and finish with --commit.
 					formatPrepareOutput(preparePayload, context);
-					throw new Error(
-						`On-chain registration required: ${missing.join(", ")} not registered. Pass --private-key or set PRIVATE_KEY to register automatically, or use --prepare-only to handle registration separately.`,
-					);
+					return 0;
 				}
 				const typedKey = privateKey as `0x${string}`;
 
