@@ -14,7 +14,7 @@ on:
 jobs:
   cli-checks:
     name: CLI Checks
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     defaults:
       run:
         working-directory: cli

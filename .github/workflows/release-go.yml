@@ -41,7 +41,7 @@ jobs:
        contains(github.event.comment.body, '!Release') ||
        contains(github.event.comment.body, '!RELEASE')) &&
       github.event.comment.user.type != 'Bot'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     outputs:
       should_release: ${{ steps.parse.outputs.should_release }}
       release_type: ${{ steps.parse.outputs.release_type }}
@@ -202,7 +202,7 @@ jobs:
     concurrency:
       group: release-go-${{ github.event_name == 'workflow_dispatch' && inputs.ref || needs.parse.outputs.ref }}
       cancel-in-progress: false
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     env:
       RELEASE_TYPE: ${{ github.event_name == 'workflow_dispatch' && inputs.release_type || needs.parse.outputs.release_type }}
       PRERELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || needs.parse.outputs.prerelease }}
