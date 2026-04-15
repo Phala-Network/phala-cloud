@@ -24,9 +24,9 @@ import type { CommandContext } from "@/src/core/types";
 import { CLOUD_URL } from "@/src/utils/constants";
 import { logger } from "@/src/utils/logger";
 import {
-	appsInstancesAddCommandMeta,
-	appsInstancesAddCommandSchema,
-	type AppsInstancesAddCommandInput,
+	instancesAddCommandMeta,
+	instancesAddCommandSchema,
+	type InstancesAddCommandInput,
 } from "./command";
 
 interface PreparePayload {
@@ -231,7 +231,7 @@ function formatPrepareOutput(
 		lines.push(
 			"",
 			"To complete the instance after on-chain approval:",
-			`  phala apps instances add ${payload.appId} \\`,
+			`  phala instances add --app-id ${payload.appId} \\`,
 			"    --commit \\",
 			`    --token ${payload.commitToken} \\`,
 			`    --compose-hash ${composeHashHex} \\`,
@@ -242,23 +242,23 @@ function formatPrepareOutput(
 }
 
 function resolveAppId(
-	input: AppsInstancesAddCommandInput,
+	input: InstancesAddCommandInput,
 	context: CommandContext,
 ): string {
 	const appId = input.appId || context.projectConfig.app_id;
 	if (!appId) {
 		throw new Error(
-			"No app ID provided. Pass as argument or set app_id in phala.toml.",
+			"No app ID provided. Pass --app-id or run `phala link` to create phala.toml with app_id.",
 		);
 	}
 	return appId.replace(/^app_/, "").replace(/^0x/, "").toLowerCase();
 }
 
-async function runAppsInstancesAddCommand(
-	rawInput: AppsInstancesAddCommandInput,
+async function runInstancesAddCommand(
+	rawInput: InstancesAddCommandInput,
 	context: CommandContext,
 ): Promise<number> {
-	const input: AppsInstancesAddCommandInput = {
+	const input: InstancesAddCommandInput = {
 		...rawInput,
 		rpcUrl: rawInput.rpcUrl || process.env.ETH_RPC_URL,
 	};
@@ -489,11 +489,11 @@ async function runAppsInstancesAddCommand(
 	}
 }
 
-export const appsInstancesAddCommand = defineCommand({
-	path: ["apps", "instances", "add"],
-	meta: appsInstancesAddCommandMeta,
-	schema: appsInstancesAddCommandSchema,
-	handler: runAppsInstancesAddCommand,
+export const instancesAddCommand = defineCommand({
+	path: ["instances", "add"],
+	meta: instancesAddCommandMeta,
+	schema: instancesAddCommandSchema,
+	handler: runInstancesAddCommand,
 });
 
-export default appsInstancesAddCommand;
+export default instancesAddCommand;

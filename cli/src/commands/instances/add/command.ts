@@ -7,19 +7,17 @@ import {
 	transactionHashOption,
 } from "@/src/core/common-flags";
 
-export const appsInstancesAddCommandMeta: CommandMeta = {
+export const instancesAddCommandMeta: CommandMeta = {
 	name: "add",
 	description: "Create a new instance under an existing app",
 	stability: "unstable",
-	arguments: [
+	options: [
 		{
 			name: "app-id",
-			description: "App ID (hex identifier)",
-			required: false,
+			description: "App ID (hex identifier). Defaults to app_id in phala.toml.",
+			type: "string",
 			target: "appId",
 		},
-	],
-	options: [
 		{
 			name: "node-id",
 			aliases: ["teepod-id"],
@@ -84,27 +82,27 @@ export const appsInstancesAddCommandMeta: CommandMeta = {
 	examples: [
 		{
 			name: "Add instance with existing compose",
-			value: "phala apps instances add <app-id> --node-id 5",
+			value: "phala instances add --app-id <app-id> --node-id 5",
 		},
 		{
 			name: "Add instance with new Docker Compose",
 			value:
-				"phala apps instances add <app-id> --node-id 5 --compose-file docker-compose.yml",
+				"phala instances add --app-id <app-id> --node-id 5 --compose-file docker-compose.yml",
 		},
 		{
 			name: "Prepare for multisig approval",
 			value:
-				"phala apps instances add <app-id> --node-id 5 --compose-file docker-compose.yml --prepare-only",
+				"phala instances add --app-id <app-id> --node-id 5 --compose-file docker-compose.yml --prepare-only",
 		},
 		{
 			name: "Commit a prepared instance",
 			value:
-				"phala apps instances add <app-id> --commit --token <token> --compose-hash <hash> --transaction-hash <tx-hash>",
+				"phala instances add --app-id <app-id> --commit --token <token> --compose-hash <hash> --transaction-hash <tx-hash>",
 		},
 	],
 };
 
-export const appsInstancesAddCommandSchema = z.object({
+export const instancesAddCommandSchema = z.object({
 	appId: z.string().optional(),
 	nodeId: z.string().optional(),
 	composeFile: z.string().optional(),
@@ -120,6 +118,6 @@ export const appsInstancesAddCommandSchema = z.object({
 	interactive: z.boolean().default(false),
 });
 
-export type AppsInstancesAddCommandInput = z.infer<
-	typeof appsInstancesAddCommandSchema
+export type InstancesAddCommandInput = z.infer<
+	typeof instancesAddCommandSchema
 >;
