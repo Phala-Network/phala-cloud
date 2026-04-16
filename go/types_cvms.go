@@ -80,6 +80,23 @@ type CvmKmsInfo struct {
 	EncryptedEnvPubkey *string `json:"encrypted_env_pubkey,omitempty"`
 }
 
+// ChainName returns a human-readable chain name based on ChainID.
+func (k *CvmKmsInfo) ChainName() string {
+	if k == nil || k.ChainID == nil {
+		return ""
+	}
+	switch *k.ChainID {
+	case 1:
+		return "Ethereum"
+	case 8453:
+		return "Base"
+	case 31337:
+		return "Anvil"
+	default:
+		return ""
+	}
+}
+
 // CvmProgressInfo holds CVM progress information.
 type CvmProgressInfo struct {
 	Target        *string `json:"target,omitempty"`
