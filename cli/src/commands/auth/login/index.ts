@@ -107,7 +107,7 @@ async function runLoginCommand(
 
 		const workspaceName = user.workspace_name || "default";
 		const workspaceSlug = user.workspace_slug;
-		const profileName = workspaceName;
+		const profileName = workspaceSlug || "default";
 
 		upsertProfile({
 			profileName,

@@ -195,7 +195,7 @@ function saveAndShowSummary(options: {
 	if (options.appId) {
 		console.log(chalk.dim(`  app_id = "${options.appId}"`));
 	}
-	console.log(chalk.dim(`  profile = "${options.profile}"`)); // TODO: switch to workspace slug when available
+	console.log(chalk.dim(`  profile = "${options.profile}"`));
 	if (options.composeFile) {
 		console.log(chalk.dim(`  compose_file = "${options.composeFile}"`));
 	}
@@ -296,7 +296,7 @@ async function runDirectLink(
 		return 1;
 	}
 
-	const { workspaceName } = auth;
+	const profile = auth.workspaceSlug || "default";
 
 	// Step 2: Verify the identifier resolves. 40-char hex (with optional 0x prefix)
 	// is treated as an app_id; everything else falls back to the CVM lookup so a
@@ -368,7 +368,7 @@ async function runDirectLink(
 		appId,
 		composeFile,
 		envFile,
-		profile: workspaceName,
+		profile,
 	});
 	return 0;
 }
@@ -384,7 +384,7 @@ async function runInteractiveLink(context: CommandContext): Promise<number> {
 		return 1;
 	}
 
-	const { workspaceName } = auth;
+	const profile = auth.workspaceSlug || "default";
 
 	// Step 2: Fetch CVM list
 	const listSpinner = logger.startSpinner("Fetching your CVMs...");
@@ -482,7 +482,7 @@ async function runInteractiveLink(context: CommandContext): Promise<number> {
 		appId: selectedChoice?.appId,
 		composeFile,
 		envFile,
-		profile: workspaceName,
+		profile,
 	});
 	return 0;
 }
