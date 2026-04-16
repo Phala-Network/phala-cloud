@@ -128,17 +128,23 @@ export function resolveAuth(options: {
 			"default",
 	);
 
-	// Backward-compat: older `phala link` wrote workspace.name (e.g.
-	// "leechael's projects") into phala.toml `profile = ...` but the
-	// canonical key is the workspace slug. If the requested profile key
-	// doesn't exist verbatim, try matching workspace.name to recover.
+	// Backward-compat: phala.toml `profile` may contain a workspace slug,
+	// workspace name, or the actual profile key. If the requested key
+	// doesn't exist verbatim, try matching workspace.slug then workspace.name.
 	let selectedProfile = requested;
 	if (credentials && !credentials.profiles[selectedProfile]) {
-		const matchByName = Object.entries(credentials.profiles).find(
-			([, info]) => info?.workspace?.name === requested,
+		const matchBySlug = Object.entries(credentials.profiles).find(
+			([, info]) => info?.workspace?.slug === requested,
 		);
-		if (matchByName) {
-			selectedProfile = matchByName[0];
+		if (matchBySlug) {
+			selectedProfile = matchBySlug[0];
+		} else {
+			const matchByName = Object.entries(credentials.profiles).find(
+				([, info]) => info?.workspace?.name === requested,
+			);
+			if (matchByName) {
+				selectedProfile = matchByName[0];
+			}
 		}
 	}
 

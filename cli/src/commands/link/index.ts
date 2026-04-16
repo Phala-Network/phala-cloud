@@ -89,12 +89,13 @@ function normalizeAppId(value: string): string {
  */
 async function ensureAuthenticated(context: CommandContext): Promise<{
 	apiKey: string;
+	profileName: string;
 	workspaceName: string;
 	workspaceSlug: string | null;
 } | null> {
-	let apiKey = resolveAuthForContext(context).apiKey;
+	let resolved = resolveAuthForContext(context);
 
-	if (!apiKey) {
+	if (!resolved.apiKey) {
 		logger.info("Not authenticated. Starting login flow...\n");
 		const loginResult = await runLoginCommand(
 			{ manual: false, noOpen: false },
@@ -103,8 +104,8 @@ async function ensureAuthenticated(context: CommandContext): Promise<{
 		if (loginResult !== 0) {
 			return null;
 		}
-		apiKey = resolveAuthForContext(context).apiKey;
-		if (!apiKey) {
+		resolved = resolveAuthForContext(context);
+		if (!resolved.apiKey) {
 			return null;
 		}
 		console.log();
@@ -134,8 +135,8 @@ async function ensureAuthenticated(context: CommandContext): Promise<{
 		if (loginResult !== 0) {
 			return null;
 		}
-		apiKey = resolveAuthForContext(context).apiKey;
-		if (!apiKey) {
+		resolved = resolveAuthForContext(context);
+		if (!resolved.apiKey) {
 			return null;
 		}
 
@@ -146,7 +147,8 @@ async function ensureAuthenticated(context: CommandContext): Promise<{
 		}
 		printAuth(refreshedUser.data);
 		return {
-			apiKey,
+			apiKey: resolved.apiKey,
+			profileName: resolved.profileName,
 			workspaceName: refreshedUser.data.workspace.name || "default",
 			workspaceSlug: refreshedUser.data.workspace.slug,
 		};
@@ -155,7 +157,8 @@ async function ensureAuthenticated(context: CommandContext): Promise<{
 	printAuth(userResult.data);
 
 	return {
-		apiKey,
+		apiKey: resolved.apiKey,
+		profileName: resolved.profileName,
 		workspaceName: userResult.data.workspace.name || "default",
 		workspaceSlug: userResult.data.workspace.slug,
 	};
@@ -296,7 +299,7 @@ async function runDirectLink(
 		return 1;
 	}
 
-	const profile = auth.workspaceSlug || "default";
+	const profile = auth.profileName;
 
 	// Step 2: Verify the identifier resolves. 40-char hex (with optional 0x prefix)
 	// is treated as an app_id; everything else falls back to the CVM lookup so a
@@ -384,7 +387,7 @@ async function runInteractiveLink(context: CommandContext): Promise<number> {
 		return 1;
 	}
 
-	const profile = auth.workspaceSlug || "default";
+	const profile = auth.profileName;
 
 	// Step 2: Fetch CVM list
 	const listSpinner = logger.startSpinner("Fetching your CVMs...");
