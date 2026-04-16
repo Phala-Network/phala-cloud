@@ -460,6 +460,30 @@ async function runInstancesAddCommand(
 				}
 			}
 
+			// Poll on-chain state until compose hash is registered before committing.
+			// The transaction may take a few seconds to be indexed by the RPC node.
+			const maxAttempts = 10;
+			for (let attempt = 0; attempt < maxAttempts; attempt++) {
+				const poll = await safeCheckOnChainPrerequisites({
+					chain: chain,
+					rpcUrl: input.rpcUrl,
+					appAddress: `0x${appId}` as `0x${string}`,
+					deviceId: preparePayload.deviceId,
+					composeHash: preparePayload.composeHash,
+				});
+				if (poll.success && poll.data.composeHashAllowed) {
+					break;
+				}
+				if (attempt === maxAttempts - 1) {
+					throw new Error(
+						"Compose hash not yet registered on-chain after waiting. " +
+							"The transaction may still be confirming. " +
+							"Retry with --commit using the token and transaction hash.",
+					);
+				}
+				await new Promise((resolve) => setTimeout(resolve, 3000));
+			}
+
 			const instance = (await client.post(`/apps/${appId}/instances`, {
 				token: preparePayload.commitToken,
 				compose_hash: preparePayload.composeHash,
