@@ -33,6 +33,7 @@ from .action_responses import (
     InstanceTypesFamilyResponse,
     ListWorkspacesResponse,
     NextAppIdsResponse,
+    ProvisionCvmComposeFileUpdateResult,
     ProvisionCvmResponse,
     RefreshInstanceIdResponse,
     RefreshInstanceIdsResponse,
@@ -285,7 +286,7 @@ class _ExtMixin:
         if m == "POST" and path == "/cvms":
             return CommitCvmProvisionResponse
         if m == "POST" and re.fullmatch(r"/cvms/[^/]+/compose_file/provision", path):
-            return ProvisionCvmResponse
+            return ProvisionCvmComposeFileUpdateResult
 
         if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/envs", path):
             return InProgressResponse | ComposeHashPreconditionResponse
@@ -520,15 +521,22 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     ) -> SafeResult[Any]:
         return self.safe(self.get_cvm_compose_file, request)
 
-    def provision_cvm_compose_file_update(self, request: Mapping[str, Any]) -> Any:
+    def provision_cvm_compose_file_update(
+        self, request: Mapping[str, Any]
+    ) -> ProvisionCvmComposeFileUpdateResult:
         req = dict(request)
         cvm_id = CvmIdRequest.model_validate(req).resolved
         body = dict(req.get("app_compose") or {})
         if "update_env_vars" in req:
             body["update_env_vars"] = req["update_env_vars"]
-        return self._loose_validate(self.post(f"/cvms/{cvm_id}/compose_file/provision", json=body))
+        return self._validate(
+            ProvisionCvmComposeFileUpdateResult,
+            self.post(f"/cvms/{cvm_id}/compose_file/provision", json=body),
+        )
 
-    def safe_provision_cvm_compose_file_update(self, request: Mapping[str, Any]) -> SafeResult[Any]:
+    def safe_provision_cvm_compose_file_update(
+        self, request: Mapping[str, Any]
+    ) -> SafeResult[ProvisionCvmComposeFileUpdateResult]:
         return self.safe(self.provision_cvm_compose_file_update, request)
 
     def commit_cvm_compose_file_update(self, request: Mapping[str, Any]) -> Any:
@@ -1314,19 +1322,22 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
     ) -> SafeResult[Any]:
         return await self.safe(self.get_cvm_compose_file, request)
 
-    async def provision_cvm_compose_file_update(self, request: Mapping[str, Any]) -> Any:
+    async def provision_cvm_compose_file_update(
+        self, request: Mapping[str, Any]
+    ) -> ProvisionCvmComposeFileUpdateResult:
         req = dict(request)
         cvm_id = CvmIdRequest.model_validate(req).resolved
         body = dict(req.get("app_compose") or {})
         if "update_env_vars" in req:
             body["update_env_vars"] = req["update_env_vars"]
-        return self._loose_validate(
-            await self.post(f"/cvms/{cvm_id}/compose_file/provision", json=body)
+        return self._validate(
+            ProvisionCvmComposeFileUpdateResult,
+            await self.post(f"/cvms/{cvm_id}/compose_file/provision", json=body),
         )
 
     async def safe_provision_cvm_compose_file_update(
         self, request: Mapping[str, Any]
-    ) -> SafeResult[Any]:
+    ) -> SafeResult[ProvisionCvmComposeFileUpdateResult]:
         return await self.safe(self.provision_cvm_compose_file_update, request)
 
     async def commit_cvm_compose_file_update(self, request: Mapping[str, Any]) -> Any:
