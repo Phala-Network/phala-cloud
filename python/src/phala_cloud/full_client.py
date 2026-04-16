@@ -249,6 +249,46 @@ class _ExtMixin:
             return CloudModel.model_validate(data)
         return data
 
+    @staticmethod
+    def _extract_465_fields(exc: Exception) -> dict[str, Any] | None:
+        status = getattr(exc, "status_code", None)
+        if status != 465:
+            return None
+        detail = getattr(exc, "detail", None)
+        if not isinstance(detail, dict):
+            return None
+
+        # New StructuredError format: fields live inside a `details` array.
+        details_array = detail.get("details")
+        if isinstance(details_array, list):
+            field_map: dict[str, Any] = {
+                item["field"]: item.get("value")
+                for item in details_array
+                if isinstance(item, dict) and "field" in item
+            }
+            compose_hash = field_map.get("compose_hash")
+            app_id = field_map.get("app_id")
+            if compose_hash is not None and app_id is not None:
+                return {
+                    "message": detail.get("message", "Compose hash verification required"),
+                    "compose_hash": compose_hash,
+                    "app_id": app_id,
+                    "device_id": field_map.get("device_id", ""),
+                    "kms_info": field_map.get("kms_info"),
+                }
+
+        # Legacy flat format: fields are top-level in `detail`.
+        if detail.get("compose_hash") is not None or detail.get("app_id") is not None:
+            return {
+                "message": detail.get("message", "Compose hash verification required"),
+                "compose_hash": detail.get("compose_hash"),
+                "app_id": detail.get("app_id"),
+                "device_id": detail.get("device_id"),
+                "kms_info": detail.get("kms_info"),
+            }
+
+        return None
+
     def _model_for_response(self, method: str, path: str) -> Any | None:
         m = method.upper()
 
@@ -567,19 +607,9 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         try:
             return self._loose_validate(self.request("PATCH", f"/cvms/{cvm_id}/envs", json=body))
         except Exception as exc:
-            status = getattr(exc, "status_code", None)
-            if status == 465 and hasattr(exc, "detail") and isinstance(exc.detail, dict):
-                detail = exc.detail
-                return self._loose_validate(
-                    {
-                        "status": "precondition_required",
-                        "message": detail.get("message", "Compose hash verification required"),
-                        "compose_hash": detail.get("compose_hash"),
-                        "app_id": detail.get("app_id"),
-                        "device_id": detail.get("device_id"),
-                        "kms_info": detail.get("kms_info"),
-                    }
-                )
+            fields = self._extract_465_fields(exc)
+            if fields is not None:
+                return self._loose_validate({"status": "precondition_required", **fields})
             raise
 
     def safe_update_cvm_envs(self, request: Mapping[str, Any]) -> SafeResult[Any]:
@@ -603,19 +633,9 @@ class PhalaCloud(_SyncBase, _ExtMixin):
                 ),
             )
         except Exception as exc:
-            status = getattr(exc, "status_code", None)
-            if status == 465 and hasattr(exc, "detail") and isinstance(exc.detail, dict):
-                detail = exc.detail
-                return self._loose_validate(
-                    {
-                        "status": "precondition_required",
-                        "message": detail.get("message", "Compose hash verification required"),
-                        "compose_hash": detail.get("compose_hash"),
-                        "app_id": detail.get("app_id"),
-                        "device_id": detail.get("device_id"),
-                        "kms_info": detail.get("kms_info"),
-                    }
-                )
+            fields = self._extract_465_fields(exc)
+            if fields is not None:
+                return self._loose_validate({"status": "precondition_required", **fields})
             raise
 
     def safe_update_docker_compose(self, request: Mapping[str, Any]) -> SafeResult[Any]:
@@ -639,19 +659,9 @@ class PhalaCloud(_SyncBase, _ExtMixin):
                 ),
             )
         except Exception as exc:
-            status = getattr(exc, "status_code", None)
-            if status == 465 and hasattr(exc, "detail") and isinstance(exc.detail, dict):
-                detail = exc.detail
-                return self._loose_validate(
-                    {
-                        "status": "precondition_required",
-                        "message": detail.get("message", "Compose hash verification required"),
-                        "compose_hash": detail.get("compose_hash"),
-                        "app_id": detail.get("app_id"),
-                        "device_id": detail.get("device_id"),
-                        "kms_info": detail.get("kms_info"),
-                    }
-                )
+            fields = self._extract_465_fields(exc)
+            if fields is not None:
+                return self._loose_validate({"status": "precondition_required", **fields})
             raise
 
     def safe_update_pre_launch_script(self, request: Mapping[str, Any]) -> SafeResult[Any]:
@@ -1372,19 +1382,9 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
                 await self.request("PATCH", f"/cvms/{cvm_id}/envs", json=body)
             )
         except Exception as exc:
-            status = getattr(exc, "status_code", None)
-            if status == 465 and hasattr(exc, "detail") and isinstance(exc.detail, dict):
-                detail = exc.detail
-                return self._loose_validate(
-                    {
-                        "status": "precondition_required",
-                        "message": detail.get("message", "Compose hash verification required"),
-                        "compose_hash": detail.get("compose_hash"),
-                        "app_id": detail.get("app_id"),
-                        "device_id": detail.get("device_id"),
-                        "kms_info": detail.get("kms_info"),
-                    }
-                )
+            fields = self._extract_465_fields(exc)
+            if fields is not None:
+                return self._loose_validate({"status": "precondition_required", **fields})
             raise
 
     async def safe_update_cvm_envs(self, request: Mapping[str, Any]) -> SafeResult[Any]:
@@ -1408,19 +1408,9 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
                 ),
             )
         except Exception as exc:
-            status = getattr(exc, "status_code", None)
-            if status == 465 and hasattr(exc, "detail") and isinstance(exc.detail, dict):
-                detail = exc.detail
-                return self._loose_validate(
-                    {
-                        "status": "precondition_required",
-                        "message": detail.get("message", "Compose hash verification required"),
-                        "compose_hash": detail.get("compose_hash"),
-                        "app_id": detail.get("app_id"),
-                        "device_id": detail.get("device_id"),
-                        "kms_info": detail.get("kms_info"),
-                    }
-                )
+            fields = self._extract_465_fields(exc)
+            if fields is not None:
+                return self._loose_validate({"status": "precondition_required", **fields})
             raise
 
     async def safe_update_docker_compose(self, request: Mapping[str, Any]) -> SafeResult[Any]:
@@ -1444,19 +1434,9 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
                 ),
             )
         except Exception as exc:
-            status = getattr(exc, "status_code", None)
-            if status == 465 and hasattr(exc, "detail") and isinstance(exc.detail, dict):
-                detail = exc.detail
-                return self._loose_validate(
-                    {
-                        "status": "precondition_required",
-                        "message": detail.get("message", "Compose hash verification required"),
-                        "compose_hash": detail.get("compose_hash"),
-                        "app_id": detail.get("app_id"),
-                        "device_id": detail.get("device_id"),
-                        "kms_info": detail.get("kms_info"),
-                    }
-                )
+            fields = self._extract_465_fields(exc)
+            if fields is not None:
+                return self._loose_validate({"status": "precondition_required", **fields})
             raise
 
     async def safe_update_pre_launch_script(self, request: Mapping[str, Any]) -> SafeResult[Any]:
