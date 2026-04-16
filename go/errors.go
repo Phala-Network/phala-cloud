@@ -84,6 +84,38 @@ func (e *APIError) IsComposePrecondition() bool {
 	return e.StatusCode == 465
 }
 
+// ComposePrecondition extracts a structured compose-hash precondition response from a 465 error.
+// It returns the populated response and true when the error contains the required fields.
+func (e *APIError) ComposePrecondition() (*ComposeHashPreconditionResponse, bool) {
+	if !e.IsComposePrecondition() {
+		return nil, false
+	}
+	fieldMap := make(map[string]any)
+	for _, d := range e.Details {
+		if d.Field != "" {
+			fieldMap[d.Field] = d.Value
+		}
+	}
+	composeHash, _ := fieldMap["compose_hash"].(string)
+	appID, _ := fieldMap["app_id"].(string)
+	if composeHash == "" || appID == "" {
+		return nil, false
+	}
+	deviceID, _ := fieldMap["device_id"].(string)
+	var kmsInfo *KMSInfo
+	if v, ok := fieldMap["kms_info"]; ok {
+		b, _ := json.Marshal(v)
+		_ = json.Unmarshal(b, &kmsInfo)
+	}
+	return &ComposeHashPreconditionResponse{
+		Message:     e.Message,
+		ComposeHash: composeHash,
+		AppID:       appID,
+		DeviceID:    deviceID,
+		KMSInfo:     kmsInfo,
+	}, true
+}
+
 // RetryAfter returns the duration to wait before retrying, based on the Retry-After header.
 // Returns 0 if the header is not present or cannot be parsed.
 func (e *APIError) RetryAfter() time.Duration {

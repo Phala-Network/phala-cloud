@@ -31,7 +31,7 @@ type UpdateResult struct {
 	Message     string `json:"message,omitempty"`
 
 	// KMS info for on-chain operations.
-	KMSInfo *CvmKmsInfo `json:"kms_info,omitempty"`
+	KMSInfo *KMSInfo `json:"kms_info,omitempty"`
 }
 
 // InProgressResponse is returned for operations that are in progress.
@@ -42,9 +42,9 @@ type InProgressResponse struct {
 
 // ComposeHashPreconditionResponse is returned when compose hash precondition fails (465).
 type ComposeHashPreconditionResponse struct {
-	Message     string      `json:"message"`
-	ComposeHash string      `json:"compose_hash"`
-	AppID       string      `json:"app_id"`
-	DeviceID    string      `json:"device_id"`
-	KMSInfo     *CvmKmsInfo `json:"kms_info,omitempty"`
+	Message     string   `json:"message"`
+	ComposeHash string   `json:"compose_hash"`
+	AppID       string   `json:"app_id"`
+	DeviceID    string   `json:"device_id"`
+	KMSInfo     *KMSInfo `json:"kms_info,omitempty"`
 }
