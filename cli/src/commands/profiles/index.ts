@@ -30,12 +30,20 @@ async function runProfilesCommand(
 	}
 
 	const credentials = loadCredentialsFile();
-	const columns = ["PROFILE", "WORKSPACE", "USER", "API ENDPOINT", ""] as const;
+	const columns = [
+		"PROFILE",
+		"SLUG",
+		"WORKSPACE",
+		"USER",
+		"API ENDPOINT",
+		"",
+	] as const;
 	const rows = profiles.map((profile) => {
 		const isCurrent = currentProfile?.name === profile;
 		const profileInfo = credentials?.profiles[profile];
 		return {
 			PROFILE: profile,
+			SLUG: profileInfo?.workspace?.slug || "",
 			WORKSPACE: profileInfo?.workspace?.name || "",
 			USER: profileInfo?.user?.username || "",
 			"API ENDPOINT": profileInfo?.api_prefix || "",
@@ -47,6 +55,7 @@ async function runProfilesCommand(
 		context.success({
 			profiles: profiles.map((profile) => ({
 				name: profile,
+				slug: credentials?.profiles[profile]?.workspace?.slug || null,
 				workspace: credentials?.profiles[profile]?.workspace?.name || null,
 				user: credentials?.profiles[profile]?.user?.username || null,
 				apiEndpoint: credentials?.profiles[profile]?.api_prefix || null,

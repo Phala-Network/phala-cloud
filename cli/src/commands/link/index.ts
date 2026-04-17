@@ -5,6 +5,7 @@ import inquirer from "inquirer";
 import {
 	safeGetCvmList,
 	safeGetCvmInfo,
+	safeGetAppInfo,
 	safeGetCurrentUser,
 } from "@phala/cloud";
 
@@ -13,6 +14,7 @@ import type { CommandContext } from "@/src/core/types";
 import { getClient, resolveAuthForContext } from "@/src/lib/client";
 import { logger } from "@/src/utils/logger";
 import {
+	getProjectConfig,
 	projectConfigExists,
 	saveProjectConfig,
 } from "@/src/utils/project-config";
@@ -72,15 +74,28 @@ function detectEnvFile(): string | undefined {
 	return undefined;
 }
 
+const APP_ID_RE = /^(0x)?[0-9a-f]{40}$/i;
+
+function isAppIdLike(value: string): boolean {
+	return APP_ID_RE.test(value);
+}
+
+function normalizeAppId(value: string): string {
+	return value.replace(/^0x/i, "").toLowerCase();
+}
+
 /**
  * Ensure user is authenticated, run login if needed
  */
-async function ensureAuthenticated(
-	context: CommandContext,
-): Promise<{ apiKey: string; workspaceName: string } | null> {
-	let apiKey = resolveAuthForContext(context).apiKey;
+async function ensureAuthenticated(context: CommandContext): Promise<{
+	apiKey: string;
+	profileName: string;
+	workspaceName: string;
+	workspaceSlug: string | null;
+} | null> {
+	let resolved = resolveAuthForContext(context);
 
-	if (!apiKey) {
+	if (!resolved.apiKey) {
 		logger.info("Not authenticated. Starting login flow...\n");
 		const loginResult = await runLoginCommand(
 			{ manual: false, noOpen: false },
@@ -89,12 +104,23 @@ async function ensureAuthenticated(
 		if (loginResult !== 0) {
 			return null;
 		}
-		apiKey = resolveAuthForContext(context).apiKey;
-		if (!apiKey) {
+		resolved = resolveAuthForContext(context);
+		if (!resolved.apiKey) {
 			return null;
 		}
 		console.log();
 	}
+
+	const printAuth = (data: {
+		user?: { username?: string };
+		workspace?: { name?: string; slug?: string | null };
+	}) => {
+		const wsName = data.workspace?.name || "default";
+		const wsSlug = data.workspace?.slug ? ` (${data.workspace.slug})` : "";
+		logger.success(`Authenticated as ${data.user?.username || "unknown"}`);
+		logger.info(`Workspace: ${wsName}${wsSlug}`);
+		console.log();
+	};
 
 	// Verify the API key is valid and discover current workspace
 	const apiClient = await getClient(context);
@@ -109,8 +135,8 @@ async function ensureAuthenticated(
 		if (loginResult !== 0) {
 			return null;
 		}
-		apiKey = resolveAuthForContext(context).apiKey;
-		if (!apiKey) {
+		resolved = resolveAuthForContext(context);
+		if (!resolved.apiKey) {
 			return null;
 		}
 
@@ -119,18 +145,23 @@ async function ensureAuthenticated(
 		if (!refreshedUser.success) {
 			return null;
 		}
-		logger.success(`Authenticated as ${refreshedUser.data.user.username}`);
-		console.log();
+		printAuth(refreshedUser.data);
 		return {
-			apiKey,
+			apiKey: resolved.apiKey,
+			profileName: resolved.profileName,
 			workspaceName: refreshedUser.data.workspace.name || "default",
+			workspaceSlug: refreshedUser.data.workspace.slug,
 		};
 	}
 
-	logger.success(`Authenticated as ${userResult.data.user.username}`);
-	console.log();
+	printAuth(userResult.data);
 
-	return { apiKey, workspaceName: userResult.data.workspace.name || "default" };
+	return {
+		apiKey: resolved.apiKey,
+		profileName: resolved.profileName,
+		workspaceName: userResult.data.workspace.name || "default",
+		workspaceSlug: userResult.data.workspace.slug,
+	};
 }
 
 /**
@@ -138,6 +169,7 @@ async function ensureAuthenticated(
  */
 function saveAndShowSummary(options: {
 	cvmName: string;
+	appId: string | undefined;
 	composeFile: string | undefined;
 	envFile: string | undefined;
 	profile: string;
@@ -147,6 +179,9 @@ function saveAndShowSummary(options: {
 		profile: options.profile,
 	};
 
+	if (options.appId) {
+		config.app_id = options.appId;
+	}
 	if (options.composeFile) {
 		config.compose_file = options.composeFile;
 	}
@@ -160,7 +195,10 @@ function saveAndShowSummary(options: {
 	console.log();
 	console.log(chalk.bold("Created phala.toml:"));
 	console.log(chalk.dim(`  name = "${options.cvmName}"`));
-	console.log(chalk.dim(`  profile = "${options.profile}"`)); // TODO: switch to workspace slug when available
+	if (options.appId) {
+		console.log(chalk.dim(`  app_id = "${options.appId}"`));
+	}
+	console.log(chalk.dim(`  profile = "${options.profile}"`));
 	if (options.composeFile) {
 		console.log(chalk.dim(`  compose_file = "${options.composeFile}"`));
 	}
@@ -183,6 +221,14 @@ export async function runLinkCommand(
 			return await runDirectLink(input.cvmId, context);
 		}
 
+		// No CVM ID: if phala.toml exists with CVM info but no app_id, upgrade it
+		if (projectConfigExists()) {
+			const existingConfig = getProjectConfig();
+			if (existingConfig.cvm_id && !existingConfig.app_id) {
+				return await runUpgradeConfig(existingConfig, context);
+			}
+		}
+
 		// Interactive mode
 		return await runInteractiveLink(context);
 	} catch (error) {
@@ -194,6 +240,49 @@ export async function runLinkCommand(
 		}
 		throw error;
 	}
+}
+
+/**
+ * Upgrade existing phala.toml by backfilling app_id from CVM info
+ */
+async function runUpgradeConfig(
+	existingConfig: ReturnType<typeof getProjectConfig>,
+	context: CommandContext,
+): Promise<number> {
+	const auth = await ensureAuthenticated(context);
+	if (!auth) {
+		context.fail("Authentication failed.");
+		return 1;
+	}
+
+	const client = await getClient(context);
+	const cvmResult = await safeGetCvmInfo(client, {
+		id: existingConfig.cvm_id as string,
+	});
+
+	if (!cvmResult.success) {
+		context.fail(
+			`Failed to fetch CVM info for ${existingConfig.cvm_id}: ${cvmResult.error?.message || "Unknown error"}`,
+		);
+		return 1;
+	}
+
+	const cvm = cvmResult.data as { app_id?: string };
+	if (!cvm.app_id) {
+		logger.warn("CVM does not have an app_id. No upgrade needed.");
+		return 0;
+	}
+
+	// Merge app_id into existing config, preserving all existing fields
+	const { cvm_id: _, ...existingFields } = existingConfig;
+	const updatedConfig: Record<string, unknown> = {
+		...existingFields,
+		app_id: cvm.app_id,
+	};
+
+	saveProjectConfig(updatedConfig);
+	logger.success(`Updated phala.toml with app_id = "${cvm.app_id}"`);
+	return 0;
 }
 
 /**
@@ -210,21 +299,41 @@ async function runDirectLink(
 		return 1;
 	}
 
-	const { workspaceName } = auth;
+	const profile = auth.profileName;
 
-	// Step 2: Verify CVM exists
+	// Step 2: Verify the identifier resolves. 40-char hex (with optional 0x prefix)
+	// is treated as an app_id; everything else falls back to the CVM lookup so a
+	// raw cvm_id / uuid / name still works.
 	const client = await getClient(context);
-	const cvmResult = await safeGetCvmInfo(client, { id: cvmId });
+	let cvmName: string;
+	let appId: string | undefined;
 
-	if (!cvmResult.success) {
-		context.fail(`CVM not found: ${cvmId}`);
-		return 1;
+	if (isAppIdLike(cvmId)) {
+		const normalizedAppId = normalizeAppId(cvmId);
+		const appResult = await safeGetAppInfo(client, { appId: normalizedAppId });
+		if (!appResult.success) {
+			context.fail(`App not found: ${normalizedAppId}`);
+			return 1;
+		}
+		const app = appResult.data as {
+			name?: string | null;
+			app_id: string;
+			current_cvm?: { name?: string | null } | null;
+		};
+		appId = app.app_id;
+		cvmName = app.current_cvm?.name || app.name || path.basename(process.cwd());
+		logger.success(`Found app: ${appId}`);
+	} else {
+		const cvmResult = await safeGetCvmInfo(client, { id: cvmId });
+		if (!cvmResult.success) {
+			context.fail(`CVM not found: ${cvmId}`);
+			return 1;
+		}
+		const cvm = cvmResult.data as { name?: string; app_id?: string };
+		cvmName = cvm.name || cvmId;
+		appId = cvm.app_id || undefined;
+		logger.success(`Found CVM: ${cvmName}`);
 	}
-
-	const cvm = cvmResult.data as { name?: string; app_id?: string };
-	const cvmName = cvm.name || cvmId;
-
-	logger.success(`Found CVM: ${cvmName}`);
 
 	// Step 3: Check for existing phala.toml
 	if (projectConfigExists()) {
@@ -259,9 +368,10 @@ async function runDirectLink(
 
 	saveAndShowSummary({
 		cvmName,
+		appId,
 		composeFile,
 		envFile,
-		profile: workspaceName,
+		profile,
 	});
 	return 0;
 }
@@ -277,7 +387,7 @@ async function runInteractiveLink(context: CommandContext): Promise<number> {
 		return 1;
 	}
 
-	const { workspaceName } = auth;
+	const profile = auth.profileName;
 
 	// Step 2: Fetch CVM list
 	const listSpinner = logger.startSpinner("Fetching your CVMs...");
@@ -308,11 +418,13 @@ async function runInteractiveLink(context: CommandContext): Promise<number> {
 		const id = cvm.hosted?.app_id || cvm.hosted?.id || "";
 		const name = cvm.name || cvm.hosted?.name || "Unnamed";
 		const status = cvm.status || cvm.hosted?.status || "Unknown";
+		const appId = cvm.hosted?.app_id || undefined;
 
 		return {
 			name: `${name} (${id}) - Status: ${status}`,
 			value: name,
 			cvmName: name,
+			appId,
 		};
 	});
 
@@ -367,11 +479,13 @@ async function runInteractiveLink(context: CommandContext): Promise<number> {
 		console.log();
 	}
 
+	const selectedChoice = choices.find((c) => c.value === selectedCvm);
 	saveAndShowSummary({
 		cvmName: selectedCvm,
+		appId: selectedChoice?.appId,
 		composeFile,
 		envFile,
-		profile: workspaceName,
+		profile,
 	});
 	return 0;
 }

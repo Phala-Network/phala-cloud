@@ -121,12 +121,32 @@ export function resolveAuth(options: {
 	projectProfile?: string;
 }): ResolvedAuth {
 	const credentials = loadCredentialsFile();
-	const selectedProfile = normalizeProfileName(
+	const requested = normalizeProfileName(
 		options.profile ||
 			options.projectProfile ||
 			credentials?.current_profile ||
 			"default",
 	);
+
+	// Backward-compat: phala.toml `profile` may contain a workspace slug,
+	// workspace name, or the actual profile key. If the requested key
+	// doesn't exist verbatim, try matching workspace.slug then workspace.name.
+	let selectedProfile = requested;
+	if (credentials && !credentials.profiles[selectedProfile]) {
+		const matchBySlug = Object.entries(credentials.profiles).find(
+			([, info]) => info?.workspace?.slug === requested,
+		);
+		if (matchBySlug) {
+			selectedProfile = matchBySlug[0];
+		} else {
+			const matchByName = Object.entries(credentials.profiles).find(
+				([, info]) => info?.workspace?.name === requested,
+			);
+			if (matchByName) {
+				selectedProfile = matchByName[0];
+			}
+		}
+	}
 
 	// API prefix resolution: env > profile > default
 	const baseURLFromEnv = options.env.PHALA_CLOUD_API_PREFIX;

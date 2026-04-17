@@ -111,7 +111,20 @@ export async function dispatchCommand(
 		});
 	}
 
-	const { definition, consumed } = resolved;
+	const { definition, consumed, remaining } = resolved;
+
+	if (
+		remaining.length > 0 &&
+		(!definition.meta.arguments || definition.meta.arguments.length === 0)
+	) {
+		const consumedPath = consumed.join(" ");
+		const unknown = remaining.join(" ");
+		stderr.write(
+			`Unknown subcommand "${unknown}" for "${consumedPath}". Run \`${executableName} ${consumedPath} --help\` for usage.\n`,
+		);
+		return 1;
+	}
+
 	const commandArgv = argv.slice(consumed.length);
 	const projectConfig = getProjectConfig();
 
