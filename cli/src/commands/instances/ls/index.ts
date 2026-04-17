@@ -72,6 +72,9 @@ async function runInstancesLsCommand(
 		if (input.json) {
 			const enriched = instances.map((item) => ({
 				...item,
+				status: item.vm_uuid
+					? (statusByUuid[item.vm_uuid]?.status ?? item.status)
+					: item.status,
 				uptime: item.vm_uuid
 					? (statusByUuid[item.vm_uuid]?.uptime ?? null)
 					: null,
