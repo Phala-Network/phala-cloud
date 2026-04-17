@@ -6,5 +6,6 @@ export const instancesGroup: CommandGroup = {
 		name: "instances",
 		description: "Manage app instances",
 		stability: "unstable",
+		category: "manage",
 	},
 };
