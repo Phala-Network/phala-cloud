@@ -33,6 +33,15 @@ func (c *Client) GetAppCVMs(ctx context.Context, appID string) ([]GenericObject,
 	return result, nil
 }
 
+// CreateAppInstance creates a new CVM instance under an existing app.
+func (c *Client) CreateAppInstance(ctx context.Context, appID string, req *CreateAppInstanceRequest) (*CVMInfo, error) {
+	var result CVMInfo
+	if err := c.doJSON(ctx, "POST", "/apps/"+appID+"/instances", req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // ReplicateAppCVM creates a replica of a CVM within an application context.
 // This uses the app-scoped endpoint POST /apps/{appID}/cvms/{vmUUID}/replicas
 // to ensure the new replica is associated with the correct app.

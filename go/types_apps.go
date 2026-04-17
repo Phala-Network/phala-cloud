@@ -1,5 +1,16 @@
 package phala
 
+// CreateAppInstanceRequest is the request body for creating an app instance.
+type CreateAppInstanceRequest struct {
+	NodeID            *int    `json:"node_id,omitempty"`
+	DockerComposeFile *string `json:"docker_compose_file,omitempty"`
+	PreLaunchScript   *string `json:"pre_launch_script,omitempty"`
+	EncryptedEnv      *string `json:"encrypted_env,omitempty"`
+	ComposeHash       *string `json:"compose_hash,omitempty"`
+	Token             *string `json:"token,omitempty"`
+	TransactionHash   *string `json:"transaction_hash,omitempty"`
+}
+
 // AppInfo represents application information.
 type AppInfo struct {
 	ID               string      `json:"id"`
