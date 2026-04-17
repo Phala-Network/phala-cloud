@@ -459,7 +459,7 @@ async function runInstancesAddCommand(
 				}
 			}
 
-			// Poll on-chain state until compose hash is registered before committing.
+			// Poll on-chain state until all required registrations are indexed.
 			// The transaction may take a few seconds to be indexed by the RPC node.
 			const maxAttempts = 10;
 			for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -470,13 +470,17 @@ async function runInstancesAddCommand(
 					deviceId: preparePayload.deviceId,
 					composeHash: preparePayload.composeHash,
 				});
-				if (poll.success && poll.data.composeHashAllowed) {
+				if (
+					poll.success &&
+					poll.data.composeHashAllowed &&
+					poll.data.deviceAllowed
+				) {
 					break;
 				}
 				if (attempt === maxAttempts - 1) {
 					throw new Error(
-						"Compose hash not yet registered on-chain after waiting. " +
-							"The transaction may still be confirming. " +
+						"On-chain prerequisites not met after waiting. " +
+							"Transactions may still be confirming. " +
 							"Retry with --commit using the token and transaction hash.",
 					);
 				}
