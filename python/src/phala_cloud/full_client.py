@@ -55,6 +55,7 @@ from .models.cvms import (
     CheckAppCvmsIsAllowedRequest,
     CheckAppIsAllowedRequest,
     CheckCvmIsAllowedRequest,
+    CvmInfoV20260121,
     PaginatedCvmInfosV20251028,
     PaginatedCvmInfosV20260121,
 )
@@ -117,6 +118,17 @@ class AppRevisionsRequest(_AliasModel):
     app_id: str = Field(alias="appId")
     page: int | None = Field(default=None, ge=1)
     page_size: int | None = Field(default=None, ge=1)
+
+
+class CreateAppInstanceRequest(_AliasModel):
+    app_id: str = Field(alias="appId")
+    node_id: int | None = None
+    docker_compose_file: str | None = None
+    pre_launch_script: str | None = None
+    encrypted_env: str | None = None
+    compose_hash: str | None = None
+    token: str | None = None
+    transaction_hash: str | None = None
 
 
 class AppRevisionDetailRequest(_AliasModel):
@@ -327,6 +339,8 @@ class _ExtMixin:
             return CommitCvmProvisionResponse
         if m == "POST" and re.fullmatch(r"/cvms/[^/]+/compose_file/provision", path):
             return ProvisionCvmComposeFileUpdateResult
+        if m == "POST" and re.fullmatch(r"/apps/[^/]+/instances", path):
+            return CvmInfoV20260121
 
         if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/envs", path):
             return InProgressResponse | ComposeHashPreconditionResponse
@@ -1097,6 +1111,26 @@ class PhalaCloud(_SyncBase, _ExtMixin):
 
     def safe_get_app_cvms(self, request: AppIdRequest | Mapping[str, Any]) -> SafeResult[Any]:
         return self.safe(self.get_app_cvms, request)
+
+    def create_app_instance(self, request: CreateAppInstanceRequest | Mapping[str, Any]) -> Any:
+        req = CreateAppInstanceRequest.model_validate(request)
+        body = {
+            "node_id": req.node_id,
+            "docker_compose_file": req.docker_compose_file,
+            "pre_launch_script": req.pre_launch_script,
+            "encrypted_env": req.encrypted_env,
+            "compose_hash": req.compose_hash,
+            "token": req.token,
+            "transaction_hash": req.transaction_hash,
+        }
+        return self._validate(
+            CvmInfoV20260121, self.post(f"/apps/{req.app_id}/instances", json=body)
+        )
+
+    def safe_create_app_instance(
+        self, request: CreateAppInstanceRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
+        return self.safe(self.create_app_instance, request)
 
     def get_app_revisions(self, request: AppRevisionsRequest | Mapping[str, Any]) -> Any:
         req = AppRevisionsRequest.model_validate(request)
@@ -1898,6 +1932,29 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
 
     async def safe_get_app_cvms(self, request: AppIdRequest | Mapping[str, Any]) -> SafeResult[Any]:
         return await self.safe(self.get_app_cvms, request)
+
+    async def create_app_instance(
+        self, request: CreateAppInstanceRequest | Mapping[str, Any]
+    ) -> Any:
+        req = CreateAppInstanceRequest.model_validate(request)
+        body = {
+            "node_id": req.node_id,
+            "docker_compose_file": req.docker_compose_file,
+            "pre_launch_script": req.pre_launch_script,
+            "encrypted_env": req.encrypted_env,
+            "compose_hash": req.compose_hash,
+            "token": req.token,
+            "transaction_hash": req.transaction_hash,
+        }
+        return self._validate(
+            CvmInfoV20260121,
+            await self.post(f"/apps/{req.app_id}/instances", json=body),
+        )
+
+    async def safe_create_app_instance(
+        self, request: CreateAppInstanceRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
+        return await self.safe(self.create_app_instance, request)
 
     async def get_app_revisions(self, request: AppRevisionsRequest | Mapping[str, Any]) -> Any:
         req = AppRevisionsRequest.model_validate(request)
