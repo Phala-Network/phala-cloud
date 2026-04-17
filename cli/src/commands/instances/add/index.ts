@@ -284,35 +284,34 @@ async function runInstancesAddCommand(
 			return 0;
 		}
 
-		// Get a CVM from the app for encrypt pubkey derivation
-		const appCvmsResult = await safeGetAppCvms(client, { appId });
-		if (!appCvmsResult.success || appCvmsResult.data.length === 0) {
-			throw new Error(
-				`No instances found for app ${appId}. Cannot derive encryption key.`,
+		// Fetch an existing CVM only when env encryption is needed
+		let encryptedEnv: string | undefined;
+		if (input.envFile) {
+			const appCvmsResult = await safeGetAppCvms(client, { appId });
+			if (!appCvmsResult.success || appCvmsResult.data.length === 0) {
+				throw new Error(
+					`No instances found for app ${appId}. Cannot derive encryption key.`,
+				);
+			}
+			const templateCvmRef = appCvmsResult.data[0];
+			if (!templateCvmRef.vm_uuid) {
+				throw new Error("Template CVM has no vm_uuid");
+			}
+
+			const cvmInfoResult = await safeGetCvmInfo(client, {
+				id: templateCvmRef.vm_uuid,
+			});
+			if (!cvmInfoResult.success) {
+				throw new Error(
+					`Failed to fetch CVM info: ${cvmInfoResult.error?.message || "Unknown error"}`,
+				);
+			}
+			encryptedEnv = await loadEncryptedEnv(
+				client,
+				cvmInfoResult.data,
+				input.envFile,
 			);
 		}
-		const templateCvmRef = appCvmsResult.data[0];
-		if (!templateCvmRef.vm_uuid) {
-			throw new Error("Template CVM has no vm_uuid");
-		}
-
-		// Fetch full CVM info for encrypt pubkey
-		const cvmInfoResult = await safeGetCvmInfo(client, {
-			id: templateCvmRef.vm_uuid,
-		});
-		if (!cvmInfoResult.success) {
-			throw new Error(
-				`Failed to fetch CVM info: ${cvmInfoResult.error?.message || "Unknown error"}`,
-			);
-		}
-		const templateCvm = cvmInfoResult.data;
-
-		// Build request body
-		const encryptedEnv = await loadEncryptedEnv(
-			client,
-			templateCvm,
-			input.envFile,
-		);
 		const resolvedNodeId = await resolveNodeId(client, input.nodeId);
 		const requestBody: Record<string, unknown> = {};
 		if (resolvedNodeId !== undefined) {
@@ -369,14 +368,14 @@ async function runInstancesAddCommand(
 			}
 
 			const chain = (
-				templateCvm as {
-					kms_info?: {
-						chain?: Parameters<
-							typeof safeCheckOnChainPrerequisites
-						>[0]["chain"];
-					};
-				}
-			).kms_info?.chain;
+				preparePayload.kmsInfo as
+					| {
+							chain?: Parameters<
+								typeof safeCheckOnChainPrerequisites
+							>[0]["chain"];
+					  }
+					| undefined
+			)?.chain;
 			if (!chain) {
 				throw new Error("App KMS info is missing chain configuration");
 			}
