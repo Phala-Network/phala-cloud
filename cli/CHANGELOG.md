@@ -1,3 +1,22 @@
+## [1.1.18](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.17...cli-v1.1.18) (2026-04-17)
+
+### feat
+
+* **cli:** add instances rm command with multi-UUID support ([0f78fc6](https://github.com/Phala-Network/phala-cloud/commit/0f78fc63116b65368830a13df387df50d819b87d))
+* **cli:** move apps instances to top-level instances command, add instances ls ([67046a1](https://github.com/Phala-Network/phala-cloud/commit/67046a18644c3e84a022c0bf66d67fbb5964081a))
+* **sdk,cli:** add POST /apps/{app_id}/instances support ([80498ab](https://github.com/Phala-Network/phala-cloud/commit/80498ab02f56610a21cbbc807b92d878304a1eb2))
+
+### fix
+
+* **cli:** include live status in instances ls --json output ([06b0360](https://github.com/Phala-Network/phala-cloud/commit/06b0360ed7d28779d61335facf51666f27fc2892))
+* **cli:** polish instances/link UX and add commit-token routing ([4ab23c5](https://github.com/Phala-Network/phala-cloud/commit/4ab23c52f51abd73f13de2a28213f8f1ba36b20c))
+* **cli:** poll both deviceAllowed and composeHashAllowed before commit ([755a256](https://github.com/Phala-Network/phala-cloud/commit/755a256e47e38c82d3566fedf30b53d7a278500f))
+* **cli:** poll on-chain state before commit after registering compose hash ([2fb4094](https://github.com/Phala-Network/phala-cloud/commit/2fb409430f06a3bc530d0e5841fb4be567f0a936))
+* **cli:** preserve all existing fields when backfilling app_id in link ([1108cc7](https://github.com/Phala-Network/phala-cloud/commit/1108cc7415fb300595381d516c4535b4900ae21b))
+* **cli:** reject unknown subcommand paths for leaf commands ([397b92b](https://github.com/Phala-Network/phala-cloud/commit/397b92b9e0ccf3c2073a13f9a753901fe8bb4ec6))
+* **cli:** resolve profile by workspace slug fallback and use actual profile key in link ([a06748b](https://github.com/Phala-Network/phala-cloud/commit/a06748ba58f2874b90dcb3bdd363b1b6e8408028))
+* **cli:** skip CVM fetch in instances add when no env-file provided ([98bb666](https://github.com/Phala-Network/phala-cloud/commit/98bb6668700b4ca9f4b6e812a85424a36eadd719))
+* **cli:** write workspace slug as profile key, not workspace name ([e707e84](https://github.com/Phala-Network/phala-cloud/commit/e707e846b62023f3b5436785f346748d6c56dddd))
 ## [1.1.17](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.16...cli-v1.1.17) (2026-04-10)
 ## [1.1.16](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.15...cli-v1.1.16) (2026-04-10)
 
