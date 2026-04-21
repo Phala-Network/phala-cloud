@@ -261,7 +261,7 @@ ls -la /var/run/tappd.sock
 ### Getting Help
 
 - Review the [NEAR Protocol documentation](https://docs.near.org/)
-- Check [Phala Cloud documentation](https://docs.phala.network/developers/dstack)
+- Check [Phala Cloud documentation](https://docs.phala.com/phala-cloud/getting-started/overview)
 - Submit issues to the [template repository](https://github.com/HashWarlock/shade-agent-template/issues)
 
 ## Security Considerations
@@ -295,7 +295,7 @@ ls -la /var/run/tappd.sock
 
 - [NEAR Shade Agent Template Repository](https://github.com/HashWarlock/shade-agent-template/tree/phala-cloud)
 - [NEAR Protocol Documentation](https://docs.near.org/)
-- [Phala Cloud TEE Documentation](https://docs.phala.network/developers/dstack)
+- [Phala Cloud TEE Documentation](https://docs.phala.com/phala-cloud/getting-started/overview)
 - [Phala Cloud Dashboard](https://cloud.phala.com/dashboard/)
 
 ## Contributing
