@@ -217,6 +217,11 @@ export const ProvisionCvmRequestSchema = z
         tproxy_enabled: z.boolean().optional(), // deprecated, for compatibility
         storage_fs: z.enum(["ext4", "zfs"]).optional(),
       })
+      // Keep compose_file open to newer backend fields (e.g.
+      // local_key_provider_enabled, port_policy). Without passthrough, zod's
+      // default strip mode drops every unknown key at parse time and the
+      // backend never sees fields that the UI / SDK consumer set.
+      .passthrough()
       .superRefine((data, ctx) => {
         validateComposePayloadSize(data.docker_compose_file, data.pre_launch_script, ctx);
       }),
