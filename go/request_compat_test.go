@@ -33,6 +33,36 @@ func TestCVMInfo_UnmarshalPreservesEndpointInstance(t *testing.T) {
 	}
 }
 
+func TestProvisionCVMResponse_UnmarshalComposeHashRegistered(t *testing.T) {
+	var resp ProvisionCVMResponse
+	err := json.Unmarshal([]byte(`{
+		"app_id":"app_1",
+		"compose_hash":"hash123",
+		"compose_hash_registered":true
+	}`), &resp)
+	if err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !resp.ComposeHashRegistered {
+		t.Fatalf("ComposeHashRegistered = %v, want true", resp.ComposeHashRegistered)
+	}
+	if resp.ComposeHash != "hash123" {
+		t.Fatalf("ComposeHash = %q, want hash123", resp.ComposeHash)
+	}
+
+	var respFalse ProvisionCVMResponse
+	err = json.Unmarshal([]byte(`{
+		"app_id":"app_1",
+		"compose_hash":"hash456"
+	}`), &respFalse)
+	if err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if respFalse.ComposeHashRegistered {
+		t.Fatalf("ComposeHashRegistered = %v, want false", respFalse.ComposeHashRegistered)
+	}
+}
+
 func TestDo_PreservesStructuredErrorDetailValues(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
