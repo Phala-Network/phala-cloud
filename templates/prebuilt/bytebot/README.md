@@ -188,7 +188,6 @@ For production deployments, consider:
 
 - Join the [ByteBot Discord Community](https://discord.gg/zcb5wA2t4u)
 - Report issues on [GitHub](https://github.com/bytebot-ai/bytebot)
-- Check the [ByteBot Blog](https://bytebot.ai/blog) for updates
 
 ---
 
