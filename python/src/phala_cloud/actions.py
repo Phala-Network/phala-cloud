@@ -112,6 +112,8 @@ __all__ = [
     "safe_get_app_info",
     "get_app_cvms",
     "safe_get_app_cvms",
+    "create_app_instance",
+    "safe_create_app_instance",
     "get_app_revisions",
     "safe_get_app_revisions",
     "get_app_revision_detail",
@@ -559,6 +561,14 @@ def get_app_cvms(client: Any, *args: Any, **kwargs: Any) -> Any:
 
 def safe_get_app_cvms(client: Any, *args: Any, **kwargs: Any) -> Any:
     return client.safe_get_app_cvms(*args, **kwargs)
+
+
+def create_app_instance(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.create_app_instance(*args, **kwargs)
+
+
+def safe_create_app_instance(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.safe_create_app_instance(*args, **kwargs)
 
 
 def get_app_revisions(client: Any, *args: Any, **kwargs: Any) -> Any:

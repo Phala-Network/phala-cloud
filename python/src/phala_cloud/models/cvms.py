@@ -1,14 +1,20 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, computed_field
 
 from .base import AliasModel, CloudModel
 from .kms import KmsInfo
 
 BillingPeriod = Literal["skip", "hourly", "monthly"]
 KmsType = Literal["phala", "ethereum", "base", "legacy"]
+
+SUPPORTED_CHAINS: dict[int, dict[str, Any]] = {
+    1: {"id": 1, "name": "Ethereum", "network": "mainnet"},
+    8453: {"id": 8453, "name": "Base", "network": "base"},
+    31337: {"id": 31337, "name": "Anvil", "network": "anvil"},
+}
 
 
 class GetCvmListRequest(CloudModel):
@@ -44,6 +50,13 @@ class CvmKmsInfoV20260121(CloudModel):
     deployer_address: str | None = None
     rpc_endpoint: str | None = None
     encrypted_env_pubkey: str | None = None
+
+    @computed_field
+    @property
+    def chain(self) -> dict[str, Any] | None:
+        if self.chain_id is not None:
+            return SUPPORTED_CHAINS.get(self.chain_id)
+        return None
 
 
 class CvmProgressInfoV20260121(CloudModel):

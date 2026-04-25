@@ -49,6 +49,14 @@ class ProvisionCvmResponse(CloudModel):
     kms_id: str | None = None
 
 
+class ProvisionCvmComposeFileUpdateResult(CloudModel):
+    app_id: str | None = None
+    device_id: str | None = None
+    compose_hash: str
+    kms_info: GenericObject | None = None
+    compose_hash_registered: bool = False
+
+
 class CommitCvmProvisionResponse(CloudModel):
     id: int | str
     name: str
