@@ -32,6 +32,10 @@ phala logs
 
 # SSH into the CVM
 phala ssh
+
+# List all replicas for one app, then target one by UUID
+phala cvms list --app app_abc123
+phala cvms restart 550e8400-e29b-41d4-a716-446655440000
 ```
 
 > **Tip:** Run `phala link` after your first deploy. It creates a `phala.toml` that binds the directory to the CVM, so subsequent commands (`deploy`, `logs`, `ssh`, `cp`, `ps`) work without specifying a CVM ID. `phala.toml` is safe to commit to version control.

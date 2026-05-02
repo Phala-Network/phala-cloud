@@ -59,6 +59,8 @@ async function runCvmsGetCommand(
 		logger.keyValueTable({
 			Name: cvm.name,
 			"App ID": `app_${cvm.app_id}`,
+			"VM UUID": cvm.vm_uuid ?? "N/A",
+			"Instance ID": cvm.instance_id ?? "N/A",
 			Status: statusColour,
 			vCPU: cvm.resource.vcpu,
 			Memory:

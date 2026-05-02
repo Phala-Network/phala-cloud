@@ -21,6 +21,7 @@ List CVMs in your workspace with filtering and pagination.
 
 | Flag | Default | Description |
 |------|---------|-------------|
+| `--app <app-id>` | | List all CVMs belonging to a specific app |
 | `--page` | 1 | Page number for pagination |
 | `--page-size` | 30 | Number of items per page |
 | `--search <query>` | | Search CVMs by name or ID |
@@ -36,6 +37,7 @@ List CVMs in your workspace with filtering and pagination.
 #### Examples
 
     $ phala cvms list
+    $ phala cvms list --app app_abc123
     $ phala cvms ls --status running --status starting
     $ phala cvms list --search my-app --json
     $ phala cvms ls --region us-west --page 2
@@ -67,6 +69,7 @@ Get detailed information about a specific CVM.
 
     $ phala cvms get
     $ phala cvms get app_abc123
+    $ phala cvms get 550e8400-e29b-41d4-a716-446655440000
     $ phala cvms get --json
     $ phala cvms get --interactive
 

@@ -9,6 +9,13 @@ export const cvmsListCommandMeta: CommandMeta = {
 	stability: "unstable",
 	options: [
 		{
+			name: "app",
+			description: "List all CVMs belonging to a specific app_id",
+			type: "string",
+			target: "appId",
+			group: "basic",
+		},
+		{
 			name: "page",
 			description: "Page number (1-based)",
 			type: "number",
@@ -87,6 +94,10 @@ export const cvmsListCommandMeta: CommandMeta = {
 			value: "phala cvms ls",
 		},
 		{
+			name: "List all replicas for an app",
+			value: "phala cvms ls --app app_123",
+		},
+		{
 			name: "Second page",
 			value: "phala cvms ls --page 2",
 		},
@@ -106,6 +117,7 @@ export const cvmsListCommandMeta: CommandMeta = {
 };
 
 export const cvmsListCommandSchema = z.object({
+	appId: z.string().optional(),
 	page: z.coerce.number().int().min(1).default(1),
 	pageSize: z.coerce.number().int().min(1).max(100).default(50),
 	search: z.string().optional(),

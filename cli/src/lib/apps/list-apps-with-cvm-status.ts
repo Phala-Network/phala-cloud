@@ -17,6 +17,8 @@ export interface AppsListWithStatusOptions {
 
 export interface AppCvmRow {
 	readonly appId: string;
+	readonly vmUuid?: string | null;
+	readonly instanceId?: string | null;
 	readonly cvmName: string;
 	readonly status: string;
 	readonly uptime?: string | null;
@@ -112,6 +114,8 @@ export async function listAppsWithCvmStatus(
 
 		rows.push({
 			appId: app.app_id,
+			vmUuid: currentCvm.vm_uuid ?? null,
+			instanceId: currentCvm.instance_id ?? null,
 			cvmName: currentCvm.name,
 			status,
 			uptime: batch?.uptime,
