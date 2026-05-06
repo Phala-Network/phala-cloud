@@ -6,6 +6,7 @@ import {
 	type Client,
 	type ErrorLink,
 	type EnvVar,
+	SUPPORTED_CHAINS,
 	safeAddComposeHash,
 	safeAddDevice,
 	safeCheckOnChainPrerequisites,
@@ -410,17 +411,18 @@ async function runCvmsReplicateCommand(
 					"Replica prepare response did not include a commit token",
 				);
 			}
-			const chain = (
-				sourceCvm as {
-					kms_info?: {
-						chain?: Parameters<
-							typeof safeCheckOnChainPrerequisites
-						>[0]["chain"];
-					};
-				}
-			).kms_info?.chain;
+			// The SDK's CvmKmsInfo zod transform only injects `chain` when chain_id is in
+			// SUPPORTED_CHAINS, so unsupported chains would silently produce undefined.
+			// Resolve from chain_id directly for a clearer error.
+			const chainId = (sourceCvm as { kms_info?: { chain_id?: number } })
+				.kms_info?.chain_id;
+			const chain = chainId != null ? SUPPORTED_CHAINS[chainId] : undefined;
 			if (!chain) {
-				throw new Error("Source CVM kms_info is missing chain configuration");
+				throw new Error(
+					chainId != null
+						? `Source CVM chain id ${chainId} is not supported by this CLI build`
+						: "Source CVM kms_info is missing chain_id",
+				);
 			}
 			if (!sourceCvm.app_id) {
 				throw new Error(
