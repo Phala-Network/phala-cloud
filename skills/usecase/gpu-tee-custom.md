@@ -24,7 +24,7 @@ description: |
 | "SSH into GPU" | **SSH** |
 | "GPU support for H100", "B300" | **Availability** |
 
-This skill builds on `phala-cli/SKILL.md`. Install + login per that skill first.
+This skill builds on the foundational `../phala-cli/SKILL.md`. Install + login per that skill first.
 
 ---
 

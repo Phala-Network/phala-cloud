@@ -22,7 +22,7 @@ description: |
 | "audit tool calls", "Sign-RPC log", "what did the agent do" | **Action Log** |
 | "deploy 10 agents", "fleet", "many agents" | **Multi-Agent Fleet** |
 
-This skill builds on `phala-cli/SKILL.md`. Install + login per that skill first.
+This skill builds on the foundational `../phala-cli/SKILL.md`. Install + login per that skill first.
 
 ---
 
@@ -121,7 +121,7 @@ phala deploy -n my-agent -c docker-compose.yml \
 
 ### Step 1: Authenticate
 
-Per `SKILL.md`:
+Per `../phala-cli/SKILL.md`:
 
 ```bash
 phala login
@@ -328,7 +328,7 @@ The script runs once inside the CVM after attestation, before containers start.
 | Sign-RPC returns 401 | KMS doesn't recognize compose-hash | Re-deploy — first deploy registers the hash |
 | Tool calls failing intermittently | Outbound network blocked | Check serial logs (`phala logs --serial`) — `dstack-gateway` allowlist may need updating |
 
-For deeper debugging, see **Debug a CVM** in `SKILL.md`.
+For deeper debugging, see **Debug a CVM** in `../phala-cli/SKILL.md`.
 
 ---
 

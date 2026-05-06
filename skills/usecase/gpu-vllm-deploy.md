@@ -22,7 +22,7 @@ description: |
 | "private model weights", "seal weights" | **Seal Weights** |
 | "OpenAI client can't connect" | **Endpoint** |
 
-This skill builds on `phala-cli/SKILL.md`. Install + login per that skill first.
+This skill builds on the foundational `../phala-cli/SKILL.md`. Install + login per that skill first.
 
 ---
 

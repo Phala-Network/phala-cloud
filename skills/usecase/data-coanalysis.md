@@ -23,7 +23,7 @@ Compute-to-data: sealed datasets stay at source, the model travels, multi-owner 
 | "differential privacy aggregate", "DP" | **DP Output** |
 | "revoke", "stop the analysis" | **Revoke** |
 
-This skill builds on `phala-cli/SKILL.md`. Install + login per that skill first.
+This skill builds on the foundational `../phala-cli/SKILL.md`. Install + login per that skill first.
 
 ---
 

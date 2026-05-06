@@ -21,7 +21,7 @@ Port a confidential workload to Phala from another TEE provider.
 | "general migration", "where to start" | **Diff Map** |
 | "cutover", "DNS switch" | **Cutover** |
 
-This skill builds on `phala-cli/SKILL.md`. Install + login per that skill first.
+This skill builds on the foundational `../phala-cli/SKILL.md`. Install + login per that skill first.
 
 ---
 

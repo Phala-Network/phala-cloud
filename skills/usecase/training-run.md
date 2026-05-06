@@ -24,7 +24,7 @@ description: |
 | "save checkpoints", "signed manifest" | **Output & Signing** |
 | "scale to 8 GPU" | **Multi-GPU** |
 
-This skill builds on `phala-cli/SKILL.md`. Install + login per that skill first.
+This skill builds on the foundational `../phala-cli/SKILL.md`. Install + login per that skill first.
 
 ---
 
