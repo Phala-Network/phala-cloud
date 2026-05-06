@@ -37,7 +37,10 @@ repos:
         priority: 30
 
       # ── JS SDK (js/) ────────────────────────────────────────────────────
-      # Mirrors release-npm.yml: lint → type-check → test (build is covered by CI).
+      # Mirrors release-npm.yml: lint → type-check → build → test. The build
+      # step is required because CLI tests consume @phala/cloud via workspace
+      # link to js/dist; a stale or missing js/dist masks real failures and
+      # also breaks downstream cli tests when js code is the thing that changed.
       - id: biome-js
         name: Biome (JS SDK)
         entry: bash -c 'cd js && bun run lint'
@@ -54,6 +57,15 @@ repos:
         types_or: [javascript, ts, tsx, jsx]
         pass_filenames: false
         priority: 20
+      - id: build-js
+        name: Build (JS SDK)
+        entry: bash -c 'cd js && bun run build'
+        language: system
+        files: ^js/
+        types_or: [javascript, ts, tsx, jsx]
+        pass_filenames: false
+        require_serial: true
+        priority: 25
       - id: test-js
         name: JS SDK tests
         entry: bash -c 'cd js && bun run test'
@@ -65,9 +77,10 @@ repos:
         priority: 30
 
       # ── CLI (cli/) ──────────────────────────────────────────────────────
-      # Mirrors release-npm.yml: lint → type-check → test. CLI consumes
-      # @phala/cloud via workspace link to js/dist, so a stale js/dist can
-      # mask real issues; rebuild js before committing if you've changed it.
+      # Mirrors release-npm.yml: lint → type-check → build → test. CLI tests
+      # spawn `bun cli/dist/index.js --help` for interface-compat checks, so
+      # the build step is mandatory — without it dist/index.js is missing and
+      # all the spawn-based tests silently fail with empty stdout.
       - id: biome-cli
         name: Biome (CLI)
         entry: bash -c 'cd cli && bun run lint'
@@ -84,6 +97,15 @@ repos:
         types_or: [javascript, ts, tsx, jsx]
         pass_filenames: false
         priority: 20
+      - id: build-cli
+        name: Build (CLI)
+        entry: bash -c 'cd cli && bun run build'
+        language: system
+        files: ^cli/
+        types_or: [javascript, ts, tsx, jsx]
+        pass_filenames: false
+        require_serial: true
+        priority: 25
       - id: test-cli
         name: CLI tests
         entry: bash -c 'cd cli && bun run test'
