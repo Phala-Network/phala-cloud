@@ -210,4 +210,36 @@ describe("ProvisionCvmRequestSchema", () => {
       }
     });
   });
+
+  describe("compose_file passthrough", () => {
+    // compose_file must forward unknown keys so newer backend fields
+    // (local_key_provider_enabled, port_policy, ...) reach the server
+    // without requiring a schema bump on every client.
+    it("preserves unknown keys on compose_file", () => {
+      const input = {
+        name: "test-app",
+        instance_type: "tdx.small",
+        compose_file: {
+          docker_compose_file: "version: '3'\nservices:\n  app:\n    image: nginx",
+          local_key_provider_enabled: true,
+          port_policy: {
+            ports: [{ port: 8080, pp: true }],
+            restrict_mode: true,
+          },
+        },
+      };
+
+      const result = ProvisionCvmRequestSchema.safeParse(input);
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const composeFile = result.data.compose_file as Record<string, unknown>;
+        expect(composeFile.local_key_provider_enabled).toBe(true);
+        expect(composeFile.port_policy).toEqual({
+          ports: [{ port: 8080, pp: true }],
+          restrict_mode: true,
+        });
+      }
+    });
+  });
 });
