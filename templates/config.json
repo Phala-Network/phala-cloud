@@ -525,21 +525,9 @@
         "description": "Wallet to report task result."
       },
       {
-        "key": "BASE_RPC_URL",
+        "key": "NETWORK_CHAINS",
         "required": true,
-        "description": "Rpc for base chain."
-      },
-      {
-        "key": "BASE_TASK_CONTRACT_ADDRESS",
-        "required": true,
-        "description": "Task contract address on base chain.",
-        "default": "0x151cb5eD5D10A42B607bB172B27BDF6F884b9707"
-      },
-      {
-        "key": "BASE_CHAIN_ID",
-        "required": true,
-        "description": "Chain id for base.",
-        "default": "8453"
+        "description": "Chains you want to support."
       },
       {
         "key": "IMAGE_TAG",
