@@ -120,6 +120,52 @@
     "tags": ["Agent", "AI", "Automation", "Messaging"]
   },
   {
+    "id": "llm-wiki",
+    "name": "LLM Wiki",
+    "description": "A personal knowledge-base app that turns unstructured documents into an interlinked wiki with source traceability, graph insights, review queues, and deep research workflows. This template provides a confidential browser-accessible development preview for the upstream Tauri desktop app.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/llm-wiki",
+    "author": "nashsu",
+    "icon": "llm-wiki-logo.jpg",
+    "envs": [
+      {
+        "key": "LLM_PROVIDER",
+        "required": false,
+        "description": "Optional LLM provider name, such as ollama or minimax."
+      },
+      {
+        "key": "OLLAMA_URL",
+        "required": false,
+        "description": "Optional Ollama endpoint."
+      },
+      {
+        "key": "OLLAMA_MODEL",
+        "required": false,
+        "description": "Optional Ollama model name."
+      },
+      {
+        "key": "MINIMAX_API_KEY",
+        "required": false,
+        "description": "Optional MiniMax API key."
+      },
+      {
+        "key": "MINIMAX_MODEL",
+        "required": false,
+        "description": "Optional MiniMax model name."
+      },
+      {
+        "key": "MINIMAX_ENDPOINT",
+        "required": false,
+        "description": "Optional MiniMax API endpoint."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 40
+    },
+    "tags": ["AI", "Knowledge Graph", "Wiki", "Research"]
+  },
+  {
     "id": "anyone-anon-service",
     "name": "Anyone Anon Service",
     "description": "Sets up a Anyone Anon (hidden) service and serves an nginx website from that.",
