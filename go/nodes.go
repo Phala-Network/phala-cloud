@@ -10,3 +10,12 @@ func (c *Client) GetAvailableNodes(ctx context.Context) (*AvailableNodes, error)
 	}
 	return &result, nil
 }
+
+// GetCVMCreateResources returns the resource graph for CVM creation.
+func (c *Client) GetCVMCreateResources(ctx context.Context) (*CVMCreateResources, error) {
+	var result CVMCreateResources
+	if err := c.doJSON(ctx, "GET", "/teepods/cvm-create-resources", nil, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}

@@ -1,5 +1,84 @@
 package phala
 
+import "encoding/json"
+
+// StringOrNumber is a JSON value that can be either a string or an integer.
+type StringOrNumber struct {
+	stringValue *string
+	intValue    *int
+}
+
+// NewStringOrNumberString creates a string value.
+func NewStringOrNumberString(value string) *StringOrNumber {
+	return &StringOrNumber{stringValue: &value}
+}
+
+// NewStringOrNumberInt creates an integer value.
+func NewStringOrNumberInt(value int) *StringOrNumber {
+	return &StringOrNumber{intValue: &value}
+}
+
+// StringValue returns the string value if present.
+func (value StringOrNumber) StringValue() (string, bool) {
+	if value.stringValue == nil {
+		return "", false
+	}
+	return *value.stringValue, true
+}
+
+// IntValue returns the integer value if present.
+func (value StringOrNumber) IntValue() (int, bool) {
+	if value.intValue == nil {
+		return 0, false
+	}
+	return *value.intValue, true
+}
+
+// MarshalJSON encodes the original string or integer value.
+func (value StringOrNumber) MarshalJSON() ([]byte, error) {
+	if value.stringValue != nil {
+		return json.Marshal(*value.stringValue)
+	}
+	if value.intValue != nil {
+		return json.Marshal(*value.intValue)
+	}
+	return []byte("null"), nil
+}
+
+// UnmarshalJSON decodes a string or integer value.
+func (value *StringOrNumber) UnmarshalJSON(data []byte) error {
+	var stringValue string
+	if err := json.Unmarshal(data, &stringValue); err == nil {
+		value.stringValue = &stringValue
+		value.intValue = nil
+		return nil
+	}
+
+	var intValue int
+	if err := json.Unmarshal(data, &intValue); err == nil {
+		value.stringValue = nil
+		value.intValue = &intValue
+		return nil
+	}
+
+	value.stringValue = nil
+	value.intValue = nil
+	return nil
+}
+
+// KMSContractID is a KMS contract identifier accepted as either string or number.
+type KMSContractID = StringOrNumber
+
+// StringKMSContractID creates a string KMS contract ID.
+func StringKMSContractID(value string) *KMSContractID {
+	return NewStringOrNumberString(value)
+}
+
+// IntKMSContractID creates a numeric KMS contract ID.
+func IntKMSContractID(value int) *KMSContractID {
+	return NewStringOrNumberInt(value)
+}
+
 // KMSInfo represents KMS server information.
 type KMSInfo struct {
 	ID                 string  `json:"id"`
