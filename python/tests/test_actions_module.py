@@ -7,6 +7,8 @@ def test_actions_exports_have_core_entries() -> None:
         "safe_get_current_user",
         "get_available_nodes",
         "safe_get_available_nodes",
+        "get_cvm_create_resources",
+        "safe_get_cvm_create_resources",
         "get_cvm_list",
         "safe_get_cvm_list",
         "get_kms_list",

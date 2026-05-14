@@ -52,6 +52,67 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
     # simple lists
     if method == "GET" and path == "/api/v1/teepods/available":
         return _json_response({"tier": "free", "capacity": {}, "nodes": [], "kms_list": []})
+    if method == "GET" and path == "/api/v1/teepods/cvm-create-resources":
+        return _json_response(
+            {
+                "tier": "free",
+                "capacity": {},
+                "nodes": [],
+                "kms_nodes": [
+                    {
+                        "id": 201,
+                        "slug": "kms-base",
+                        "url": "https://kms-base.example.com",
+                        "version": "0.5.0",
+                        "kms_type": "BASE",
+                        "chain_id": 8453,
+                        "kms_contract_id": 301,
+                        "kms_contract_address": "0xbase",
+                        "gateway_app_id": "0xgateway",
+                        "supported_os_images": ["dstack-0.5.0"],
+                    }
+                ],
+                "node_kms_relations": [
+                    {
+                        "teepod_id": 11,
+                        "kms_id": 201,
+                        "kms_type": "BASE",
+                        "kms_contract_id": 301,
+                        "kms_contract_address": "0xbase",
+                        "supported_os_images": ["dstack-0.5.0"],
+                    }
+                ],
+                "gateway_nodes": [
+                    {
+                        "id": 401,
+                        "teepod_id": 11,
+                        "kms_contract_id": 301,
+                        "rpc_url": "https://gateway.example.com/rpc",
+                        "domain_suffix": "example.app",
+                        "enabled": True,
+                    }
+                ],
+                "instance_types": [
+                    {
+                        "id": "tdx.small",
+                        "name": "TDX Small",
+                        "vcpu": 2,
+                        "memory_mb": 4096,
+                        "default_disk_size_gb": 40,
+                        "requires_gpu": False,
+                        "requires_gpu_count": 0,
+                        "family": "cpu",
+                        "display_order": 1,
+                    }
+                ],
+                "gpu_availability": {
+                    "has_reserved_gpus": False,
+                    "reserved_gpu_count": 0,
+                    "has_public_gpus": True,
+                    "public_gpu_count": 1,
+                },
+            }
+        )
     if method == "GET" and path == "/api/v1/instance-types":
         return _json_response({"result": []})
     if method == "GET" and path.startswith("/api/v1/instance-types/"):
@@ -334,6 +395,7 @@ def test_sync_action_matrix_and_safe() -> None:
         calls = [
             lambda: c.get_current_user(),
             lambda: c.get_available_nodes(),
+            lambda: c.get_cvm_create_resources(),
             lambda: c.get_cvm_list(),
             lambda: c.get_kms_list(),
             lambda: c.list_all_instance_type_families(),
@@ -407,6 +469,7 @@ def test_sync_action_matrix_and_safe() -> None:
 
         assert c.safe_get_current_user().ok
         assert c.safe_get_available_nodes().ok
+        assert c.safe_get_cvm_create_resources().ok
         assert c.safe_get_cvm_list().ok
         assert c.safe_get_kms_list().ok
 
@@ -417,6 +480,7 @@ def test_safe_matrix_sync_all_actions() -> None:
         c = PhalaCloud(http_client=raw)
         cases = {
             "safe_list_all_instance_type_families": (),
+            "safe_get_cvm_create_resources": (),
             "safe_list_family_instance_types": ({"family": "cpu"},),
             "safe_list_workspaces": (),
             "safe_get_workspace": ("team",),
