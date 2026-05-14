@@ -6,7 +6,7 @@ The upstream project is primarily a Tauri desktop app, not a server app. This Ph
 
 ## Service
 
-- `llm-wiki`: clones `nashsu/llm_wiki`, installs dependencies, and starts the Vite dev server.
+- `llm-wiki`: clones `nashsu/llm_wiki`, applies a Vite `allowedHosts` compatibility patch, installs dependencies, and starts the Vite dev server.
 
 ## Port
 
@@ -35,10 +35,13 @@ The template creates these volumes:
 ## Deploy
 
 ```bash
+docker compose config
 docker compose up -d
 ```
 
 Open port `1420` to view the frontend preview.
+
+The startup patch sets `server.allowedHosts = true` in `vite.config.ts` if the setting is missing. This prevents Vite host-block errors when accessing the app through dynamic Phala public URLs.
 
 ## Important limitation
 

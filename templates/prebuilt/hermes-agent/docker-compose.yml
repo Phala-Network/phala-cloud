@@ -1,10 +1,11 @@
 services:
-  gateway:
+  hermes:
     image: nousresearch/hermes-agent:latest
     container_name: hermes
     restart: unless-stopped
     ports:
       - "8642:8642"
+      - "9119:9119"
     volumes:
       - hermes_data:/opt/data
     environment:
@@ -12,27 +13,15 @@ services:
       HERMES_GID: ${HERMES_GID:-10000}
       API_SERVER_HOST: ${API_SERVER_HOST:-0.0.0.0}
       API_SERVER_KEY: ${API_SERVER_KEY}
+      HERMES_DASHBOARD: ${HERMES_DASHBOARD:-1}
+      HERMES_DASHBOARD_HOST: ${HERMES_DASHBOARD_HOST:-0.0.0.0}
+      HERMES_DASHBOARD_PORT: ${HERMES_DASHBOARD_PORT:-9119}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       DISCORD_TOKEN: ${DISCORD_TOKEN:-}
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
     command: ["gateway", "run"]
-
-  dashboard:
-    image: nousresearch/hermes-agent:latest
-    container_name: hermes-dashboard
-    restart: unless-stopped
-    depends_on:
-      - gateway
-    ports:
-      - "9119:9119"
-    volumes:
-      - hermes_data:/opt/data
-    environment:
-      HERMES_UID: ${HERMES_UID:-10000}
-      HERMES_GID: ${HERMES_GID:-10000}
-    command: ["dashboard", "--host", "0.0.0.0", "--no-open"]
 
 volumes:
   hermes_data:
