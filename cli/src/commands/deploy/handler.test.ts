@@ -233,6 +233,30 @@ describe("buildProvisionPayload", () => {
 			expect(payload.kms_id).toBe("custom-kms");
 		});
 
+		test("should include CVM resource matching v2 fields when specified", () => {
+			const options = {
+				kms: "base",
+				kmsContract: "0xbase",
+				kmsContractId: "contract_1",
+				keyProviderMode: "local" as const,
+				skipGateway: true,
+			};
+
+			const payload = buildProvisionPayload(
+				options,
+				defaultName,
+				defaultDockerCompose,
+				defaultEnvs,
+				defaultPrivacySettings,
+			);
+
+			expect(payload.kms).toBe("BASE");
+			expect(payload.kms_contract).toBe("0xbase");
+			expect(payload.kms_contract_id).toBe("contract_1");
+			expect(payload.key_provider_mode).toBe("local");
+			expect(payload.skip_gateway).toBe(true);
+		});
+
 		test("should default to prefer_dev=false when using BASE KMS", () => {
 			const options = {
 				kms: "base",
