@@ -314,6 +314,9 @@ async function runInstancesAddCommand(
 		}
 		const resolvedNodeId = await resolveNodeId(client, input.nodeId);
 		const requestBody: Record<string, unknown> = {};
+		if (input.name) {
+			requestBody.name = input.name;
+		}
 		if (resolvedNodeId !== undefined) {
 			requestBody.node_id = resolvedNodeId;
 		}
