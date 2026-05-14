@@ -33,7 +33,7 @@
     "description": "A self-hosted AI gateway for coordinating agent sessions across native clients, device nodes, and messaging channels. Deploy the OpenClaw gateway in a confidential VM with persistent config, auth profile, and workspace volumes.",
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/openclaw",
     "author": "OpenClaw",
-    "icon": "openclaw-logo.png",
+    "icon": "ironclaw.png",
     "envs": [
       {
         "key": "OPENCLAW_GATEWAY_TOKEN",
@@ -72,6 +72,125 @@
       "diskSize": 40
     },
     "tags": ["Agent", "AI", "Automation", "Messaging"]
+  },
+  {
+    "id": "ironclaw",
+    "name": "IronClaw",
+    "description": "A self-hosted AI agent runtime with an HTTP gateway. This template runs the official IronClaw image in a confidential VM with persistent local state and a production Postgres/pgvector sidecar.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/ironclaw",
+    "author": "NEAR AI",
+    "icon": "ironclaw.png",
+    "envs": [
+      {
+        "key": "GATEWAY_AUTH_TOKEN",
+        "required": true,
+        "description": "Long random token used to authenticate non-local gateway access."
+      },
+      {
+        "key": "SECRETS_MASTER_KEY",
+        "required": true,
+        "description": "Stable 64-character hex key used by IronClaw to encrypt stored secrets. Generate with openssl rand -hex 32."
+      },
+      {
+        "key": "POSTGRES_PASSWORD",
+        "required": true,
+        "description": "Long URL-safe random password for the bundled Postgres/pgvector database."
+      },
+      {
+        "key": "IRONCLAW_IN_DOCKER",
+        "required": false,
+        "default": "true",
+        "description": "Indicates that IronClaw is running inside Docker Compose. This template defaults it to true."
+      },
+      {
+        "key": "DATABASE_SSLMODE",
+        "required": false,
+        "default": "disable",
+        "description": "Postgres SSL mode for the internal sidecar connection."
+      },
+      {
+        "key": "POSTGRES_DB",
+        "required": false,
+        "default": "ironclaw",
+        "description": "Database name for the bundled Postgres/pgvector sidecar."
+      },
+      {
+        "key": "POSTGRES_USER",
+        "required": false,
+        "default": "ironclaw",
+        "description": "Database user for the bundled Postgres/pgvector sidecar."
+      },
+      {
+        "key": "SANDBOX_ENABLED",
+        "required": false,
+        "default": "false",
+        "description": "Set to false for Phala deployments because this template does not mount the Docker socket."
+      },
+      {
+        "key": "LLM_BACKEND",
+        "required": false,
+        "default": "nearai",
+        "description": "LLM provider backend. Defaults to nearai; alternatives include openai, anthropic, and openai_compatible."
+      },
+      {
+        "key": "NEARAI_API_KEY",
+        "required": false,
+        "description": "Optional NEAR AI API key for the default nearai backend."
+      },
+      {
+        "key": "NEARAI_SESSION_TOKEN",
+        "required": false,
+        "description": "Optional NEAR AI hosted/session-token auth token for upstream NEAR AI mode."
+      },
+      {
+        "key": "NEARAI_AUTH_URL",
+        "required": false,
+        "description": "Optional NEAR AI auth URL used with hosted/session-token authentication."
+      },
+      {
+        "key": "NEARAI_MODEL",
+        "required": false,
+        "default": "Qwen/Qwen3.5-122B-A10B",
+        "description": "Optional NEAR AI model name override."
+      },
+      {
+        "key": "NEARAI_BASE_URL",
+        "required": false,
+        "default": "",
+        "description": "Optional NEAR AI API base URL override. Leave empty so IronClaw selects the upstream endpoint for the configured auth mode."
+      },
+      {
+        "key": "ANTHROPIC_API_KEY",
+        "required": false,
+        "description": "Optional Anthropic API key when using the anthropic backend."
+      },
+      {
+        "key": "OPENAI_API_KEY",
+        "required": false,
+        "description": "Optional OpenAI API key when using the openai backend."
+      },
+      {
+        "key": "LLM_BASE_URL",
+        "required": false,
+        "description": "Optional OpenAI-compatible API base URL when using openai_compatible."
+      },
+      {
+        "key": "LLM_API_KEY",
+        "required": false,
+        "description": "Optional API key for OpenAI-compatible providers."
+      },
+      {
+        "key": "LLM_MODEL",
+        "required": false,
+        "description": "Optional model name override for the selected LLM backend."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 40
+    },
+    "tags": ["Agent", "AI", "Gateway", "NEAR"]
   },
   {
     "id": "hermes-agent",
