@@ -6,8 +6,7 @@ This template deploys Hermes Agent in a confidential VM on Phala Cloud with a sh
 
 ## Services
 
-- `gateway`: Hermes gateway and OpenAI-compatible API server.
-- `dashboard`: Hermes web dashboard.
+- `hermes`: Hermes gateway, OpenAI-compatible API server, and dashboard in one container.
 
 ## Ports
 
@@ -51,11 +50,12 @@ The `hermes_data` volume is mounted to `/opt/data` and stores Hermes state:
 - `hooks/`
 - `logs/`
 
-Do not run two Hermes gateway containers against the same data directory. The dashboard service can share the volume with the gateway.
+Do not run two Hermes gateway containers against the same data directory.
 
 ## Deploy
 
 ```bash
+docker compose config
 docker compose up -d
 ```
 
@@ -67,4 +67,5 @@ After deployment:
 ## Notes
 
 - The upstream compose file uses `network_mode: host` and binds the dashboard to `127.0.0.1`. This Phala template uses normal Compose port mappings and binds the dashboard to `0.0.0.0` so it can be reached through the CVM gateway.
+- The dashboard is enabled via gateway-managed mode (`HERMES_DASHBOARD=1`) instead of running a second standalone dashboard container. This matches upstream Docker guidance and avoids dashboard restart loops when binding on `0.0.0.0`.
 - Keep `API_SERVER_KEY` secret and rotate it if it is exposed.

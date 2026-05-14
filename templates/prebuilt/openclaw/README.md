@@ -46,6 +46,7 @@ The template creates these volumes:
 ## Deploy
 
 ```bash
+docker compose config
 docker compose up -d
 ```
 
@@ -53,5 +54,6 @@ After the gateway starts, connect OpenClaw clients or companion nodes to the pub
 
 ## Notes
 
+- On startup, this template writes `gateway.mode=local` and `gateway.bind=${OPENCLAW_GATEWAY_BIND}` before launching the gateway. This avoids bootstrap failures on fresh volumes and keeps redeploys deterministic.
 - Bonjour/mDNS is disabled because container bridge networking and remote CVM environments do not reliably support local network discovery.
 - The upstream Docker setup also provides an interactive CLI sidecar. This Phala template keeps the deployment focused on the long-running gateway service so it can run reliably as a hosted CVM.

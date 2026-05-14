@@ -35,13 +35,9 @@ services:
       - no-new-privileges:true
     command:
       [
-        "node",
-        "dist/index.js",
-        "gateway",
-        "--bind",
-        "${OPENCLAW_GATEWAY_BIND:-lan}",
-        "--port",
-        "18789",
+        "sh",
+        "-lc",
+        "set -eu; BIND=\"${OPENCLAW_GATEWAY_BIND:-lan}\"; node dist/index.js config set --batch-json \"[{\\\"path\\\":\\\"gateway.mode\\\",\\\"value\\\":\\\"local\\\"},{\\\"path\\\":\\\"gateway.bind\\\",\\\"value\\\":\\\"$${BIND}\\\"}]\"; exec node dist/index.js gateway --allow-unconfigured --bind \"$${BIND}\" --port 18789"
       ]
     healthcheck:
       test:

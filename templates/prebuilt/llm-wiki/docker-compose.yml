@@ -21,7 +21,7 @@ services:
       [
         "sh",
         "-lc",
-        "if [ ! -f package.json ]; then git clone --depth=1 https://github.com/nashsu/llm_wiki.git .; fi && npm ci && npm run dev -- --host 0.0.0.0 --port 1420",
+        "set -eu; if [ ! -f package.json ]; then git clone --depth=1 https://github.com/nashsu/llm_wiki.git .; fi; if [ -f vite.config.ts ] && ! grep -q 'allowedHosts' vite.config.ts; then perl -0pi -e 's/server:\\s*\\{/server: { allowedHosts: true, /' vite.config.ts; fi; npm ci; npm run dev -- --host 0.0.0.0 --port 1420 --strictPort",
       ]
 
 volumes:
