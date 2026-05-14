@@ -1,0 +1,29 @@
+services:
+  llm-wiki:
+    image: node:24-bookworm
+    container_name: llm-wiki
+    restart: unless-stopped
+    working_dir: /workspace/llm_wiki
+    ports:
+      - "1420:1420"
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      OLLAMA_URL: ${OLLAMA_URL:-}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
+      MINIMAX_MODEL: ${MINIMAX_MODEL:-}
+      MINIMAX_ENDPOINT: ${MINIMAX_ENDPOINT:-}
+      TAURI_DEV_HOST: 0.0.0.0
+    volumes:
+      - llm_wiki_repo:/workspace/llm_wiki
+      - llm_wiki_npm_cache:/root/.npm
+    command:
+      [
+        "sh",
+        "-lc",
+        "set -eu; if [ ! -f package.json ]; then git clone --depth=1 https://github.com/nashsu/llm_wiki.git .; fi; if [ -f vite.config.ts ] && ! grep -q 'allowedHosts' vite.config.ts; then perl -0pi -e 's/server:\\s*\\{/server: { allowedHosts: true, /' vite.config.ts; fi; npm ci; npm run dev -- --host 0.0.0.0 --port 1420 --strictPort",
+      ]
+
+volumes:
+  llm_wiki_repo:
+  llm_wiki_npm_cache:
