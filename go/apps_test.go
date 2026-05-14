@@ -17,15 +17,18 @@ func TestCreateAppInstance(t *testing.T) {
 			t.Errorf("path = %q, want /apps/app-123/instances", r.URL.Path)
 		}
 
-		var body map[string]any
+		var body CreateAppInstanceRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Fatalf("decode body: %v", err)
 		}
-		if body["node_id"] != float64(5) {
-			t.Errorf("node_id = %v, want 5", body["node_id"])
+		if body.Name == nil || *body.Name != "redis-0" {
+			t.Errorf("name = %v, want redis-0", body.Name)
 		}
-		if body["docker_compose_file"] != "services:\n  app:\n    image: nginx" {
-			t.Errorf("docker_compose_file = %v", body["docker_compose_file"])
+		if body.NodeID == nil || *body.NodeID != 5 {
+			t.Errorf("node_id = %v, want 5", body.NodeID)
+		}
+		if body.DockerComposeFile == nil || *body.DockerComposeFile != "services:\n  app:\n    image: nginx" {
+			t.Errorf("docker_compose_file = %v", body.DockerComposeFile)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -46,7 +49,9 @@ func TestCreateAppInstance(t *testing.T) {
 
 	dockerCompose := "services:\n  app:\n    image: nginx"
 	nodeID := 5
+	name := "redis-0"
 	result, err := client.CreateAppInstance(context.Background(), "app-123", &CreateAppInstanceRequest{
+		Name:              &name,
 		NodeID:            &nodeID,
 		DockerComposeFile: &dockerCompose,
 	})
