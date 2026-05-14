@@ -48,6 +48,7 @@ import { VMSchema } from "../../types/cvm_info";
 export const CreateAppInstanceRequestSchema = z
   .object({
     appId: z.string().min(1),
+    name: z.string().optional(),
     node_id: z.number().optional(),
     docker_compose_file: z.string().optional(),
     pre_launch_script: z.string().optional(),
