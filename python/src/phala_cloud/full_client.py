@@ -122,6 +122,7 @@ class AppRevisionsRequest(_AliasModel):
 
 class CreateAppInstanceRequest(_AliasModel):
     app_id: str = Field(alias="appId")
+    name: str | None = None
     node_id: int | None = None
     docker_compose_file: str | None = None
     pre_launch_script: str | None = None
@@ -1117,6 +1118,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     def create_app_instance(self, request: CreateAppInstanceRequest | Mapping[str, Any]) -> Any:
         req = CreateAppInstanceRequest.model_validate(request)
         body = {
+            "name": req.name,
             "node_id": req.node_id,
             "docker_compose_file": req.docker_compose_file,
             "pre_launch_script": req.pre_launch_script,
@@ -1940,6 +1942,7 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
     ) -> Any:
         req = CreateAppInstanceRequest.model_validate(request)
         body = {
+            "name": req.name,
             "node_id": req.node_id,
             "docker_compose_file": req.docker_compose_file,
             "pre_launch_script": req.pre_launch_script,
