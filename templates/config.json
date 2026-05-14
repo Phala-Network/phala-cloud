@@ -242,14 +242,14 @@
   {
     "id": "solana-mcp",
     "name": "Solana MCP",
-    "description": "A Solana MCP server deployed on Phala Cloud that enables AI agents to fetch real-time Solana data, including protocol TVL (Total Value Locked), chain metrics, and token prices.",
+    "description": "A Solana MCP server deployed on Phala Cloud that enables AI agents to interact with Solana via MCP tools, including wallet, token, and chain operations.",
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/solana-mcp",
     "author": "SendAI & DARK",
     "envs": [
       { "key": "BEARER_TOKEN", "required": true },
       { "key": "SOLANA_PRIVATE_KEY", "required": true },
       { "key": "RPC_URL", "required": true },
-      { "key": "OPENAI_API_KEY", "required": true }
+      { "key": "OPENAI_API_KEY", "required": false }
     ],
     "icon": "mcp-solana.svg",
     "tags": ["MCP"]
@@ -257,7 +257,7 @@
   {
     "id": "context7-mcp",
     "name": "Context7 MCP",
-    "description": "A Context7 MCP server deployed on Phala Cloud that enables AI agents to fetch real-time Context7 data, including protocol TVL (Total Value Locked), chain metrics, and token prices.",
+    "description": "A Context7 MCP server deployed on Phala Cloud that helps AI agents retrieve up-to-date library documentation and code examples via MCP.",
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/context7-mcp",
     "author": "Phala-Network",
     "icon": "mcp-context7.png",
