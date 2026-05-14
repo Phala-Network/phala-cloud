@@ -4,7 +4,7 @@ services:
     # ports: # Using caddy to proxy the server to enhance security, so no need to expose the port
     #   - "8000:8000"
     volumes:
-      - /root/data:/root/Desktop
+      - elevenlabs_data:/root/Desktop
     environment:
       - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
       - ELEVENLABS_MCP_BASE_PATH=${ELEVENLABS_MCP_BASE_PATH}
@@ -16,7 +16,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - /root/data:/root/data
+      - elevenlabs_data:/root/data
     working_dir: /root/data
     command: python -m http.server 8080
     networks:
@@ -45,7 +45,7 @@ configs:
               header Authorization "Bearer $BEARER_TOKEN"
           }
           route @valid_auth {
-              reverse_proxy app:8080
+              reverse_proxy app:8000
           }
           route {
               respond 401 {
@@ -54,6 +54,9 @@ configs:
               }
           }
       }
+
+volumes:
+  elevenlabs_data:
 
 networks:
   internal:
