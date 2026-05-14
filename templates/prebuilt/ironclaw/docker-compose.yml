@@ -1,0 +1,65 @@
+services:
+  ironclaw:
+    image: nearaidev/ironclaw:latest
+    container_name: ironclaw
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      HOME: /home/ironclaw
+      IRONCLAW_IN_DOCKER: ${IRONCLAW_IN_DOCKER:-true}
+      GATEWAY_ENABLED: ${GATEWAY_ENABLED:-true}
+      GATEWAY_HOST: ${GATEWAY_HOST:-0.0.0.0}
+      GATEWAY_PORT: ${GATEWAY_PORT:-3000}
+      GATEWAY_AUTH_TOKEN: ${GATEWAY_AUTH_TOKEN:?Set GATEWAY_AUTH_TOKEN}
+      DATABASE_BACKEND: postgres
+      DATABASE_URL: postgres://${POSTGRES_USER:-ironclaw}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ironclaw}
+      DATABASE_SSLMODE: ${DATABASE_SSLMODE:-disable}
+      SECRETS_MASTER_KEY: ${SECRETS_MASTER_KEY:?Set SECRETS_MASTER_KEY}
+      ONBOARD_COMPLETED: ${ONBOARD_COMPLETED:-true}
+      SANDBOX_ENABLED: ${SANDBOX_ENABLED:-false}
+      LLM_BACKEND: ${LLM_BACKEND:-nearai}
+      NEARAI_API_KEY: ${NEARAI_API_KEY:-}
+      NEARAI_SESSION_TOKEN: ${NEARAI_SESSION_TOKEN:-}
+      NEARAI_AUTH_URL: ${NEARAI_AUTH_URL:-}
+      NEARAI_MODEL: ${NEARAI_MODEL:-Qwen/Qwen3.5-122B-A10B}
+      NEARAI_BASE_URL: ${NEARAI_BASE_URL:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ironclaw_data:/home/ironclaw/.ironclaw
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["run"]
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ironclaw-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ironclaw}
+      POSTGRES_USER: ${POSTGRES_USER:-ironclaw}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+      TZ: ${TZ:-UTC}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-ironclaw} -d ${POSTGRES_DB:-ironclaw}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  ironclaw_data:
+  postgres_data:
