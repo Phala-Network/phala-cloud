@@ -28,6 +28,98 @@
     "tags": ["VibeVM", "TEE", "AI", "VSCode"]
   },
   {
+    "id": "openclaw",
+    "name": "OpenClaw",
+    "description": "A self-hosted AI gateway for coordinating agent sessions across native clients, device nodes, and messaging channels. Deploy the OpenClaw gateway in a confidential VM with persistent config, auth profile, and workspace volumes.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/openclaw",
+    "author": "OpenClaw",
+    "icon": "openclaw-logo.png",
+    "envs": [
+      {
+        "key": "OPENCLAW_GATEWAY_TOKEN",
+        "required": true,
+        "description": "Long random token used to authenticate non-local gateway access."
+      },
+      {
+        "key": "ANTHROPIC_API_KEY",
+        "required": false,
+        "description": "Optional Anthropic API key for OpenClaw agents."
+      },
+      {
+        "key": "OPENAI_API_KEY",
+        "required": false,
+        "description": "Optional OpenAI API key for OpenClaw agents."
+      },
+      {
+        "key": "CLAUDE_AI_SESSION_KEY",
+        "required": false,
+        "description": "Optional Claude session key for browser-authenticated Claude workflows."
+      },
+      {
+        "key": "CLAUDE_WEB_SESSION_KEY",
+        "required": false,
+        "description": "Optional Claude web session key."
+      },
+      {
+        "key": "CLAUDE_WEB_COOKIE",
+        "required": false,
+        "description": "Optional Claude web cookie."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 40
+    },
+    "tags": ["Agent", "AI", "Automation", "Messaging"]
+  },
+  {
+    "id": "hermes-agent",
+    "name": "Hermes Agent",
+    "description": "A persistent AI agent gateway from Nous Research with command-capable conversations, an OpenAI-compatible API server, a dashboard, persistent memory, skills, and messaging integrations.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/hermes-agent",
+    "author": "NousResearch",
+    "icon": "hermes-logo.png",
+    "envs": [
+      {
+        "key": "API_SERVER_KEY",
+        "required": true,
+        "description": "Long random API key required when exposing the Hermes API server."
+      },
+      {
+        "key": "ANTHROPIC_API_KEY",
+        "required": false,
+        "description": "Optional Anthropic API key for Hermes."
+      },
+      {
+        "key": "OPENAI_API_KEY",
+        "required": false,
+        "description": "Optional OpenAI API key for Hermes."
+      },
+      {
+        "key": "TELEGRAM_BOT_TOKEN",
+        "required": false,
+        "description": "Optional Telegram bot token."
+      },
+      {
+        "key": "DISCORD_TOKEN",
+        "required": false,
+        "description": "Optional Discord bot token."
+      },
+      {
+        "key": "SLACK_BOT_TOKEN",
+        "required": false,
+        "description": "Optional Slack bot token."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 40
+    },
+    "tags": ["Agent", "AI", "Automation", "Messaging"]
+  },
+  {
     "id": "anyone-anon-service",
     "name": "Anyone Anon Service",
     "description": "Sets up a Anyone Anon (hidden) service and serves an nginx website from that.",
