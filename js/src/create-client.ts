@@ -19,6 +19,11 @@ import {
   type AvailableNodes,
 } from "./actions/get_available_nodes";
 import {
+  getCvmCreateResources,
+  safeGetCvmCreateResources,
+  type CvmCreateResourceGraph,
+} from "./actions/get_cvm_create_resources";
+import {
   listAllInstanceTypeFamilies,
   safeListAllInstanceTypeFamilies,
   listFamilyInstanceTypes,
@@ -269,6 +274,8 @@ export function createClient<V extends ApiVersion = DefaultApiVersion>(
     readonly safeGetCurrentUser: typeof safeGetCurrentUser;
     readonly getAvailableNodes: typeof getAvailableNodes;
     readonly safeGetAvailableNodes: typeof safeGetAvailableNodes;
+    readonly getCvmCreateResources: typeof getCvmCreateResources;
+    readonly safeGetCvmCreateResources: typeof safeGetCvmCreateResources;
     readonly listAllInstanceTypeFamilies: typeof listAllInstanceTypeFamilies;
     readonly safeListAllInstanceTypeFamilies: typeof safeListAllInstanceTypeFamilies;
     readonly listFamilyInstanceTypes: typeof listFamilyInstanceTypes;
@@ -356,6 +363,8 @@ export function createClient<V extends ApiVersion = DefaultApiVersion>(
     safeGetCurrentUser,
     getAvailableNodes,
     safeGetAvailableNodes,
+    getCvmCreateResources,
+    safeGetCvmCreateResources,
     listAllInstanceTypeFamilies,
     safeListAllInstanceTypeFamilies,
     listFamilyInstanceTypes,
@@ -493,6 +502,18 @@ export interface Client<V extends ApiVersion = DefaultApiVersion> extends BaseCl
     SafeResult<z.infer<T>>
   >;
   safeGetAvailableNodes(parameters: { schema: false }): Promise<SafeResult<unknown>>;
+
+  getCvmCreateResources(): Promise<CvmCreateResourceGraph>;
+  getCvmCreateResources<T extends z.ZodTypeAny>(
+    parameters: { schema: T },
+  ): Promise<z.infer<T>>;
+  getCvmCreateResources(parameters: { schema: false }): Promise<unknown>;
+
+  safeGetCvmCreateResources(): Promise<SafeResult<CvmCreateResourceGraph>>;
+  safeGetCvmCreateResources<T extends z.ZodTypeAny>(
+    parameters: { schema: T },
+  ): Promise<SafeResult<z.infer<T>>>;
+  safeGetCvmCreateResources(parameters: { schema: false }): Promise<SafeResult<unknown>>;
 
   // Instance type actions - no parameters
   listAllInstanceTypeFamilies(): Promise<AllFamiliesResponse>;

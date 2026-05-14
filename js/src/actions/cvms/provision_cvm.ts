@@ -229,6 +229,9 @@ export const ProvisionCvmRequestSchema = z
     kms_id: z.string().optional(),
     kms: z.enum(["PHALA", "ETHEREUM", "BASE"]).optional(), // KMS type selection (defaults to PHALA)
     kms_contract: z.string().optional(), // KMS contract address for on-chain KMS
+    kms_contract_id: z.union([z.string(), z.number()]).optional(),
+    key_provider_mode: z.enum(["kms", "local"]).optional(),
+    skip_gateway: z.boolean().optional(),
     env_keys: z.array(z.string()).optional(),
     // Manual nonce specification (Advanced - PHALA KMS only)
     nonce: z.number().optional(), // User-specified nonce for deterministic app_id generation
@@ -254,6 +257,9 @@ export type ProvisionCvmRequest = z.input<typeof ProvisionCvmRequestSchema> & {
   };
   nonce?: number; // Manual nonce specification (Advanced - PHALA KMS only)
   app_id?: string; // Expected app_id (must match calculated app_id from nonce)
+  kms_contract_id?: string | number;
+  key_provider_mode?: "kms" | "local";
+  skip_gateway?: boolean;
 };
 
 // Helper functions
