@@ -443,9 +443,18 @@
     "id": "mcp-swarms-agent",
     "name": "Swarms Agent in Phala TEE",
     "description": "A Swarms agent deployed on Phala Cloud that perform a comprehensive legal team swarm for contract creation and management",
-    "repo": "https://github.com/The-Swarm-Corporation/Phala-Deployment-Template",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/mcp-swarms-agent",
     "author": "The-Swarm-Corporation",
     "icon": "mcp-swarms.svg",
+    "envs": [
+      { "key": "OPENAI_API_KEY", "required": true },
+      {
+        "key": "OPENAI_API_BASE",
+        "default": "https://api.openai.com/v1",
+        "required": false
+      },
+      { "key": "MODEL_NAME", "default": "gpt-4o-mini", "required": false }
+    ],
     "tags": ["MCP"]
   },
   {
