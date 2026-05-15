@@ -87,9 +87,9 @@ describe("detectPackageManager", () => {
 });
 
 describe("formatGlobalInstallCommand", () => {
-	test("includes --no-cache for bun", () => {
+	test("uses update for bun", () => {
 		expect(formatGlobalInstallCommand("bun", "phala@1.2.3")).toBe(
-			"bun add -g --no-cache phala@1.2.3",
+			"bun update -g phala@1.2.3",
 		);
 	});
 
@@ -113,10 +113,10 @@ describe("formatGlobalInstallCommand", () => {
 });
 
 describe("getGlobalInstallArgs", () => {
-	test("includes --no-cache for bun", () => {
+	test("uses update for bun", () => {
 		const result = getGlobalInstallArgs("bun", "phala@1.2.3");
 		expect(result.command).toBe("bun");
-		expect(result.args).toEqual(["add", "-g", "--no-cache", "phala@1.2.3"]);
+		expect(result.args).toEqual(["update", "-g", "phala@1.2.3"]);
 	});
 
 	test("returns correct args for npm", () => {

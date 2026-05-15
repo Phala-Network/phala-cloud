@@ -337,7 +337,7 @@ describe("checkForUpdates", () => {
 		expect(result).not.toBeNull();
 		expect(result?.message).toContain("phala@1.2.3");
 		expect(result?.message).not.toContain("phala@latest");
-		expect(result?.message).toContain("--no-cache");
+		expect(result?.message).toContain("bun update -g");
 	});
 
 	test("uses prerelease channel tag when current is prerelease", async () => {
