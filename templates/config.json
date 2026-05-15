@@ -306,7 +306,7 @@
     "id": "moof-mcp",
     "name": "MOOF MCP",
     "description": "An MCP server enables LLMs to work with the MOOF platform, deployed on Phala Cloud. It can list flows, create new flows, and deploy other MCP servers on Phala Cloud. Additionally, it supports fetching public flow templates, forking flows from templates, retrieving authenticated user flows, publishing or unpublishing flows to/from the shared flow store, and deploying MCP servers directly from GitHub with optional Phala hosting and environment variable support.",
-    "repo": "https://github.com/moofdotfun/MOOF-MCP",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/moof-mcp",
     "author": "MOOF",
     "icon": "moof.png",
     "envs": [
