@@ -297,7 +297,7 @@
     "id": "anyone-anon-relay",
     "name": "Anyone Network Relay",
     "description": "Set up a Anon relay and participate in expanding the Anyone Network by providing bandwidth to earn recognition rewards",
-    "repo": "https://github.com/rA3ka/anon-relay-docker",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/anyone-anon-relay",
     "author": "Anyone",
     "icon": "Anyone-anon-hs.png",
     "tags": ["Anyone", "anon", "relay"]

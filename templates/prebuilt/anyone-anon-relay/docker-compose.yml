@@ -1,0 +1,60 @@
+services:
+  anon-relay:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM ubuntu:22.04
+
+        VOLUME ["/var/lib/anon", "/var/log/anon"]
+
+        RUN apt-get update && apt-get install -y \
+            wget \
+            debconf \
+            net-tools \
+            vim \
+            nyx \
+            nano \
+            ca-certificates
+
+        RUN rm -rf /var/lib/apt/lists/*
+
+        RUN echo "anon anon/terms boolean true" | debconf-set-selections
+
+        RUN . /etc/os-release && \
+            wget -qO- https://deb.en.anyone.tech/anon.asc | tee /etc/apt/trusted.gpg.d/anon.asc && \
+            echo "deb [signed-by=/etc/apt/trusted.gpg.d/anon.asc] https://deb.en.anyone.tech anon-live-$$VERSION_CODENAME main" | tee /etc/apt/sources.list.d/anon.list
+
+        RUN apt-get update && \
+            apt-get install -y anon && \
+            apt-get autoremove
+
+        CMD ["/usr/bin/anon", "-f", "/etc/anon/anonrc"]
+    image: anon-relay:latest
+    pull_policy: build
+    container_name: anon-relay
+    init: true
+    restart: unless-stopped
+    ports:
+      - "9001:9001"
+    configs:
+      - source: anonrc
+        target: /etc/anon/anonrc
+    volumes:
+      - anon_data:/var/lib/anon
+      - anon_logs:/var/log/anon
+
+configs:
+  anonrc:
+    content: |
+      AgreeToTerms 1
+      ControlPort 9051
+      SocksPort 9050
+      Log notice file /var/log/anon/notices.log
+      ExitRelay 0
+      ORPort 9001
+      Nickname MyRelayNickname
+      ContactInfo my@example.mail
+
+volumes:
+  anon_data:
+  anon_logs:
