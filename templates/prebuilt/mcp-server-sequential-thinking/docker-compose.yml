@@ -1,0 +1,57 @@
+services:
+  mcp-server-sequential-thinking:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM node:22.12-alpine AS builder
+
+        ARG UPSTREAM_COMMIT=ded1d9211d0c713161cec146a96fe901e61e5fa7
+
+        WORKDIR /app
+
+        RUN apk add --no-cache ca-certificates wget
+
+        RUN wget -O /tmp/mcp-servers.tar.gz "https://github.com/Leechael/mcp-servers/archive/$${UPSTREAM_COMMIT}.tar.gz" \
+            && mkdir -p /tmp/mcp-servers \
+            && tar -xzf /tmp/mcp-servers.tar.gz -C /tmp/mcp-servers --strip-components=1 \
+            && cp -R /tmp/mcp-servers/src/sequentialthinking/. /app/ \
+            && cp /tmp/mcp-servers/tsconfig.json /tsconfig.json \
+            && rm -rf /tmp/mcp-servers /tmp/mcp-servers.tar.gz
+
+        RUN sed -i 's|const POST_ENDPOINT = "/message";|const POST_ENDPOINT = "/messages";|' index.ts \
+            && sed -i 's|const sessionId = req.query.sessionId;|const sessionId = req.query.sessionId ?? req.query.session_id;|' index.ts \
+            && npm pkg set dependencies.@modelcontextprotocol/sdk=1.11.0 \
+            && npm pkg set dependencies.chalk=5.3.0 \
+            && npm pkg set dependencies.yargs=17.7.2 \
+            && npm pkg set dependencies.express=5.1.0 \
+            && npm pkg set devDependencies.@types/express=5.0.1 \
+            && npm pkg set devDependencies.@types/node=22.10.2 \
+            && npm pkg set devDependencies.@types/yargs=17.0.33 \
+            && npm pkg set devDependencies.shx=0.3.4 \
+            && npm pkg set devDependencies.typescript=5.8.2
+
+        RUN NODE_ENV=development npm install --ignore-scripts --no-audit --no-fund \
+            && npm run build \
+            && npm prune --omit=dev --ignore-scripts --no-audit --no-fund
+
+        FROM node:22.12-alpine AS runtime
+
+        ENV NODE_ENV=production
+        ENV PORT=3001
+
+        WORKDIR /app
+
+        COPY --from=builder /app/package.json /app/package-lock.json ./
+        COPY --from=builder /app/node_modules ./node_modules
+        COPY --from=builder /app/dist ./dist
+
+        EXPOSE 3001
+
+        USER node
+
+        CMD ["node", "dist/index.js"]
+    image: mcp-server-sequential-thinking:latest
+    pull_policy: build
+    ports:
+      - "8000:3001"
+    restart: unless-stopped

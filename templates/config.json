@@ -435,8 +435,8 @@
     "id": "mcp-server-sequential-thinking",
     "name": "MCP Server Sequential Thinking",
     "description": "A MCP server deployed on Phala Cloud that enables AI agents to think sequentially.",
-    "repo": "https://github.com/Leechael/mcp-servers/tree/main/src/sequentialthinking",
-    "author": "Leechael",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/mcp-server-sequential-thinking",
+    "author": "Phala-Network",
     "tags": ["MCP"]
   },
   {
