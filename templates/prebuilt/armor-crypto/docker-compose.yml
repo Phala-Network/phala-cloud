@@ -1,0 +1,12 @@
+services:
+  app:
+    image: hashwarlock/armor-crypto-mcp@sha256:ae7bda1b29077cdb39abf6d42587db630231dff5f2d38c7980108b9c14e48e1e
+    platform: linux/amd64
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: "8000"
+      ARMOR_API_KEY: ${ARMOR_API_KEY:?ARMOR_API_KEY is required}
+      ARMOR_API_URL: ${ARMOR_API_URL:-https://app.armorwallet.ai/api/v1}
+      ARMOR_ACCESS_TOKEN: ${ARMOR_ACCESS_TOKEN:-}
+    restart: unless-stopped
