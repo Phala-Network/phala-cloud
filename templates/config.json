@@ -711,6 +711,17 @@
     "icon": "bytebot.svg",
     "envs": [
       {
+        "key": "BYTEBOT_PASSWORD",
+        "required": true,
+        "description": "Required Basic Auth password for the public ByteBot desktop, agent API, and web UI endpoints."
+      },
+      {
+        "key": "BYTEBOT_USERNAME",
+        "required": false,
+        "default": "bytebot",
+        "description": "Optional Basic Auth username for public ByteBot endpoints. Defaults to bytebot."
+      },
+      {
         "key": "ANTHROPIC_API_KEY",
         "required": false,
         "description": "Anthropic Claude API key for AI task planning and execution (at least one API key required)"
