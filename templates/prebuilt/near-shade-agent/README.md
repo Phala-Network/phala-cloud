@@ -84,63 +84,46 @@ Configure the following environment variables:
 The template provides these REST API endpoints:
 
 ### Agent Account Details
-- **GET** `/api/agent/account`
+- **GET** `/api/agent-account`
 - **Description**: Returns NEAR agent account information and status
-- **Authentication**: None required for basic status
+- **Authentication**: None at the HTTP layer; requires a real NEAR testnet account, seed phrase, and Phala API key for a successful agent-account response
 - **Response**:
 ```json
 {
-  "status": "success",
-  "data": {
-    "accountId": "your-agent.testnet",
-    "balance": "1000.5 NEAR",
-    "contractDeployed": true,
-    "lastActivity": "2025-08-08T10:30:00Z"
-  }
+  "accountId": "your-agent.testnet",
+  "balance": "1000.5 NEAR"
 }
 ```
 
 ### Ethereum Account Details  
-- **GET** `/api/eth/account`
+- **GET** `/api/eth-account`
 - **Description**: Get Ethereum account information for oracle operations
-- **Authentication**: Bearer token required
+- **Authentication**: None at the HTTP layer
 - **Response**:
 ```json
 {
-  "status": "success", 
-  "data": {
-    "address": "0x1234567890123456789012345678901234567890",
-    "balance": "0.5 ETH",
-    "nonce": 42,
-    "network": "mainnet"
-  }
+  "senderAddress": "0x1234567890123456789012345678901234567890",
+  "balance": 0.5
 }
 ```
 
 ### Send Transaction
-- **POST** `/api/eth/send`
-- **Description**: Send Ethereum transactions through the TEE agent
-- **Authentication**: Bearer token required
-- **Request**:
-```json
-{
-  "to": "0x1234567890123456789012345678901234567890",
-  "value": "0.1",
-  "gasLimit": 21000,
-  "data": "0x"
-}
-```
+- **GET** `/api/transaction`
+- **Description**: Send the ETH price oracle update transaction through the TEE agent
+- **Authentication**: None at the HTTP layer; requires real NEAR testnet credentials, a valid Phala API key, and funding for the derived Ethereum account
 - **Response**:
 ```json
 {
-  "status": "success",
-  "data": {
-    "transactionHash": "0xabcdef...",
-    "gasUsed": 21000,
-    "status": "pending"
-  }
+  "txHash": "0xabcdef...",
+  "newPrice": "2500.00"
 }
 ```
+
+## Smoke Testing
+
+For shallow deployment smoke tests, generated dummy values for `NEAR_SEED_PHRASE` and `PHALA_API_KEY` can bring up the web app and allow `GET /` plus `GET /api/eth-account` to respond. These checks only verify that the image is serving and that the Ethereum account derivation route is reachable.
+
+`GET /api/agent-account` and `GET /api/transaction` are expected to fail with dummy NEAR or Phala credentials. Full agent-account and transaction behavior requires a real NEAR testnet account ID, the matching seed phrase, a valid Phala API key, the correct `NEXT_PUBLIC_contractId`, and any required funding for the derived Ethereum account. During dummy-credential smoke tests, the `shade-agent-api` sidecar may restart while failing to authenticate; treat that as expected unless real credentials were provided.
 
 ## Architecture
 
