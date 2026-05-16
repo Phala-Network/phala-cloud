@@ -1,0 +1,38 @@
+services:
+  webshell:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM alpine:3.22
+
+        RUN apk add --no-cache ca-certificates ttyd \
+            && addgroup -g 1000 -S phala \
+            && adduser -u 1000 -S -D -h /home/phala -s /bin/ash -G phala phala \
+            && mkdir -p /workspace \
+            && chown -R 1000:1000 /home/phala /workspace
+
+        WORKDIR /workspace
+        EXPOSE 7681
+
+        USER 1000:1000
+
+        CMD ["sh", "-lc", "echo 'Run with docker compose and set WEBSHELL_PASSWORD.' >&2; exit 1"]
+    image: phala-webshell:latest
+    pull_policy: build
+    init: true
+    restart: unless-stopped
+    ports:
+      - "7681:7681"
+    environment:
+      WEBSHELL_USER: ${WEBSHELL_USER:-phala}
+      WEBSHELL_PASSWORD: ${WEBSHELL_PASSWORD:?WEBSHELL_PASSWORD is required}
+    command:
+      [
+        "sh",
+        "-lc",
+        "set -eu; exec ttyd -i 0.0.0.0 -p 7681 -c \"$${WEBSHELL_USER}:$${WEBSHELL_PASSWORD}\" /bin/ash -l",
+      ]
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

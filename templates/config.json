@@ -469,8 +469,21 @@
     "id": "webshell",
     "name": "Webshell",
     "description": "This guide outlines the steps to set up and use a webshell with the ttyd service.",
-    "repo": "https://github.com/Dstack-TEE/dstack-examples/tree/main/webshell",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/webshell",
     "author": "Dstack-TEE",
+    "envs": [
+      {
+        "key": "WEBSHELL_PASSWORD",
+        "required": true,
+        "description": "HTTP basic auth password for ttyd. Set a long random value; no default is provided."
+      },
+      {
+        "key": "WEBSHELL_USER",
+        "required": false,
+        "default": "phala",
+        "description": "HTTP basic auth username for ttyd."
+      }
+    ],
     "tags": ["Dstack"]
   },
   {
