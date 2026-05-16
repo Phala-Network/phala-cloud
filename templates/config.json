@@ -631,15 +631,45 @@
     "id": "zep-graphiti-mcp",
     "name": "Zep Graphiti MCP",
     "description": "A Zep Graphiti MCP server deployed on Phala Cloud to build private Real-Time Knowledge Graphs for AI Agents.",
-    "repo": "https://github.com/HashWarlock/graphiti/tree/main/mcp_server",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/zep-graphiti-mcp",
     "author": "HashWarlock",
     "icon": "zep.png",
     "envs": [
-      { "key": "OPENAI_API_KEY", "required": true },
-      { "key": "MODEL_NAME", "required": true },
-      { "key": "NEO4J_URI", "required": false },
-      { "key": "NEO4J_USER", "required": false },
-      { "key": "NEO4J_PASSWORD", "required": false }
+      {
+        "key": "OPENAI_API_KEY",
+        "required": true,
+        "description": "OpenAI API key used by Graphiti for LLM and embedding operations"
+      },
+      {
+        "key": "MODEL_NAME",
+        "required": false,
+        "default": "gpt-4.1-mini",
+        "description": "OpenAI model used for Graphiti LLM calls"
+      },
+      {
+        "key": "NEO4J_URI",
+        "required": false,
+        "default": "bolt://neo4j:7687",
+        "description": "Neo4j Bolt URI; the default uses the internal bundled Neo4j service"
+      },
+      {
+        "key": "NEO4J_USER",
+        "required": false,
+        "default": "neo4j",
+        "description": "Neo4j username"
+      },
+      {
+        "key": "NEO4J_PASSWORD",
+        "required": false,
+        "default": "demodemo",
+        "description": "Neo4j password for the bundled internal Neo4j service"
+      },
+      {
+        "key": "SEMAPHORE_LIMIT",
+        "required": false,
+        "default": "1",
+        "description": "Episode processing concurrency; keep low to reduce LLM provider rate-limit pressure"
+      }
     ],
     "tags": ["MCP", "Knowledge Graph"]
   },
