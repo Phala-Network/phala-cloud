@@ -1,0 +1,84 @@
+services:
+  app:
+    image: dylanckawalec/akavelink@sha256:b2c4a351869d6ed0665e4e6a15c5c73fbea38489589d2547ed4a9026f0cdf73b
+    platform: linux/amd64
+    restart: unless-stopped
+    expose:
+      - "80"
+    environment:
+      NODE_ADDRESS: "${NODE_ADDRESS}"
+      PRIVATE_KEY: "${PRIVATE_KEY}"
+      PORT: "80"
+      CORS_ORIGIN: "${CORS_ORIGIN:-*}"
+      DEBUG: "${DEBUG:-true}"
+      ADMIN_PASSWORD_HASH: "${ADMIN_PASSWORD_HASH}"
+    volumes:
+      - /var/run/tappd.sock:/var/run/tappd.sock
+      - akave_downloads:/app/downloads
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:80/health"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - internal
+
+  caddy:
+    image: caddy:2.8@sha256:b95ed06fbc6d74d24a40902090c8cc6086ce7d08ba60a3a7e8e62bf164a9d7bb
+    platform: linux/amd64
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    environment:
+      AKAVELINK_USERNAME: "${AKAVELINK_USERNAME:-admin}"
+      ADMIN_PASSWORD_HASH: "${ADMIN_PASSWORD_HASH}"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "caddy",
+          "validate",
+          "--config",
+          "/etc/caddy/Caddyfile",
+          "--adapter",
+          "caddyfile"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          basic_auth {
+              {$$AKAVELINK_USERNAME} {$$ADMIN_PASSWORD_HASH}
+          }
+
+          reverse_proxy app:80
+      }
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  akave_downloads:
