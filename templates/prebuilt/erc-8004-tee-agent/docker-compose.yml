@@ -1,0 +1,124 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.11-slim-bookworm
+
+        ARG UPSTREAM_COMMIT=3196a3c68571da28eef78d296ae0e65ff3d83569
+
+        ENV PYTHONDONTWRITEBYTECODE=1
+        ENV PYTHONUNBUFFERED=1
+        ENV PIP_NO_CACHE_DIR=1
+
+        WORKDIR /app
+
+        RUN apt-get update && apt-get install -y --no-install-recommends \
+            bash \
+            ca-certificates \
+            curl \
+            wget \
+            && rm -rf /var/lib/apt/lists/*
+
+        RUN wget -O /tmp/erc-8004-tee-agent.tar.gz "https://github.com/Phala-Network/erc-8004-tee-agent/archive/$${UPSTREAM_COMMIT}.tar.gz" \
+            && mkdir -p /tmp/erc-8004-tee-agent \
+            && tar -xzf /tmp/erc-8004-tee-agent.tar.gz -C /tmp/erc-8004-tee-agent --strip-components=1 \
+            && cp -a /tmp/erc-8004-tee-agent/. /app/ \
+            && rm -rf /tmp/erc-8004-tee-agent /tmp/erc-8004-tee-agent.tar.gz
+
+        RUN sed -i '/Salt: {salt}/c\    print("Salt: [configured]" if salt else "Salt: [missing]")' deployment/local_agent_server.py \
+            && sed -i '/Deriving key for agent with path:/c\        print("Deriving key for agent path: wallet/erc8004-[redacted]")' src/agent/tee_auth.py
+
+        RUN pip install --upgrade pip \
+            && pip install -e . \
+            && python -m compileall deployment src
+
+        LABEL org.opencontainers.image.source="https://github.com/Phala-Network/erc-8004-tee-agent" \
+              org.opencontainers.image.revision="$${UPSTREAM_COMMIT}" \
+              org.opencontainers.image.licenses="MIT"
+
+        EXPOSE 8000
+    image: erc-8004-tee-agent:3196a3c
+    pull_policy: build
+    environment:
+      AGENT_HOST: 0.0.0.0
+      AGENT_PORT: "8000"
+      AGENT_DOMAIN: ${AGENT_DOMAIN:-}
+      TRUST_CENTER_URL: ${TRUST_CENTER_URL:-}
+      AGENT_SALT: ${AGENT_SALT:?AGENT_SALT is required}
+      CHAIN_NAME: ${CHAIN_NAME:?CHAIN_NAME is required}
+      CHAIN_ID: ${CHAIN_ID:-11155111}
+      RPC_URL: ${RPC_URL:?RPC_URL is required}
+      SUBGRAPH_API_KEY: ${SUBGRAPH_API_KEY:?SUBGRAPH_API_KEY is required}
+      IDENTITY_REGISTRY_ADDRESS: ${IDENTITY_REGISTRY_ADDRESS:-0x8004A818BFB912233c491871b3d84c89A494BD9e}
+      REPUTATION_REGISTRY_ADDRESS: ${REPUTATION_REGISTRY_ADDRESS:-0x8004B663056A597Dffe9eCcC1965A193B7388713}
+      REDPILL_API_KEY: ${REDPILL_API_KEY:?REDPILL_API_KEY is required}
+      REDPILL_API_URL: ${REDPILL_API_URL:-https://api.redpill.ai}
+      ANTHROPIC_AUTH_TOKEN: ${ANTHROPIC_AUTH_TOKEN:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.redpill.ai}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-openai/gpt-oss-120b}
+      AI_MODEL: ${AI_MODEL:-phala/qwen-2.5-7b-instruct}
+      AI_TEMPERATURE: ${AI_TEMPERATURE:-0.3}
+      AI_MAX_TOKENS: ${AI_MAX_TOKENS:-2000}
+      SESSION_TIMEOUT_MINUTES: ${SESSION_TIMEOUT_MINUTES:-60}
+      MAX_SESSIONS: ${MAX_SESSIONS:-100}
+      CODE_EXECUTION_TIMEOUT: ${CODE_EXECUTION_TIMEOUT:-30}
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
+    command:
+      - /bin/bash
+      - -ceu
+      - |
+        if [ -z "$${AGENT_DOMAIN:-}" ]; then
+          if [ -n "$${DSTACK_APP_ID:-}" ] && [ -n "$${DSTACK_GATEWAY_DOMAIN:-}" ]; then
+            export AGENT_DOMAIN="$${DSTACK_APP_ID}-8000.$${DSTACK_GATEWAY_DOMAIN}"
+          else
+            export AGENT_DOMAIN="localhost:8000"
+          fi
+        fi
+
+        if [ -z "$${TRUST_CENTER_URL:-}" ] && [ -n "$${DSTACK_APP_ID:-}" ]; then
+          export TRUST_CENTER_URL="https://trust.phala.com/widget/app/$${DSTACK_APP_ID}"
+        fi
+
+        export ANTHROPIC_AUTH_TOKEN="$${ANTHROPIC_AUTH_TOKEN:-$${REDPILL_API_KEY}}"
+        exec python3 deployment/local_agent_server.py
+    restart: unless-stopped
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    ports:
+      - "8000:80"
+    environment:
+      ERC8004_AGENT_USERNAME: ${ERC8004_AGENT_USERNAME:-agent}
+      ERC8004_AGENT_PASSWORD_HASH: ${ERC8004_AGENT_PASSWORD_HASH:?ERC8004_AGENT_PASSWORD_HASH is required}
+    entrypoint:
+      - /bin/sh
+      - -ceu
+    command:
+      - |
+        : "$${ERC8004_AGENT_USERNAME:?ERC8004_AGENT_USERNAME is required}"
+        : "$${ERC8004_AGENT_PASSWORD_HASH:?ERC8004_AGENT_PASSWORD_HASH is required}"
+
+        {
+          printf '%s\n' ':80 {'
+          printf '%s\n' '    basic_auth {'
+          printf '        %s %s\n' "$${ERC8004_AGENT_USERNAME}" "$${ERC8004_AGENT_PASSWORD_HASH}"
+          printf '%s\n' '    }'
+          printf '%s\n' ''
+          printf '%s\n' '    reverse_proxy app:8000'
+          printf '%s\n' '}'
+        } > /etc/caddy/Caddyfile
+
+        exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+    depends_on:
+      - app
+    restart: unless-stopped
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
