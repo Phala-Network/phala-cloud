@@ -460,7 +460,7 @@
     "id": "lightclient",
     "name": "TEE Coprocessors in Dstack",
     "description": "Minimal docker file for using the Helios light client to provide a trustworthy view of the blockchain.",
-    "repo": "https://github.com/Dstack-TEE/dstack-examples/tree/main/lightclient",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/lightclient",
     "author": "Dstack-TEE",
     "envs": [{ "key": "ETH_RPC_URL", "required": true }],
     "tags": ["Dstack"]
