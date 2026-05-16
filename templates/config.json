@@ -610,7 +610,7 @@
     "id": "moralis-mcp",
     "name": "Moralis MCP",
     "description": "A Moralis MCP server deployed on Phala Cloud is an engine that connects natural language prompts to real blockchain insights — allowing AI models to query wallet activity, token metrics, dapp usage, and more without custom code or SQL.",
-    "repo": "https://github.com/HashWarlock/moralis-mcp-server",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/moralis-mcp",
     "author": "HashWarlock",
     "icon": "moralis.png",
     "envs": [
