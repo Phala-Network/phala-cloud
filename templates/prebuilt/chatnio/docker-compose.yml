@@ -1,24 +1,35 @@
-version: '3'
 services:
   mysql:
-    image: mysql:latest
+    image: mysql:8.4
+    platform: linux/amd64
     container_name: db
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: chatnio
       MYSQL_USER: chatnio
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}
       TZ: Asia/Shanghai
     expose:
       - "3306"
     volumes:
-        - db:/var/lib/mysql
+      - db:/var/lib/mysql
     networks:
       - chatnio-network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "MYSQL_PWD=\"$${MYSQL_ROOT_PASSWORD}\" mysqladmin ping -h 127.0.0.1 -uroot --silent",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   redis:
-    image: redis:latest
+    image: redis:7.4-alpine
+    platform: linux/amd64
     container_name: redis
     restart: always
     expose:
@@ -27,39 +38,102 @@ services:
       - redis:/data
     networks:
       - chatnio-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  init-root-user:
+    image: mysql:8.4
+    platform: linux/amd64
+    container_name: chatnio-init-root
+    restart: "no"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_USER: chatnio
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}
+      MYSQL_DATABASE: chatnio
+      SECRET: ${SECRET:?Set SECRET}
+      CHATNIO_ROOT_PASSWORD: ${CHATNIO_ROOT_PASSWORD:?Set CHATNIO_ROOT_PASSWORD}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        if [ $${#SECRET} -lt 32 ]; then
+          echo "SECRET must be at least 32 characters." >&2
+          exit 1
+        fi
+        if [ "$${CHATNIO_ROOT_PASSWORD}" = "chatnio123456" ]; then
+          echo "CHATNIO_ROOT_PASSWORD must not use Chatnio's public default password." >&2
+          exit 1
+        fi
+        if [ $${#CHATNIO_ROOT_PASSWORD} -lt 12 ] || [ $${#CHATNIO_ROOT_PASSWORD} -gt 36 ]; then
+          echo "CHATNIO_ROOT_PASSWORD must be 12-36 characters." >&2
+          exit 1
+        fi
+        case "$${CHATNIO_ROOT_PASSWORD}" in
+          *[[:space:]]*)
+            echo "CHATNIO_ROOT_PASSWORD must not contain whitespace." >&2
+            exit 1
+            ;;
+        esac
+        password_hash="$$(printf '%s' "$${CHATNIO_ROOT_PASSWORD}" | sha256sum | awk '{print $$1}')"
+        export MYSQL_PWD="$${MYSQL_PASSWORD}"
+        mysql --host="$${MYSQL_HOST}" --user="$${MYSQL_USER}" "$${MYSQL_DATABASE}" <<SQL
+        CREATE TABLE IF NOT EXISTS auth (
+          id INT PRIMARY KEY AUTO_INCREMENT,
+          bind_id INT UNIQUE,
+          username VARCHAR(24) UNIQUE,
+          token VARCHAR(255) NOT NULL,
+          email VARCHAR(255) UNIQUE,
+          password VARCHAR(64) NOT NULL,
+          is_admin BOOLEAN DEFAULT FALSE,
+          is_banned BOOLEAN DEFAULT FALSE
+        );
+        INSERT INTO auth (username, password, email, is_admin, bind_id, token)
+        SELECT 'root', '$${password_hash}', 'root@example.com', TRUE, 0, 'root'
+        WHERE NOT EXISTS (SELECT 1 FROM auth LIMIT 1);
+        SQL
+    networks:
+      - chatnio-network
 
   chatnio:
-      image: programzmh/chatnio
-      container_name: chatnio
-      restart: always
-      ports:
-          - "8000:8094"
-      depends_on:
-          - mysql
-          - redis
-      links:
-          - mysql
-          - redis
-      ulimits:
-        nofile:
-          soft: 65535
-          hard: 65535
-      environment:
-          MYSQL_HOST: mysql
-          MYSQL_USER: chatnio
-          MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-          MYSQL_DB: chatnio
-          REDIS_HOST: redis
-          REDIS_PORT: 6379
-          REDIS_PASSWORD: ""
-          REDIS_DB: 0
-          SERVE_STATIC: "true"
-      volumes:
-        - config:/config
-        - logs:/logs
-        - storage:/storage
-      networks:
-        - chatnio-network
+    image: programzmh/chatnio:latest
+    platform: linux/amd64
+    container_name: chatnio
+    restart: always
+    ports:
+      - "8000:8094"
+    depends_on:
+      init-root-user:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_USER: chatnio
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}
+      MYSQL_DB: chatnio
+      SECRET: ${SECRET:?Set SECRET}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      REDIS_DB: 0
+      SERVE_STATIC: "true"
+    volumes:
+      - config:/config
+      - logs:/logs
+      - storage:/storage
+    networks:
+      - chatnio-network
 volumes:
   db:
   redis:

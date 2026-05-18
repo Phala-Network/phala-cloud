@@ -616,7 +616,9 @@
     "icon": "chatnio.png",
     "envs": [
       { "key": "MYSQL_ROOT_PASSWORD", "required": true },
-      { "key": "MYSQL_PASSWORD", "required": true }
+      { "key": "MYSQL_PASSWORD", "required": true },
+      { "key": "SECRET", "required": true },
+      { "key": "CHATNIO_ROOT_PASSWORD", "required": true }
     ],
     "tags": ["Chat"]
   },
