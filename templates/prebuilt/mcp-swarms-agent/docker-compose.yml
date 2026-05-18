@@ -1,0 +1,10 @@
+services:
+  swarms-agent-server:
+    image: 0xii/swarms-template@sha256:68f8c1b8992c35de43452e062cfa7c3bdb25d754287284601444521eaa3bd5e6
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      OPENAI_API_KEY: "${OPENAI_API_KEY:?required}"
+      OPENAI_API_BASE: "${OPENAI_API_BASE:-https://api.openai.com/v1}"
+      MODEL_NAME: "${MODEL_NAME:-gpt-4o-mini}"
+    command: ["/bin/sh", "-c", "python3 main.py; sleep infinity"]
