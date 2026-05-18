@@ -823,14 +823,15 @@
   {
     "id": "akave-link",
     "name": "Akave Link (Confidential Storage API)",
-    "description": "A production-ready Akave decentralized storage API with interactive UI, password-gated access (optional), and wallet connect/disconnect, running in Phala Cloud's TEE.",
-    "repo": "https://github.com/DylanCkawalec/akavelink",
+    "description": "A production-ready Akave decentralized storage API with interactive UI, Caddy Basic Auth protection, and wallet connect/disconnect, running in Phala Cloud's TEE.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/akave-link",
     "author": "DylanCkawalec",
     "icon": "akave-link.png",
     "envs": [
       { "key": "NODE_ADDRESS", "required": true, "default": "connect.akave.ai:5500", "description": "Akave node endpoint" },
       { "key": "PRIVATE_KEY", "required": true, "description": "Ethereum private key for Akave" },
-      { "key": "ADMIN_PASSWORD_HASH", "required": false, "description": "bcrypt hash for API password (protects all routes)" },
+      { "key": "ADMIN_PASSWORD_HASH", "required": true, "description": "Caddy bcrypt hash for the Basic Auth password that protects all routes" },
+      { "key": "AKAVELINK_USERNAME", "required": false, "default": "admin", "description": "Caddy Basic Auth username" },
       { "key": "PORT", "required": false, "default": "80" },
       { "key": "CORS_ORIGIN", "required": false, "default": "*" },
       { "key": "DEBUG", "required": false, "default": "true" }
