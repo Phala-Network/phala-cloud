@@ -892,15 +892,30 @@
     "id": "erc-8004-tee-agent",
     "name": "ERC-8004 TEE Agent",
     "description": "An ERC-8004 Compliant TEE Agent with a TEE Registry Extension for Secure & Verifiable Trustless Agents in a CVM on Phala Cloud. Combines on-chain identity verification, Intel TDX attestation, and AI chat interface for autonomous blockchain agents.",
-    "repo": "https://github.com/Phala-Network/erc-8004-tee-agent",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/erc-8004-tee-agent",
     "author": "Phala-Network",
     "envs": [
       { "key": "AGENT_SALT", "required": true, "description": "Unique secret salt for key derivation" },
       { "key": "REDPILL_API_KEY", "required": true, "description": "API key for confidential AI inference" },
       { "key": "SUBGRAPH_API_KEY", "required": true, "description": "Access token for blockchain data queries" },
-      { "key": "CHAIN_NAME", "required": true, "description": "Target blockchain (e.g., eth-sepolia)" },
       { "key": "RPC_URL", "required": true, "description": "Blockchain node endpoint" },
-      { "key": "ANTHROPIC_MODEL", "required": false, "description": "AI model selection", "default": "moonshotai/kimi-k2.5" }
+      { "key": "CHAIN_NAME", "required": true, "description": "Target blockchain (e.g., eth-sepolia)" },
+      { "key": "ERC8004_AGENT_PASSWORD_HASH", "required": true, "description": "Caddy bcrypt password hash for Basic Auth" },
+      { "key": "ERC8004_AGENT_USERNAME", "required": false, "description": "Caddy Basic Auth username", "default": "agent" },
+      { "key": "AGENT_DOMAIN", "required": false, "description": "Public agent domain override; derived at startup when omitted" },
+      { "key": "TRUST_CENTER_URL", "required": false, "description": "Trust Center widget URL override; derived at startup when omitted" },
+      { "key": "ANTHROPIC_MODEL", "required": false, "description": "Chat model selection", "default": "openai/gpt-oss-120b" },
+      { "key": "AI_MODEL", "required": false, "description": "RedPill model used by the code-generation helper", "default": "phala/qwen-2.5-7b-instruct" },
+      { "key": "AI_TEMPERATURE", "required": false, "description": "AI sampling temperature", "default": "0.3" },
+      { "key": "AI_MAX_TOKENS", "required": false, "description": "AI response token limit", "default": "2000" },
+      { "key": "CODE_EXECUTION_TIMEOUT", "required": false, "description": "Code execution timeout in seconds", "default": "30" },
+      { "key": "REDPILL_API_URL", "required": false, "description": "RedPill API base URL", "default": "https://api.redpill.ai" },
+      { "key": "ANTHROPIC_BASE_URL", "required": false, "description": "Anthropic-compatible API base URL", "default": "https://api.redpill.ai" },
+      { "key": "CHAIN_ID", "required": false, "description": "EVM chain ID override", "default": "11155111" },
+      { "key": "IDENTITY_REGISTRY_ADDRESS", "required": false, "description": "ERC-8004 identity registry contract override", "default": "0x8004A818BFB912233c491871b3d84c89A494BD9e" },
+      { "key": "REPUTATION_REGISTRY_ADDRESS", "required": false, "description": "ERC-8004 reputation registry contract override", "default": "0x8004B663056A597Dffe9eCcC1965A193B7388713" },
+      { "key": "SESSION_TIMEOUT_MINUTES", "required": false, "description": "Chat session timeout in minutes", "default": "60" },
+      { "key": "MAX_SESSIONS", "required": false, "description": "Maximum in-memory chat sessions", "default": "100" }
     ],
     "tags": ["Agent", "TEE", "ERC-8004", "AI"]
   }
