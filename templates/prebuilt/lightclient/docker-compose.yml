@@ -1,0 +1,129 @@
+services:
+  tapp:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM ubuntu:24.04@sha256:b59d21599a2b151e23eea5f6602f4af4d7d31c4e236d22bf0b62b86d2e386b8f
+
+        ENV DEBIAN_FRONTEND=noninteractive
+
+        RUN apt-get update \
+            && apt-get install -y --no-install-recommends \
+                ca-certificates \
+                curl \
+                wget \
+            && rm -rf /var/lib/apt/lists/*
+
+        WORKDIR /root
+
+        RUN wget -O /tmp/foundry.tar.gz "https://github.com/foundry-rs/foundry/releases/download/nightly-c3069a50ba18cccfc4e7d5de9b9b388811d9cc7b/foundry_nightly_linux_amd64.tar.gz" \
+            && tar -xzf /tmp/foundry.tar.gz -C /usr/local/bin \
+            && rm /tmp/foundry.tar.gz
+
+        RUN wget -O /tmp/helios.tar.gz "https://github.com/a16z/helios/releases/download/0.11.0/helios_linux_amd64.tar.gz" \
+            && tar -xzf /tmp/helios.tar.gz -C /usr/local/bin \
+            && rm /tmp/helios.tar.gz
+
+        CMD ["bash", "/root/run.sh"]
+    image: phala-lightclient:latest
+    pull_policy: build
+    platform: linux/amd64
+    init: true
+    environment:
+      ETH_RPC_URL: ${ETH_RPC_URL:?Set ETH_RPC_URL to an Ethereum execution RPC URL}
+    configs:
+      - source: run.sh
+        target: /root/run.sh
+    volumes:
+      - /var/run/tappd.sock:/var/run/tappd.sock
+
+configs:
+  run.sh:
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      : "$${ETH_RPC_URL:?ETH_RPC_URL is required}"
+
+      HELIOS_PID=""
+
+      cleanup() {
+        if [[ -n "$${HELIOS_PID}" ]] && kill -0 "$${HELIOS_PID}" 2>/dev/null; then
+          kill "$${HELIOS_PID}"
+          wait "$${HELIOS_PID}" 2>/dev/null || true
+        fi
+      }
+      trap cleanup EXIT INT TERM
+
+      echo "Starting Helios mainnet light client on 127.0.0.1:8545"
+      helios ethereum \
+        --network mainnet \
+        --execution-rpc "$${ETH_RPC_URL}" \
+        --fallback https://sync-mainnet.beaconcha.in \
+        --rpc-bind-ip 127.0.0.1 &
+      HELIOS_PID="$$!"
+
+      wait_for_block_number() {
+        local attempt
+        local block_number
+
+        for attempt in $$(seq 1 60); do
+          if ! kill -0 "$${HELIOS_PID}" 2>/dev/null; then
+            echo "Helios exited before eth_blockNumber was available" >&2
+            wait "$${HELIOS_PID}" || true
+            return 1
+          fi
+
+          block_number="$$(curl -fsS --max-time 5 \
+            -H "Content-Type: application/json" \
+            -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' \
+            http://127.0.0.1:8545 2>/dev/null \
+            | sed -n 's/.*"result":"\([^"]*\)".*/\1/p' || true)"
+
+          if printf "%s" "$${block_number}" | grep -Eq '^0x[[:xdigit:]]+$$'; then
+            echo "Helios eth_blockNumber ready: $${block_number}"
+            return 0
+          fi
+
+          echo "Waiting for Helios RPC ($${attempt}/60)"
+          sleep 5
+        done
+
+        echo "Timed out waiting for Helios eth_blockNumber on localhost:8545" >&2
+        return 1
+      }
+
+      fetch_block() {
+        local attempt
+
+        for attempt in $$(seq 1 12); do
+          if cast block latest --rpc-url http://127.0.0.1:8545 | tee response.txt; then
+            return 0
+          fi
+
+          echo "Waiting for cast block through Helios ($${attempt}/12)"
+          sleep 5
+        done
+
+        echo "Timed out waiting for cast block through Helios" >&2
+        return 1
+      }
+
+      wait_for_block_number
+
+      echo "Fetching latest block through Helios"
+      fetch_block
+
+      RESPONSE_HASH="$$(sha256sum response.txt | cut -d " " -f 1)"
+      REPORT_DATA="$$(printf "%s" "$${RESPONSE_HASH}" | od -An -v -tx1 | tr -d " \n")"
+      PAYLOAD="{\"report_data\":\"$${REPORT_DATA}\"}"
+
+      echo "response.txt sha256=$${RESPONSE_HASH}"
+      echo "Requesting tappd attestation for response hash"
+      ATTEST="$$(curl -fsS \
+        --unix-socket /var/run/tappd.sock \
+        -H "Content-Type: application/json" \
+        -d "$${PAYLOAD}" \
+        http://localhost/prpc/Tappd.TdxQuote?json)"
+
+      printf "ATTEST=%s\n" "$${ATTEST}" | tee -a response.txt
