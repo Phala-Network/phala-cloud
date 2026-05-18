@@ -8,8 +8,8 @@ services:
     container_name: blinko-website
     environment:
       NODE_ENV: production
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?Set NEXTAUTH_SECRET}
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/postgres
     depends_on:
       postgres:
         condition: service_healthy
@@ -19,15 +19,15 @@ services:
         max-size: "10m"
         max-file: "3"
     ports:
-      - 1111:1111
+      - "1111:1111"
     volumes:
-      - blinko:/app/.blinko 
+      - blinko:/app/.blinko
     healthcheck:
       test: ["CMD", "wget", "--spider", "http://blinko-website:1111/"]
-      interval: 30s 
-      timeout: 10s   
-      retries: 5     
-      start_period: 30s 
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     networks:
       - blinko-network
 
@@ -35,12 +35,10 @@ services:
     image: postgres:14
     container_name: blinko-postgres
     restart: always
-    ports:
-      - 5435:5432
     environment:
       POSTGRES_DB: postgres
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
       TZ: Asia/Shanghai
     volumes:
       - db:/var/lib/postgresql/data
