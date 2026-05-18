@@ -535,9 +535,27 @@
     "id": "armor-crypto",
     "name": "Armor Crypto",
     "description": "A single source for integrating AI Agents with the Crypto ecosystem. This includes Wallet creation and management, swaps, transfers, event-based trades like DCA, stop loss and take profit, and much more. The Armor MCP supports Solana in Alpha and, when in beta, will support more than a dozen blockchains, including Ethereum. Base, Avalanche, Bitcoin, Sui, Berachain, megaETH, Optimism, Ton, BNB, and Arbitrum, among others. Using Armor's MCP you can bring all of crypto into your AI Agent with unified logic and a complete set of tools.",
-    "repo": "https://github.com/HashWarlock/armor-crypto-mcp/tree/phala-mcp",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/armor-crypto",
     "author": "Armor Crypto",
     "icon": "armor-crypto.png",
+    "envs": [
+      {
+        "key": "ARMOR_API_KEY",
+        "required": true,
+        "description": "Armor API key."
+      },
+      {
+        "key": "ARMOR_API_URL",
+        "required": false,
+        "default": "https://app.armorwallet.ai/api/v1",
+        "description": "Armor API base URL."
+      },
+      {
+        "key": "ARMOR_ACCESS_TOKEN",
+        "required": false,
+        "description": "Optional Armor access token."
+      }
+    ],
     "tags": ["MCP"]
   },
   {
