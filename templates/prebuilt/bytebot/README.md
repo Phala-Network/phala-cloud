@@ -1,181 +1,125 @@
 # ByteBot Template
 
-Deploy ByteBot, an open-source AI desktop agent, on Phala Cloud's secure TEE infrastructure. ByteBot can control a computer desktop to complete tasks for you, running in Docker containers on your own infrastructure.
+Deploy ByteBot, an open-source AI desktop agent, on Phala Cloud. ByteBot runs a browser-accessible desktop, an agent API, a web UI, and a PostgreSQL database inside the same Docker Compose deployment.
 
-## What is ByteBot?
+## Components
 
-ByteBot is an open-source AI agent that can control a computer desktop to complete tasks for you. It runs in Docker containers on your own infrastructure, giving you a virtual assistant that can:
+- `bytebot-desktop`: Ubuntu desktop environment, noVNC/websockify, and the ByteBot desktop daemon.
+- `bytebot-agent`: Agent service that plans and executes tasks with configured LLM providers.
+- `bytebot-ui`: Web UI for creating and monitoring tasks.
+- `postgres`: Internal PostgreSQL database for ByteBot state.
+- `caddy`: Public reverse proxy for the ByteBot desktop, agent API, and web UI.
 
-- Use any desktop application (browser, email, office tools, etc.)
-- Process uploaded files including PDFs, spreadsheets, and documents
-- Read entire files directly into the LLM context for rapid analysis
-- Automate repetitive tasks like data entry and form filling
-- Handle complex workflows that span multiple applications
-- Work 24/7 without human supervision
+## Phala Cloud Deployment
 
-Simply describe what you need done in plain English, and ByteBot will figure out how to do it – clicking buttons, typing text, navigating websites, reading documents, and completing tasks just like a human would.
-
-## Architecture
-
-This template deploys four main components:
-
-1. **ByteBot Desktop** (`bytebot-desktop`): Ubuntu 22.04 with XFCE4, VSCode, Firefox, Thunderbird email client, and automation daemon (bytebotd)
-2. **PostgreSQL Database** (`postgres`): Stores task data and configuration
-3. **ByteBot Agent** (`bytebot-agent`): NestJS service that uses LLMs to plan and execute tasks
-4. **ByteBot UI** (`bytebot-ui`): Next.js web app for creating and managing tasks
-
-## Features
-
-- 🤖 **Natural Language Control**: Just tell ByteBot what you need done. No coding or complex automation tools required.
-- 🖥️ **Full Desktop Access**: ByteBot can use any application you can install - browsers, office tools, custom software.
-- 🔒 **Complete Privacy**: Runs entirely on your infrastructure. Your data never leaves your servers.
-- 🔄 **Two Operating Modes**: Autonomous Mode for independent task completion and Takeover Mode for manual intervention.
-- 🖱️ **Direct Desktop Access**: Desktop tab for free-form access and Task View for monitoring execution.
-- 🚀 **Easy Deployment**: One-click deployment with Docker Compose.
-- 🔌 **Developer-Friendly**: REST APIs for programmatic control and extensible architecture.
-
-## Quick Start
-
-### Prerequisites
-
-- Docker and Docker Compose installed
-- At least one of the following API keys:
-  - Anthropic Claude API key
-  - OpenAI GPT API key
-  - Google Gemini API key
-
-### Required Environment Variables
-
-Create a `.env` file in the same directory as your `docker-compose.yml` with the following variables:
+Use the ByteBot prebuilt template in Phala Cloud and provide these environment variables:
 
 ```bash
-# Required: At least one LLM API key must be provided
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-OPENAI_API_KEY=your_openai_api_key_here
-GEMINI_API_KEY=your_gemini_api_key_here
+BYTEBOT_PASSWORD=replace-with-a-strong-password
+BYTEBOT_USERNAME=bytebot
+ANTHROPIC_API_KEY=replace-with-your-anthropic-api-key
+OPENAI_API_KEY=replace-with-your-openai-api-key
+GEMINI_API_KEY=replace-with-your-gemini-api-key
 ```
 
-**Note**: You must provide at least one of the API keys above. ByteBot will use whichever keys you provide.
+`BYTEBOT_PASSWORD` is required. `BYTEBOT_USERNAME` is optional and defaults to `bytebot`.
 
-### Optional Environment Variables
+The LLM API keys are optional at deploy time, but at least one real provider key is required for actual ByteBot task execution. A deployment without a valid Anthropic, OpenAI, or Gemini key can start, but ByteBot will not be able to run real AI tasks.
+
+Only set keys for providers you plan to use. Leave unused provider variables empty or unset.
+
+## Authentication
+
+This template does not expose `bytebot-desktop`, `bytebot-agent`, `bytebot-ui`, or `postgres` directly.
+
+All public traffic goes through the `caddy` service. Caddy publishes ports `9990`, `9991`, and `9992`, generates a bcrypt hash from `BYTEBOT_PASSWORD` at container startup with `caddy hash-password --algorithm bcrypt --plaintext`, and enforces HTTP Basic Auth on all three public ports.
+
+Use the same Basic Auth credentials for every public endpoint:
+
+- Username: `BYTEBOT_USERNAME`, or `bytebot` when unset.
+- Password: `BYTEBOT_PASSWORD`.
+
+Do not use the placeholder password in production. Choose a long, unique password.
+Use the HTTPS Phala gateway URL when accessing public endpoints, because Basic Auth credentials are reusable.
+
+## Public Endpoints
+
+Phala Cloud exposes the template ports through its public gateway. The exact hostnames are assigned by Phala Cloud after deployment.
+
+- Port `9992`: ByteBot web UI, proxied to `bytebot-ui:9992`.
+- Port `9990`: ByteBot desktop/noVNC and desktop daemon, proxied to `bytebot-desktop:9990`.
+- Port `9991`: ByteBot agent API, proxied to `bytebot-agent:9991`.
+
+Every request to these public endpoints must include Basic Auth. For direct API access to the public agent endpoint, configure your client to send Basic Auth credentials with the request.
+
+## Internal Service URLs
+
+The application services continue to communicate over the private Docker network:
 
 ```bash
-# Database connection string (defaults to internal PostgreSQL)
 DATABASE_URL=postgresql://postgres:postgres@postgres:5432/bytebotdb
-
-# Service URLs (usually don't need to be changed)
 BYTEBOT_DESKTOP_BASE_URL=http://bytebot-desktop:9990
 BYTEBOT_AGENT_BASE_URL=http://bytebot-agent:9991
 BYTEBOT_DESKTOP_VNC_URL=http://bytebot-desktop:9990/websockify
 ```
 
-### Deployment
+These internal URLs are for container-to-container traffic only. They are not public gateway URLs and do not require Basic Auth inside the Docker network.
 
-1. **Clone or download this template**
-2. **Set up environment variables** (see above)
-3. **Deploy with Docker Compose**:
+## Local Docker Compose Usage
 
-```bash
-docker-compose up -d
-```
-
-4. **Access ByteBot**:
-   - **Web UI**: http://localhost:9992
-   - **Desktop VNC**: http://localhost:9990
-   - **Agent API**: http://localhost:9991
-
-## Usage
-
-### Creating Tasks
-
-1. Open the ByteBot web interface at `http://localhost:9992`
-2. Click "Create New Task"
-3. Describe what you want ByteBot to do in natural language
-4. Submit the task and watch ByteBot execute it
-
-### Task Examples
-
-- **"Download my bank statement from the online banking portal and save it to the desktop"**
-- **"Open Excel, create a new spreadsheet with columns for Name, Email, and Phone, and enter the data from the PDF I uploaded"**
-- **"Navigate to the company website, fill out the contact form with the information from the CSV file, and submit it"**
-- **"Open the email client, compose a new message with the quarterly report attached, and send it to the management team"**
-
-### Monitoring and Control
-
-- **Task View**: Watch ByteBot execute tasks in real-time
-- **Desktop Tab**: Take manual control when needed
-- **Task History**: Review completed tasks and their outputs
-- **Screenshots**: View screenshots taken during task execution
-
-## Ports
-
-- **9990**: ByteBot Desktop (VNC and automation daemon)
-- **9991**: ByteBot Agent API
-- **9992**: ByteBot Web UI
-- **5432**: PostgreSQL Database (localhost only)
-
-## Security Features
-
-- **Container Isolation**: Each service runs in its own Docker container
-- **Network Isolation**: Services communicate only through the internal `bytebot-network`
-- **Local Database**: PostgreSQL only accessible from localhost
-- **TEE Integration**: Leverage Phala Cloud's secure computation framework
-
-## Troubleshooting
-
-### Common Issues
-
-1. **VNC Connection Issues**: Ensure port 9990 is accessible and not blocked by firewall
-2. **API Key Errors**: Verify at least one LLM API key is set in your environment variables
-3. **Database Connection**: Check that PostgreSQL is running and accessible on port 5432
-4. **Memory Issues**: ByteBot Desktop requires at least 2GB of shared memory (`shm_size: "2g"`)
-
-### Logs
-
-View logs for specific services:
+For local testing, create a `.env` file next to `docker-compose.yml`:
 
 ```bash
-# View all services
-docker-compose logs
+BYTEBOT_PASSWORD=replace-with-a-strong-password
+BYTEBOT_USERNAME=bytebot
 
-# View specific service
-docker-compose logs bytebot-agent
-docker-compose logs bytebot-desktop
-docker-compose logs bytebot-ui
+# Provide at least one real key before running actual tasks.
+ANTHROPIC_API_KEY=
+OPENAI_API_KEY=
+GEMINI_API_KEY=
 ```
 
-### Restart Services
+Start the template:
 
 ```bash
-# Restart all services
-docker-compose restart
-
-# Restart specific service
-docker-compose restart bytebot-agent
+docker compose up -d
 ```
 
-## Advanced Configuration
+Then open:
 
-### Custom Desktop Environment
+- `http://localhost:9992` for the ByteBot web UI.
+- `http://localhost:9990` for the ByteBot desktop/noVNC endpoint.
+- `http://localhost:9991` for the ByteBot agent API.
 
-You can customize the desktop environment by modifying the `bytebot-desktop` service in the docker-compose file. The desktop runs Ubuntu 22.04 with XFCE4 by default.
+Your browser or API client will prompt for Basic Auth before access is granted.
 
-### API Integration
+## Usage Notes
 
-ByteBot provides REST APIs for programmatic control:
+- Create tasks from the web UI on port `9992`.
+- Use the desktop endpoint on port `9990` for direct desktop access or takeover workflows.
+- Use the agent API on port `9991` only with Basic Auth when calling it from outside the deployment.
+- PostgreSQL is internal-only and is not published to the public gateway.
+- ByteBot Desktop uses `shm_size: "2g"` and needs enough memory for browser and desktop automation workloads.
 
-- **Task Management**: Create, monitor, and manage tasks
-- **Direct Desktop Control**: Send commands directly to the desktop
-- **File Operations**: Upload, download, and process files
+## Logs and Operations
 
-### Scaling
+View logs:
 
-For production deployments, consider:
+```bash
+docker compose logs
+docker compose logs caddy
+docker compose logs bytebot-agent
+docker compose logs bytebot-desktop
+docker compose logs bytebot-ui
+```
 
-- Using external PostgreSQL database
-- Setting up reverse proxy (nginx/traefik)
-- Implementing health checks and monitoring
-- Adding SSL/TLS encryption
+Restart services:
+
+```bash
+docker compose restart
+docker compose restart caddy
+docker compose restart bytebot-agent
+```
 
 ## Resources
 
@@ -183,12 +127,3 @@ For production deployments, consider:
 - [ByteBot GitHub Repository](https://github.com/bytebot-ai/bytebot)
 - [Phala Cloud Documentation](https://docs.phala.network/)
 - [Docker Compose Documentation](https://docs.docker.com/compose/)
-
-## Support
-
-- Join the [ByteBot Discord Community](https://discord.gg/zcb5wA2t4u)
-- Report issues on [GitHub](https://github.com/bytebot-ai/bytebot)
-
----
-
-**Ready to give your AI its own computer?** Deploy this template and start automating desktop tasks with natural language commands!

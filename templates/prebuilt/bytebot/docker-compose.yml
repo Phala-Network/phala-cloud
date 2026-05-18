@@ -8,8 +8,6 @@ services:
     restart: unless-stopped
     hostname: computer
     privileged: true
-    ports:
-      - "9990:9990" # bytebotd service & noVNC
     environment:
       - DISPLAY=:0
     networks:
@@ -19,8 +17,6 @@ services:
     image: postgres:16-alpine
     container_name: bytebot-postgres
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:5432:5432"
     environment:
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_USER=postgres
@@ -34,8 +30,6 @@ services:
     image: ghcr.io/bytebot-ai/bytebot-agent:edge
     container_name: bytebot-agent
     restart: unless-stopped
-    ports:
-      - "9991:9991"
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/bytebotdb}
       - BYTEBOT_DESKTOP_BASE_URL=${BYTEBOT_DESKTOP_BASE_URL:-http://bytebot-desktop:9990}
@@ -51,14 +45,70 @@ services:
     image: ghcr.io/bytebot-ai/bytebot-ui:edge
     container_name: bytebot-ui
     restart: unless-stopped
-    ports:
-      - "9992:9992"
     environment:
       - NODE_ENV=production
       - BYTEBOT_AGENT_BASE_URL=${BYTEBOT_AGENT_BASE_URL:-http://bytebot-agent:9991}
       - BYTEBOT_DESKTOP_VNC_URL=${BYTEBOT_DESKTOP_VNC_URL:-http://bytebot-desktop:9990/websockify}
     depends_on:
       - bytebot-agent
+    networks:
+      - bytebot-network
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: bytebot-caddy
+    restart: unless-stopped
+    ports:
+      - "9990:9990"
+      - "9991:9991"
+      - "9992:9992"
+    environment:
+      - BYTEBOT_USERNAME=${BYTEBOT_USERNAME:-bytebot}
+      - BYTEBOT_PASSWORD=${BYTEBOT_PASSWORD:?BYTEBOT_PASSWORD is required}
+    entrypoint: ["/bin/sh", "-eu", "-c"]
+    command:
+      - |
+        : "$${BYTEBOT_PASSWORD:?BYTEBOT_PASSWORD is required}"
+        case "$${BYTEBOT_USERNAME}" in
+          ""|*[!A-Za-z0-9._@-]*)
+            echo "BYTEBOT_USERNAME must contain only letters, numbers, dots, underscores, at signs, and hyphens." >&2
+            exit 1
+            ;;
+        esac
+
+        hash="$$(caddy hash-password --algorithm bcrypt --plaintext "$${BYTEBOT_PASSWORD}")"
+        cat > /etc/caddy/Caddyfile <<EOF
+        {
+          admin off
+        }
+
+        :9990 {
+          basic_auth {
+            $${BYTEBOT_USERNAME} $${hash}
+          }
+          reverse_proxy bytebot-desktop:9990
+        }
+
+        :9991 {
+          basic_auth {
+            $${BYTEBOT_USERNAME} $${hash}
+          }
+          reverse_proxy bytebot-agent:9991
+        }
+
+        :9992 {
+          basic_auth {
+            $${BYTEBOT_USERNAME} $${hash}
+          }
+          reverse_proxy bytebot-ui:9992
+        }
+        EOF
+
+        exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+    depends_on:
+      - bytebot-desktop
+      - bytebot-agent
+      - bytebot-ui
     networks:
       - bytebot-network
 
