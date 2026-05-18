@@ -735,12 +735,12 @@
       { 
         "key": "NEAR_ACCOUNT_ID", 
         "required": true, 
-        "description": "NEAR account ID obtained from near-cli-rs" 
+        "description": "NEAR testnet account ID obtained from near-cli-rs; real account required for agent-account and transaction behavior"
       },
       { 
         "key": "NEAR_SEED_PHRASE", 
         "required": true, 
-        "description": "NEAR account seed phrase for authentication" 
+        "description": "Matching NEAR testnet account seed phrase; dummy values are only suitable for shallow smoke tests"
       },
       { 
         "key": "NEXT_PUBLIC_contractId", 
@@ -769,7 +769,7 @@
       { 
         "key": "PHALA_API_KEY", 
         "required": true, 
-        "description": "Phala API key from https://cloud.phala.com/dashboard/tokens" 
+        "description": "Phala API key from https://cloud.phala.com/dashboard/tokens; real key required for full agent behavior"
       }
     ],
     "tags": ["Agent", "NEAR", "Oracle", "TEE"]
