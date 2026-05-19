@@ -303,21 +303,6 @@
     "tags": ["Anyone", "anon", "relay"]
   },
   {
-    "id": "moof-mcp",
-    "name": "MOOF MCP",
-    "description": "An MCP server enables LLMs to work with the MOOF platform, deployed on Phala Cloud. It can list flows, create new flows, and deploy other MCP servers on Phala Cloud. Additionally, it supports fetching public flow templates, forking flows from templates, retrieving authenticated user flows, publishing or unpublishing flows to/from the shared flow store, and deploying MCP servers directly from GitHub with optional Phala hosting and environment variable support.",
-    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/moof-mcp",
-    "author": "MOOF",
-    "icon": "moof.png",
-    "envs": [
-      { "key": "MOOF_API_KEY", "required": true },
-      { "key": "MCP_API_KEY", "required": true },
-      { "key": "BASE_URL", "required": false },
-      { "key": "MCP_BASE_URL", "required": false }
-    ],
-    "tags": ["MCP", "A2A", "x402"]
-  },
-  {
     "id": "evm-mcp",
     "name": "EVM MCP",
     "description": "This guide outlines the steps to set up and use a webshell with the ttyd service.",
