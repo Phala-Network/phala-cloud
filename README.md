@@ -74,7 +74,6 @@ If you want to integrate the SDK into your existing apps, here are the SDKs we c
 
 ### MCP (Model Context Protocol) Servers
 
-- [**MOOF MCP**](https://github.com/moofdotfun/MOOF-MCP) - An MCP server enables LLMs to work with the MOOF platform, deployed on Phala Cloud. It can list flows, create new flows, and deploy other MCP servers on Phala Cloud. Additionally, it supports fetching public flow templates, forking flows from templates, retrieving authenticated user flows, publishing or unpublishing flows to/from the shared flow store, and deploying MCP servers directly from GitHub with optional Phala hosting and environment variable support. *by MOOF*
 - [**DeMCP Defillama**](https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/demap-defilama) - A DeFiLlama MCP server deployed on Phala Cloud that enables AI agents to fetch real-time DeFi data, including protocol TVL (Total Value Locked), chain metrics, and token prices. *by DeMCP*
 - [**Context7 MCP**](https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/context7-mcp) - A Context7 MCP server deployed on Phala Cloud that enables AI agents to fetch real-time Context7 data, including protocol TVL (Total Value Locked), chain metrics, and token prices. *by Phala-Network*
 - [**MCP Server Fetch**](https://github.com/Leechael/mcp-servers/tree/main/src/fetch) - A MCP server deployed on Phala Cloud that enables AI agents to fetch real-time data from a given URL. *by Leechael*
