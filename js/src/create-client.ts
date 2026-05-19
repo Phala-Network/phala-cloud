@@ -504,15 +504,13 @@ export interface Client<V extends ApiVersion = DefaultApiVersion> extends BaseCl
   safeGetAvailableNodes(parameters: { schema: false }): Promise<SafeResult<unknown>>;
 
   getCvmCreateResources(): Promise<CvmCreateResourceGraph>;
-  getCvmCreateResources<T extends z.ZodTypeAny>(
-    parameters: { schema: T },
-  ): Promise<z.infer<T>>;
+  getCvmCreateResources<T extends z.ZodTypeAny>(parameters: { schema: T }): Promise<z.infer<T>>;
   getCvmCreateResources(parameters: { schema: false }): Promise<unknown>;
 
   safeGetCvmCreateResources(): Promise<SafeResult<CvmCreateResourceGraph>>;
-  safeGetCvmCreateResources<T extends z.ZodTypeAny>(
-    parameters: { schema: T },
-  ): Promise<SafeResult<z.infer<T>>>;
+  safeGetCvmCreateResources<T extends z.ZodTypeAny>(parameters: { schema: T }): Promise<
+    SafeResult<z.infer<T>>
+  >;
   safeGetCvmCreateResources(parameters: { schema: false }): Promise<SafeResult<unknown>>;
 
   // Instance type actions - no parameters
