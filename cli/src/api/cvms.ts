@@ -16,6 +16,7 @@ import {
 import type {
 	PostCvmResponse,
 	CvmAttestationResponse,
+	CvmCreateResourcesResponse,
 	GetCvmNetworkResponse,
 	TeepodResponse,
 	PubkeyResponse,
@@ -281,6 +282,16 @@ export async function getTeepods(v03x_only = false): Promise<TeepodResponse> {
 	}
 	const response = await client.get(url);
 	return response as TeepodResponse;
+}
+
+/**
+ * Get the CVM create resource graph.
+ * @returns Nodes, KMS resources, gateway resources, and instance types for CVM creation
+ */
+export async function getCvmCreateResources(): Promise<CvmCreateResourcesResponse> {
+	const client = await getClient();
+	const response = await client.get("teepods/cvm-create-resources");
+	return response as CvmCreateResourcesResponse;
 }
 
 // ============================================

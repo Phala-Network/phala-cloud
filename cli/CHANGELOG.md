@@ -1,3 +1,9 @@
+## [1.1.19](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.18...cli-v1.1.19) (2026-05-19)
+
+### feat
+
+* **cli:** add app instance name option ([2ed537c](https://github.com/Phala-Network/phala-cloud/commit/2ed537cf802e122b24f2d9e3aff8af20f56fb367))
+* **cli:** add CVM create resource graph ([dc7a788](https://github.com/Phala-Network/phala-cloud/commit/dc7a7880b1ea83f8cfb3332776a42b84acfbcff7))
 ## [1.1.18](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.17...cli-v1.1.18) (2026-04-17)
 
 ### feat

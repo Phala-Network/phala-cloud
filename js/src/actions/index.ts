@@ -16,6 +16,23 @@ export {
 } from "./get_available_nodes";
 
 export {
+  getCvmCreateResources,
+  safeGetCvmCreateResources,
+  CvmCreateResourceGraphSchema,
+  CvmCreateKmsResourceSchema,
+  CvmCreateNodeKmsRelationSchema,
+  CvmCreateGatewayResourceSchema,
+  CvmCreateInstanceTypeResourceSchema,
+  GpuAvailabilitySchema,
+  type CvmCreateResourceGraph,
+  type CvmCreateKmsResource,
+  type CvmCreateNodeKmsRelation,
+  type CvmCreateGatewayResource,
+  type CvmCreateInstanceTypeResource,
+  type GpuAvailability,
+} from "./get_cvm_create_resources";
+
+export {
   provisionCvm,
   safeProvisionCvm,
   ProvisionCvmSchema,

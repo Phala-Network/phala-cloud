@@ -46,7 +46,15 @@ from .kms import (
     OnChainKmsContract,
     OnChainOsImage,
 )
-from .nodes import AvailableNodes
+from .nodes import (
+    AvailableNodes,
+    CvmCreateGatewayResource,
+    CvmCreateInstanceTypeResource,
+    CvmCreateKmsResource,
+    CvmCreateNodeKmsRelation,
+    CvmCreateResourceGraph,
+    GpuAvailability,
+)
 from .os_images import GetOsImagesRequest, GetOsImagesResponse, OSImagePublic
 
 __all__ = [
@@ -67,6 +75,11 @@ __all__ = [
     "CvmInfoDetailV20260121",
     "CvmInfoV20251028",
     "CvmInfoV20260121",
+    "CvmCreateGatewayResource",
+    "CvmCreateInstanceTypeResource",
+    "CvmCreateKmsResource",
+    "CvmCreateNodeKmsRelation",
+    "CvmCreateResourceGraph",
     "CvmKmsInfoV20260121",
     "CvmOsInfoV20260121",
     "CvmProgressInfoV20260121",
@@ -84,6 +97,7 @@ __all__ = [
     "GetKmsOnChainDetailResponse",
     "GetOsImagesRequest",
     "GetOsImagesResponse",
+    "GpuAvailability",
     "KmsInfo",
     "KmsType",
     "NodeRef",

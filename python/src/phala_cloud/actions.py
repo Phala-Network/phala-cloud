@@ -9,6 +9,8 @@ __all__ = [
     "safe_get_current_user",
     "get_available_nodes",
     "safe_get_available_nodes",
+    "get_cvm_create_resources",
+    "safe_get_cvm_create_resources",
     "get_cvm_list",
     "safe_get_cvm_list",
     "get_kms_list",
@@ -149,6 +151,14 @@ def get_available_nodes(client: Any, *args: Any, **kwargs: Any) -> Any:
 
 def safe_get_available_nodes(client: Any, *args: Any, **kwargs: Any) -> Any:
     return client.safe_get_available_nodes(*args, **kwargs)
+
+
+def get_cvm_create_resources(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.get_cvm_create_resources(*args, **kwargs)
+
+
+def safe_get_cvm_create_resources(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.safe_get_cvm_create_resources(*args, **kwargs)
 
 
 def get_cvm_list(client: Any, *args: Any, **kwargs: Any) -> Any:

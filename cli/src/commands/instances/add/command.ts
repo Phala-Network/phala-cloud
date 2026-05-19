@@ -19,6 +19,12 @@ export const instancesAddCommandMeta: CommandMeta = {
 			target: "appId",
 		},
 		{
+			name: "name",
+			description: "Custom CVM name for the new instance.",
+			type: "string",
+			target: "name",
+		},
+		{
 			name: "node-id",
 			aliases: ["teepod-id"],
 			description: "Target node ID for the new instance.",
@@ -85,6 +91,10 @@ export const instancesAddCommandMeta: CommandMeta = {
 			value: "phala instances add --app-id <app-id> --node-id 5",
 		},
 		{
+			name: "Add instance with custom name",
+			value: "phala instances add --app-id <app-id> --name redis-0 --node-id 5",
+		},
+		{
 			name: "Add instance with new Docker Compose",
 			value:
 				"phala instances add --app-id <app-id> --node-id 5 --compose-file docker-compose.yml",
@@ -104,6 +114,7 @@ export const instancesAddCommandMeta: CommandMeta = {
 
 export const instancesAddCommandSchema = z.object({
 	appId: z.string().optional(),
+	name: z.string().optional(),
 	nodeId: z.string().optional(),
 	composeFile: z.string().optional(),
 	preLaunchScript: z.string().optional(),

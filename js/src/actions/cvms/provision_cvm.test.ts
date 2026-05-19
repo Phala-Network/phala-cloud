@@ -128,6 +128,32 @@ describe("ProvisionCvmRequestSchema", () => {
 
       expect(result.success).toBe(true);
     });
+
+    it("should preserve CVM resource matching v2 fields", () => {
+      const input = {
+        name: "test-app",
+        instance_type: "tdx.small",
+        compose_file: {
+          docker_compose_file:
+            "version: '3'\nservices:\n  app:\n    image: nginx",
+        },
+        kms: "BASE",
+        kms_contract: "0xbase",
+        kms_contract_id: "contract_1",
+        key_provider_mode: "local",
+        skip_gateway: true,
+      };
+
+      const result = ProvisionCvmRequestSchema.safeParse(input);
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.kms_contract).toBe("0xbase");
+        expect(result.data.kms_contract_id).toBe("contract_1");
+        expect(result.data.key_provider_mode).toBe("local");
+        expect(result.data.skip_gateway).toBe(true);
+      }
+    });
   });
 
   describe("smart default for instance_type", () => {

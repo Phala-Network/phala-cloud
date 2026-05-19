@@ -70,6 +70,10 @@ interface Options {
 	interactive?: boolean;
 	kms?: string;
 	kmsId?: string;
+	kmsContract?: string;
+	kmsContractId?: string;
+	keyProviderMode?: "kms" | "local";
+	skipGateway?: boolean;
 	cvmId?: string;
 	uuid?: string;
 	customAppId?: string;
@@ -690,6 +694,18 @@ export const buildProvisionPayload = (
 	// Keep kms_id for backward compatibility if provided
 	if (deprecatedKmsId) {
 		payload.kms_id = deprecatedKmsId;
+	}
+	if (options.kmsContract) {
+		payload.kms_contract = options.kmsContract;
+	}
+	if (options.kmsContractId) {
+		payload.kms_contract_id = options.kmsContractId;
+	}
+	if (options.keyProviderMode) {
+		payload.key_provider_mode = options.keyProviderMode;
+	}
+	if (options.skipGateway === true) {
+		payload.skip_gateway = true;
 	}
 
 	// Add prefer_dev flag based on --dev-os / --no-dev-os

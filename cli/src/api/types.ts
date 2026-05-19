@@ -275,9 +275,60 @@ export interface KmsListItem {
 	slug?: string | null;
 	url: string;
 	version: string;
+	kms_type?: string;
+	kms_contract_id?: string | number | null;
 	chain_id?: number | null;
 	kms_contract_address?: string | null;
 	gateway_app_id?: string | null;
+	supported_os_images?: string[];
+}
+
+export interface CvmCreateNodeKmsRelation {
+	teepod_id: number;
+	kms_id: string | number;
+	kms_type: string;
+	kms_contract_id?: string | number | null;
+	kms_contract_address?: string | null;
+	supported_os_images?: string[];
+}
+
+export interface CvmCreateGatewayResource {
+	id: string | number;
+	teepod_id?: number | null;
+	kms_contract_id: string | number;
+	rpc_url?: string | null;
+	domain_suffix?: string | null;
+	enabled: boolean;
+}
+
+export interface CvmCreateInstanceTypeResource {
+	id: string;
+	name: string;
+	vcpu: number;
+	memory_mb: number;
+	default_disk_size_gb: number;
+	requires_gpu: boolean;
+	requires_gpu_count: number;
+	family?: string | null;
+	display_order?: number | null;
+}
+
+export interface GpuAvailability {
+	has_reserved_gpus: boolean;
+	reserved_gpu_count: number;
+	has_public_gpus: boolean;
+	public_gpu_count: number;
+}
+
+export interface CvmCreateResourcesResponse {
+	tier: string;
+	capacity: Record<string, unknown>;
+	nodes: TEEPod[];
+	kms_nodes: KmsListItem[];
+	node_kms_relations: CvmCreateNodeKmsRelation[];
+	gateway_nodes: CvmCreateGatewayResource[];
+	instance_types: CvmCreateInstanceTypeResource[];
+	gpu_availability: GpuAvailability;
 }
 
 // Pubkey Response

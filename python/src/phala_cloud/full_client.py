@@ -60,7 +60,7 @@ from .models.cvms import (
     PaginatedCvmInfosV20260121,
 )
 from .models.kms import GetKmsListResponse, GetKmsOnChainDetailResponse, KmsInfo
-from .models.nodes import AvailableNodes
+from .models.nodes import AvailableNodes, CvmCreateResourceGraph
 from .models.os_images import GetOsImagesRequest, GetOsImagesResponse
 from .result import SafeResult
 
@@ -122,6 +122,7 @@ class AppRevisionsRequest(_AliasModel):
 
 class CreateAppInstanceRequest(_AliasModel):
     app_id: str = Field(alias="appId")
+    name: str | None = None
     node_id: int | None = None
     docker_compose_file: str | None = None
     pre_launch_script: str | None = None
@@ -312,6 +313,8 @@ class _ExtMixin:
             )
         if m == "GET" and path == "/teepods/available":
             return AvailableNodes
+        if m == "GET" and path == "/teepods/cvm-create-resources":
+            return CvmCreateResourceGraph
         if m == "GET" and path == "/cvms/paginated":
             return (
                 PaginatedCvmInfosV20251028
@@ -1115,6 +1118,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     def create_app_instance(self, request: CreateAppInstanceRequest | Mapping[str, Any]) -> Any:
         req = CreateAppInstanceRequest.model_validate(request)
         body = {
+            "name": req.name,
             "node_id": req.node_id,
             "docker_compose_file": req.docker_compose_file,
             "pre_launch_script": req.pre_launch_script,
@@ -1938,6 +1942,7 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
     ) -> Any:
         req = CreateAppInstanceRequest.model_validate(request)
         body = {
+            "name": req.name,
             "node_id": req.node_id,
             "docker_compose_file": req.docker_compose_file,
             "pre_launch_script": req.pre_launch_script,

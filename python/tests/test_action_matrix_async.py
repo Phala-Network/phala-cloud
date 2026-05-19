@@ -35,6 +35,68 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200, json={"tier": "free", "capacity": {}, "nodes": [], "kms_list": []}
         )
+    if method == "GET" and path == "/api/v1/teepods/cvm-create-resources":
+        return httpx.Response(
+            200,
+            json={
+                "tier": "free",
+                "capacity": {},
+                "nodes": [],
+                "kms_nodes": [
+                    {
+                        "id": 201,
+                        "slug": "kms-base",
+                        "url": "https://kms-base.example.com",
+                        "version": "0.5.0",
+                        "kms_type": "BASE",
+                        "chain_id": 8453,
+                        "kms_contract_id": 301,
+                        "kms_contract_address": "0xbase",
+                        "gateway_app_id": "0xgateway",
+                        "supported_os_images": ["dstack-0.5.0"],
+                    }
+                ],
+                "node_kms_relations": [
+                    {
+                        "teepod_id": 11,
+                        "kms_id": 201,
+                        "kms_type": "BASE",
+                        "kms_contract_id": 301,
+                        "kms_contract_address": "0xbase",
+                        "supported_os_images": ["dstack-0.5.0"],
+                    }
+                ],
+                "gateway_nodes": [
+                    {
+                        "id": 401,
+                        "teepod_id": 11,
+                        "kms_contract_id": 301,
+                        "rpc_url": "https://gateway.example.com/rpc",
+                        "domain_suffix": "example.app",
+                        "enabled": True,
+                    }
+                ],
+                "instance_types": [
+                    {
+                        "id": "tdx.small",
+                        "name": "TDX Small",
+                        "vcpu": 2,
+                        "memory_mb": 4096,
+                        "default_disk_size_gb": 40,
+                        "requires_gpu": False,
+                        "requires_gpu_count": 0,
+                        "family": "cpu",
+                        "display_order": 1,
+                    }
+                ],
+                "gpu_availability": {
+                    "has_reserved_gpus": False,
+                    "reserved_gpu_count": 0,
+                    "has_public_gpus": True,
+                    "public_gpu_count": 1,
+                },
+            },
+        )
     if method == "GET" and path == "/api/v1/kms":
         return httpx.Response(
             200,
@@ -149,6 +211,7 @@ async def test_async_action_matrix_and_safe() -> None:
 
         await c.get_current_user()
         await c.get_available_nodes()
+        await c.get_cvm_create_resources()
         await c.get_cvm_list()
         await c.get_kms_list()
         await c.provision_cvm(
@@ -169,6 +232,7 @@ async def test_async_action_matrix_and_safe() -> None:
 
         assert (await c.safe_get_current_user()).ok
         assert (await c.safe_get_available_nodes()).ok
+        assert (await c.safe_get_cvm_create_resources()).ok
         assert (await c.safe_get_cvm_list()).ok
         assert (await c.safe_get_kms_list()).ok
 

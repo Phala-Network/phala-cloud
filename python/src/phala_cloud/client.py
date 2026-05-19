@@ -23,6 +23,7 @@ from .models import (
     CurrentUser,
     CurrentUserV20251028,
     CurrentUserV20260121,
+    CvmCreateResourceGraph,
     GetCvmListRequest,
     GetKmsListRequest,
     GetKmsListResponse,
@@ -187,6 +188,13 @@ class AsyncPhalaCloud:
 
     async def safe_get_available_nodes(self) -> SafeResult[AvailableNodes]:
         return await self.safe(self.get_available_nodes)
+
+    async def get_cvm_create_resources(self) -> CvmCreateResourceGraph:
+        data = await self.get("/teepods/cvm-create-resources")
+        return self._validate(CvmCreateResourceGraph, data)
+
+    async def safe_get_cvm_create_resources(self) -> SafeResult[CvmCreateResourceGraph]:
+        return await self.safe(self.get_cvm_create_resources)
 
     async def get_cvm_list(
         self,
@@ -406,6 +414,13 @@ class PhalaCloud:
 
     def safe_get_available_nodes(self) -> SafeResult[AvailableNodes]:
         return self.safe(self.get_available_nodes)
+
+    def get_cvm_create_resources(self) -> CvmCreateResourceGraph:
+        data = self.get("/teepods/cvm-create-resources")
+        return self._validate(CvmCreateResourceGraph, data)
+
+    def safe_get_cvm_create_resources(self) -> SafeResult[CvmCreateResourceGraph]:
+        return self.safe(self.get_cvm_create_resources)
 
     def get_cvm_list(
         self,
