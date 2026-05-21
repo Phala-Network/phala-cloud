@@ -1782,5 +1782,27 @@
     "tags": [
       "MCP"
     ]
+  },
+  {
+    "id": "stripe-mcp",
+    "name": "Stripe",
+    "description": "MCP server integrating with Stripe - tools for customers, products, payments, and more deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/stripe/agent-toolkit",
+    "author": "stripe",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
   }
 ]
