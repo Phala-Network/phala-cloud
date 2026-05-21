@@ -25,7 +25,7 @@
       "memory": 4096,
       "diskSize": 40
     },
-    "tags": ["VibeVM", "TEE", "AI", "VSCode"]
+    "tags": ["Developer Tools", "AI Agents", "TEE & Privacy"]
   },
   {
     "id": "openclaw",
@@ -71,7 +71,7 @@
       "memory": 4096,
       "diskSize": 40
     },
-    "tags": ["Agent", "AI", "Automation", "Messaging"]
+    "tags": ["AI Agents", "Automation"]
   },
   {
     "id": "ironclaw",
@@ -190,7 +190,7 @@
       "memory": 4096,
       "diskSize": 40
     },
-    "tags": ["Agent", "AI", "Gateway", "NEAR"]
+    "tags": ["AI Agents", "Blockchain & Web3"]
   },
   {
     "id": "hermes-agent",
@@ -236,7 +236,7 @@
       "memory": 4096,
       "diskSize": 40
     },
-    "tags": ["Agent", "AI", "Automation", "Messaging"]
+    "tags": ["AI Agents", "Automation"]
   },
   {
     "id": "llm-wiki",
@@ -282,7 +282,7 @@
       "memory": 4096,
       "diskSize": 40
     },
-    "tags": ["AI", "Knowledge Graph", "Wiki", "Research"]
+    "tags": ["AI Agents", "Data & Storage"]
   },
   {
     "id": "anyone-anon-service",
@@ -291,7 +291,7 @@
     "repo": "https://github.com/rA3ka/dstack-examples/tree/main/anyone-anon-service",
     "author": "Anyone",
     "icon": "Anyone-anon-hs.png",
-    "tags": ["Anyone", "anon"]
+    "tags": ["TEE & Privacy", "Infrastructure"]
   },
   {
     "id": "anyone-anon-relay",
@@ -300,7 +300,7 @@
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/anyone-anon-relay",
     "author": "Anyone",
     "icon": "Anyone-anon-hs.png",
-    "tags": ["Anyone", "anon", "relay"]
+    "tags": ["TEE & Privacy", "Infrastructure"]
   },
   {
     "id": "evm-mcp",
@@ -316,7 +316,7 @@
       { "key": "PERPLEXITY_API_KEY", "required": true },
       { "key": "COINGECKO_PRO_API_KEY", "required": true }
     ],
-    "tags": ["MCP"]
+    "tags": ["MCP Servers", "Blockchain & Web3"]
   },
   {
     "id": "demap-defillama",
@@ -326,7 +326,7 @@
     "author": "DeMCP",
     "icon": "mcp-defillama.svg",
     "envs": [{ "key": "BEARER_TOKEN", "required": true }],
-    "tags": ["MCP"]
+    "tags": ["MCP Servers", "Blockchain & Web3"]
   },
   {
     "id": "near-mcp",
@@ -341,7 +341,7 @@
       { "key": "NEAR_ACCOUNT_ID", "required": true }
     ],
     "icon": "mcp-near.svg",
-    "tags": ["MCP"]
+    "tags": ["MCP Servers", "Blockchain & Web3"]
   },
   {
     "id": "solana-mcp",
@@ -356,7 +356,7 @@
       { "key": "OPENAI_API_KEY", "required": false }
     ],
     "icon": "mcp-solana.svg",
-    "tags": ["MCP"]
+    "tags": ["MCP Servers", "Blockchain & Web3"]
   },
   {
     "id": "context7-mcp",
@@ -366,7 +366,7 @@
     "author": "Phala-Network",
     "icon": "mcp-context7.png",
     "envs": [{ "key": "BEARER_TOKEN", "required": true }],
-    "tags": ["MCP"]
+    "tags": ["MCP Servers", "Developer Tools"]
   },
   {
     "id": "mcd-mcp",
@@ -388,7 +388,7 @@
       }
     ],
     "defaultResource": { "vCPU": 1, "memory": 1024, "diskSize": 10 },
-    "tags": ["MCP", "Food", "China"]
+    "tags": ["MCP Servers", "Payments & Commerce"]
   },
   {
     "id": "elevenlabs-mcp",
@@ -402,7 +402,7 @@
       { "key": "ELEVENLABS_MCP_BASE_PATH", "required": true }
     ],
     "icon": "elevenlabs.png",
-    "tags": ["MCP"]
+    "tags": ["MCP Servers", "Media & Design"]
   },
   {
     "id": "supabase-db",
@@ -415,7 +415,7 @@
       { "key": "SUPABASE_ACCESS_TOKEN", "required": true }
     ],
     "icon": "supabase.svg",
-    "tags": ["MCP"]
+    "tags": ["MCP Servers", "Data & Storage"]
   },
   {
     "id": "figma-mcp",
@@ -428,7 +428,7 @@
       { "key": "FIGMA_API_KEY", "required": true }
     ],
     "icon": "mcp-figma.svg",
-    "tags": ["MCP"]
+    "tags": ["MCP Servers", "Media & Design"]
   },
   {
     "id": "mcp-server-fetch",
@@ -436,7 +436,7 @@
     "description": "A MCP server deployed on Phala Cloud that enables AI agents to fetch real-time data from a given URL.",
     "repo": "https://github.com/Leechael/mcp-servers/tree/main/src/fetch",
     "author": "Leechael",
-    "tags": ["MCP"]
+    "tags": ["MCP Servers", "Web Data & Search"]
   },
   {
     "id": "mcp-server-sequential-thinking",
@@ -444,7 +444,7 @@
     "description": "A MCP server deployed on Phala Cloud that enables AI agents to think sequentially.",
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/mcp-server-sequential-thinking",
     "author": "Phala-Network",
-    "tags": ["MCP"]
+    "tags": ["MCP Servers", "AI Agents"]
   },
   {
     "id": "mcp-swarms-agent",
@@ -462,7 +462,7 @@
       },
       { "key": "MODEL_NAME", "default": "gpt-4o-mini", "required": false }
     ],
-    "tags": ["MCP"]
+    "tags": ["AI Agents", "MCP Servers", "TEE & Privacy"]
   },
   {
     "id": "tor-hidden-service",
@@ -470,7 +470,7 @@
     "description": "This docker compose example sets up a Tor hidden service and serves an nginx website from that.",
     "repo": "https://github.com/Dstack-TEE/dstack-examples/tree/main/tor-hidden-service",
     "author": "Dstack-TEE",
-    "tags": ["Dstack"]
+    "tags": ["TEE & Privacy", "Infrastructure"]
   },
   {
     "id": "lightclient",
@@ -479,7 +479,7 @@
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/lightclient",
     "author": "Dstack-TEE",
     "envs": [{ "key": "ETH_RPC_URL", "required": true }],
-    "tags": ["Dstack"]
+    "tags": ["Blockchain & Web3", "TEE & Privacy"]
   },
   {
     "id": "webshell",
@@ -500,7 +500,7 @@
         "description": "HTTP basic auth username for ttyd."
       }
     ],
-    "tags": ["Dstack"]
+    "tags": ["Developer Tools", "Infrastructure"]
   },
   {
     "id": "nextjs-starter",
@@ -509,7 +509,7 @@
     "repo": "https://github.com/Phala-Network/phala-cloud-nextjs-starter",
     "author": "Phala-Network",
     "icon": "nextjs-starter.svg",
-    "tags": ["Starter"]
+    "tags": ["Starter Kits", "Web Apps"]
   },
   {
     "id": "python-starter",
@@ -518,7 +518,7 @@
     "repo": "https://github.com/Phala-Network/phala-cloud-python-starter",
     "author": "Phala-Network",
     "icon": "python-starter.png",
-    "tags": ["Starter"]
+    "tags": ["Starter Kits", "Developer Tools"]
   },
   {
     "id": "bun-starter",
@@ -527,7 +527,7 @@
     "repo": "https://github.com/Phala-Network/phala-cloud-bun-starter",
     "author": "Phala-Network",
     "icon": "bun-starter.svg",
-    "tags": ["Starter"]
+    "tags": ["Starter Kits", "Developer Tools"]
   },
   {
     "id": "node-starter",
@@ -536,7 +536,7 @@
     "repo": "https://github.com/Gldywn/phala-cloud-node-starter",
     "author": "Gldywn",
     "icon": "node-starter.svg",
-    "tags": ["Starter"]
+    "tags": ["Starter Kits", "Developer Tools"]
   },
   {
     "id": "armor-crypto",
@@ -563,7 +563,7 @@
         "description": "Optional Armor access token."
       }
     ],
-    "tags": ["MCP"]
+    "tags": ["MCP Servers", "Blockchain & Web3", "Payments & Commerce"]
   },
   {
     "id": "coinbase-x402-tee",
@@ -586,7 +586,7 @@
         "required": true
       }
     ],
-    "tags": ["Starter", "x402"]
+    "tags": ["Payments & Commerce", "TEE & Privacy", "Starter Kits"]
   },
   {
     "id": "vrf",
@@ -599,7 +599,7 @@
       { "key": "RPC_URL", "required": true },
       { "key": "CONTRACT_ADDRESS", "required": true }
     ],
-    "tags": ["VRF"]
+    "tags": ["Blockchain & Web3", "TEE & Privacy"]
   },
   {
     "id": "blinko",
@@ -612,7 +612,7 @@
       { "key": "NEXTAUTH_SECRET", "required": true },
       { "key": "POSTGRES_PASSWORD", "required": true }
     ],
-    "tags": ["Notebook"]
+    "tags": ["Web Apps", "Data & Storage"]
   },
   {
     "id": "chatnio",
@@ -627,7 +627,7 @@
       { "key": "SECRET", "required": true },
       { "key": "CHATNIO_ROOT_PASSWORD", "required": true }
     ],
-    "tags": ["Chat"]
+    "tags": ["Web Apps", "AI Agents"]
   },
   {
     "id": "n8n-automation",
@@ -653,7 +653,7 @@
       { "key": "GOOGLE_OAUTH_CLIENT_SECRET", "required": false }
     ],
     "defaultResource": { "vCPU": 2, "memory": 4096, "diskSize": 40 },
-    "tags": ["Automation", "Workflow", "Integration"]
+    "tags": ["Automation", "Business Apps", "Web Apps"]
   },
   {
     "id": "moralis-mcp",
@@ -672,9 +672,7 @@
         "required": true
       }
     ],
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Blockchain & Web3"]
   },
   {
     "id": "zep-graphiti-mcp",
@@ -720,7 +718,7 @@
         "description": "Episode processing concurrency; keep low to reduce LLM provider rate-limit pressure"
       }
     ],
-    "tags": ["MCP", "Knowledge Graph"]
+    "tags": ["MCP Servers", "AI Agents", "Data & Storage"]
   },
   {
     "id": "msft-presidio-app",
@@ -729,7 +727,7 @@
     "repo": "https://github.com/HashWarlock/presidio/tree/phala-cloud/docs/samples/python/streamlit",
     "author": "HashWarlock",
     "icon": "msft-presidio.png",
-    "tags": ["De-Identification"]
+    "tags": ["TEE & Privacy", "Data & Storage"]
   },
   {
     "id": "near-shade-agent",
@@ -779,7 +777,7 @@
         "description": "Phala API key from https://cloud.phala.com/dashboard/tokens; real key required for full agent behavior"
       }
     ],
-    "tags": ["Agent", "NEAR", "Oracle", "TEE"]
+    "tags": ["AI Agents", "Blockchain & Web3", "TEE & Privacy"]
   },
   {
     "id": "bytebot",
@@ -816,7 +814,7 @@
         "description": "Google Gemini API key for AI task planning and execution (at least one API key required)"
       }
     ],
-    "tags": ["AI", "Automation"]
+    "tags": ["AI Agents", "Automation"]
   },
   {
     "id": "node-oracle-template",
@@ -825,7 +823,7 @@
     "repo": "https://github.com/Gldywn/phala-cloud-oracle-template",
     "author": "Gldywn",
     "icon": "hha.png",
-    "tags": ["Oracle", "Node"]
+    "tags": ["Blockchain & Web3", "Infrastructure"]
   },
   {
     "id": "akave-link",
@@ -844,7 +842,7 @@
       { "key": "DEBUG", "required": false, "default": "true" }
     ],
     "defaultResource": { "vCPU": 2, "memory": 2048, "diskSize": 20 },
-    "tags": ["Storage", "Akave", "REST", "TEE"]
+    "tags": ["Data & Storage", "TEE & Privacy", "Web Apps"]
   },
   {
     "id": "open-webui",
@@ -857,7 +855,7 @@
       { "key": "WEBUI_SECRET_KEY", "required": false, "description": "Secret key for Open WebUI authentication" }
     ],
     "defaultResource": { "vCPU": 2, "memory": 2048, "diskSize": 20 },
-    "tags": ["OpenWebUI", "REST", "TEE"]
+    "tags": ["AI Agents", "Web Apps", "TEE & Privacy"]
   },
   {
     "id": "primus-attestor-node",
@@ -889,11 +887,7 @@
       "memory": 8192,
       "diskSize": 20
     },
-    "tags": [
-      "ZKTLS",
-      "TEE",
-      "PrimusLabs"
-    ]
+    "tags": ["TEE & Privacy", "Blockchain & Web3", "Infrastructure"]
   },
   {
     "id": "erc-8004-tee-agent",
@@ -924,7 +918,7 @@
       { "key": "SESSION_TIMEOUT_MINUTES", "required": false, "description": "Chat session timeout in minutes", "default": "60" },
       { "key": "MAX_SESSIONS", "required": false, "description": "Maximum in-memory chat sessions", "default": "100" }
     ],
-    "tags": ["Agent", "TEE", "ERC-8004", "AI"]
+    "tags": ["AI Agents", "Blockchain & Web3", "TEE & Privacy"]
   },
   {
     "id": "markitdown-mcp",
@@ -944,9 +938,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Data & Storage"]
   },
   {
     "id": "netdata-mcp-server",
@@ -966,9 +958,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Infrastructure"]
   },
   {
     "id": "chrome-devtools-mcp",
@@ -988,9 +978,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Developer Tools"]
   },
   {
     "id": "playwright-mcp",
@@ -1010,9 +998,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Developer Tools", "Web Data & Search"]
   },
   {
     "id": "github-mcp-server",
@@ -1037,9 +1023,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Developer Tools"]
   },
   {
     "id": "serena-mcp",
@@ -1064,9 +1048,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Developer Tools", "AI Agents"]
   },
   {
     "id": "unity-mcp",
@@ -1096,9 +1078,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Developer Tools", "Media & Design"]
   },
   {
     "id": "firecrawl-mcp-server",
@@ -1128,9 +1108,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Web Data & Search"]
   },
   {
     "id": "desktop-commander-mcp",
@@ -1150,9 +1128,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Developer Tools"]
   },
   {
     "id": "notion-mcp-server",
@@ -1172,9 +1148,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Business Apps"]
   },
   {
     "id": "azure-mcp",
@@ -1215,9 +1189,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Infrastructure"]
   },
   {
     "id": "microsoft-fabric-mcp",
@@ -1252,9 +1224,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Data & Storage", "Business Apps"]
   },
   {
     "id": "dbhub",
@@ -1279,9 +1249,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Data & Storage", "Developer Tools"]
   },
   {
     "id": "brightdata-mcp",
@@ -1316,9 +1284,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Web Data & Search"]
   },
   {
     "id": "tavily-mcp",
@@ -1343,9 +1309,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Web Data & Search"]
   },
   {
     "id": "azure-devops-mcp",
@@ -1375,9 +1339,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Developer Tools", "Business Apps"]
   },
   {
     "id": "microsoftdocs-mcp",
@@ -1397,9 +1359,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Developer Tools"]
   },
   {
     "id": "stripe-mcp",
@@ -1419,9 +1379,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Payments & Commerce"]
   },
   {
     "id": "nuget-mcp",
@@ -1441,9 +1399,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Developer Tools"]
   },
   {
     "id": "terraform-mcp-server",
@@ -1479,9 +1435,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Infrastructure", "Developer Tools"]
   },
   {
     "id": "apify-mcp-server",
@@ -1501,9 +1455,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Web Data & Search", "Automation"]
   },
   {
     "id": "mongodb-mcp-server",
@@ -1544,9 +1496,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Data & Storage"]
   },
   {
     "id": "nuxt-mcp",
@@ -1566,9 +1516,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Developer Tools", "Web Apps"]
   },
   {
     "id": "next-devtools-mcp",
@@ -1593,9 +1541,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Developer Tools", "Web Apps"]
   },
   {
     "id": "atlassian-mcp-server",
@@ -1615,9 +1561,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Business Apps", "Developer Tools"]
   },
   {
     "id": "sentry-mcp",
@@ -1652,9 +1596,7 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Developer Tools", "Infrastructure"]
   },
   {
     "id": "elasticsearch-mcp",
@@ -1700,8 +1642,6 @@
       "memory": 4096,
       "diskSize": 20
     },
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP Servers", "Data & Storage", "Infrastructure"]
   }
 ]
