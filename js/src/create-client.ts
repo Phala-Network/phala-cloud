@@ -96,6 +96,18 @@ import {
   safeGetCvmPreLaunchScript,
   type GetCvmPreLaunchScriptRequest,
 } from "./actions/cvms/get_cvm_prelaunch_script";
+import {
+  getPreLaunchScriptUpgradeStatus,
+  safeGetPreLaunchScriptUpgradeStatus,
+  type GetPreLaunchScriptUpgradeStatusRequest,
+  type PreLaunchScriptUpgradeStatus,
+} from "./actions/cvms/get_prelaunch_script_upgrade_status";
+import {
+  upgradePreLaunchScript,
+  safeUpgradePreLaunchScript,
+  type UpgradePreLaunchScriptRequest,
+  type UpgradePreLaunchScriptResult,
+} from "./actions/cvms/upgrade_prelaunch_script";
 import { getKmsInfo, safeGetKmsInfo, type GetKmsInfoRequest } from "./actions/kms/get_kms_info";
 import {
   getKmsList,
@@ -306,6 +318,10 @@ export function createClient<V extends ApiVersion = DefaultApiVersion>(
     readonly safeUpdatePreLaunchScript: typeof safeUpdatePreLaunchScript;
     readonly getCvmPreLaunchScript: typeof getCvmPreLaunchScript;
     readonly safeGetCvmPreLaunchScript: typeof safeGetCvmPreLaunchScript;
+    readonly getPreLaunchScriptUpgradeStatus: typeof getPreLaunchScriptUpgradeStatus;
+    readonly safeGetPreLaunchScriptUpgradeStatus: typeof safeGetPreLaunchScriptUpgradeStatus;
+    readonly upgradePreLaunchScript: typeof upgradePreLaunchScript;
+    readonly safeUpgradePreLaunchScript: typeof safeUpgradePreLaunchScript;
     readonly startCvm: typeof startCvm;
     readonly safeStartCvm: typeof safeStartCvm;
     readonly stopCvm: typeof stopCvm;
@@ -395,6 +411,10 @@ export function createClient<V extends ApiVersion = DefaultApiVersion>(
     safeUpdatePreLaunchScript,
     getCvmPreLaunchScript,
     safeGetCvmPreLaunchScript,
+    getPreLaunchScriptUpgradeStatus,
+    safeGetPreLaunchScriptUpgradeStatus,
+    upgradePreLaunchScript,
+    safeUpgradePreLaunchScript,
     startCvm,
     safeStartCvm,
     stopCvm,
@@ -802,6 +822,54 @@ export interface Client<V extends ApiVersion = DefaultApiVersion> extends BaseCl
   ): Promise<SafeResult<z.infer<T>>>;
   safeGetCvmPreLaunchScript(
     request: GetCvmPreLaunchScriptRequest,
+    parameters: { schema: false },
+  ): Promise<SafeResult<unknown>>;
+
+  getPreLaunchScriptUpgradeStatus(
+    request: GetPreLaunchScriptUpgradeStatusRequest,
+  ): Promise<PreLaunchScriptUpgradeStatus>;
+  getPreLaunchScriptUpgradeStatus<T extends z.ZodTypeAny>(
+    request: GetPreLaunchScriptUpgradeStatusRequest,
+    parameters: { schema: T },
+  ): Promise<z.infer<T>>;
+  getPreLaunchScriptUpgradeStatus(
+    request: GetPreLaunchScriptUpgradeStatusRequest,
+    parameters: { schema: false },
+  ): Promise<unknown>;
+
+  safeGetPreLaunchScriptUpgradeStatus(
+    request: GetPreLaunchScriptUpgradeStatusRequest,
+  ): Promise<SafeResult<PreLaunchScriptUpgradeStatus>>;
+  safeGetPreLaunchScriptUpgradeStatus<T extends z.ZodTypeAny>(
+    request: GetPreLaunchScriptUpgradeStatusRequest,
+    parameters: { schema: T },
+  ): Promise<SafeResult<z.infer<T>>>;
+  safeGetPreLaunchScriptUpgradeStatus(
+    request: GetPreLaunchScriptUpgradeStatusRequest,
+    parameters: { schema: false },
+  ): Promise<SafeResult<unknown>>;
+
+  upgradePreLaunchScript(
+    request: UpgradePreLaunchScriptRequest,
+  ): Promise<UpgradePreLaunchScriptResult>;
+  upgradePreLaunchScript<T extends z.ZodTypeAny>(
+    request: UpgradePreLaunchScriptRequest,
+    parameters: { schema: T },
+  ): Promise<z.infer<T>>;
+  upgradePreLaunchScript(
+    request: UpgradePreLaunchScriptRequest,
+    parameters: { schema: false },
+  ): Promise<unknown>;
+
+  safeUpgradePreLaunchScript(
+    request: UpgradePreLaunchScriptRequest,
+  ): Promise<SafeResult<UpgradePreLaunchScriptResult>>;
+  safeUpgradePreLaunchScript<T extends z.ZodTypeAny>(
+    request: UpgradePreLaunchScriptRequest,
+    parameters: { schema: T },
+  ): Promise<SafeResult<z.infer<T>>>;
+  safeUpgradePreLaunchScript(
+    request: UpgradePreLaunchScriptRequest,
     parameters: { schema: false },
   ): Promise<SafeResult<unknown>>;
 

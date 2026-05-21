@@ -515,6 +515,26 @@ export {
 } from "./cvms/get_cvm_prelaunch_script";
 
 export {
+  getPreLaunchScriptUpgradeStatus,
+  safeGetPreLaunchScriptUpgradeStatus,
+  GetPreLaunchScriptUpgradeStatusRequestSchema,
+  type GetPreLaunchScriptUpgradeStatusRequest,
+  PreLaunchScriptUpgradeStatusSchema,
+  type PreLaunchScriptUpgradeStatus,
+} from "./cvms/get_prelaunch_script_upgrade_status";
+
+export {
+  upgradePreLaunchScript,
+  safeUpgradePreLaunchScript,
+  UpgradePreLaunchScriptRequestSchema,
+  type UpgradePreLaunchScriptRequest,
+  UpgradePreLaunchScriptResultSchema,
+  type UpgradePreLaunchScriptResult,
+  type UpgradePreLaunchScriptInProgress,
+  type UpgradePreLaunchScriptPreconditionRequired,
+} from "./cvms/upgrade_prelaunch_script";
+
+export {
   getCvmStatusBatch,
   safeGetCvmStatusBatch,
   CvmStatusSchema,
