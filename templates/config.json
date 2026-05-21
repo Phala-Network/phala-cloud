@@ -1373,5 +1373,27 @@
     "tags": [
       "MCP"
     ]
+  },
+  {
+    "id": "playwright-mcp",
+    "name": "Playwright",
+    "description": "Automate web browsers using accessibility trees for testing and data extraction deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/microsoft/playwright-mcp",
+    "author": "microsoft",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
   }
 ]

@@ -1,0 +1,54 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM mcr.microsoft.com/playwright:v1.57.0-noble
+        USER root
+        RUN npm install -g supergateway@3.4.3
+        WORKDIR /workspace
+        EXPOSE 8000
+        CMD ["sh", "-lc", "exec supergateway --stdio \"npx -y @playwright/mcp\" --outputTransport streamableHttp --port 8000 --streamableHttpPath /mcp --healthEndpoint /healthz --cors"]
+    image: playwright-mcp:latest
+    pull_policy: build
+    environment: []
+    expose:
+      - "8000"
+    restart: unless-stopped
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    ports:
+      - "18080:80"
+    environment:
+      - BEARER_TOKEN=${BEARER_TOKEN}
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    restart: unless-stopped
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          @valid_auth {
+              header X-Phala-MCP-Token "{env.BEARER_TOKEN}"
+          }
+          route @valid_auth {
+              reverse_proxy app:8000
+          }
+          route {
+              respond 401 {
+                  body "Unauthorized"
+                  close
+              }
+          }
+      }
+
+networks:
+  internal:
+    driver: bridge
