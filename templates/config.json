@@ -33,7 +33,7 @@
     "description": "A self-hosted AI gateway for coordinating agent sessions across native clients, device nodes, and messaging channels. Deploy the OpenClaw gateway in a confidential VM with persistent config, auth profile, and workspace volumes.",
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/openclaw",
     "author": "OpenClaw",
-    "icon": "ironclaw.png",
+    "icon": "openclaw-logo.png",
     "envs": [
       {
         "key": "OPENCLAW_GATEWAY_TOKEN",
