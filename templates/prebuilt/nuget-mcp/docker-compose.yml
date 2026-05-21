@@ -8,7 +8,7 @@ services:
         RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get update && apt-get install -y --no-install-recommends nodejs && rm -rf /var/lib/apt/lists/*
         RUN npm install -g supergateway@3.4.3 && npm cache clean --force
         RUN dotnet tool install --global NuGet.Mcp.Server --version 1.4.3
-        ENV PATH="/root/.dotnet/tools:${PATH}"
+        ENV PATH="/root/.dotnet/tools:$${PATH}"
         WORKDIR /workspace
         EXPOSE 8000
         CMD ["sh", "-lc", "exec supergateway --stdio \"nuget-mcp-server\" --outputTransport streamableHttp --port 8000 --streamableHttpPath /mcp --healthEndpoint /healthz --cors"]

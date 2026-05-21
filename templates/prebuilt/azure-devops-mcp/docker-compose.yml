@@ -7,7 +7,7 @@ services:
         RUN npm install -g supergateway@3.4.3
         WORKDIR /workspace
         EXPOSE 8000
-        CMD ["sh", "-lc", "exec supergateway --stdio \"npx -y @azure-devops/mcp $AZURE_DEVOPS_ORG\" --outputTransport streamableHttp --port 8000 --streamableHttpPath /mcp --healthEndpoint /healthz --cors"]
+        CMD ["sh", "-lc", "exec supergateway --stdio \"npx -y @azure-devops/mcp $$AZURE_DEVOPS_ORG\" --outputTransport streamableHttp --port 8000 --streamableHttpPath /mcp --healthEndpoint /healthz --cors"]
     image: azure-devops-mcp:latest
     pull_policy: build
     environment:
