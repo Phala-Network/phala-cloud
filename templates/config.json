@@ -1557,5 +1557,48 @@
     "tags": [
       "MCP"
     ]
+  },
+  {
+    "id": "azure-mcp",
+    "name": "Azure MCP Server",
+    "description": "All Azure MCP tools to create a seamless connection between AI agents and Azure services deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/microsoft/mcp",
+    "author": "microsoft",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "AZURE_TENANT_ID",
+        "required": false,
+        "description": "Azure tenant ID for service-principal authentication."
+      },
+      {
+        "key": "AZURE_CLIENT_ID",
+        "required": false,
+        "description": "Azure client ID for service-principal authentication."
+      },
+      {
+        "key": "AZURE_CLIENT_SECRET",
+        "required": false,
+        "description": "Azure client secret for service-principal authentication."
+      },
+      {
+        "key": "AZURE_MCP_COLLECT_TELEMETRY",
+        "required": false,
+        "description": "Set to false to disable Azure MCP telemetry.",
+        "default": "false"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
   }
 ]
