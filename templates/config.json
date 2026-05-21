@@ -925,5 +925,783 @@
       { "key": "MAX_SESSIONS", "required": false, "description": "Maximum in-memory chat sessions", "default": "100" }
     ],
     "tags": ["Agent", "TEE", "ERC-8004", "AI"]
+  },
+  {
+    "id": "markitdown-mcp",
+    "name": "Markitdown",
+    "description": "Convert various file formats (PDF, Word, Excel, images, audio) to Markdown deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/microsoft/markitdown",
+    "author": "microsoft",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "netdata-mcp-server",
+    "name": "Netdata",
+    "description": "Real-time infrastructure monitoring with metrics, logs, alerts, and ML-based anomaly detection deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/netdata/netdata",
+    "author": "netdata",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "chrome-devtools-mcp",
+    "name": "Chrome DevTools MCP",
+    "description": "MCP server for Chrome DevTools deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/ChromeDevTools/chrome-devtools-mcp",
+    "author": "ChromeDevTools",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "playwright-mcp",
+    "name": "Playwright",
+    "description": "Automate web browsers using accessibility trees for testing and data extraction deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/microsoft/playwright-mcp",
+    "author": "microsoft",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "github-mcp-server",
+    "name": "GitHub",
+    "description": "Connect AI assistants to GitHub - manage repos, issues, PRs, and workflows through natural language deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/github/github-mcp-server",
+    "author": "github",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "required": true,
+        "description": "GitHub fine-grained or classic PAT used by the MCP server."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "serena-mcp",
+    "name": "Serena",
+    "description": "Semantic code retrieval & editing tools for coding agents deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/oraios/serena",
+    "author": "oraios",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "SERENA_PROJECT",
+        "required": false,
+        "description": "Optional project path to activate after the server starts, typically under /workspace."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "unity-mcp",
+    "name": "Unity",
+    "description": "Control the Unity Editor from MCP clients via a Unity bridge + local Python server deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/CoplayDev/unity-mcp",
+    "author": "CoplayDev",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "UNITY_HOST",
+        "required": false,
+        "description": "Optional Unity bridge host if your Unity Editor can reach this CVM."
+      },
+      {
+        "key": "UNITY_PORT",
+        "required": false,
+        "description": "Optional Unity bridge port."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "firecrawl-mcp-server",
+    "name": "Firecrawl",
+    "description": "Extract web data with Firecrawl deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/firecrawl/firecrawl-mcp-server",
+    "author": "firecrawl",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "FIRECRAWL_API_KEY",
+        "required": true,
+        "description": "Firecrawl API key."
+      },
+      {
+        "key": "FIRECRAWL_API_URL",
+        "required": false,
+        "description": "Optional self-hosted Firecrawl API URL."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "desktop-commander-mcp",
+    "name": "Desktop Commander",
+    "description": "MCP server for terminal commands, file operations, and process management deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/wonderwhy-er/DesktopCommanderMCP",
+    "author": "wonderwhy-er",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "notion-mcp-server",
+    "name": "Notion",
+    "description": "Official MCP server for Notion API deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/makenotion/notion-mcp-server",
+    "author": "makenotion",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "azure-mcp",
+    "name": "Azure MCP Server",
+    "description": "All Azure MCP tools to create a seamless connection between AI agents and Azure services deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/microsoft/mcp",
+    "author": "microsoft",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "AZURE_TENANT_ID",
+        "required": false,
+        "description": "Azure tenant ID for service-principal authentication."
+      },
+      {
+        "key": "AZURE_CLIENT_ID",
+        "required": false,
+        "description": "Azure client ID for service-principal authentication."
+      },
+      {
+        "key": "AZURE_CLIENT_SECRET",
+        "required": false,
+        "description": "Azure client secret for service-principal authentication."
+      },
+      {
+        "key": "AZURE_MCP_COLLECT_TELEMETRY",
+        "required": false,
+        "description": "Set to false to disable Azure MCP telemetry.",
+        "default": "false"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "microsoft-fabric-mcp",
+    "name": "Microsoft Fabric MCP Server",
+    "description": "MCP tools for interacting with Microsoft Fabric deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/microsoft/mcp",
+    "author": "microsoft",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "AZURE_TENANT_ID",
+        "required": false,
+        "description": "Tenant ID used by Microsoft identity libraries."
+      },
+      {
+        "key": "AZURE_CLIENT_ID",
+        "required": false,
+        "description": "Client ID for app/service-principal auth."
+      },
+      {
+        "key": "AZURE_CLIENT_SECRET",
+        "required": false,
+        "description": "Client secret for app/service-principal auth."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "dbhub",
+    "name": "DBHub",
+    "description": "Minimal, token-efficient Database MCP Server for PostgreSQL, MySQL, SQL Server, SQLite, MariaDB deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/bytebase/dbhub",
+    "author": "bytebase",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "DBHUB_DSN",
+        "required": true,
+        "description": "Database DSN, for example postgres://user:pass@host:5432/dbname?sslmode=require."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "brightdata-mcp",
+    "name": "Brightdata",
+    "description": "Bright Data's Web MCP server enabling AI agents to search, extract & navigate the web deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/brightdata/brightdata-mcp",
+    "author": "brightdata",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "API_TOKEN",
+        "required": true,
+        "description": "Bright Data API token."
+      },
+      {
+        "key": "WEB_UNLOCKER_ZONE",
+        "required": false,
+        "description": "Optional Bright Data Web Unlocker zone."
+      },
+      {
+        "key": "BROWSER_AUTH",
+        "required": false,
+        "description": "Optional Browser API authentication string."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "tavily-mcp",
+    "name": "Tavily",
+    "description": "MCP server for advanced web search using Tavily deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/tavily-ai/tavily-mcp",
+    "author": "tavily-ai",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "TAVILY_API_KEY",
+        "required": true,
+        "description": "Tavily API key."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "azure-devops-mcp",
+    "name": "Azure DevOps",
+    "description": "Interact with Azure DevOps services like repositories, work items, builds, releases, test plans, and code search deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/microsoft/azure-devops-mcp",
+    "author": "microsoft",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "AZURE_DEVOPS_ORG",
+        "required": true,
+        "description": "Azure DevOps organization name, for example contoso."
+      },
+      {
+        "key": "AZURE_DEVOPS_EXT_PAT",
+        "required": false,
+        "description": "Optional Azure DevOps PAT for non-interactive auth."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "microsoftdocs-mcp",
+    "name": "Microsoft Learn",
+    "description": "Enables clients like GitHub Copilot and other AI agents to bring trusted and up-to-date information directly from Microsoft's official documentation deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/microsoftdocs/mcp",
+    "author": "MicrosoftDocs",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "stripe-mcp",
+    "name": "Stripe",
+    "description": "MCP server integrating with Stripe - tools for customers, products, payments, and more deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/stripe/agent-toolkit",
+    "author": "stripe",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "nuget-mcp",
+    "name": "Microsoft Nuget",
+    "description": "A Model Context Protocol (MCP) server for NuGet deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/NuGet/Home",
+    "author": "NuGet",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "terraform-mcp-server",
+    "name": "Terraform",
+    "description": "Generate more accurate Terraform and automate workflows for HCP Terraform and Terraform Enterprise deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/hashicorp/terraform-mcp-server",
+    "author": "hashicorp",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "TFE_ADDRESS",
+        "required": false,
+        "description": "Optional HCP Terraform or Terraform Enterprise address.",
+        "default": "https://app.terraform.io"
+      },
+      {
+        "key": "TFE_TOKEN",
+        "required": false,
+        "description": "Optional HCP Terraform or Terraform Enterprise token."
+      },
+      {
+        "key": "MCP_TOOLSETS",
+        "required": false,
+        "description": "Optional comma-separated Terraform MCP toolsets."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "apify-mcp-server",
+    "name": "Apify",
+    "description": "Extract data from any website with thousands of scrapers, crawlers, and automations on Apify Store ⚡ deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/apify/apify-mcp-server",
+    "author": "apify",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "mongodb-mcp-server",
+    "name": "Mongodb",
+    "description": "MongoDB Model Context Protocol Server deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/mongodb-js/mongodb-mcp-server",
+    "author": "mongodb-js",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "MDB_MCP_CONNECTION_STRING",
+        "required": true,
+        "description": "MongoDB connection string, or configure Atlas API credentials instead."
+      },
+      {
+        "key": "MDB_MCP_API_CLIENT_ID",
+        "required": false,
+        "description": "Optional MongoDB Atlas API client ID."
+      },
+      {
+        "key": "MDB_MCP_API_CLIENT_SECRET",
+        "required": false,
+        "description": "Optional MongoDB Atlas API client secret."
+      },
+      {
+        "key": "MDB_MCP_READ_ONLY",
+        "required": false,
+        "description": "Set to true to prefer read-only operation where supported.",
+        "default": "false"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "nuxt-mcp",
+    "name": "Nuxt",
+    "description": "MCP server helping models understand your Vite/Nuxt app deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/antfu/nuxt-mcp",
+    "author": "antfu",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "next-devtools-mcp",
+    "name": "Vercel Next Dev Tools",
+    "description": "Next.js development tools MCP server with stdio transport deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/vercel/next-devtools-mcp",
+    "author": "vercel",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "NEXT_DEV_SERVER_URL",
+        "required": false,
+        "description": "Optional URL for the Next.js dev server this MCP should inspect."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "atlassian-mcp-server",
+    "name": "Atlassian",
+    "description": "Atlassian Rovo MCP Server deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/atlassian/atlassian-mcp-server",
+    "author": "atlassian",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "sentry-mcp",
+    "name": "Getsentry Sentry",
+    "description": "MCP server for Sentry - error monitoring, issue tracking, and debugging for AI assistants deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/getsentry/sentry-mcp",
+    "author": "getsentry",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "SENTRY_ACCESS_TOKEN",
+        "required": true,
+        "description": "Sentry user auth token."
+      },
+      {
+        "key": "SENTRY_HOST",
+        "required": false,
+        "description": "Optional self-hosted Sentry host."
+      },
+      {
+        "key": "SENTRY_DISABLE_SKILLS",
+        "required": false,
+        "description": "Optional comma-separated Sentry skills/tools to disable."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
+  },
+  {
+    "id": "elasticsearch-mcp",
+    "name": "Elasticsearch",
+    "description": "MCP server for connecting to Elasticsearch data and indices. Supports search queries, mappings, ES|QL, and shard information through natural language interactions deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/elastic/mcp-server-elasticsearch",
+    "author": "elastic",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "ES_URL",
+        "required": true,
+        "description": "Elasticsearch cluster URL."
+      },
+      {
+        "key": "ES_API_KEY",
+        "required": false,
+        "description": "Elasticsearch API key."
+      },
+      {
+        "key": "ES_USERNAME",
+        "required": false,
+        "description": "Elasticsearch username for basic auth."
+      },
+      {
+        "key": "ES_PASSWORD",
+        "required": false,
+        "description": "Elasticsearch password for basic auth."
+      },
+      {
+        "key": "ES_SSL_SKIP_VERIFY",
+        "required": false,
+        "description": "Set to true to skip Elasticsearch TLS verification.",
+        "default": "false"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
   }
 ]

@@ -1,0 +1,32 @@
+services:
+  proxy:
+    image: caddy:2.8
+    ports:
+      - "18080:80"
+    environment:
+      - BEARER_TOKEN=${BEARER_TOKEN}
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    restart: unless-stopped
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          @valid_auth {
+              header X-Phala-MCP-Token "{env.BEARER_TOKEN}"
+          }
+          route @valid_auth {
+              rewrite * /api/v1/mcp
+              reverse_proxy https://app.netdata.cloud {
+                  header_up Host app.netdata.cloud
+              }
+          }
+          route {
+              respond 401 {
+                  body "Unauthorized"
+                  close
+              }
+          }
+      }
