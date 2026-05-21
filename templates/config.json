@@ -25,12 +25,7 @@
       "memory": 4096,
       "diskSize": 40
     },
-    "tags": [
-      "VibeVM",
-      "TEE",
-      "AI",
-      "VSCode"
-    ]
+    "tags": ["VibeVM", "TEE", "AI", "VSCode"]
   },
   {
     "id": "openclaw",
@@ -76,12 +71,7 @@
       "memory": 4096,
       "diskSize": 40
     },
-    "tags": [
-      "Agent",
-      "AI",
-      "Automation",
-      "Messaging"
-    ]
+    "tags": ["Agent", "AI", "Automation", "Messaging"]
   },
   {
     "id": "ironclaw",
@@ -200,12 +190,7 @@
       "memory": 4096,
       "diskSize": 40
     },
-    "tags": [
-      "Agent",
-      "AI",
-      "Gateway",
-      "NEAR"
-    ]
+    "tags": ["Agent", "AI", "Gateway", "NEAR"]
   },
   {
     "id": "hermes-agent",
@@ -251,12 +236,7 @@
       "memory": 4096,
       "diskSize": 40
     },
-    "tags": [
-      "Agent",
-      "AI",
-      "Automation",
-      "Messaging"
-    ]
+    "tags": ["Agent", "AI", "Automation", "Messaging"]
   },
   {
     "id": "llm-wiki",
@@ -302,12 +282,7 @@
       "memory": 4096,
       "diskSize": 40
     },
-    "tags": [
-      "AI",
-      "Knowledge Graph",
-      "Wiki",
-      "Research"
-    ]
+    "tags": ["AI", "Knowledge Graph", "Wiki", "Research"]
   },
   {
     "id": "anyone-anon-service",
@@ -316,10 +291,7 @@
     "repo": "https://github.com/rA3ka/dstack-examples/tree/main/anyone-anon-service",
     "author": "Anyone",
     "icon": "Anyone-anon-hs.png",
-    "tags": [
-      "Anyone",
-      "anon"
-    ]
+    "tags": ["Anyone", "anon"]
   },
   {
     "id": "anyone-anon-relay",
@@ -328,11 +300,7 @@
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/anyone-anon-relay",
     "author": "Anyone",
     "icon": "Anyone-anon-hs.png",
-    "tags": [
-      "Anyone",
-      "anon",
-      "relay"
-    ]
+    "tags": ["Anyone", "anon", "relay"]
   },
   {
     "id": "evm-mcp",
@@ -341,34 +309,14 @@
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/evm-mcp-server",
     "author": "MCP-DAO",
     "envs": [
-      {
-        "key": "BEARER_TOKEN",
-        "required": true
-      },
-      {
-        "key": "EVM_PRIVATE_KEY",
-        "required": true
-      },
-      {
-        "key": "RPC_URL",
-        "required": true
-      },
-      {
-        "key": "OPENAI_API_KEY",
-        "required": true
-      },
-      {
-        "key": "PERPLEXITY_API_KEY",
-        "required": true
-      },
-      {
-        "key": "COINGECKO_PRO_API_KEY",
-        "required": true
-      }
+      { "key": "BEARER_TOKEN", "required": true },
+      { "key": "EVM_PRIVATE_KEY", "required": true },
+      { "key": "RPC_URL", "required": true },
+      { "key": "OPENAI_API_KEY", "required": true },
+      { "key": "PERPLEXITY_API_KEY", "required": true },
+      { "key": "COINGECKO_PRO_API_KEY", "required": true }
     ],
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP"]
   },
   {
     "id": "demap-defillama",
@@ -377,15 +325,8 @@
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/demap-defilama",
     "author": "DeMCP",
     "icon": "mcp-defillama.svg",
-    "envs": [
-      {
-        "key": "BEARER_TOKEN",
-        "required": true
-      }
-    ],
-    "tags": [
-      "MCP"
-    ]
+    "envs": [{ "key": "BEARER_TOKEN", "required": true }],
+    "tags": ["MCP"]
   },
   {
     "id": "near-mcp",
@@ -394,27 +335,13 @@
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/near-mcp-server",
     "author": "Phala-Network",
     "envs": [
-      {
-        "key": "BEARER_TOKEN",
-        "required": true
-      },
-      {
-        "key": "NEAR_KEYSTOREDATA",
-        "required": true
-      },
-      {
-        "key": "NEAR_NETWORK",
-        "required": false
-      },
-      {
-        "key": "NEAR_ACCOUNT_ID",
-        "required": true
-      }
+      { "key": "BEARER_TOKEN", "required": true },
+      { "key": "NEAR_KEYSTOREDATA", "required": true },
+      { "key": "NEAR_NETWORK", "required": false },
+      { "key": "NEAR_ACCOUNT_ID", "required": true }
     ],
     "icon": "mcp-near.svg",
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP"]
   },
   {
     "id": "solana-mcp",
@@ -423,27 +350,13 @@
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/solana-mcp",
     "author": "SendAI & DARK",
     "envs": [
-      {
-        "key": "BEARER_TOKEN",
-        "required": true
-      },
-      {
-        "key": "SOLANA_PRIVATE_KEY",
-        "required": true
-      },
-      {
-        "key": "RPC_URL",
-        "required": true
-      },
-      {
-        "key": "OPENAI_API_KEY",
-        "required": false
-      }
+      { "key": "BEARER_TOKEN", "required": true },
+      { "key": "SOLANA_PRIVATE_KEY", "required": true },
+      { "key": "RPC_URL", "required": true },
+      { "key": "OPENAI_API_KEY", "required": false }
     ],
     "icon": "mcp-solana.svg",
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP"]
   },
   {
     "id": "context7-mcp",
@@ -452,15 +365,8 @@
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/context7-mcp",
     "author": "Phala-Network",
     "icon": "mcp-context7.png",
-    "envs": [
-      {
-        "key": "BEARER_TOKEN",
-        "required": true
-      }
-    ],
-    "tags": [
-      "MCP"
-    ]
+    "envs": [{ "key": "BEARER_TOKEN", "required": true }],
+    "tags": ["MCP"]
   },
   {
     "id": "mcd-mcp",
@@ -481,16 +387,8 @@
         "description": "Bearer token required by clients that call this Phala Cloud proxy"
       }
     ],
-    "defaultResource": {
-      "vCPU": 1,
-      "memory": 1024,
-      "diskSize": 10
-    },
-    "tags": [
-      "MCP",
-      "Food",
-      "China"
-    ]
+    "defaultResource": { "vCPU": 1, "memory": 1024, "diskSize": 10 },
+    "tags": ["MCP", "Food", "China"]
   },
   {
     "id": "elevenlabs-mcp",
@@ -499,23 +397,12 @@
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/elevenlabs-mcp-server",
     "author": "Phala-Network",
     "envs": [
-      {
-        "key": "BEARER_TOKEN",
-        "required": true
-      },
-      {
-        "key": "ELEVENLABS_API_KEY",
-        "required": true
-      },
-      {
-        "key": "ELEVENLABS_MCP_BASE_PATH",
-        "required": true
-      }
+      { "key": "BEARER_TOKEN", "required": true },
+      { "key": "ELEVENLABS_API_KEY", "required": true },
+      { "key": "ELEVENLABS_MCP_BASE_PATH", "required": true }
     ],
     "icon": "elevenlabs.png",
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP"]
   },
   {
     "id": "supabase-db",
@@ -524,19 +411,11 @@
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/supabase-db",
     "author": "Phala-Network",
     "envs": [
-      {
-        "key": "BEARER_TOKEN",
-        "required": true
-      },
-      {
-        "key": "SUPABASE_ACCESS_TOKEN",
-        "required": true
-      }
+      { "key": "BEARER_TOKEN", "required": true },
+      { "key": "SUPABASE_ACCESS_TOKEN", "required": true }
     ],
     "icon": "supabase.svg",
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP"]
   },
   {
     "id": "figma-mcp",
@@ -545,19 +424,11 @@
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/figma-mcp",
     "author": "Phala-Network",
     "envs": [
-      {
-        "key": "BEARER_TOKEN",
-        "required": true
-      },
-      {
-        "key": "FIGMA_API_KEY",
-        "required": true
-      }
+      { "key": "BEARER_TOKEN", "required": true },
+      { "key": "FIGMA_API_KEY", "required": true }
     ],
     "icon": "mcp-figma.svg",
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP"]
   },
   {
     "id": "mcp-server-fetch",
@@ -565,9 +436,7 @@
     "description": "A MCP server deployed on Phala Cloud that enables AI agents to fetch real-time data from a given URL.",
     "repo": "https://github.com/Leechael/mcp-servers/tree/main/src/fetch",
     "author": "Leechael",
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP"]
   },
   {
     "id": "mcp-server-sequential-thinking",
@@ -575,9 +444,7 @@
     "description": "A MCP server deployed on Phala Cloud that enables AI agents to think sequentially.",
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/mcp-server-sequential-thinking",
     "author": "Phala-Network",
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP"]
   },
   {
     "id": "mcp-swarms-agent",
@@ -587,24 +454,15 @@
     "author": "The-Swarm-Corporation",
     "icon": "mcp-swarms.svg",
     "envs": [
-      {
-        "key": "OPENAI_API_KEY",
-        "required": true
-      },
+      { "key": "OPENAI_API_KEY", "required": true },
       {
         "key": "OPENAI_API_BASE",
         "default": "https://api.openai.com/v1",
         "required": false
       },
-      {
-        "key": "MODEL_NAME",
-        "default": "gpt-4o-mini",
-        "required": false
-      }
+      { "key": "MODEL_NAME", "default": "gpt-4o-mini", "required": false }
     ],
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP"]
   },
   {
     "id": "tor-hidden-service",
@@ -612,9 +470,7 @@
     "description": "This docker compose example sets up a Tor hidden service and serves an nginx website from that.",
     "repo": "https://github.com/Dstack-TEE/dstack-examples/tree/main/tor-hidden-service",
     "author": "Dstack-TEE",
-    "tags": [
-      "Dstack"
-    ]
+    "tags": ["Dstack"]
   },
   {
     "id": "lightclient",
@@ -622,15 +478,8 @@
     "description": "Minimal docker file for using the Helios light client to provide a trustworthy view of the blockchain.",
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/lightclient",
     "author": "Dstack-TEE",
-    "envs": [
-      {
-        "key": "ETH_RPC_URL",
-        "required": true
-      }
-    ],
-    "tags": [
-      "Dstack"
-    ]
+    "envs": [{ "key": "ETH_RPC_URL", "required": true }],
+    "tags": ["Dstack"]
   },
   {
     "id": "webshell",
@@ -651,9 +500,7 @@
         "description": "HTTP basic auth username for ttyd."
       }
     ],
-    "tags": [
-      "Dstack"
-    ]
+    "tags": ["Dstack"]
   },
   {
     "id": "nextjs-starter",
@@ -662,9 +509,7 @@
     "repo": "https://github.com/Phala-Network/phala-cloud-nextjs-starter",
     "author": "Phala-Network",
     "icon": "nextjs-starter.svg",
-    "tags": [
-      "Starter"
-    ]
+    "tags": ["Starter"]
   },
   {
     "id": "python-starter",
@@ -673,9 +518,7 @@
     "repo": "https://github.com/Phala-Network/phala-cloud-python-starter",
     "author": "Phala-Network",
     "icon": "python-starter.png",
-    "tags": [
-      "Starter"
-    ]
+    "tags": ["Starter"]
   },
   {
     "id": "bun-starter",
@@ -684,9 +527,7 @@
     "repo": "https://github.com/Phala-Network/phala-cloud-bun-starter",
     "author": "Phala-Network",
     "icon": "bun-starter.svg",
-    "tags": [
-      "Starter"
-    ]
+    "tags": ["Starter"]
   },
   {
     "id": "node-starter",
@@ -695,9 +536,7 @@
     "repo": "https://github.com/Gldywn/phala-cloud-node-starter",
     "author": "Gldywn",
     "icon": "node-starter.svg",
-    "tags": [
-      "Starter"
-    ]
+    "tags": ["Starter"]
   },
   {
     "id": "armor-crypto",
@@ -724,9 +563,7 @@
         "description": "Optional Armor access token."
       }
     ],
-    "tags": [
-      "MCP"
-    ]
+    "tags": ["MCP"]
   },
   {
     "id": "coinbase-x402-tee",
@@ -749,10 +586,7 @@
         "required": true
       }
     ],
-    "tags": [
-      "Starter",
-      "x402"
-    ]
+    "tags": ["Starter", "x402"]
   },
   {
     "id": "vrf",
@@ -762,18 +596,10 @@
     "author": "Phala-Network",
     "icon": "vrf.png",
     "envs": [
-      {
-        "key": "RPC_URL",
-        "required": true
-      },
-      {
-        "key": "CONTRACT_ADDRESS",
-        "required": true
-      }
+      { "key": "RPC_URL", "required": true },
+      { "key": "CONTRACT_ADDRESS", "required": true }
     ],
-    "tags": [
-      "VRF"
-    ]
+    "tags": ["VRF"]
   },
   {
     "id": "blinko",
@@ -783,18 +609,10 @@
     "author": "Blinko Space",
     "icon": "blinko.png",
     "envs": [
-      {
-        "key": "NEXTAUTH_SECRET",
-        "required": true
-      },
-      {
-        "key": "POSTGRES_PASSWORD",
-        "required": true
-      }
+      { "key": "NEXTAUTH_SECRET", "required": true },
+      { "key": "POSTGRES_PASSWORD", "required": true }
     ],
-    "tags": [
-      "Notebook"
-    ]
+    "tags": ["Notebook"]
   },
   {
     "id": "chatnio",
@@ -804,26 +622,12 @@
     "author": "coaidev",
     "icon": "chatnio.png",
     "envs": [
-      {
-        "key": "MYSQL_ROOT_PASSWORD",
-        "required": true
-      },
-      {
-        "key": "MYSQL_PASSWORD",
-        "required": true
-      },
-      {
-        "key": "SECRET",
-        "required": true
-      },
-      {
-        "key": "CHATNIO_ROOT_PASSWORD",
-        "required": true
-      }
+      { "key": "MYSQL_ROOT_PASSWORD", "required": true },
+      { "key": "MYSQL_PASSWORD", "required": true },
+      { "key": "SECRET", "required": true },
+      { "key": "CHATNIO_ROOT_PASSWORD", "required": true }
     ],
-    "tags": [
-      "Chat"
-    ]
+    "tags": ["Chat"]
   },
   {
     "id": "n8n-automation",
@@ -844,29 +648,12 @@
         "default": "UTC",
         "description": "Timezone for schedule-oriented n8n nodes"
       },
-      {
-        "key": "OPENAI_API_KEY",
-        "required": false
-      },
-      {
-        "key": "GOOGLE_OAUTH_CLIENT_ID",
-        "required": false
-      },
-      {
-        "key": "GOOGLE_OAUTH_CLIENT_SECRET",
-        "required": false
-      }
+      { "key": "OPENAI_API_KEY", "required": false },
+      { "key": "GOOGLE_OAUTH_CLIENT_ID", "required": false },
+      { "key": "GOOGLE_OAUTH_CLIENT_SECRET", "required": false }
     ],
-    "defaultResource": {
-      "vCPU": 2,
-      "memory": 4096,
-      "diskSize": 40
-    },
-    "tags": [
-      "Automation",
-      "Workflow",
-      "Integration"
-    ]
+    "defaultResource": { "vCPU": 2, "memory": 4096, "diskSize": 40 },
+    "tags": ["Automation", "Workflow", "Integration"]
   },
   {
     "id": "moralis-mcp",
@@ -933,10 +720,7 @@
         "description": "Episode processing concurrency; keep low to reduce LLM provider rate-limit pressure"
       }
     ],
-    "tags": [
-      "MCP",
-      "Knowledge Graph"
-    ]
+    "tags": ["MCP", "Knowledge Graph"]
   },
   {
     "id": "msft-presidio-app",
@@ -945,9 +729,7 @@
     "repo": "https://github.com/HashWarlock/presidio/tree/phala-cloud/docs/samples/python/streamlit",
     "author": "HashWarlock",
     "icon": "msft-presidio.png",
-    "tags": [
-      "De-Identification"
-    ]
+    "tags": ["De-Identification"]
   },
   {
     "id": "near-shade-agent",
@@ -957,52 +739,47 @@
     "author": "HashWarlock",
     "icon": "mcp-near.svg",
     "envs": [
-      {
-        "key": "NEAR_ACCOUNT_ID",
-        "required": true,
+      { 
+        "key": "NEAR_ACCOUNT_ID", 
+        "required": true, 
         "description": "NEAR testnet account ID obtained from near-cli-rs; real account required for agent-account and transaction behavior"
       },
-      {
-        "key": "NEAR_SEED_PHRASE",
-        "required": true,
+      { 
+        "key": "NEAR_SEED_PHRASE", 
+        "required": true, 
         "description": "Matching NEAR testnet account seed phrase; dummy values are only suitable for shallow smoke tests"
       },
-      {
-        "key": "NEXT_PUBLIC_contractId",
-        "required": true,
-        "description": "Contract ID (ac-proxy.[NEAR_ACCOUNT_ID] for local, ac-sandbox.[NEAR_ACCOUNT_ID] for Phala Cloud)",
-        "default": "ac-proxy.NEAR_ACCOUNT_ID"
+      { 
+        "key": "NEXT_PUBLIC_contractId", 
+        "required": true, 
+        "description": "Contract ID (ac-proxy.[NEAR_ACCOUNT_ID] for local, ac-sandbox.[NEAR_ACCOUNT_ID] for Phala Cloud)", 
+        "default": "ac-proxy.NEAR_ACCOUNT_ID" 
       },
-      {
-        "key": "API_CODEHASH",
-        "required": true,
-        "description": "Shade agent API code hash (do not change)",
-        "default": "a86e3a4300b069c08d629a38d61a3d780f7992eaf36aa505e4527e466553e2e5"
+      { 
+        "key": "API_CODEHASH", 
+        "required": true, 
+        "description": "Shade agent API code hash (do not change)", 
+        "default": "a86e3a4300b069c08d629a38d61a3d780f7992eaf36aa505e4527e466553e2e5" 
       },
-      {
-        "key": "APP_CODEHASH",
-        "required": true,
-        "description": "Your app's code hash (updates automatically with shade-agent-cli)",
-        "default": "af0c4432864489eb8c6650a6dc61f03ef831240a4199e602cd4d6bd8f4d7163f"
+      { 
+        "key": "APP_CODEHASH", 
+        "required": true, 
+        "description": "Your app's code hash (updates automatically with shade-agent-cli)", 
+        "default": "af0c4432864489eb8c6650a6dc61f03ef831240a4199e602cd4d6bd8f4d7163f" 
       },
-      {
-        "key": "DOCKER_TAG",
-        "required": true,
-        "description": "Docker tag in format docker_username/image_name",
-        "default": "pivortex/my-app"
+      { 
+        "key": "DOCKER_TAG", 
+        "required": true, 
+        "description": "Docker tag in format docker_username/image_name", 
+        "default": "pivortex/my-app" 
       },
-      {
-        "key": "PHALA_API_KEY",
-        "required": true,
+      { 
+        "key": "PHALA_API_KEY", 
+        "required": true, 
         "description": "Phala API key from https://cloud.phala.com/dashboard/tokens; real key required for full agent behavior"
       }
     ],
-    "tags": [
-      "Agent",
-      "NEAR",
-      "Oracle",
-      "TEE"
-    ]
+    "tags": ["Agent", "NEAR", "Oracle", "TEE"]
   },
   {
     "id": "bytebot",
@@ -1039,10 +816,7 @@
         "description": "Google Gemini API key for AI task planning and execution (at least one API key required)"
       }
     ],
-    "tags": [
-      "AI",
-      "Automation"
-    ]
+    "tags": ["AI", "Automation"]
   },
   {
     "id": "node-oracle-template",
@@ -1051,10 +825,7 @@
     "repo": "https://github.com/Gldywn/phala-cloud-oracle-template",
     "author": "Gldywn",
     "icon": "hha.png",
-    "tags": [
-      "Oracle",
-      "Node"
-    ]
+    "tags": ["Oracle", "Node"]
   },
   {
     "id": "akave-link",
@@ -1064,55 +835,16 @@
     "author": "DylanCkawalec",
     "icon": "akave-link.png",
     "envs": [
-      {
-        "key": "NODE_ADDRESS",
-        "required": true,
-        "default": "connect.akave.ai:5500",
-        "description": "Akave node endpoint"
-      },
-      {
-        "key": "PRIVATE_KEY",
-        "required": true,
-        "description": "Ethereum private key for Akave"
-      },
-      {
-        "key": "ADMIN_PASSWORD_HASH",
-        "required": true,
-        "description": "Caddy bcrypt hash for the Basic Auth password that protects all routes"
-      },
-      {
-        "key": "AKAVELINK_USERNAME",
-        "required": false,
-        "default": "admin",
-        "description": "Caddy Basic Auth username"
-      },
-      {
-        "key": "PORT",
-        "required": false,
-        "default": "80"
-      },
-      {
-        "key": "CORS_ORIGIN",
-        "required": false,
-        "default": "*"
-      },
-      {
-        "key": "DEBUG",
-        "required": false,
-        "default": "true"
-      }
+      { "key": "NODE_ADDRESS", "required": true, "default": "connect.akave.ai:5500", "description": "Akave node endpoint" },
+      { "key": "PRIVATE_KEY", "required": true, "description": "Ethereum private key for Akave" },
+      { "key": "ADMIN_PASSWORD_HASH", "required": true, "description": "Caddy bcrypt hash for the Basic Auth password that protects all routes" },
+      { "key": "AKAVELINK_USERNAME", "required": false, "default": "admin", "description": "Caddy Basic Auth username" },
+      { "key": "PORT", "required": false, "default": "80" },
+      { "key": "CORS_ORIGIN", "required": false, "default": "*" },
+      { "key": "DEBUG", "required": false, "default": "true" }
     ],
-    "defaultResource": {
-      "vCPU": 2,
-      "memory": 2048,
-      "diskSize": 20
-    },
-    "tags": [
-      "Storage",
-      "Akave",
-      "REST",
-      "TEE"
-    ]
+    "defaultResource": { "vCPU": 2, "memory": 2048, "diskSize": 20 },
+    "tags": ["Storage", "Akave", "REST", "TEE"]
   },
   {
     "id": "open-webui",
@@ -1122,22 +854,10 @@
     "author": "Phala-Network",
     "icon": "open-webui.png",
     "envs": [
-      {
-        "key": "WEBUI_SECRET_KEY",
-        "required": false,
-        "description": "Secret key for Open WebUI authentication"
-      }
+      { "key": "WEBUI_SECRET_KEY", "required": false, "description": "Secret key for Open WebUI authentication" }
     ],
-    "defaultResource": {
-      "vCPU": 2,
-      "memory": 2048,
-      "diskSize": 20
-    },
-    "tags": [
-      "OpenWebUI",
-      "REST",
-      "TEE"
-    ]
+    "defaultResource": { "vCPU": 2, "memory": 2048, "diskSize": 20 },
+    "tags": ["OpenWebUI", "REST", "TEE"]
   },
   {
     "id": "primus-attestor-node",
@@ -1182,131 +902,29 @@
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/erc-8004-tee-agent",
     "author": "Phala-Network",
     "envs": [
-      {
-        "key": "AGENT_SALT",
-        "required": true,
-        "description": "Unique secret salt for key derivation"
-      },
-      {
-        "key": "REDPILL_API_KEY",
-        "required": true,
-        "description": "API key for confidential AI inference"
-      },
-      {
-        "key": "SUBGRAPH_API_KEY",
-        "required": true,
-        "description": "Access token for blockchain data queries"
-      },
-      {
-        "key": "RPC_URL",
-        "required": true,
-        "description": "Blockchain node endpoint"
-      },
-      {
-        "key": "CHAIN_NAME",
-        "required": true,
-        "description": "Target blockchain (e.g., eth-sepolia)"
-      },
-      {
-        "key": "ERC8004_AGENT_PASSWORD_HASH",
-        "required": true,
-        "description": "Caddy bcrypt password hash for Basic Auth"
-      },
-      {
-        "key": "ERC8004_AGENT_USERNAME",
-        "required": false,
-        "description": "Caddy Basic Auth username",
-        "default": "agent"
-      },
-      {
-        "key": "AGENT_DOMAIN",
-        "required": false,
-        "description": "Public agent domain override; derived at startup when omitted"
-      },
-      {
-        "key": "TRUST_CENTER_URL",
-        "required": false,
-        "description": "Trust Center widget URL override; derived at startup when omitted"
-      },
-      {
-        "key": "ANTHROPIC_MODEL",
-        "required": false,
-        "description": "Chat model selection",
-        "default": "openai/gpt-oss-120b"
-      },
-      {
-        "key": "AI_MODEL",
-        "required": false,
-        "description": "RedPill model used by the code-generation helper",
-        "default": "phala/qwen-2.5-7b-instruct"
-      },
-      {
-        "key": "AI_TEMPERATURE",
-        "required": false,
-        "description": "AI sampling temperature",
-        "default": "0.3"
-      },
-      {
-        "key": "AI_MAX_TOKENS",
-        "required": false,
-        "description": "AI response token limit",
-        "default": "2000"
-      },
-      {
-        "key": "CODE_EXECUTION_TIMEOUT",
-        "required": false,
-        "description": "Code execution timeout in seconds",
-        "default": "30"
-      },
-      {
-        "key": "REDPILL_API_URL",
-        "required": false,
-        "description": "RedPill API base URL",
-        "default": "https://api.redpill.ai"
-      },
-      {
-        "key": "ANTHROPIC_BASE_URL",
-        "required": false,
-        "description": "Anthropic-compatible API base URL",
-        "default": "https://api.redpill.ai"
-      },
-      {
-        "key": "CHAIN_ID",
-        "required": false,
-        "description": "EVM chain ID override",
-        "default": "11155111"
-      },
-      {
-        "key": "IDENTITY_REGISTRY_ADDRESS",
-        "required": false,
-        "description": "ERC-8004 identity registry contract override",
-        "default": "0x8004A818BFB912233c491871b3d84c89A494BD9e"
-      },
-      {
-        "key": "REPUTATION_REGISTRY_ADDRESS",
-        "required": false,
-        "description": "ERC-8004 reputation registry contract override",
-        "default": "0x8004B663056A597Dffe9eCcC1965A193B7388713"
-      },
-      {
-        "key": "SESSION_TIMEOUT_MINUTES",
-        "required": false,
-        "description": "Chat session timeout in minutes",
-        "default": "60"
-      },
-      {
-        "key": "MAX_SESSIONS",
-        "required": false,
-        "description": "Maximum in-memory chat sessions",
-        "default": "100"
-      }
+      { "key": "AGENT_SALT", "required": true, "description": "Unique secret salt for key derivation" },
+      { "key": "REDPILL_API_KEY", "required": true, "description": "API key for confidential AI inference" },
+      { "key": "SUBGRAPH_API_KEY", "required": true, "description": "Access token for blockchain data queries" },
+      { "key": "RPC_URL", "required": true, "description": "Blockchain node endpoint" },
+      { "key": "CHAIN_NAME", "required": true, "description": "Target blockchain (e.g., eth-sepolia)" },
+      { "key": "ERC8004_AGENT_PASSWORD_HASH", "required": true, "description": "Caddy bcrypt password hash for Basic Auth" },
+      { "key": "ERC8004_AGENT_USERNAME", "required": false, "description": "Caddy Basic Auth username", "default": "agent" },
+      { "key": "AGENT_DOMAIN", "required": false, "description": "Public agent domain override; derived at startup when omitted" },
+      { "key": "TRUST_CENTER_URL", "required": false, "description": "Trust Center widget URL override; derived at startup when omitted" },
+      { "key": "ANTHROPIC_MODEL", "required": false, "description": "Chat model selection", "default": "openai/gpt-oss-120b" },
+      { "key": "AI_MODEL", "required": false, "description": "RedPill model used by the code-generation helper", "default": "phala/qwen-2.5-7b-instruct" },
+      { "key": "AI_TEMPERATURE", "required": false, "description": "AI sampling temperature", "default": "0.3" },
+      { "key": "AI_MAX_TOKENS", "required": false, "description": "AI response token limit", "default": "2000" },
+      { "key": "CODE_EXECUTION_TIMEOUT", "required": false, "description": "Code execution timeout in seconds", "default": "30" },
+      { "key": "REDPILL_API_URL", "required": false, "description": "RedPill API base URL", "default": "https://api.redpill.ai" },
+      { "key": "ANTHROPIC_BASE_URL", "required": false, "description": "Anthropic-compatible API base URL", "default": "https://api.redpill.ai" },
+      { "key": "CHAIN_ID", "required": false, "description": "EVM chain ID override", "default": "11155111" },
+      { "key": "IDENTITY_REGISTRY_ADDRESS", "required": false, "description": "ERC-8004 identity registry contract override", "default": "0x8004A818BFB912233c491871b3d84c89A494BD9e" },
+      { "key": "REPUTATION_REGISTRY_ADDRESS", "required": false, "description": "ERC-8004 reputation registry contract override", "default": "0x8004B663056A597Dffe9eCcC1965A193B7388713" },
+      { "key": "SESSION_TIMEOUT_MINUTES", "required": false, "description": "Chat session timeout in minutes", "default": "60" },
+      { "key": "MAX_SESSIONS", "required": false, "description": "Maximum in-memory chat sessions", "default": "100" }
     ],
-    "tags": [
-      "Agent",
-      "TEE",
-      "ERC-8004",
-      "AI"
-    ]
+    "tags": ["Agent", "TEE", "ERC-8004", "AI"]
   },
   {
     "id": "markitdown-mcp",
