@@ -29,6 +29,7 @@ type APIError struct {
 	Detail      any
 	Body        string
 	Headers     http.Header
+	RequestID   string
 	ErrorCode   string
 	Details     []ErrorDetail
 	Suggestions []string
@@ -158,6 +159,10 @@ func (e *APIError) FormatError() string {
 		fmt.Fprintf(&b, "[%s] ", e.ErrorCode)
 	}
 	b.WriteString(e.Message)
+
+	if e.RequestID != "" {
+		fmt.Fprintf(&b, "\nRequest ID: %s", e.RequestID)
+	}
 
 	if len(e.Details) > 0 {
 		b.WriteString("\n\nDetails:")

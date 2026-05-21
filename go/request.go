@@ -47,6 +47,7 @@ func (c *Client) do(ctx context.Context, req *http.Request) (*http.Response, err
 		StatusCode: resp.StatusCode,
 		Body:       string(bodyBytes),
 		Headers:    resp.Header,
+		RequestID:  resp.Header.Get("X-Request-ID"),
 	}
 
 	// Try to parse error message from JSON response.
@@ -63,6 +64,9 @@ func (c *Client) do(ctx context.Context, req *http.Request) (*http.Response, err
 				b, _ := json.Marshal(detail)
 				apiErr.Message = string(b)
 			}
+		}
+		if requestID, ok := parsed["request_id"].(string); ok {
+			apiErr.RequestID = requestID
 		}
 		if code, ok := parsed["error_code"].(string); ok {
 			apiErr.ErrorCode = code

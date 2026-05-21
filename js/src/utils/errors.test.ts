@@ -12,6 +12,7 @@ import {
   getValidationFields,
   formatValidationErrors,
   formatErrorMessage,
+  formatStructuredError,
 } from "./errors";
 
 describe("parseApiError", () => {
@@ -470,6 +471,7 @@ describe("RequestError.fromFetchError with StructuredError responses", () => {
       data: {
         error_code: "ERR-01-005",
         message: "Compose hash registration required on-chain",
+        request_id: "rid-body-123",
         details: [
           { field: "compose_hash", value: "0xhash123", message: null },
           { field: "app_id", value: "0xapp456", message: null },
@@ -506,6 +508,7 @@ describe("RequestError.fromFetchError with StructuredError responses", () => {
 
     const detail = requestError.detail as Record<string, unknown>;
     expect(detail.error_code).toBe("ERR-01-005");
+    expect(detail.request_id).toBe("rid-body-123");
     expect(detail.details).toBeDefined();
     expect(Array.isArray(detail.details)).toBe(true);
   });
@@ -519,12 +522,30 @@ describe("RequestError.fromFetchError with StructuredError responses", () => {
     expect(error).toBeInstanceOf(BusinessError);
     expect(error).toBeInstanceOf(PhalaCloudError);
     expect(error.status).toBe(465);
+    expect(error.requestId).toBe("rid-body-123");
 
     // detail should still contain the StructuredError object
     expect(error.detail).toBeDefined();
     expect(typeof error.detail).toBe("object");
     const detail = error.detail as Record<string, unknown>;
     expect(detail.error_code).toBe("ERR-01-005");
+    expect(detail.request_id).toBe("rid-body-123");
     expect(Array.isArray(detail.details)).toBe(true);
+  });
+
+  it("should use X-Request-ID header when structured body omits request_id", () => {
+    const fetchError = makeStructuredFetchError(465) as Record<string, unknown>;
+    const data = fetchError.data as Record<string, unknown>;
+    delete data.request_id;
+    fetchError.response = {
+      headers: new Headers({ "X-Request-ID": "rid-header-456" }),
+    } as Response;
+
+    const requestError = RequestError.fromFetchError(fetchError as never);
+    const error = parseApiError(requestError);
+
+    expect(error).toBeInstanceOf(ResourceError);
+    expect(error.requestId).toBe("rid-header-456");
+    expect(formatStructuredError(error as ResourceError)).toContain("Request ID: rid-header-456");
   });
 });
