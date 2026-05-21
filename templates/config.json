@@ -1760,5 +1760,27 @@
     "tags": [
       "MCP"
     ]
+  },
+  {
+    "id": "microsoftdocs-mcp",
+    "name": "Microsoft Learn",
+    "description": "Enables clients like GitHub Copilot and other AI agents to bring trusted and up-to-date information directly from Microsoft's official documentation deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/microsoftdocs/mcp",
+    "author": "MicrosoftDocs",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
   }
 ]
