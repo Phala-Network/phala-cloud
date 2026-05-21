@@ -369,6 +369,28 @@
     "tags": ["MCP"]
   },
   {
+    "id": "mcd-mcp",
+    "name": "McDonald's China MCP",
+    "description": "A protected Phala Cloud proxy for McDonald's China MCP, enabling AI agents to use McDelivery ordering, in-store pickup, group meals, coupons, points redemption, nutrition information, nearby store search, and campaign calendars through the official Streamable HTTP MCP service.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/mcd-mcp",
+    "author": "McDonald's China",
+    "icon": "mcd-mcp.svg",
+    "envs": [
+      {
+        "key": "MCD_MCP_TOKEN",
+        "required": true,
+        "description": "McDonald's China MCP token from https://open.mcd.cn/mcp"
+      },
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Bearer token required by clients that call this Phala Cloud proxy"
+      }
+    ],
+    "defaultResource": { "vCPU": 1, "memory": 1024, "diskSize": 10 },
+    "tags": ["MCP", "Food", "China"]
+  },
+  {
     "id": "elevenlabs-mcp",
     "name": "ElevenLabs MCP",
     "description": "An ElevenLabs MCP server deployed on Phala Cloud that enables AI agents to fetch real-time ElevenLabs data, including protocol TVL (Total Value Locked), chain metrics, and token prices.",
