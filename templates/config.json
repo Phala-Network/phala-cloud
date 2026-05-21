@@ -1664,5 +1664,42 @@
     "tags": [
       "MCP"
     ]
+  },
+  {
+    "id": "brightdata-mcp",
+    "name": "Brightdata",
+    "description": "Bright Data's Web MCP server enabling AI agents to search, extract & navigate the web deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/brightdata/brightdata-mcp",
+    "author": "brightdata",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "API_TOKEN",
+        "required": true,
+        "description": "Bright Data API token."
+      },
+      {
+        "key": "WEB_UNLOCKER_ZONE",
+        "required": false,
+        "description": "Optional Bright Data Web Unlocker zone."
+      },
+      {
+        "key": "BROWSER_AUTH",
+        "required": false,
+        "description": "Optional Browser API authentication string."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
   }
 ]
