@@ -1886,5 +1886,48 @@
     "tags": [
       "MCP"
     ]
+  },
+  {
+    "id": "mongodb-mcp-server",
+    "name": "Mongodb",
+    "description": "MongoDB Model Context Protocol Server deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/mongodb-js/mongodb-mcp-server",
+    "author": "mongodb-js",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "MDB_MCP_CONNECTION_STRING",
+        "required": true,
+        "description": "MongoDB connection string, or configure Atlas API credentials instead."
+      },
+      {
+        "key": "MDB_MCP_API_CLIENT_ID",
+        "required": false,
+        "description": "Optional MongoDB Atlas API client ID."
+      },
+      {
+        "key": "MDB_MCP_API_CLIENT_SECRET",
+        "required": false,
+        "description": "Optional MongoDB Atlas API client secret."
+      },
+      {
+        "key": "MDB_MCP_READ_ONLY",
+        "required": false,
+        "description": "Set to true to prefer read-only operation where supported.",
+        "default": "false"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
   }
 ]
