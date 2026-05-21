@@ -1951,5 +1951,32 @@
     "tags": [
       "MCP"
     ]
+  },
+  {
+    "id": "next-devtools-mcp",
+    "name": "Vercel Next Dev Tools",
+    "description": "Next.js development tools MCP server with stdio transport deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/vercel/next-devtools-mcp",
+    "author": "vercel",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "NEXT_DEV_SERVER_URL",
+        "required": false,
+        "description": "Optional URL for the Next.js dev server this MCP should inspect."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
   }
 ]
