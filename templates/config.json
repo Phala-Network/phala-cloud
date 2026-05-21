@@ -1535,5 +1535,27 @@
     "tags": [
       "MCP"
     ]
+  },
+  {
+    "id": "notion-mcp-server",
+    "name": "Notion",
+    "description": "Official MCP server for Notion API deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/makenotion/notion-mcp-server",
+    "author": "makenotion",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
   }
 ]
