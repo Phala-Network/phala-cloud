@@ -931,7 +931,7 @@
     "id": "markitdown-mcp",
     "name": "Markitdown",
     "description": "Convert various file formats (PDF, Word, Excel, images, audio) to Markdown deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/microsoft/markitdown",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/markitdown-mcp",
     "author": "microsoft",
     "icon": "markitdown-mcp.png",
     "envs": [
@@ -952,7 +952,7 @@
     "id": "netdata-mcp-server",
     "name": "Netdata",
     "description": "Real-time infrastructure monitoring with metrics, logs, alerts, and ML-based anomaly detection deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/netdata/netdata",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/netdata-mcp-server",
     "author": "netdata",
     "icon": "netdata-mcp-server.png",
     "envs": [
@@ -973,7 +973,7 @@
     "id": "chrome-devtools-mcp",
     "name": "Chrome DevTools MCP",
     "description": "MCP server for Chrome DevTools deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/ChromeDevTools/chrome-devtools-mcp",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/chrome-devtools-mcp",
     "author": "ChromeDevTools",
     "icon": "chrome-devtools-mcp.png",
     "envs": [
@@ -994,7 +994,7 @@
     "id": "playwright-mcp",
     "name": "Playwright",
     "description": "Automate web browsers using accessibility trees for testing and data extraction deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/microsoft/playwright-mcp",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/playwright-mcp",
     "author": "microsoft",
     "icon": "playwright-mcp.png",
     "envs": [
@@ -1015,7 +1015,7 @@
     "id": "github-mcp-server",
     "name": "GitHub",
     "description": "Connect AI assistants to GitHub - manage repos, issues, PRs, and workflows through natural language deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/github/github-mcp-server",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/github-mcp-server",
     "author": "github",
     "icon": "github-mcp-server.png",
     "envs": [
@@ -1041,7 +1041,7 @@
     "id": "serena-mcp",
     "name": "Serena",
     "description": "Semantic code retrieval & editing tools for coding agents deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/oraios/serena",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/serena-mcp",
     "author": "oraios",
     "icon": "serena-mcp.svg",
     "envs": [
@@ -1067,7 +1067,7 @@
     "id": "unity-mcp",
     "name": "Unity",
     "description": "Control the Unity Editor from MCP clients via a Unity bridge + local Python server deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/CoplayDev/unity-mcp",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/unity-mcp",
     "author": "CoplayDev",
     "icon": "unity-mcp.png",
     "envs": [
@@ -1098,7 +1098,7 @@
     "id": "firecrawl-mcp-server",
     "name": "Firecrawl",
     "description": "Extract web data with Firecrawl deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/firecrawl/firecrawl-mcp-server",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/firecrawl-mcp-server",
     "author": "firecrawl",
     "icon": "firecrawl-mcp-server.png",
     "envs": [
@@ -1129,7 +1129,7 @@
     "id": "desktop-commander-mcp",
     "name": "Desktop Commander",
     "description": "MCP server for terminal commands, file operations, and process management deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/wonderwhy-er/DesktopCommanderMCP",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/desktop-commander-mcp",
     "author": "wonderwhy-er",
     "icon": "desktop-commander-mcp.png",
     "envs": [
@@ -1150,7 +1150,7 @@
     "id": "notion-mcp-server",
     "name": "Notion",
     "description": "Official MCP server for Notion API deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/makenotion/notion-mcp-server",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/notion-mcp-server",
     "author": "makenotion",
     "icon": "notion-mcp-server.png",
     "envs": [
@@ -1171,7 +1171,7 @@
     "id": "azure-mcp",
     "name": "Azure MCP Server",
     "description": "All Azure MCP tools to create a seamless connection between AI agents and Azure services deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/microsoft/mcp",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/azure-mcp",
     "author": "microsoft",
     "icon": "azure-mcp.svg",
     "envs": [
@@ -1213,7 +1213,7 @@
     "id": "microsoft-fabric-mcp",
     "name": "Microsoft Fabric MCP Server",
     "description": "MCP tools for interacting with Microsoft Fabric deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/microsoft/mcp",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/microsoft-fabric-mcp",
     "author": "microsoft",
     "icon": "microsoft-fabric-mcp.svg",
     "envs": [
@@ -1249,7 +1249,7 @@
     "id": "dbhub",
     "name": "DBHub",
     "description": "Minimal, token-efficient Database MCP Server for PostgreSQL, MySQL, SQL Server, SQLite, MariaDB deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/bytebase/dbhub",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/dbhub",
     "author": "bytebase",
     "icon": "dbhub.svg",
     "envs": [
@@ -1275,7 +1275,7 @@
     "id": "brightdata-mcp",
     "name": "Brightdata",
     "description": "Bright Data's Web MCP server enabling AI agents to search, extract & navigate the web deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/brightdata/brightdata-mcp",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/brightdata-mcp",
     "author": "brightdata",
     "icon": "brightdata-mcp.png",
     "envs": [
@@ -1311,7 +1311,7 @@
     "id": "tavily-mcp",
     "name": "Tavily",
     "description": "MCP server for advanced web search using Tavily deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/tavily-ai/tavily-mcp",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/tavily-mcp",
     "author": "tavily-ai",
     "icon": "tavily-mcp.png",
     "envs": [
@@ -1337,7 +1337,7 @@
     "id": "azure-devops-mcp",
     "name": "Azure DevOps",
     "description": "Interact with Azure DevOps services like repositories, work items, builds, releases, test plans, and code search deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/microsoft/azure-devops-mcp",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/azure-devops-mcp",
     "author": "microsoft",
     "icon": "azure-devops-mcp.png",
     "envs": [
@@ -1368,7 +1368,7 @@
     "id": "microsoftdocs-mcp",
     "name": "Microsoft Learn",
     "description": "Enables clients like GitHub Copilot and other AI agents to bring trusted and up-to-date information directly from Microsoft's official documentation deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/microsoftdocs/mcp",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/microsoftdocs-mcp",
     "author": "MicrosoftDocs",
     "icon": "microsoftdocs-mcp.png",
     "envs": [
@@ -1389,7 +1389,7 @@
     "id": "stripe-mcp",
     "name": "Stripe",
     "description": "MCP server integrating with Stripe - tools for customers, products, payments, and more deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/stripe/agent-toolkit",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/stripe-mcp",
     "author": "stripe",
     "icon": "stripe-mcp.png",
     "envs": [
@@ -1410,7 +1410,7 @@
     "id": "nuget-mcp",
     "name": "Microsoft Nuget",
     "description": "A Model Context Protocol (MCP) server for NuGet deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/NuGet/Home",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/nuget-mcp",
     "author": "NuGet",
     "icon": "nuget-mcp.png",
     "envs": [
@@ -1431,7 +1431,7 @@
     "id": "terraform-mcp-server",
     "name": "Terraform",
     "description": "Generate more accurate Terraform and automate workflows for HCP Terraform and Terraform Enterprise deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/hashicorp/terraform-mcp-server",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/terraform-mcp-server",
     "author": "hashicorp",
     "icon": "terraform-mcp-server.svg",
     "envs": [
@@ -1468,7 +1468,7 @@
     "id": "apify-mcp-server",
     "name": "Apify",
     "description": "Extract data from any website with thousands of scrapers, crawlers, and automations on Apify Store ⚡ deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/apify/apify-mcp-server",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/apify-mcp-server",
     "author": "apify",
     "icon": "apify-mcp-server.svg",
     "envs": [
@@ -1489,7 +1489,7 @@
     "id": "mongodb-mcp-server",
     "name": "Mongodb",
     "description": "MongoDB Model Context Protocol Server deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/mongodb-js/mongodb-mcp-server",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/mongodb-mcp-server",
     "author": "mongodb-js",
     "icon": "mongodb-mcp-server.png",
     "envs": [
@@ -1531,7 +1531,7 @@
     "id": "nuxt-mcp",
     "name": "Nuxt",
     "description": "MCP server helping models understand your Vite/Nuxt app deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/antfu/nuxt-mcp",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/nuxt-mcp",
     "author": "antfu",
     "icon": "nuxt-mcp.svg",
     "envs": [
@@ -1552,7 +1552,7 @@
     "id": "next-devtools-mcp",
     "name": "Vercel Next Dev Tools",
     "description": "Next.js development tools MCP server with stdio transport deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/vercel/next-devtools-mcp",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/next-devtools-mcp",
     "author": "vercel",
     "icon": "next-devtools-mcp.png",
     "envs": [
@@ -1578,7 +1578,7 @@
     "id": "atlassian-mcp-server",
     "name": "Atlassian",
     "description": "Atlassian Rovo MCP Server deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/atlassian/atlassian-mcp-server",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/atlassian-mcp-server",
     "author": "atlassian",
     "icon": "atlassian-mcp-server.svg",
     "envs": [
@@ -1599,7 +1599,7 @@
     "id": "sentry-mcp",
     "name": "Getsentry Sentry",
     "description": "MCP server for Sentry - error monitoring, issue tracking, and debugging for AI assistants deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/getsentry/sentry-mcp",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/sentry-mcp",
     "author": "getsentry",
     "icon": "sentry-mcp.png",
     "envs": [
@@ -1635,7 +1635,7 @@
     "id": "elasticsearch-mcp",
     "name": "Elasticsearch",
     "description": "MCP server for connecting to Elasticsearch data and indices. Supports search queries, mappings, ES|QL, and shard information through natural language interactions deployed on Phala Cloud with a protected MCP endpoint.",
-    "repo": "https://github.com/elastic/mcp-server-elasticsearch",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/elasticsearch-mcp",
     "author": "elastic",
     "icon": "elasticsearch-mcp.png",
     "envs": [
