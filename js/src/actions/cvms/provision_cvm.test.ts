@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
-import { ProvisionCvmRequestSchema } from "./provision_cvm";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Client } from "../../client";
 import { MAX_COMPOSE_PAYLOAD_BYTES } from "../../types/app_compose";
+import { provisionCvm, ProvisionCvmRequestSchema } from "./provision_cvm";
 
 describe("ProvisionCvmRequestSchema", () => {
   describe("manual nonce specification", () => {
@@ -267,5 +268,84 @@ describe("ProvisionCvmRequestSchema", () => {
         });
       }
     });
+  });
+});
+
+// Regression coverage for the previously-present `node_id -> teepod_id` rewrite.
+// Node.id and Teepod.id are separate identifier spaces on the backend; the SDK
+// must forward whichever field the caller set without renaming, or post-#1449
+// frontends (which now send a real Node.id in `node_id`) route requests to the
+// wrong teepod.
+describe("provisionCvm (wire-level)", () => {
+  let mockClient: Client;
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  const baseRequest = {
+    name: "test-app",
+    instance_type: "tdx.small",
+    compose_file: {
+      docker_compose_file: "services: {}",
+    },
+  } as const;
+
+  // Minimal response satisfying ProvisionCvmSchema (compose_hash is the only required field).
+  const mockResponse = { compose_hash: "0xabc" };
+
+  function getRequestBody(): Record<string, unknown> {
+    const calls = (mockClient.post as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls).toHaveLength(1);
+    const [path, body] = calls[0];
+    expect(path).toBe("/cvms/provision");
+    return body as Record<string, unknown>;
+  }
+
+  beforeEach(() => {
+    mockClient = {
+      post: vi.fn().mockResolvedValue(mockResponse),
+    } as unknown as Client;
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
+  it("forwards node_id verbatim and does not synthesize teepod_id", async () => {
+    await provisionCvm(mockClient, { ...baseRequest, node_id: 7 });
+
+    const body = getRequestBody();
+    expect(body.node_id).toBe(7);
+    expect("teepod_id" in body).toBe(false);
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("forwards teepod_id verbatim with deprecation warning when only teepod_id is set", async () => {
+    await provisionCvm(mockClient, { ...baseRequest, teepod_id: 12 });
+
+    const body = getRequestBody();
+    expect(body.teepod_id).toBe(12);
+    expect("node_id" in body).toBe(false);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("teepod_id is deprecated"));
+  });
+
+  it("preserves distinct node_id and teepod_id values when both are set", async () => {
+    // Guards against the historical rewrite that copied node_id into teepod_id
+    // and dropped node_id. With distinct values (7 vs 12), a regression would
+    // collapse them to a single id.
+    await provisionCvm(mockClient, { ...baseRequest, node_id: 7, teepod_id: 12 });
+
+    const body = getRequestBody();
+    expect(body.node_id).toBe(7);
+    expect(body.teepod_id).toBe(12);
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not warn when neither id is provided", async () => {
+    await provisionCvm(mockClient, baseRequest);
+
+    const body = getRequestBody();
+    expect("node_id" in body).toBe(false);
+    expect("teepod_id" in body).toBe(false);
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 });
