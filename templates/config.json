@@ -1864,5 +1864,27 @@
     "tags": [
       "MCP"
     ]
+  },
+  {
+    "id": "apify-mcp-server",
+    "name": "Apify",
+    "description": "Extract data from any website with thousands of scrapers, crawlers, and automations on Apify Store ⚡ deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/apify/apify-mcp-server",
+    "author": "apify",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
   }
 ]
