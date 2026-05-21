@@ -1,0 +1,50 @@
+services:
+  app:
+    image: docker.elastic.co/mcp/elasticsearch:latest
+    command: ["http"]
+    environment:
+      - ES_URL=${ES_URL:-}
+      - ES_API_KEY=${ES_API_KEY:-}
+      - ES_USERNAME=${ES_USERNAME:-}
+      - ES_PASSWORD=${ES_PASSWORD:-}
+      - ES_SSL_SKIP_VERIFY=${ES_SSL_SKIP_VERIFY:-}
+    expose:
+      - "8080"
+    restart: unless-stopped
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    ports:
+      - "18080:80"
+    environment:
+      - BEARER_TOKEN=${BEARER_TOKEN}
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    restart: unless-stopped
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          @valid_auth {
+              header X-Phala-MCP-Token "{env.BEARER_TOKEN}"
+          }
+          route @valid_auth {
+              reverse_proxy app:8080
+          }
+          route {
+              respond 401 {
+                  body "Unauthorized"
+                  close
+              }
+          }
+      }
+
+networks:
+  internal:
+    driver: bridge

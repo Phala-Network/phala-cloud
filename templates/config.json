@@ -2037,5 +2037,53 @@
     "tags": [
       "MCP"
     ]
+  },
+  {
+    "id": "elasticsearch-mcp",
+    "name": "Elasticsearch",
+    "description": "MCP server for connecting to Elasticsearch data and indices. Supports search queries, mappings, ES|QL, and shard information through natural language interactions deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/elastic/mcp-server-elasticsearch",
+    "author": "elastic",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "ES_URL",
+        "required": true,
+        "description": "Elasticsearch cluster URL."
+      },
+      {
+        "key": "ES_API_KEY",
+        "required": false,
+        "description": "Elasticsearch API key."
+      },
+      {
+        "key": "ES_USERNAME",
+        "required": false,
+        "description": "Elasticsearch username for basic auth."
+      },
+      {
+        "key": "ES_PASSWORD",
+        "required": false,
+        "description": "Elasticsearch password for basic auth."
+      },
+      {
+        "key": "ES_SSL_SKIP_VERIFY",
+        "required": false,
+        "description": "Set to true to skip Elasticsearch TLS verification.",
+        "default": "false"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
   }
 ]
