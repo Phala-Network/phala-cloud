@@ -2000,5 +2000,42 @@
     "tags": [
       "MCP"
     ]
+  },
+  {
+    "id": "sentry-mcp",
+    "name": "Getsentry Sentry",
+    "description": "MCP server for Sentry - error monitoring, issue tracking, and debugging for AI assistants deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/getsentry/sentry-mcp",
+    "author": "getsentry",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "SENTRY_ACCESS_TOKEN",
+        "required": true,
+        "description": "Sentry user auth token."
+      },
+      {
+        "key": "SENTRY_HOST",
+        "required": false,
+        "description": "Optional self-hosted Sentry host."
+      },
+      {
+        "key": "SENTRY_DISABLE_SKILLS",
+        "required": false,
+        "description": "Optional comma-separated Sentry skills/tools to disable."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
   }
 ]
