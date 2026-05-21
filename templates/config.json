@@ -1701,5 +1701,32 @@
     "tags": [
       "MCP"
     ]
+  },
+  {
+    "id": "tavily-mcp",
+    "name": "Tavily",
+    "description": "MCP server for advanced web search using Tavily deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/tavily-ai/tavily-mcp",
+    "author": "tavily-ai",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "TAVILY_API_KEY",
+        "required": true,
+        "description": "Tavily API key."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
   }
 ]
