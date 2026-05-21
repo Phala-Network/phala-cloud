@@ -1,0 +1,36 @@
+services:
+  proxy:
+    image: caddy:2.8
+    ports:
+      - "18080:80"
+    environment:
+      - BEARER_TOKEN=${BEARER_TOKEN}
+      - MCD_MCP_TOKEN=${MCD_MCP_TOKEN}
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    restart: unless-stopped
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          @valid_auth {
+              header Authorization "Bearer $BEARER_TOKEN"
+          }
+
+          handle @valid_auth {
+              reverse_proxy https://mcp.mcd.cn {
+                  header_up Host mcp.mcd.cn
+                  header_up Authorization "Bearer $MCD_MCP_TOKEN"
+                  transport http {
+                      tls_server_name mcp.mcd.cn
+                  }
+              }
+          }
+
+          respond 401 {
+              body "Unauthorized"
+              close
+          }
+      }

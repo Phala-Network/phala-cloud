@@ -1,0 +1,8 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">McDonald's China MCP</title>
+  <desc id="desc">A red rounded square with a yellow MCP mark.</desc>
+  <rect width="256" height="256" rx="56" fill="#DA291C"/>
+  <path d="M52 190V70h32l44 70 44-70h32v120h-30V119l-38 59h-16l-38-59v71H52Z" fill="#FFC72C"/>
+  <path d="M56 204h144" stroke="#FFC72C" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="204" cy="68" r="18" fill="#FFC72C"/>
+</svg>

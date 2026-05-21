@@ -297,8 +297,6 @@ function handleGatewayCompatibility(appCompose: ProvisionCvmRequest): ProvisionC
   };
 }
 
-// The teepod_id -> node_id transformation is now handled by the schema's .transform()
-// This way, when users specify { schema: false }, they get the raw response
 const { action: provisionCvm, safeAction: safeProvisionCvm } = defineAction<
   ProvisionCvmRequest,
   typeof ProvisionCvmSchema
@@ -306,15 +304,13 @@ const { action: provisionCvm, safeAction: safeProvisionCvm } = defineAction<
   const validated = ProvisionCvmRequestSchema.parse(appCompose);
   const body = handleGatewayCompatibility(validated);
 
-  let requestBody = { ...body };
-  if (typeof body.node_id === "number") {
-    requestBody = { ...body, teepod_id: body.node_id };
-    delete requestBody.node_id;
-  } else if (typeof body.teepod_id === "number") {
+  // The backend accepts both `node_id` (Node.id) and `teepod_id` (Teepod.id) as
+  // distinct fields; they are not interchangeable. Pass them through as-is.
+  if (typeof body.teepod_id === "number" && typeof body.node_id !== "number") {
     console.warn("[phala/cloud] teepod_id is deprecated, please use node_id instead.");
   }
 
-  return await client.post("/cvms/provision", requestBody);
+  return await client.post("/cvms/provision", body);
 });
 
 export { provisionCvm, safeProvisionCvm };
