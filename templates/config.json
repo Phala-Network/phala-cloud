@@ -1395,5 +1395,32 @@
     "tags": [
       "MCP"
     ]
+  },
+  {
+    "id": "github-mcp-server",
+    "name": "GitHub",
+    "description": "Connect AI assistants to GitHub - manage repos, issues, PRs, and workflows through natural language deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/github/github-mcp-server",
+    "author": "github",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "required": true,
+        "description": "GitHub fine-grained or classic PAT used by the MCP server."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
   }
 ]
