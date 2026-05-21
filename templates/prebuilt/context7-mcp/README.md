@@ -1,34 +1,58 @@
 # Context7 MCP
 
-Context7 MCP server on Phala Cloud for retrieving up-to-date library documentation and code examples.
+Deploy a protected Context7 MCP server on Phala Cloud.
 
-## Environment Variables
+Context7 gives AI agents current library documentation and code examples through MCP. This template runs the MCP server behind Caddy so the public endpoint requires a bearer token.
 
-- `BEARER_TOKEN` (required): Bearer token checked by the Caddy proxy.
+## Services
 
-## Expected HTTP Behavior
+- `app`: Context7 MCP server on internal port `3000`.
+- `proxy`: Caddy reverse proxy exposed through Phala Cloud.
 
-- Request without `Authorization` header returns `401 Unauthorized` from the proxy.
-- Request to `/` with correct bearer token may return app-level `404 Not Found`.
+## Ports
 
-An authenticated `404` on `/` is expected for this app and indicates proxy auth is working and requests are reaching the backend.
+- `18080`: Public HTTP endpoint handled by Caddy.
 
-## Example `.env`
+## Required environment variables
 
-```env
-BEARER_TOKEN=CHANGEME_BEARER_TOKEN
-```
+- `BEARER_TOKEN`: Token required from MCP clients calling this deployment.
 
-## MCP Client Endpoint
-
-Use the authenticated SSE endpoint:
-
-```text
-https://APP_HOST/sse
-```
-
-Quick check:
+Generate a strong token:
 
 ```bash
-curl -iN -H "Authorization: Bearer ${BEARER_TOKEN}" "https://APP_HOST/sse"
+openssl rand -hex 32
 ```
+
+## MCP client configuration
+
+Use your Phala Cloud app URL as a Streamable HTTP MCP endpoint:
+
+```json
+{
+  "mcpServers": {
+    "context7": {
+      "type": "streamablehttp",
+      "url": "https://<your-app-domain>",
+      "headers": {
+        "Authorization": "Bearer YOUR_BEARER_TOKEN"
+      }
+    }
+  }
+}
+```
+
+## Verify
+
+Requests without the bearer token return `401`:
+
+```bash
+curl -i https://<your-app-domain>
+```
+
+Requests with the bearer token are proxied to the MCP server:
+
+```bash
+curl -i -H "Authorization: Bearer YOUR_BEARER_TOKEN" https://<your-app-domain>
+```
+
+Run the same checks after rotating `BEARER_TOKEN` or changing the app domain. Context7 returns MCP protocol responses only for clients that speak the configured Streamable HTTP transport.

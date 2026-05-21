@@ -1,89 +1,54 @@
 # EVM MCP
 
-A Model Context Protocol server for interacting with the EVM blockchain, powered by the [EVM AI Kit](https://github.com/mcp-dao/evm-agent-kit).
+Deploy a protected EVM MCP server on Phala Cloud.
 
-## Overview
+This template exposes blockchain tools for EVM agent workflows, including RPC-backed chain interactions and optional AI-assisted data access. Caddy protects the public MCP endpoint with a bearer token.
 
-This project implements a Model Context Protocol (MCP) server that enables AI models to interact with the Ethereum Virtual Machine (EVM) blockchain. It leverages the EVM AI Kit to provide a robust interface for blockchain interactions.
+## Services
 
-## Features
+- `app`: EVM MCP server on internal port `3000`.
+- `proxy`: Caddy reverse proxy exposed through Phala Cloud.
 
-- EVM blockchain interaction through MCP
-- TypeScript implementation
-- Express.js server
-- Environment-based configuration
+## Ports
 
-## Prerequisites
+- `18080`: Public MCP endpoint handled by Caddy.
 
-- Node.js (Latest LTS version recommended)
-- npm or yarn package manager
-- Access to an EVM-compatible blockchain node
+## Required environment variables
 
-## Installation
+- `BEARER_TOKEN`: Token required from MCP clients calling this deployment.
+- `EVM_PRIVATE_KEY`: EVM private key used by the MCP server for wallet operations.
+- `RPC_URL`: EVM RPC endpoint.
+- `OPENAI_API_KEY`: OpenAI API key used by the server.
+- `PERPLEXITY_API_KEY`: Perplexity API key used by the server.
+- `COINGECKO_PRO_API_KEY`: CoinGecko Pro API key used by the server.
 
-1. Clone the repository:
-```bash
-git clone https://github.com/mcp-dao/evm-mcp.git
-cd evm-mcp
+## Security notes
+
+- Use a dedicated wallet key with limited funds and scoped permissions.
+- Store all API keys as Phala Cloud environment variables.
+- Rotate `BEARER_TOKEN` when sharing MCP access with another client.
+
+## MCP client configuration
+
+```json
+{
+  "mcpServers": {
+    "evm": {
+      "type": "streamablehttp",
+      "url": "https://<your-app-domain>",
+      "headers": {
+        "Authorization": "Bearer YOUR_BEARER_TOKEN"
+      }
+    }
+  }
+}
 ```
 
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Set up environment variables:
-```bash
-cp .env.example .env
-```
-Edit the `.env` file with your configuration values.
-
-## Development
-
-To run the development server:
+## Verify
 
 ```bash
-npm run dev
+curl -i https://<your-app-domain>
+curl -i -H "Authorization: Bearer YOUR_BEARER_TOKEN" https://<your-app-domain>
 ```
 
-This will start the server with hot-reloading enabled.
-
-## Building
-
-To build the project:
-
-```bash
-npm run build
-```
-
-## Production
-
-To start the production server:
-
-```bash
-npm start
-```
-
-## Deploy on Phala Cloud
-
-Check the [doc](./tee.md)
-
-## Dependencies
-
-- `@modelcontextprotocol/sdk`: MCP SDK for protocol implementation
-- `evm-ai-kit`: EVM interaction toolkit
-- `express`: Web server framework
-- `zod`: Schema validation
-- `dotenv`: Environment variable management
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## Support
-
-For support, please open an issue in the GitHub repository or contact the maintainers.
+The first command should return `401`. The second command should reach the MCP server.
