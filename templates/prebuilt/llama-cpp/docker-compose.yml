@@ -1,0 +1,99 @@
+services:
+  model-init:
+    image: curlimages/curl:8.11.1
+    user: root
+    restart: "no"
+    environment:
+      MODEL_URL: ${MODEL_URL:-https://huggingface.co/ggml-org/test-model-stories260K/resolve/main/stories260K-f32.gguf}
+      MODEL_FILE: ${MODEL_FILE:-stories260K-f32.gguf}
+    volumes:
+      - llama_models:/models
+    entrypoint: ["/bin/sh", "-lc"]
+    command:
+      - |
+        set -eu
+        case "$$MODEL_FILE" in
+          ""|/*|*/*|*..*)
+            echo "MODEL_FILE must be a plain file name inside /models" >&2
+            exit 1
+            ;;
+        esac
+        model_path="/models/$$MODEL_FILE"
+        if [ ! -s "$$model_path" ]; then
+          tmp_path="$${model_path}.tmp"
+          rm -f "$$tmp_path"
+          curl -fL --retry 5 --retry-delay 2 --connect-timeout 20 --output "$$tmp_path" "$$MODEL_URL"
+          mv "$$tmp_path" "$$model_path"
+        fi
+        ls -lh "$$model_path"
+    networks:
+      - internal
+
+  llama-server:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    restart: unless-stopped
+    depends_on:
+      model-init:
+        condition: service_completed_successfully
+    environment:
+      MODEL_FILE: ${MODEL_FILE:-stories260K-f32.gguf}
+      LLAMA_ARG_MODEL: ${LLAMA_ARG_MODEL:-}
+      LLAMA_ARG_CTX_SIZE: ${LLAMA_ARG_CTX_SIZE:-512}
+      LLAMA_ARG_HOST: ${LLAMA_ARG_HOST:-0.0.0.0}
+      LLAMA_ARG_PORT: ${LLAMA_ARG_PORT:-8080}
+      LLAMA_ARG_THREADS: ${LLAMA_ARG_THREADS:-1}
+      LLAMA_ARG_N_PREDICT: ${LLAMA_ARG_N_PREDICT:-64}
+    volumes:
+      - llama_models:/models:ro
+    expose:
+      - "8080"
+    entrypoint: ["/bin/sh", "-lc"]
+    command:
+      - |
+        set -eu
+        model="$${LLAMA_ARG_MODEL:-/models/$$MODEL_FILE}"
+        exec /app/llama-server \
+          --model "$$model" \
+          --host "$$LLAMA_ARG_HOST" \
+          --port "$$LLAMA_ARG_PORT" \
+          --ctx-size "$$LLAMA_ARG_CTX_SIZE" \
+          --threads "$$LLAMA_ARG_THREADS" \
+          --n-predict "$$LLAMA_ARG_N_PREDICT"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:$${LLAMA_ARG_PORT:-8080}/health >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    depends_on:
+      llama-server:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    environment:
+      LLAMA_ARG_PORT: ${LLAMA_ARG_PORT:-8080}
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          reverse_proxy llama-server:{env.LLAMA_ARG_PORT}
+      }
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  llama_models:
