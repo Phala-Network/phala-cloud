@@ -42,31 +42,6 @@ Authenticate with Phala Cloud.
 
 - **`status`**: *(Deprecated)* Check the current authentication status (use `phala status` instead)
 
-## Docker Management
-
-### `phala docker`
-
-Login to Docker Hub and manage Docker images.
-
-#### Subcommands:
-
-- **`login`**: Login to Docker Hub
-  
-- **`build`**: Build a Docker image for TEE deployment
-  - Options:
-    - `-t, --tag <tag>`: Tag for the Docker image
-    - `-f, --file <file>`: Path to Dockerfile (default: ./Dockerfile)
-    - `--no-cache`: Build without using cache
-
-- **`push`**: Push a Docker image to Docker Hub
-  - Options:
-    - `-t, --tag <tag>`: Tag for the Docker image to push
-
-- **`generate`**: Generate Docker configuration files
-  - Options:
-    - `-t, --template <template>`: Template name
-    - `-o, --output <output>`: Output directory
-
 ## Node Management
 
 ### `phala nodes`

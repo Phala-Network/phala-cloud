@@ -121,8 +121,7 @@ export function formatGlobalHelp(options: GlobalHelpOptions): string {
 		)
 			return "profile";
 		if (name === "api" || name === "self") return "advanced";
-		if (name === "auth" || name === "config" || name === "docker")
-			return "deprecated";
+		if (name === "auth" || name === "config") return "deprecated";
 
 		// default bucket
 		return "advanced";

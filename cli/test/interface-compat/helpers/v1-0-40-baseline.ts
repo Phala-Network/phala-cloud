@@ -215,48 +215,6 @@ export const v1_0_40_interface = {
 		} as CommandSpec,
 	},
 
-	// Docker subcommands
-	dockerCommands: {
-		login: {
-			name: "docker login",
-			hasHelp: true,
-			flags: {
-				registry: { long: "--registry", required: false },
-				username: { long: "--username", required: false },
-				password: { long: "--password", required: false },
-			},
-		} as CommandSpec,
-
-		build: {
-			name: "docker build",
-			hasHelp: true,
-			flags: {
-				image: { long: "--image", short: "-i", required: true },
-				tag: { long: "--tag", short: "-t", required: true },
-				file: { long: "--file", short: "-f", required: false },
-			},
-		} as CommandSpec,
-
-		push: {
-			name: "docker push",
-			hasHelp: true,
-			flags: {
-				image: { long: "--image", short: "-i", required: true },
-			},
-		} as CommandSpec,
-
-		generate: {
-			name: "docker generate",
-			hasHelp: true,
-			flags: {
-				image: { long: "--image", short: "-i", required: true },
-				envFile: { long: "--env-file", short: "-e", required: false },
-				output: { long: "--output", short: "-o", required: false },
-				template: { long: "--template", required: false },
-			},
-		} as CommandSpec,
-	},
-
 	// Simulator subcommands
 	simulatorCommands: {
 		start: {
@@ -330,7 +288,6 @@ export function getAllCommands(): string[] {
 	for (const group of [
 		v1_0_40_interface.authCommands,
 		v1_0_40_interface.cvmsCommands,
-		v1_0_40_interface.dockerCommands,
 		v1_0_40_interface.simulatorCommands,
 		v1_0_40_interface.nodesCommands,
 		v1_0_40_interface.configCommands,
@@ -352,7 +309,6 @@ export function getCommandSpec(commandName: string): CommandSpec | undefined {
 		v1_0_40_interface.commands,
 		v1_0_40_interface.authCommands,
 		v1_0_40_interface.cvmsCommands,
-		v1_0_40_interface.dockerCommands,
 		v1_0_40_interface.simulatorCommands,
 		v1_0_40_interface.nodesCommands,
 		v1_0_40_interface.configCommands,

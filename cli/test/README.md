@@ -7,7 +7,6 @@ This directory contains tests for the Phala TEE Cloud CLI.
 - `e2e/`: End-to-end tests for the CLI commands
   - `cli.test.ts`: General CLI tests
   - `config.test.ts`: Tests for the config commands
-  - `docker.test.ts`: Tests for the Docker commands
   - `simulator.test.ts`: Tests for the simulator commands
   - `cvms.test.ts`: Tests for the CVM commands
 - `utils/`: Utility functions for testing
@@ -64,4 +63,4 @@ import { createMockFile } from '../utils/mock';
 
 // Create a mock file
 createMockFile('/path/to/file.json', JSON.stringify({ key: 'value' }));
-``` 
+```
