@@ -1826,5 +1826,43 @@
     "tags": [
       "MCP"
     ]
+  },
+  {
+    "id": "terraform-mcp-server",
+    "name": "Terraform",
+    "description": "Generate more accurate Terraform and automate workflows for HCP Terraform and Terraform Enterprise deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/hashicorp/terraform-mcp-server",
+    "author": "hashicorp",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "TFE_ADDRESS",
+        "required": false,
+        "description": "Optional HCP Terraform or Terraform Enterprise address.",
+        "default": "https://app.terraform.io"
+      },
+      {
+        "key": "TFE_TOKEN",
+        "required": false,
+        "description": "Optional HCP Terraform or Terraform Enterprise token."
+      },
+      {
+        "key": "MCP_TOOLSETS",
+        "required": false,
+        "description": "Optional comma-separated Terraform MCP toolsets."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
   }
 ]
