@@ -1,34 +1,49 @@
 # Blinko
 
-Blinko is an innovative **privacy-focused** open-source notebook designed for individuals who want to securely capture and organize their fleeting thoughts. Built with privacy at its core, Blinko can integrate with **Phala Network's secure computation framework** to ensure your ideas and notes remain confidential and protected. Whether you're brainstorming sensitive projects or personal musings, Blinko allows you to seamlessly jot down ideas the moment they strike, with the peace of mind that your data stays private and secure.
+Deploy Blinko, a privacy-focused self-hosted notebook, with its PostgreSQL database on Phala Cloud.
+
+Blinko captures notes, ideas, and lightweight knowledge snippets in a web UI. This template runs the Blinko web app and an internal PostgreSQL service with persistent volumes for app data and database state.
+
+## Services
+
+- `blinko-website`: Blinko web application, exposed on port `1111`.
+- `postgres`: Internal PostgreSQL 14 database used by Blinko.
+
+## Ports
+
+- `1111`: Blinko web UI.
 
 ## Required environment variables
 
-Set these variables before deploying:
+- `NEXTAUTH_SECRET`: Secret used by Blinko authentication. Generate a strong random value.
+- `POSTGRES_PASSWORD`: PostgreSQL password for the internal database.
 
-```env
-NEXTAUTH_SECRET=replace-with-a-long-random-secret
-POSTGRES_PASSWORD=replace-with-a-long-url-safe-random-password
-```
-
-`NEXTAUTH_SECRET` signs Blinko authentication state and must stay stable across redeploys. Generate a long random value, for example with `openssl rand -hex 32`.
-
-`POSTGRES_PASSWORD` is used by both the internal Postgres service and the Blinko app `DATABASE_URL`. Because it is embedded in a URL, use a URL-safe value such as hex output from `openssl rand -hex 32`, or percent-encode any reserved URL characters.
-
-## Networking
-
-Blinko is published on port `1111` and is the only public service in this template.
-
-Postgres is internal-only. It has no host port or public Phala endpoint; the app reaches it on the Compose bridge network at `postgres:5432`.
-
-## Local validation
-
-Render the Compose file with dummy values before deployment:
+Example values:
 
 ```bash
-NEXTAUTH_SECRET=dummy-nextauth-secret \
-POSTGRES_PASSWORD=dummy-postgres-password \
-docker compose -f docker-compose.yml config
+NEXTAUTH_SECRET=$(openssl rand -hex 32)
+POSTGRES_PASSWORD=$(openssl rand -base64 24)
 ```
 
-For a quick smoke test after deployment, open the Phala app URL for port `1111`. Blinko should load in the browser, and the Postgres container should stay healthy without exposing a separate database endpoint.
+## Persistent data
+
+The template creates these volumes:
+
+- `blinko`: Blinko app data mounted at `/app/.blinko`.
+- `db`: PostgreSQL data mounted at `/var/lib/postgresql/data`.
+
+## Deploy
+
+1. Create the required environment variables in the Phala Cloud template form.
+2. Deploy the template.
+3. Open `https://<your-app-domain>` and finish Blinko's first-run setup.
+
+## Verify
+
+After deployment, check the web UI and health endpoint behavior:
+
+```bash
+curl -I https://<your-app-domain>
+```
+
+The app container also runs a healthcheck against `http://blinko-website:1111/` inside the compose network.
