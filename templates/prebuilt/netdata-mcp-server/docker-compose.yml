@@ -18,8 +18,9 @@ configs:
               header X-Phala-MCP-Token "{env.BEARER_TOKEN}"
           }
           route @valid_auth {
-              reverse_proxy https://app.netdata.cloud/api/v1/mcp {
-                  header_up Host {upstream_hostport}
+              rewrite * /api/v1/mcp
+              reverse_proxy https://app.netdata.cloud {
+                  header_up Host app.netdata.cloud
               }
           }
           route {

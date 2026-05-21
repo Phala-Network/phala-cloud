@@ -19,7 +19,7 @@ configs:
           }
           route @valid_auth {
               reverse_proxy https://mcp.stripe.com {
-                  header_up Host {upstream_hostport}
+                  header_up Host mcp.stripe.com
               }
           }
           route {

@@ -18,8 +18,9 @@ configs:
               header X-Phala-MCP-Token "{env.BEARER_TOKEN}"
           }
           route @valid_auth {
-              reverse_proxy https://mcp.nuxt.com/sse {
-                  header_up Host {upstream_hostport}
+              rewrite * /sse
+              reverse_proxy https://mcp.nuxt.com {
+                  header_up Host mcp.nuxt.com
               }
           }
           route {

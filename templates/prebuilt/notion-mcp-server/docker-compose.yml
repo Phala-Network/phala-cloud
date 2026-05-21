@@ -18,8 +18,9 @@ configs:
               header X-Phala-MCP-Token "{env.BEARER_TOKEN}"
           }
           route @valid_auth {
-              reverse_proxy https://mcp.notion.com/sse {
-                  header_up Host {upstream_hostport}
+              rewrite * /sse
+              reverse_proxy https://mcp.notion.com {
+                  header_up Host mcp.notion.com
               }
           }
           route {

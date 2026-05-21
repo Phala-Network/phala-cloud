@@ -18,8 +18,9 @@ configs:
               header X-Phala-MCP-Token "{env.BEARER_TOKEN}"
           }
           route @valid_auth {
-              reverse_proxy https://mcp.atlassian.com/v1/mcp {
-                  header_up Host {upstream_hostport}
+              rewrite * /v1/mcp
+              reverse_proxy https://mcp.atlassian.com {
+                  header_up Host mcp.atlassian.com
               }
           }
           route {

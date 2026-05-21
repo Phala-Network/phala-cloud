@@ -18,8 +18,8 @@ configs:
               header X-Phala-MCP-Token "{env.BEARER_TOKEN}"
           }
           route @valid_auth {
-              reverse_proxy https://mcp.apify.com/ {
-                  header_up Host {upstream_hostport}
+              reverse_proxy https://mcp.apify.com {
+                  header_up Host mcp.apify.com
               }
           }
           route {
