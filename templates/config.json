@@ -1422,5 +1422,32 @@
     "tags": [
       "MCP"
     ]
+  },
+  {
+    "id": "serena-mcp",
+    "name": "Serena",
+    "description": "Semantic code retrieval & editing tools for coding agents deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/oraios/serena",
+    "author": "oraios",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "SERENA_PROJECT",
+        "required": false,
+        "description": "Optional project path to activate after the server starts, typically under /workspace."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
   }
 ]
