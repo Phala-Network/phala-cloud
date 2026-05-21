@@ -1637,5 +1637,32 @@
     "tags": [
       "MCP"
     ]
+  },
+  {
+    "id": "dbhub",
+    "name": "DBHub",
+    "description": "Minimal, token-efficient Database MCP Server for PostgreSQL, MySQL, SQL Server, SQLite, MariaDB deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/bytebase/dbhub",
+    "author": "bytebase",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "DBHUB_DSN",
+        "required": true,
+        "description": "Database DSN, for example postgres://user:pass@host:5432/dbname?sslmode=require."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
   }
 ]
