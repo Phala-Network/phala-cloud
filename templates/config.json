@@ -1600,5 +1600,42 @@
     "tags": [
       "MCP"
     ]
+  },
+  {
+    "id": "microsoft-fabric-mcp",
+    "name": "Microsoft Fabric MCP Server",
+    "description": "MCP tools for interacting with Microsoft Fabric deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/microsoft/mcp",
+    "author": "microsoft",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "AZURE_TENANT_ID",
+        "required": false,
+        "description": "Tenant ID used by Microsoft identity libraries."
+      },
+      {
+        "key": "AZURE_CLIENT_ID",
+        "required": false,
+        "description": "Client ID for app/service-principal auth."
+      },
+      {
+        "key": "AZURE_CLIENT_SECRET",
+        "required": false,
+        "description": "Client secret for app/service-principal auth."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
   }
 ]
