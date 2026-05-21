@@ -11,7 +11,6 @@ import { configCommands } from "./commands/config";
 import { cvmsCommands } from "./commands/cvms";
 import { deployCommand } from "./commands/deploy";
 import { envsCommands } from "./commands/envs";
-import { dockerCommands } from "./commands/docker";
 import { helpCommand } from "./commands/help";
 import { linkCommand } from "./commands/link";
 import { loginCommand } from "./commands/login";
@@ -122,11 +121,6 @@ for (const command of envsCommands.commands) {
 
 registry.registerGroup(sshKeysCommands.group);
 for (const command of sshKeysCommands.commands) {
-	registry.registerCommand(command);
-}
-
-registry.registerGroup(dockerCommands.group);
-for (const command of dockerCommands.commands) {
 	registry.registerCommand(command);
 }
 

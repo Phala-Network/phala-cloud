@@ -103,24 +103,6 @@ describe("CLI Interface Compatibility - Flag Support (v1.0.40 baseline)", () => 
 		}
 	});
 
-	describe("Docker subcommands", () => {
-		const commands = [
-			{ path: "docker login", spec: v1_0_40_interface.dockerCommands.login },
-			{ path: "docker build", spec: v1_0_40_interface.dockerCommands.build },
-			{ path: "docker push", spec: v1_0_40_interface.dockerCommands.push },
-			{
-				path: "docker generate",
-				spec: v1_0_40_interface.dockerCommands.generate,
-			},
-		];
-
-		for (const { path, spec } of commands) {
-			test(`${path} supports all v1.0.40 flags`, async () => {
-				await testCommandFlags(path, spec);
-			});
-		}
-	});
-
 	describe("Nodes commands", () => {
 		test("nodes list supports all v1.0.40 flags", async () => {
 			await testCommandFlags(

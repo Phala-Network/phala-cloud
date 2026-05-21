@@ -14,7 +14,6 @@ describe("CLI Interface Compatibility - Command Existence (v1.0.40 baseline)", (
 		{ name: "top-level commands", commands: v1_0_40_interface.commands },
 		{ name: "auth subcommands", commands: v1_0_40_interface.authCommands },
 		{ name: "cvms subcommands", commands: v1_0_40_interface.cvmsCommands },
-		{ name: "docker subcommands", commands: v1_0_40_interface.dockerCommands },
 		{
 			name: "simulator subcommands",
 			commands: v1_0_40_interface.simulatorCommands,

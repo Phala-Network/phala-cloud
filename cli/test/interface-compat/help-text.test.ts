@@ -52,10 +52,6 @@ describe("CLI Interface Compatibility - Help Text (v1.0.40 baseline)", () => {
 					"--yes",
 				],
 			},
-			{
-				cmd: "docker build",
-				flags: ["--image", "--tag"],
-			},
 		];
 
 		for (const { cmd, flags } of criticalFlags) {
@@ -99,7 +95,6 @@ describe("CLI Interface Compatibility - Help Text (v1.0.40 baseline)", () => {
 				],
 			},
 			{ group: "auth", subcommands: ["login", "logout", "status"] },
-			{ group: "docker", subcommands: ["login", "build", "push", "generate"] },
 		];
 
 		for (const { group, subcommands } of groups) {

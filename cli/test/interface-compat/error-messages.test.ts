@@ -56,9 +56,6 @@ describe("CLI Interface Compatibility - Error Handling (v1.0.40 baseline)", () =
 
 	describe("Commands fail with helpful errors", () => {
 		const errorTests = [
-			// Missing required args
-			{ cmd: "docker build", reason: "missing required args" },
-			{ cmd: "docker push", reason: "missing required args" },
 			// Invalid values
 			{
 				cmd: "deploy --name test --vcpu -999 --compose test.yml",

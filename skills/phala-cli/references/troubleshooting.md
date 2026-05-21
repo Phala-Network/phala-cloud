@@ -110,7 +110,7 @@ DSTACK_DOCKER_PASSWORD=your-token
 docker info
 
 # Check Dockerfile path
-phala docker build -i my-app -t v1 -f ./path/to/Dockerfile
+docker build -t my-app:v1 -f ./path/to/Dockerfile .
 ```
 
 ## SSH/SCP Issues

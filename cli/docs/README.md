@@ -49,7 +49,6 @@ For installation and quick start, see the [README](../README.md).
 | [api](./api.md) | Make authenticated API requests |
 | [self](./self.md) | CLI self-management (update) |
 | [config](./config.md) | Manage local CLI configuration |
-| [docker](./docker.md) | Docker image build/push helpers |
 | [simulator](./simulator.md) | Local TEE simulator for development |
 | [completion](./completion.md) | Generate shell completion scripts |
 

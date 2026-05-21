@@ -24,10 +24,6 @@ export function getLegacyApiKeyFilePath(): string {
 	return path.join(getPhalaCloudDir(), "api-key");
 }
 
-function getDockerCredentialsFilePath(): string {
-	return path.join(getPhalaCloudDir(), "docker-credentials.json");
-}
-
 function ensureDirectoryExists(): void {
 	const dir = getPhalaCloudDir();
 	if (!fs.existsSync(dir)) {
@@ -371,57 +367,4 @@ export async function saveApiKey(apiKey: string): Promise<void> {
 
 export async function removeApiKey(): Promise<void> {
 	removeProfile();
-}
-
-// Docker Credentials Management
-interface DockerCredentials {
-	username: string;
-	registry?: string;
-}
-
-export async function saveDockerCredentials(
-	credentials: DockerCredentials,
-): Promise<void> {
-	ensureDirectoryExists();
-	try {
-		fs.writeFileSync(
-			getDockerCredentialsFilePath(),
-			JSON.stringify(credentials, null, 2),
-			{ mode: 0o600 },
-		);
-		logger.success("Docker information saved successfully.");
-	} catch (error) {
-		logger.error("Failed to save Docker information:", error);
-		throw error;
-	}
-}
-
-export async function getDockerCredentials(): Promise<DockerCredentials | null> {
-	try {
-		const filePath = getDockerCredentialsFilePath();
-		if (fs.existsSync(filePath)) {
-			const data = fs.readFileSync(filePath, "utf8");
-			const credentials = JSON.parse(data) as DockerCredentials;
-			return credentials;
-		}
-		return null;
-	} catch (error) {
-		logger.error("Failed to read Docker credentials:", error);
-		return null;
-	}
-}
-
-export async function removeDockerCredentials(): Promise<void> {
-	try {
-		const filePath = getDockerCredentialsFilePath();
-		if (fs.existsSync(filePath)) {
-			fs.unlinkSync(filePath);
-			logger.success("Docker credentials removed successfully.");
-		} else {
-			logger.warn("No Docker credentials found to remove.");
-		}
-	} catch (error) {
-		logger.error("Failed to remove Docker credentials:", error);
-		throw error;
-	}
 }

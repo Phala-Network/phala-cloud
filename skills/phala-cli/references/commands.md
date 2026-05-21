@@ -346,14 +346,6 @@ Make authenticated HTTP requests to the Phala Cloud API.
 | `--shell <type>` | bash, zsh, or fish |
 | `--fig` | Generate Fig/Amazon Q spec |
 
-### phala docker
-
-    phala docker login [-u <user>] [-p <pass>] [-r <registry>]
-    phala docker build -i <image> -t <tag> [-f <dockerfile>]
-    phala docker push -i <image>
-    phala docker generate -i <image> [-e <envfile>] [-o <output>]
-    phala docker run [-c <compose>] [-e <envfile>]
-
 ### phala simulator
 
     phala simulator              # show status
