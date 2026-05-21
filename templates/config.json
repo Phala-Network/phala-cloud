@@ -1449,5 +1449,37 @@
     "tags": [
       "MCP"
     ]
+  },
+  {
+    "id": "unity-mcp",
+    "name": "Unity",
+    "description": "Control the Unity Editor from MCP clients via a Unity bridge + local Python server deployed on Phala Cloud with a protected MCP endpoint.",
+    "repo": "https://github.com/CoplayDev/unity-mcp",
+    "author": "CoplayDev",
+    "envs": [
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Local gateway token required in the X-Phala-MCP-Token request header."
+      },
+      {
+        "key": "UNITY_HOST",
+        "required": false,
+        "description": "Optional Unity bridge host if your Unity Editor can reach this CVM."
+      },
+      {
+        "key": "UNITY_PORT",
+        "required": false,
+        "description": "Optional Unity bridge port."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 20
+    },
+    "tags": [
+      "MCP"
+    ]
   }
 ]
