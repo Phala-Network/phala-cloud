@@ -308,6 +308,7 @@
     "description": "This guide outlines the steps to set up and use a webshell with the ttyd service.",
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/evm-mcp-server",
     "author": "MCP-DAO",
+    "icon": "evm-mcp.png",
     "envs": [
       { "key": "BEARER_TOKEN", "required": true },
       { "key": "EVM_PRIVATE_KEY", "required": true },
@@ -436,6 +437,7 @@
     "description": "A MCP server deployed on Phala Cloud that enables AI agents to fetch real-time data from a given URL.",
     "repo": "https://github.com/Leechael/mcp-servers/tree/main/src/fetch",
     "author": "Leechael",
+    "icon": "mcp-server-fetch.png",
     "tags": ["MCP Servers", "Web Data & Search"]
   },
   {
@@ -444,6 +446,7 @@
     "description": "A MCP server deployed on Phala Cloud that enables AI agents to think sequentially.",
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/mcp-server-sequential-thinking",
     "author": "Phala-Network",
+    "icon": "mcp-server-sequential-thinking.png",
     "tags": ["MCP Servers", "AI Agents"]
   },
   {
@@ -470,6 +473,7 @@
     "description": "This docker compose example sets up a Tor hidden service and serves an nginx website from that.",
     "repo": "https://github.com/Dstack-TEE/dstack-examples/tree/main/tor-hidden-service",
     "author": "Dstack-TEE",
+    "icon": "tor-hidden-service.png",
     "tags": ["TEE & Privacy", "Infrastructure"]
   },
   {
@@ -478,6 +482,7 @@
     "description": "Minimal docker file for using the Helios light client to provide a trustworthy view of the blockchain.",
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/lightclient",
     "author": "Dstack-TEE",
+    "icon": "lightclient.png",
     "envs": [{ "key": "ETH_RPC_URL", "required": true }],
     "tags": ["Blockchain & Web3", "TEE & Privacy"]
   },
@@ -487,6 +492,7 @@
     "description": "This guide outlines the steps to set up and use a webshell with the ttyd service.",
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/webshell",
     "author": "Dstack-TEE",
+    "icon": "webshell.png",
     "envs": [
       {
         "key": "WEBSHELL_PASSWORD",
@@ -895,6 +901,7 @@
     "description": "An ERC-8004 Compliant TEE Agent with a TEE Registry Extension for Secure & Verifiable Trustless Agents in a CVM on Phala Cloud. Combines on-chain identity verification, Intel TDX attestation, and AI chat interface for autonomous blockchain agents.",
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/erc-8004-tee-agent",
     "author": "Phala-Network",
+    "icon": "erc-8004-tee-agent.png",
     "envs": [
       { "key": "AGENT_SALT", "required": true, "description": "Unique secret salt for key derivation" },
       { "key": "REDPILL_API_KEY", "required": true, "description": "API key for confidential AI inference" },
@@ -926,6 +933,7 @@
     "description": "Convert various file formats (PDF, Word, Excel, images, audio) to Markdown deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/microsoft/markitdown",
     "author": "microsoft",
+    "icon": "markitdown-mcp.png",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -946,6 +954,7 @@
     "description": "Real-time infrastructure monitoring with metrics, logs, alerts, and ML-based anomaly detection deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/netdata/netdata",
     "author": "netdata",
+    "icon": "netdata-mcp-server.png",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -966,6 +975,7 @@
     "description": "MCP server for Chrome DevTools deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/ChromeDevTools/chrome-devtools-mcp",
     "author": "ChromeDevTools",
+    "icon": "chrome-devtools-mcp.png",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -986,6 +996,7 @@
     "description": "Automate web browsers using accessibility trees for testing and data extraction deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/microsoft/playwright-mcp",
     "author": "microsoft",
+    "icon": "playwright-mcp.png",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1006,6 +1017,7 @@
     "description": "Connect AI assistants to GitHub - manage repos, issues, PRs, and workflows through natural language deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/github/github-mcp-server",
     "author": "github",
+    "icon": "github-mcp-server.png",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1031,6 +1043,7 @@
     "description": "Semantic code retrieval & editing tools for coding agents deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/oraios/serena",
     "author": "oraios",
+    "icon": "serena-mcp.svg",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1056,6 +1069,7 @@
     "description": "Control the Unity Editor from MCP clients via a Unity bridge + local Python server deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/CoplayDev/unity-mcp",
     "author": "CoplayDev",
+    "icon": "unity-mcp.png",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1086,6 +1100,7 @@
     "description": "Extract web data with Firecrawl deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/firecrawl/firecrawl-mcp-server",
     "author": "firecrawl",
+    "icon": "firecrawl-mcp-server.png",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1116,6 +1131,7 @@
     "description": "MCP server for terminal commands, file operations, and process management deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/wonderwhy-er/DesktopCommanderMCP",
     "author": "wonderwhy-er",
+    "icon": "desktop-commander-mcp.png",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1136,6 +1152,7 @@
     "description": "Official MCP server for Notion API deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/makenotion/notion-mcp-server",
     "author": "makenotion",
+    "icon": "notion-mcp-server.png",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1156,6 +1173,7 @@
     "description": "All Azure MCP tools to create a seamless connection between AI agents and Azure services deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/microsoft/mcp",
     "author": "microsoft",
+    "icon": "azure-mcp.svg",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1197,6 +1215,7 @@
     "description": "MCP tools for interacting with Microsoft Fabric deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/microsoft/mcp",
     "author": "microsoft",
+    "icon": "microsoft-fabric-mcp.svg",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1232,6 +1251,7 @@
     "description": "Minimal, token-efficient Database MCP Server for PostgreSQL, MySQL, SQL Server, SQLite, MariaDB deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/bytebase/dbhub",
     "author": "bytebase",
+    "icon": "dbhub.svg",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1257,6 +1277,7 @@
     "description": "Bright Data's Web MCP server enabling AI agents to search, extract & navigate the web deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/brightdata/brightdata-mcp",
     "author": "brightdata",
+    "icon": "brightdata-mcp.png",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1292,6 +1313,7 @@
     "description": "MCP server for advanced web search using Tavily deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/tavily-ai/tavily-mcp",
     "author": "tavily-ai",
+    "icon": "tavily-mcp.png",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1317,6 +1339,7 @@
     "description": "Interact with Azure DevOps services like repositories, work items, builds, releases, test plans, and code search deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/microsoft/azure-devops-mcp",
     "author": "microsoft",
+    "icon": "azure-devops-mcp.png",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1347,6 +1370,7 @@
     "description": "Enables clients like GitHub Copilot and other AI agents to bring trusted and up-to-date information directly from Microsoft's official documentation deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/microsoftdocs/mcp",
     "author": "MicrosoftDocs",
+    "icon": "microsoftdocs-mcp.png",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1367,6 +1391,7 @@
     "description": "MCP server integrating with Stripe - tools for customers, products, payments, and more deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/stripe/agent-toolkit",
     "author": "stripe",
+    "icon": "stripe-mcp.png",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1387,6 +1412,7 @@
     "description": "A Model Context Protocol (MCP) server for NuGet deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/NuGet/Home",
     "author": "NuGet",
+    "icon": "nuget-mcp.png",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1407,6 +1433,7 @@
     "description": "Generate more accurate Terraform and automate workflows for HCP Terraform and Terraform Enterprise deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/hashicorp/terraform-mcp-server",
     "author": "hashicorp",
+    "icon": "terraform-mcp-server.svg",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1443,6 +1470,7 @@
     "description": "Extract data from any website with thousands of scrapers, crawlers, and automations on Apify Store ⚡ deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/apify/apify-mcp-server",
     "author": "apify",
+    "icon": "apify-mcp-server.svg",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1463,6 +1491,7 @@
     "description": "MongoDB Model Context Protocol Server deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/mongodb-js/mongodb-mcp-server",
     "author": "mongodb-js",
+    "icon": "mongodb-mcp-server.png",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1504,6 +1533,7 @@
     "description": "MCP server helping models understand your Vite/Nuxt app deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/antfu/nuxt-mcp",
     "author": "antfu",
+    "icon": "nuxt-mcp.svg",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1524,6 +1554,7 @@
     "description": "Next.js development tools MCP server with stdio transport deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/vercel/next-devtools-mcp",
     "author": "vercel",
+    "icon": "next-devtools-mcp.png",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1549,6 +1580,7 @@
     "description": "Atlassian Rovo MCP Server deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/atlassian/atlassian-mcp-server",
     "author": "atlassian",
+    "icon": "atlassian-mcp-server.svg",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1569,6 +1601,7 @@
     "description": "MCP server for Sentry - error monitoring, issue tracking, and debugging for AI assistants deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/getsentry/sentry-mcp",
     "author": "getsentry",
+    "icon": "sentry-mcp.png",
     "envs": [
       {
         "key": "BEARER_TOKEN",
@@ -1604,6 +1637,7 @@
     "description": "MCP server for connecting to Elasticsearch data and indices. Supports search queries, mappings, ES|QL, and shard information through natural language interactions deployed on Phala Cloud with a protected MCP endpoint.",
     "repo": "https://github.com/elastic/mcp-server-elasticsearch",
     "author": "elastic",
+    "icon": "elasticsearch-mcp.png",
     "envs": [
       {
         "key": "BEARER_TOKEN",
