@@ -82,7 +82,9 @@ export const UpgradePreLaunchScriptResultSchema = z.union([
 
 export type UpgradePreLaunchScriptRequest = z.input<typeof UpgradePreLaunchScriptRequestSchema>;
 export type UpgradePreLaunchScriptResult = z.infer<typeof UpgradePreLaunchScriptResultSchema>;
-export type UpgradePreLaunchScriptInProgress = z.infer<typeof UpgradePreLaunchScriptInProgressSchema>;
+export type UpgradePreLaunchScriptInProgress = z.infer<
+  typeof UpgradePreLaunchScriptInProgressSchema
+>;
 export type UpgradePreLaunchScriptPreconditionRequired = z.infer<
   typeof UpgradePreLaunchScriptPreconditionRequiredSchema
 >;

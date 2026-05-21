@@ -36,15 +36,13 @@ export const PreLaunchScriptUpgradeStatusSchema = z.object({
 
 export type PreLaunchScriptUpgradeStatus = z.infer<typeof PreLaunchScriptUpgradeStatusSchema>;
 
-const {
-  action: getPreLaunchScriptUpgradeStatus,
-  safeAction: safeGetPreLaunchScriptUpgradeStatus,
-} = defineAction<GetPreLaunchScriptUpgradeStatusRequest, typeof PreLaunchScriptUpgradeStatusSchema>(
-  PreLaunchScriptUpgradeStatusSchema,
-  async (client, request) => {
-    const { cvmId } = GetPreLaunchScriptUpgradeStatusRequestSchema.parse(request);
-    return await client.get(`/cvms/${cvmId}/pre-launch-script/upgrade-status`);
-  },
-);
+const { action: getPreLaunchScriptUpgradeStatus, safeAction: safeGetPreLaunchScriptUpgradeStatus } =
+  defineAction<GetPreLaunchScriptUpgradeStatusRequest, typeof PreLaunchScriptUpgradeStatusSchema>(
+    PreLaunchScriptUpgradeStatusSchema,
+    async (client, request) => {
+      const { cvmId } = GetPreLaunchScriptUpgradeStatusRequestSchema.parse(request);
+      return await client.get(`/cvms/${cvmId}/pre-launch-script/upgrade-status`);
+    },
+  );
 
 export { getPreLaunchScriptUpgradeStatus, safeGetPreLaunchScriptUpgradeStatus };
