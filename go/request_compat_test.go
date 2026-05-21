@@ -63,12 +63,50 @@ func TestProvisionCVMResponse_UnmarshalComposeHashRegistered(t *testing.T) {
 	}
 }
 
+func TestDo_UsesRequestIDHeaderWhenBodyOmitsRequestID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Request-ID", "rid-header-456")
+		w.WriteHeader(400)
+		_, _ = io.WriteString(w, `{
+			"message":"structured failure",
+			"error_code":"ERR-01-005"
+		}`)
+	}))
+	defer srv.Close()
+
+	client, err := NewClient(WithAPIKey("k"), WithBaseURL(srv.URL))
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	req, err := client.newRequest(context.Background(), "GET", "/test", nil)
+	if err != nil {
+		t.Fatalf("newRequest: %v", err)
+	}
+
+	_, err = client.do(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	apiErr, ok := err.(*APIError)
+	if !ok {
+		t.Fatalf("expected *APIError, got %T", err)
+	}
+	if apiErr.RequestID != "rid-header-456" {
+		t.Fatalf("RequestID = %q, want rid-header-456", apiErr.RequestID)
+	}
+}
+
 func TestDo_PreservesStructuredErrorDetailValues(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Request-ID", "rid-header-456")
 		w.WriteHeader(465)
 		_, _ = io.WriteString(w, `{
 			"message":"compose hash precondition failed",
+			"request_id":"rid-body-123",
 			"error_code":"ERR-03-006",
 			"details":[
 				{
@@ -105,6 +143,9 @@ func TestDo_PreservesStructuredErrorDetailValues(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected *APIError, got %T", err)
 	}
+	if apiErr.RequestID != "rid-body-123" {
+		t.Fatalf("RequestID = %q, want rid-body-123", apiErr.RequestID)
+	}
 	if len(apiErr.Details) != 2 {
 		t.Fatalf("details = %#v", apiErr.Details)
 	}
@@ -123,6 +164,9 @@ func TestDo_PreservesStructuredErrorDetailValues(t *testing.T) {
 	}
 
 	formatted := apiErr.FormatError()
+	if !strings.Contains(formatted, "Request ID: rid-body-123") {
+		t.Fatalf("FormatError() missing request id: %s", formatted)
+	}
 	if !strings.Contains(formatted, `"kms_info":{"chain_id":1}`) {
 		t.Fatalf("FormatError() missing object value: %s", formatted)
 	}

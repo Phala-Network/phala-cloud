@@ -28,6 +28,20 @@ export const ApiErrorSchema = z.object({
 
 export type ApiError = z.infer<typeof ApiErrorSchema>;
 
+function extractRequestId(data: unknown): string | undefined {
+  if (!data || typeof data !== "object") {
+    return undefined;
+  }
+  const requestId = (data as Record<string, unknown>).request_id;
+  return typeof requestId === "string" ? requestId : undefined;
+}
+
+function extractRequestIdFromResponse(
+  response: { headers?: { get(name: string): string | null } } | undefined,
+): string | undefined {
+  return response?.headers?.get("X-Request-ID") ?? undefined;
+}
+
 /**
  * Structured validation error item from FastAPI/Pydantic
  */
@@ -52,6 +66,7 @@ export class PhalaCloudError extends Error {
     | string
     | Record<string, unknown>
     | Array<{ msg: string; type?: string; ctx?: Record<string, unknown> }>;
+  public readonly requestId?: string;
 
   constructor(
     message: string,
@@ -62,6 +77,7 @@ export class PhalaCloudError extends Error {
         | string
         | Record<string, unknown>
         | Array<{ msg: string; type?: string; ctx?: Record<string, unknown> }>;
+      requestId?: string;
     },
   ) {
     super(message);
@@ -69,6 +85,7 @@ export class PhalaCloudError extends Error {
     this.status = data.status;
     this.statusText = data.statusText;
     this.detail = data.detail;
+    this.requestId = data.requestId;
 
     // Maintains proper stack trace for where error was thrown (only available on V8)
     if (Error.captureStackTrace) {
@@ -112,12 +129,14 @@ export class RequestError extends PhalaCloudError implements ApiError {
           }>;
       code?: string | undefined;
       type?: string | undefined;
+      requestId?: string | undefined;
     },
   ) {
     super(message, {
       status: options?.status ?? 0,
       statusText: options?.statusText ?? "Unknown Error",
       detail: options?.detail || message,
+      requestId: options?.requestId,
     });
 
     this.data = options?.data;
@@ -131,6 +150,10 @@ export class RequestError extends PhalaCloudError implements ApiError {
    * Create RequestError from FetchError
    */
   static fromFetchError(error: FetchError): RequestError {
+    const bodyRequestId = extractRequestId(error.data);
+    const headerRequestId = extractRequestIdFromResponse(error.response);
+    const requestId = bodyRequestId ?? headerRequestId;
+
     // Try to parse the error response as ApiError
     const parseResult = ApiErrorSchema.safeParse(error.data);
 
@@ -163,6 +186,7 @@ export class RequestError extends PhalaCloudError implements ApiError {
             }>,
         code: parseResult.data.code ?? undefined,
         type: parseResult.data.type ?? undefined,
+        requestId,
       });
     }
 
@@ -175,6 +199,7 @@ export class RequestError extends PhalaCloudError implements ApiError {
       response: error.response ?? undefined,
       detail: error.data?.detail || "Unknown API error",
       code: error.status?.toString() ?? undefined,
+      requestId,
     });
   }
 
@@ -447,6 +472,7 @@ export function parseApiError(requestError: RequestError): PhalaCloudError {
       status,
       statusText,
       detail,
+      requestId: structured.request_id ?? requestError.requestId,
       errorCode: structured.error_code,
       structuredDetails: structured.details,
       suggestions: structured.suggestions,
@@ -457,7 +483,7 @@ export function parseApiError(requestError: RequestError): PhalaCloudError {
   // Fallback to original logic for backward compatibility
   const errorType = categorizeErrorType(status);
   const message = extractPrimaryMessage(status, detail, requestError.message);
-  const commonData = { status, statusText, detail };
+  const commonData = { status, statusText, detail, requestId: requestError.requestId };
 
   // Return appropriate error subclass
   if (errorType === "validation" && Array.isArray(detail)) {
@@ -641,6 +667,7 @@ export interface ErrorLink {
 export interface StructuredErrorResponse {
   error_code: string; // e.g., "ERR-01-001"
   message: string;
+  request_id?: string;
   details?: StructuredErrorDetail[];
   suggestions?: string[];
   links?: ErrorLink[];
@@ -676,6 +703,7 @@ export class ResourceError extends BusinessError {
             input?: unknown;
             [key: string]: unknown;
           }>;
+      requestId?: string;
       errorCode?: string;
       structuredDetails?: StructuredErrorDetail[];
       suggestions?: string[];
@@ -710,6 +738,7 @@ function parseStructuredError(detail: unknown): StructuredErrorResponse | null {
     return {
       error_code: obj.error_code,
       message: obj.message,
+      request_id: typeof obj.request_id === "string" ? obj.request_id : undefined,
       details: obj.details as StructuredErrorDetail[] | undefined,
       suggestions: obj.suggestions as string[] | undefined,
       links: obj.links as ErrorLink[] | undefined,
@@ -770,6 +799,10 @@ export function formatStructuredError(
     parts.push(`Error [${error.errorCode}]: ${error.message}`);
   } else {
     parts.push(error.message);
+  }
+
+  if (error.requestId) {
+    parts.push(`Request ID: ${error.requestId}`);
   }
 
   // Details

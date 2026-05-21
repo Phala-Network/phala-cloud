@@ -249,12 +249,19 @@ class AsyncPhalaCloud:
         except Exception:
             pass
 
+        request_id = response.headers.get("X-Request-ID")
+        if isinstance(payload, dict):
+            body_request_id = payload.get("request_id")
+            if isinstance(body_request_id, str):
+                request_id = body_request_id
+
         status = response.status_code
         base_kwargs: dict[str, Any] = {
             "status_code": status,
             "message": message,
             "code": code,
             "detail": payload,
+            "request_id": request_id,
         }
 
         # Structured error (has error_code field)
@@ -475,12 +482,19 @@ class PhalaCloud:
         except Exception:
             pass
 
+        request_id = response.headers.get("X-Request-ID")
+        if isinstance(payload, dict):
+            body_request_id = payload.get("request_id")
+            if isinstance(body_request_id, str):
+                request_id = body_request_id
+
         status = response.status_code
         base_kwargs: dict[str, Any] = {
             "status_code": status,
             "message": message,
             "code": code,
             "detail": payload,
+            "request_id": request_id,
         }
 
         # Structured error (has error_code field)

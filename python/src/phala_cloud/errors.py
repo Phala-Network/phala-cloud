@@ -21,10 +21,12 @@ class ApiError(PhalaCloudError):
         message: str,
         code: str | None = None,
         detail: Any | None = None,
+        request_id: str | None = None,
     ) -> None:
         self.status_code = status_code
         self.code = code
         self.detail = detail
+        self.request_id = request_id
         super().__init__(message)
 
 
@@ -59,6 +61,7 @@ class ResourceError(BusinessError):
         message: str,
         code: str | None = None,
         detail: Any | None = None,
+        request_id: str | None = None,
         error_code: str | None = None,
         structured_details: list[dict[str, Any]] | None = None,
         suggestions: list[str] | None = None,
@@ -68,7 +71,13 @@ class ResourceError(BusinessError):
         self.structured_details = structured_details
         self.suggestions = suggestions
         self.links = links
-        super().__init__(status_code=status_code, message=message, code=code, detail=detail)
+        super().__init__(
+            status_code=status_code,
+            message=message,
+            code=code,
+            detail=detail,
+            request_id=request_id,
+        )
 
 
 class ValidationError(PhalaCloudError):

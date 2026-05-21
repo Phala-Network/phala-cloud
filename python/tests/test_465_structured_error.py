@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from phala_cloud import AsyncPhalaCloud, PhalaCloud
-from phala_cloud.errors import ApiError
+from phala_cloud.errors import ApiError, ResourceError
 
 
 def _make_structured_465_response() -> httpx.Response:
@@ -13,6 +13,7 @@ def _make_structured_465_response() -> httpx.Response:
         json={
             "error_code": "ERR-01-005",
             "message": "Compose hash registration required on-chain",
+            "request_id": "rid-body-123",
             "details": [
                 {"field": "compose_hash", "value": "0xhash123", "message": None},
                 {"field": "app_id", "value": "0xapp456", "message": None},
@@ -123,6 +124,28 @@ class Test465StructuredErrorSync:
             with pytest.raises(ApiError):
                 c.update_cvm_envs({"id": "c1", "encrypted_env": "x"})
 
+    def test_structured_error_exposes_body_request_id(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                400,
+                json={
+                    "error_code": "ERR-01-005",
+                    "message": "Compose hash registration required on-chain",
+                    "request_id": "rid-body-123",
+                },
+                headers={"X-Request-ID": "rid-header-456"},
+            )
+
+        transport = httpx.MockTransport(handler)
+        with httpx.Client(
+            transport=transport, base_url="https://cloud-api.phala.com/api/v1"
+        ) as raw:
+            c = PhalaCloud(http_client=raw)
+            with pytest.raises(ResourceError) as exc_info:
+                c.get("/test")
+
+        assert exc_info.value.request_id == "rid-body-123"
+
 
 class Test465StructuredErrorAsync:
     @pytest.mark.anyio
@@ -201,3 +224,25 @@ class Test465StructuredErrorAsync:
             c = AsyncPhalaCloud(http_client=raw)
             with pytest.raises(ApiError):
                 await c.update_cvm_envs({"id": "c1", "encrypted_env": "x"})
+
+    @pytest.mark.anyio
+    async def test_structured_error_exposes_header_request_id(self) -> None:
+        async def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                400,
+                json={
+                    "error_code": "ERR-01-005",
+                    "message": "Compose hash registration required on-chain",
+                },
+                headers={"X-Request-ID": "rid-header-456"},
+            )
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="https://cloud-api.phala.com/api/v1"
+        ) as raw:
+            c = AsyncPhalaCloud(http_client=raw)
+            with pytest.raises(ResourceError) as exc_info:
+                await c.get("/test")
+
+        assert exc_info.value.request_id == "rid-header-456"
