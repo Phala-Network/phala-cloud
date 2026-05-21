@@ -37,6 +37,17 @@ export const LooseAppComposeSchema = z
     public_logs: z.boolean().optional(),
     public_sysinfo: z.boolean().optional(),
     tproxy_enabled: z.boolean().optional(),
+    port_policy: z
+      .object({
+        ports: z.array(
+          z.object({
+            port: z.number().int().min(1).max(65535),
+            pp: z.boolean(),
+          }),
+        ),
+        restrict_mode: z.boolean(),
+      })
+      .optional(),
     storage_fs: z.enum(["ext4", "zfs"]).optional(),
     pre_launch_script: z.string().optional(),
     env_pubkey: z.string().optional(),

@@ -95,4 +95,48 @@ describe("LooseAppComposeSchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("should accept a valid port_policy", () => {
+    const result = LooseAppComposeSchema.safeParse({
+      docker_compose_file: "version: '3'",
+      port_policy: {
+        ports: [
+          { port: 80, pp: true },
+          { port: 443, pp: false },
+        ],
+        restrict_mode: true,
+      },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.port_policy).toEqual({
+        ports: [
+          { port: 80, pp: true },
+          { port: 443, pp: false },
+        ],
+        restrict_mode: true,
+      });
+    }
+  });
+
+  it("should reject port_policy with out-of-range port", () => {
+    const result = LooseAppComposeSchema.safeParse({
+      docker_compose_file: "version: '3'",
+      port_policy: {
+        ports: [{ port: 70000, pp: true }],
+        restrict_mode: false,
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("should reject port_policy missing restrict_mode", () => {
+    const result = LooseAppComposeSchema.safeParse({
+      docker_compose_file: "version: '3'",
+      port_policy: {
+        ports: [{ port: 80, pp: true }],
+      },
+    });
+    expect(result.success).toBe(false);
+  });
 });
