@@ -3,7 +3,7 @@ import { CvmIdObjectSchema, CvmIdSchema, refineCvmId } from "../../types/cvm_id"
 import { defineAction } from "../../utils/define-action";
 
 export const InstanceIdRefreshResultSchema = z.object({
-  cvm_id: z.number().int(),
+  cvm_id: z.string(),
   identifier: z.string(),
   status: z.enum(["updated", "unchanged", "skipped", "conflict", "error"]),
   old_instance_id: z.string().nullable().optional(),

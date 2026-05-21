@@ -4,12 +4,12 @@ import { IsAllowedResultSchema } from "../cvms/check_cvm_is_allowed";
 
 export const AppCvmsBatchIsAllowedResponseSchema = z.object({
   is_onchain: z.boolean(),
-  results: z.array(IsAllowedResultSchema.extend({ cvm_id: z.number() })).default([]),
+  results: z.array(IsAllowedResultSchema.extend({ cvm_id: z.string() })).default([]),
   total: z.number().default(0),
   allowed_count: z.number().default(0),
   denied_count: z.number().default(0),
   error_count: z.number().default(0),
-  skipped_cvm_ids: z.array(z.number()).default([]),
+  skipped_cvm_ids: z.array(z.string()).default([]),
 });
 
 export type AppCvmsBatchIsAllowedResponse = z.infer<typeof AppCvmsBatchIsAllowedResponseSchema>;

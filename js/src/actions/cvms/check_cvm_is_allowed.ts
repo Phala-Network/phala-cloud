@@ -3,7 +3,7 @@ import { defineAction } from "../../utils/define-action";
 import { CvmIdSchema, type CvmIdInput } from "../../types/cvm_id";
 
 export const IsAllowedResultSchema = z.object({
-  cvm_id: z.number().optional(),
+  cvm_id: z.string().optional(),
   app_contract_address: z.string(),
   compose_hash: z.string(),
   device_id: z.string(),

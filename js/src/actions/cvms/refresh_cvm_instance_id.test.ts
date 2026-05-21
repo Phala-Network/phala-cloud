@@ -7,7 +7,7 @@ import {
 
 describe("refreshCvmInstanceId", () => {
   const mockResponse = {
-    cvm_id: 101,
+    cvm_id: "cvm_101",
     identifier: "101",
     status: "updated" as const,
     old_instance_id: null,

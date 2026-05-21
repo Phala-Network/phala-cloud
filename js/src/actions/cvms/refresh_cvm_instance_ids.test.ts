@@ -16,7 +16,7 @@ describe("refreshCvmInstanceIds", () => {
     errors: 0,
     items: [
       {
-        cvm_id: 101,
+        cvm_id: "cvm_101",
         identifier: "101",
         status: "updated" as const,
         old_instance_id: null,
@@ -26,7 +26,7 @@ describe("refreshCvmInstanceIds", () => {
         reason: null,
       },
       {
-        cvm_id: 102,
+        cvm_id: "cvm_102",
         identifier: "102",
         status: "unchanged" as const,
         old_instance_id: "inst-def",

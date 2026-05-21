@@ -89,11 +89,11 @@ type AppAttestationResponse = GenericObject
 
 // DeviceAllowlistItem represents an item in the device allowlist.
 type DeviceAllowlistItem struct {
-	DeviceID       string  `json:"device_id"`
-	NodeName       *string `json:"node_name,omitempty"`
-	CVMIDs         []int   `json:"cvm_ids,omitempty"`
-	AllowedOnchain bool    `json:"allowed_onchain"`
-	Status         string  `json:"status"`
+	DeviceID       string   `json:"device_id"`
+	NodeName       *string  `json:"node_name,omitempty"`
+	CVMIDs         []string `json:"cvm_ids,omitempty"`
+	AllowedOnchain bool     `json:"allowed_onchain"`
+	Status         string   `json:"status"`
 }
 
 // DeviceAllowlistResponse is the response for getting app device allowlist.
