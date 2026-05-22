@@ -77,20 +77,20 @@ Expected `/demo` fields include:
 Run locally from the repository root:
 
 ```bash
-docker compose -f sdks/templates/prebuilt/openllm/docker-compose.yml config >/dev/null
-docker compose -f sdks/templates/prebuilt/openllm/docker-compose.yml up -d
+docker compose -f templates/prebuilt/openllm/docker-compose.yml config >/dev/null
+docker compose -f templates/prebuilt/openllm/docker-compose.yml up -d
 curl -fsS http://localhost:8080/healthz
 curl -fsS http://localhost:8080/demo
 curl -fsS http://localhost:8080/v1/models
-docker compose -f sdks/templates/prebuilt/openllm/docker-compose.yml down
+docker compose -f templates/prebuilt/openllm/docker-compose.yml down
 ```
 
 Template validation commands:
 
 ```bash
-python sdks/templates/validate.py
-git -C sdks diff --check origin/main...HEAD
-docker compose -f sdks/templates/prebuilt/openllm/docker-compose.yml config >/dev/null
+python3 templates/validate.py
+git diff --check origin/main...HEAD
+docker compose -f templates/prebuilt/openllm/docker-compose.yml config >/dev/null
 ```
 
 ## Extending To Real OpenLLM Serving
@@ -129,7 +129,7 @@ curl -fsS https://<your-app-domain>/v1/chat/completions \
 For local Docker Compose testing:
 
 ```bash
-docker compose -f sdks/templates/prebuilt/openllm/docker-compose.yml down
+docker compose -f templates/prebuilt/openllm/docker-compose.yml down
 ```
 
 The default demo does not create named volumes. In Phala Cloud, delete the deployment when you no longer need the CVM.
