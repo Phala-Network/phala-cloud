@@ -4,7 +4,7 @@ import type { CommandContext } from "@/src/core/types";
 import { getProjectConfig } from "@/src/utils/project-config";
 import { resolveAuth, type ResolvedAuth } from "@/src/utils/credentials";
 
-const API_VERSION = "2026-01-21" as const;
+const API_VERSION = "2026-05-22" as const;
 
 export type CliApiClient = Client<typeof API_VERSION>;
 

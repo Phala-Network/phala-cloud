@@ -145,9 +145,8 @@ import { defineAction } from "../../utils/define-action";
  */
 
 // Zod schema definition (align with backend VMSchema)
-export const CommitCvmProvisionSchema = z
+const CommitCvmProvisionBaseSchema = z
   .object({
-    id: z.number(),
     name: z.string(),
     status: z.string(),
     teepod_id: z.number(),
@@ -179,6 +178,20 @@ export const CommitCvmProvisionSchema = z
   })
   .passthrough();
 
+export const CommitCvmProvisionV20260121Schema = CommitCvmProvisionBaseSchema.extend({
+  id: z.number(),
+});
+export type CommitCvmProvisionV20260121 = z.infer<typeof CommitCvmProvisionV20260121Schema>;
+
+export const CommitCvmProvisionV20260522Schema = CommitCvmProvisionBaseSchema.extend({
+  id: z.string(),
+});
+export type CommitCvmProvisionV20260522 = z.infer<typeof CommitCvmProvisionV20260522Schema>;
+
+export const CommitCvmProvisionSchema = z.union([
+  CommitCvmProvisionV20260121Schema,
+  CommitCvmProvisionV20260522Schema,
+]);
 export type CommitCvmProvision = z.infer<typeof CommitCvmProvisionSchema>;
 
 // Request schema

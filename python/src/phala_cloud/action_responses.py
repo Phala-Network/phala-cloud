@@ -6,7 +6,11 @@ from .models.apps import AppRevisionDetailResponse as AppRevisionDetailResponse
 from .models.apps import AppRevisionsResponse as AppRevisionsResponse
 from .models.auth import CurrentUserV20251028, CurrentUserV20260121
 from .models.base import CloudModel
-from .models.cvms import PaginatedCvmInfosV20251028, PaginatedCvmInfosV20260121
+from .models.cvms import (
+    PaginatedCvmInfosV20251028,
+    PaginatedCvmInfosV20260121,
+    PaginatedCvmInfosV20260522,
+)
 
 
 class GenericObject(CloudModel):
@@ -220,4 +224,6 @@ class AppAttestationResponse(CloudModel):
 
 
 CurrentUserResponse = CurrentUserV20260121 | CurrentUserV20251028
-PaginatedCvmListResponse = PaginatedCvmInfosV20260121 | PaginatedCvmInfosV20251028
+PaginatedCvmListResponse = (
+    PaginatedCvmInfosV20260522 | PaginatedCvmInfosV20260121 | PaginatedCvmInfosV20251028
+)

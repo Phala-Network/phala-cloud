@@ -3,8 +3,8 @@ import { type Client, type SafeResult } from "../../client";
 import type { ApiVersion } from "../../types/client";
 import { CvmInfoV20251028Schema } from "../../types/cvm_info_v20251028";
 import type { CvmInfoV20251028 } from "../../types/cvm_info_v20251028";
-import { CvmInfoV20260121Schema } from "../../types/cvm_info_v20260121";
-import type { CvmInfoV20260121 } from "../../types/cvm_info_v20260121";
+import { CvmInfoV20260121Schema, CvmInfoV20260522Schema } from "../../types/cvm_info_v20260121";
+import type { CvmInfoV20260121, CvmInfoV20260522 } from "../../types/cvm_info_v20260121";
 import type { GetAppCvmsResponse } from "../../types/version-mappings";
 
 export const GetAppCvmsRequestSchema = z
@@ -16,9 +16,9 @@ export const GetAppCvmsRequestSchema = z
 export type GetAppCvmsRequest = z.infer<typeof GetAppCvmsRequestSchema>;
 
 function getSchemaForVersion(version: ApiVersion) {
-  return version === "2025-10-28"
-    ? z.array(CvmInfoV20251028Schema)
-    : z.array(CvmInfoV20260121Schema);
+  if (version === "2025-10-28") return z.array(CvmInfoV20251028Schema);
+  if (version === "2026-01-21") return z.array(CvmInfoV20260121Schema);
+  return z.array(CvmInfoV20260522Schema);
 }
 
 /**

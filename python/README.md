@@ -60,7 +60,7 @@ asyncio.run(main())
 
 - `api_key`
 - `base_url`
-- `version` (`2025-10-28` / `2026-01-21`)
+- `version` (`2025-10-28` / `2026-01-21` / `2026-05-22`)
 - `timeout`
 - `headers`
 - `use_cookie_auth`

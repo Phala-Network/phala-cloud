@@ -2,22 +2,52 @@ import { z } from "zod";
 import { type Client, type SafeResult } from "../../client";
 import type { ApiVersion } from "../../types/client";
 
-const DeviceAllowlistItemSchema = z.object({
+const DeviceAllowlistItemBaseSchema = z.object({
   device_id: z.string(),
   node_name: z.string().nullable(),
-  cvm_ids: z.array(z.string()),
   allowed_onchain: z.boolean(),
   status: z.string(),
 });
 
-const DeviceAllowlistResponseSchema = z.object({
+export const DeviceAllowlistItemV20260121Schema = DeviceAllowlistItemBaseSchema.extend({
+  cvm_ids: z.array(z.number()),
+});
+export type DeviceAllowlistItemV20260121 = z.infer<typeof DeviceAllowlistItemV20260121Schema>;
+
+export const DeviceAllowlistItemV20260522Schema = DeviceAllowlistItemBaseSchema.extend({
+  cvm_ids: z.array(z.string()),
+});
+export type DeviceAllowlistItemV20260522 = z.infer<typeof DeviceAllowlistItemV20260522Schema>;
+
+const DeviceAllowlistResponseBaseSchema = z.object({
   is_onchain_kms: z.boolean(),
   allow_any_device: z.boolean().nullable().optional(),
   chain_id: z.number().nullable().optional(),
   app_contract_address: z.string().nullable().optional(),
-  devices: z.array(DeviceAllowlistItemSchema).optional().default([]),
 });
 
+export const DeviceAllowlistResponseV20260121Schema = DeviceAllowlistResponseBaseSchema.extend({
+  devices: z.array(DeviceAllowlistItemV20260121Schema).optional().default([]),
+});
+export type DeviceAllowlistResponseV20260121 = z.infer<
+  typeof DeviceAllowlistResponseV20260121Schema
+>;
+
+export const DeviceAllowlistResponseV20260522Schema = DeviceAllowlistResponseBaseSchema.extend({
+  devices: z.array(DeviceAllowlistItemV20260522Schema).optional().default([]),
+});
+export type DeviceAllowlistResponseV20260522 = z.infer<
+  typeof DeviceAllowlistResponseV20260522Schema
+>;
+
+const DeviceAllowlistItemSchema = z.union([
+  DeviceAllowlistItemV20260121Schema,
+  DeviceAllowlistItemV20260522Schema,
+]);
+const DeviceAllowlistResponseSchema = z.union([
+  DeviceAllowlistResponseV20260121Schema,
+  DeviceAllowlistResponseV20260522Schema,
+]);
 export type DeviceAllowlistItem = z.infer<typeof DeviceAllowlistItemSchema>;
 export type DeviceAllowlistResponse = z.infer<typeof DeviceAllowlistResponseSchema>;
 

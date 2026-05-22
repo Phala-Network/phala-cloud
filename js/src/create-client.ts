@@ -269,6 +269,9 @@ import type { SafeResult } from "./types/client";
  * @returns Client extended with all available actions
  */
 export function createClient(
+  config: ClientConfig<"2026-05-22"> & { version: "2026-05-22" },
+): Client<"2026-05-22">;
+export function createClient(
   config: ClientConfig<"2026-01-21"> & { version: "2026-01-21" },
 ): Client<"2026-01-21">;
 export function createClient(

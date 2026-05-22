@@ -23,6 +23,12 @@ describe("versioned client type inference", () => {
       expectTypeOf(client.config.version).toEqualTypeOf<"2026-01-21">();
     });
 
+    it("should infer v20260522 types when version is 2026-05-22", () => {
+      const client = createClient({ version: "2026-05-22", apiKey: "test" });
+
+      expectTypeOf(client.config.version).toEqualTypeOf<"2026-05-22">();
+    });
+
     it("should infer v20251028 types when version is 2025-10-28", () => {
       const client = createClient({ version: "2025-10-28", apiKey: "test" });
 
@@ -33,7 +39,7 @@ describe("versioned client type inference", () => {
       const client = createClient({ apiKey: "test" });
 
       // Default should be the latest supported version
-      expectTypeOf(client.config.version).toEqualTypeOf<"2026-01-21">();
+      expectTypeOf(client.config.version).toEqualTypeOf<"2026-05-22">();
     });
   });
 

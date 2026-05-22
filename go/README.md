@@ -62,7 +62,7 @@ client, err := phala.NewClient(
 	phala.WithUserAgent("my-app/1.0"),
 	phala.WithHeader("X-Custom", "value"),
 	phala.WithHTTPClient(customHTTPClient),
-	phala.WithAPIVersion("2026-01-21"),
+	phala.WithAPIVersion("2026-05-22"),
 )
 ```
 

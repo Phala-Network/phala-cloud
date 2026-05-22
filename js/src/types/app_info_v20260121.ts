@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CvmInfoV20260121Schema } from "./cvm_info_v20260121";
+import { CvmInfoV20260121Schema, CvmInfoV20260522Schema } from "./cvm_info_v20260121";
 
 export const DstackAppFullResponseV20260121Schema = z.object({
   id: z.string(),
@@ -23,6 +23,12 @@ export const DstackAppFullResponseV20260121Schema = z.object({
   cvm_count: z.number().int().default(0),
 });
 export type DstackAppFullResponseV20260121 = z.infer<typeof DstackAppFullResponseV20260121Schema>;
+
+export const DstackAppFullResponseV20260522Schema = DstackAppFullResponseV20260121Schema.extend({
+  current_cvm: CvmInfoV20260522Schema.nullable().optional(),
+  cvms: z.array(CvmInfoV20260522Schema).default([]),
+});
+export type DstackAppFullResponseV20260522 = z.infer<typeof DstackAppFullResponseV20260522Schema>;
 
 export const DstackAppMinimalResponseV20260121Schema = z.object({
   id: z.null().optional(),
@@ -48,6 +54,14 @@ export type DstackAppWithCvmResponseV20260121 = z.infer<
   typeof DstackAppWithCvmResponseV20260121Schema
 >;
 
+export const DstackAppWithCvmResponseV20260522Schema = z.union([
+  DstackAppFullResponseV20260522Schema,
+  DstackAppMinimalResponseV20260121Schema,
+]);
+export type DstackAppWithCvmResponseV20260522 = z.infer<
+  typeof DstackAppWithCvmResponseV20260522Schema
+>;
+
 export const DstackAppListResponseV20260121Schema = z.object({
   dstack_apps: z.array(DstackAppWithCvmResponseV20260121Schema),
   page: z.number().int(),
@@ -56,3 +70,8 @@ export const DstackAppListResponseV20260121Schema = z.object({
   total_pages: z.number().int(),
 });
 export type DstackAppListResponseV20260121 = z.infer<typeof DstackAppListResponseV20260121Schema>;
+
+export const DstackAppListResponseV20260522Schema = DstackAppListResponseV20260121Schema.extend({
+  dstack_apps: z.array(DstackAppWithCvmResponseV20260522Schema),
+});
+export type DstackAppListResponseV20260522 = z.infer<typeof DstackAppListResponseV20260522Schema>;

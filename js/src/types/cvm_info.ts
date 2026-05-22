@@ -9,8 +9,7 @@ import { z } from "zod";
  * Used by start/stop/shutdown/restart operations
  * This is an internal model, not a versioned API response
  */
-export const VMSchema = z.object({
-  id: z.number(),
+const VMBaseSchema = z.object({
   name: z.string(),
   status: z.string(),
   teepod_id: z.number(),
@@ -40,4 +39,15 @@ export const VMSchema = z.object({
   encrypted_env_pubkey: z.string().nullable(),
 });
 
+export const VMV20260121Schema = VMBaseSchema.extend({
+  id: z.number(),
+});
+export type VMV20260121 = z.infer<typeof VMV20260121Schema>;
+
+export const VMV20260522Schema = VMBaseSchema.extend({
+  id: z.string(),
+});
+export type VMV20260522 = z.infer<typeof VMV20260522Schema>;
+
+export const VMSchema = z.union([VMV20260121Schema, VMV20260522Schema]);
 export type VM = z.infer<typeof VMSchema>;

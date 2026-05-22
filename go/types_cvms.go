@@ -2,9 +2,8 @@ package phala
 
 import "fmt"
 
-// CVMInfo represents CVM information (API version 2026-01-21).
-type CVMInfo struct {
-	ID             string           `json:"id"`
+// CVMInfoFields contains fields shared by versioned CVM response schemas.
+type CVMInfoFields struct {
 	Name           string           `json:"name"`
 	AppID          *string          `json:"app_id,omitempty"`
 	VMUUID         *string          `json:"vm_uuid,omitempty"`
@@ -44,6 +43,21 @@ type CVMInfo struct {
 	Endpoints          []CVMEndpoint `json:"endpoints,omitempty"`
 	PublicURLs         []CVMEndpoint `json:"public_urls,omitempty"`
 }
+
+// CVMInfoV20260121 represents CVM information before hashed CVM IDs.
+type CVMInfoV20260121 struct {
+	ID int `json:"id"`
+	CVMInfoFields
+}
+
+// CVMInfoV20260522 represents CVM information with hashed CVM IDs.
+type CVMInfoV20260522 struct {
+	ID string `json:"id"`
+	CVMInfoFields
+}
+
+// CVMInfo is the latest CVM information schema.
+type CVMInfo = CVMInfoV20260522
 
 // CVMEndpoint represents a CVM endpoint URL.
 type CVMEndpoint struct {
@@ -148,8 +162,14 @@ type CvmRef struct {
 	VMUUID     *string `json:"vm_uuid,omitempty"`
 }
 
-// PaginatedCVMInfos is a paginated list of CVM infos.
-type PaginatedCVMInfos = Paginated[CVMInfo]
+// PaginatedCVMInfosV20260121 is a paginated list of CVM infos before hashed CVM IDs.
+type PaginatedCVMInfosV20260121 = Paginated[CVMInfoV20260121]
+
+// PaginatedCVMInfosV20260522 is a paginated list of CVM infos with hashed CVM IDs.
+type PaginatedCVMInfosV20260522 = Paginated[CVMInfoV20260522]
+
+// PaginatedCVMInfos is the latest paginated CVM info schema.
+type PaginatedCVMInfos = PaginatedCVMInfosV20260522
 
 // GetCVMListOptions holds query parameters for listing CVMs.
 type GetCVMListOptions struct {
@@ -225,19 +245,35 @@ type CommitCVMProvisionRequest struct {
 	EnvKeys         []string `json:"env_keys,omitempty"`
 }
 
-// CommitCVMProvisionResponse is the response from committing a CVM provision.
-type CommitCVMProvisionResponse struct {
-	ID     any    `json:"id"`
+// CommitCVMProvisionResponseFields contains shared commit response fields.
+type CommitCVMProvisionResponseFields struct {
 	Name   string `json:"name"`
 	Status string `json:"status"`
 }
 
+// CommitCVMProvisionResponseV20260121 is the commit response before hashed CVM IDs.
+type CommitCVMProvisionResponseV20260121 struct {
+	ID int `json:"id"`
+	CommitCVMProvisionResponseFields
+}
+
+// CommitCVMProvisionResponseV20260522 is the commit response with hashed CVM IDs.
+type CommitCVMProvisionResponseV20260522 struct {
+	ID string `json:"id"`
+	CommitCVMProvisionResponseFields
+}
+
+// CommitCVMProvisionResponse is the latest commit response schema.
+type CommitCVMProvisionResponse = CommitCVMProvisionResponseV20260522
+
 // CvmID returns the CVM ID as a string.
-func (r *CommitCVMProvisionResponse) CvmID() string {
-	if r.ID == nil {
-		return ""
-	}
-	return fmt.Sprintf("%v", r.ID)
+func (r *CommitCVMProvisionResponseV20260522) CvmID() string {
+	return r.ID
+}
+
+// CvmID returns the CVM ID as a string.
+func (r *CommitCVMProvisionResponseV20260121) CvmID() string {
+	return fmt.Sprintf("%d", r.ID)
 }
 
 // CVMState represents the state of a CVM.
@@ -376,9 +412,8 @@ type CVMVisibility struct {
 	PublicTcbinfo *bool `json:"public_tcbinfo,omitempty"`
 }
 
-// IsAllowedResult represents the result of an on-chain allowance check.
-type IsAllowedResult struct {
-	CvmID              string  `json:"cvm_id,omitempty"`
+// IsAllowedResultFields contains shared allowance check fields.
+type IsAllowedResultFields struct {
 	AppContractAddress string  `json:"app_contract_address"`
 	ComposeHash        string  `json:"compose_hash"`
 	DeviceID           string  `json:"device_id"`
@@ -388,6 +423,21 @@ type IsAllowedResult struct {
 	IsAllowed          bool    `json:"is_allowed"`
 	Error              *string `json:"error,omitempty"`
 }
+
+// IsAllowedResultV20260121 is an allowance check result before hashed CVM IDs.
+type IsAllowedResultV20260121 struct {
+	CvmID int `json:"cvm_id,omitempty"`
+	IsAllowedResultFields
+}
+
+// IsAllowedResultV20260522 is an allowance check result with hashed CVM IDs.
+type IsAllowedResultV20260522 struct {
+	CvmID string `json:"cvm_id,omitempty"`
+	IsAllowedResultFields
+}
+
+// IsAllowedResult is the latest allowance check result schema.
+type IsAllowedResult = IsAllowedResultV20260522
 
 // CheckCvmIsAllowedRequest is the request for checking CVM on-chain allowance.
 type CheckCvmIsAllowedRequest struct {
@@ -404,16 +454,31 @@ type CheckAppIsAllowedRequest struct {
 	ChainID     *int    `json:"chain_id,omitempty"`
 }
 
-// AppCvmsBatchIsAllowedResponse is the batch response for app CVMs allowance check.
-type AppCvmsBatchIsAllowedResponse struct {
-	IsOnchain     bool              `json:"is_onchain"`
-	Results       []IsAllowedResult `json:"results"`
-	Total         int               `json:"total"`
-	AllowedCount  int               `json:"allowed_count"`
-	DeniedCount   int               `json:"denied_count"`
-	ErrorCount    int               `json:"error_count"`
-	SkippedCvmIDs []string          `json:"skipped_cvm_ids"`
+// AppCvmsBatchIsAllowedResponseFields contains shared batch allowance fields.
+type AppCvmsBatchIsAllowedResponseFields struct {
+	IsOnchain    bool `json:"is_onchain"`
+	Total        int  `json:"total"`
+	AllowedCount int  `json:"allowed_count"`
+	DeniedCount  int  `json:"denied_count"`
+	ErrorCount   int  `json:"error_count"`
 }
+
+// AppCvmsBatchIsAllowedResponseV20260121 is the batch response before hashed CVM IDs.
+type AppCvmsBatchIsAllowedResponseV20260121 struct {
+	AppCvmsBatchIsAllowedResponseFields
+	Results       []IsAllowedResultV20260121 `json:"results"`
+	SkippedCvmIDs []int                      `json:"skipped_cvm_ids"`
+}
+
+// AppCvmsBatchIsAllowedResponseV20260522 is the batch response with hashed CVM IDs.
+type AppCvmsBatchIsAllowedResponseV20260522 struct {
+	AppCvmsBatchIsAllowedResponseFields
+	Results       []IsAllowedResultV20260522 `json:"results"`
+	SkippedCvmIDs []string                   `json:"skipped_cvm_ids"`
+}
+
+// AppCvmsBatchIsAllowedResponse is the latest batch allowance schema.
+type AppCvmsBatchIsAllowedResponse = AppCvmsBatchIsAllowedResponseV20260522
 
 // OSImage represents an available OS image.
 type OSImage struct {

@@ -63,7 +63,7 @@ const mockCvmListV20251028 = {
 const mockCvmListV20260121 = {
   items: [
     {
-      id: "hashed-id-123",
+      id: 123,
       name: "test-cvm",
       app_id: "app-123",
       vm_uuid: null,
@@ -196,9 +196,9 @@ describe("version-based schema validation", () => {
   });
 
   describe("client version configuration", () => {
-    it("should default to 2026-01-21 version", () => {
+    it("should default to 2026-05-22 version", () => {
       const client = createClient({ apiKey: "test" });
-      expect(client.config.version).toBe("2026-01-21");
+      expect(client.config.version).toBe("2026-05-22");
     });
 
     it("should use specified version 2025-10-28", () => {
@@ -209,6 +209,11 @@ describe("version-based schema validation", () => {
     it("should use specified version 2026-01-21", () => {
       const client = createClient({ apiKey: "test", version: "2026-01-21" });
       expect(client.config.version).toBe("2026-01-21");
+    });
+
+    it("should use specified version 2026-05-22", () => {
+      const client = createClient({ apiKey: "test", version: "2026-05-22" });
+      expect(client.config.version).toBe("2026-05-22");
     });
   });
 });

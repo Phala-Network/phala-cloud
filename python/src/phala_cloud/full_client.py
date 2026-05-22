@@ -56,8 +56,10 @@ from .models.cvms import (
     CheckAppIsAllowedRequest,
     CheckCvmIsAllowedRequest,
     CvmInfoV20260121,
+    CvmInfoV20260522,
     PaginatedCvmInfosV20251028,
     PaginatedCvmInfosV20260121,
+    PaginatedCvmInfosV20260522,
 )
 from .models.kms import GetKmsListResponse, GetKmsOnChainDetailResponse, KmsInfo
 from .models.nodes import AvailableNodes, CvmCreateResourceGraph
@@ -250,6 +252,8 @@ class ConfirmCvmPatchRequest(CvmIdRequest):
 
 
 class _ExtMixin:
+    config: Any
+
     @staticmethod
     def _loose_validate(data: Any) -> Any:
         if data is None:
@@ -316,11 +320,11 @@ class _ExtMixin:
         if m == "GET" and path == "/teepods/cvm-create-resources":
             return CvmCreateResourceGraph
         if m == "GET" and path == "/cvms/paginated":
-            return (
-                PaginatedCvmInfosV20251028
-                if self.config.version == "2025-10-28"
-                else PaginatedCvmInfosV20260121
-            )
+            if self.config.version == "2025-10-28":
+                return PaginatedCvmInfosV20251028
+            if self.config.version == "2026-01-21":
+                return PaginatedCvmInfosV20260121
+            return PaginatedCvmInfosV20260522
         if m == "GET" and path == "/kms":
             return GetKmsListResponse
         if m == "GET" and path == "/instance-types":
@@ -343,7 +347,7 @@ class _ExtMixin:
         if m == "POST" and re.fullmatch(r"/cvms/[^/]+/compose_file/provision", path):
             return ProvisionCvmComposeFileUpdateResult
         if m == "POST" and re.fullmatch(r"/apps/[^/]+/instances", path):
-            return CvmInfoV20260121
+            return CvmInfoV20260121 if self.config.version == "2026-01-21" else CvmInfoV20260522
 
         if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/envs", path):
             return InProgressResponse | ComposeHashPreconditionResponse
@@ -1127,9 +1131,8 @@ class PhalaCloud(_SyncBase, _ExtMixin):
             "token": req.token,
             "transaction_hash": req.transaction_hash,
         }
-        return self._validate(
-            CvmInfoV20260121, self.post(f"/apps/{req.app_id}/instances", json=body)
-        )
+        model = CvmInfoV20260121 if self.config.version == "2026-01-21" else CvmInfoV20260522
+        return self._validate(model, self.post(f"/apps/{req.app_id}/instances", json=body))
 
     def safe_create_app_instance(
         self, request: CreateAppInstanceRequest | Mapping[str, Any]
@@ -1951,10 +1954,8 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
             "token": req.token,
             "transaction_hash": req.transaction_hash,
         }
-        return self._validate(
-            CvmInfoV20260121,
-            await self.post(f"/apps/{req.app_id}/instances", json=body),
-        )
+        model = CvmInfoV20260121 if self.config.version == "2026-01-21" else CvmInfoV20260522
+        return self._validate(model, await self.post(f"/apps/{req.app_id}/instances", json=body))
 
     async def safe_create_app_instance(
         self, request: CreateAppInstanceRequest | Mapping[str, Any]

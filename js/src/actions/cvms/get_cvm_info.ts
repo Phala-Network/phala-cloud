@@ -2,8 +2,14 @@ import { type Client, type SafeResult } from "../../client";
 import type { ApiVersion } from "../../types/client";
 import { CvmDetailV20251028Schema } from "../../types/cvm_info_v20251028";
 import type { CvmDetailV20251028 } from "../../types/cvm_info_v20251028";
-import { CvmInfoDetailV20260121Schema } from "../../types/cvm_info_v20260121";
-import type { CvmInfoDetailV20260121 } from "../../types/cvm_info_v20260121";
+import {
+  CvmInfoDetailV20260121Schema,
+  CvmInfoDetailV20260522Schema,
+} from "../../types/cvm_info_v20260121";
+import type {
+  CvmInfoDetailV20260121,
+  CvmInfoDetailV20260522,
+} from "../../types/cvm_info_v20260121";
 import { CvmIdSchema, type CvmIdInput } from "../../types/cvm_id";
 import type { GetCvmInfoResponse } from "../../types/version-mappings";
 
@@ -11,7 +17,9 @@ export const GetCvmInfoRequestSchema = CvmIdSchema;
 export type GetCvmInfoRequest = CvmIdInput;
 
 function getSchemaForVersion(version: ApiVersion) {
-  return version === "2025-10-28" ? CvmDetailV20251028Schema : CvmInfoDetailV20260121Schema;
+  if (version === "2025-10-28") return CvmDetailV20251028Schema;
+  if (version === "2026-01-21") return CvmInfoDetailV20260121Schema;
+  return CvmInfoDetailV20260522Schema;
 }
 
 /**

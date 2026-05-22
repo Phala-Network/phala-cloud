@@ -95,7 +95,7 @@ export const CvmNodeInfoV20260121Schema = NodeRefSchema;
 export type CvmNodeInfoV20260121 = NodeRef;
 
 export const CvmInfoV20260121Schema = z.object({
-  id: z.string(), // hashed CvmId
+  id: z.number(),
   name: z.string(),
   app_id: z.string().nullable().optional(),
   vm_uuid: z.string().nullable().optional(),
@@ -123,6 +123,11 @@ export const CvmInfoV20260121Schema = z.object({
 });
 export type CvmInfoV20260121 = z.infer<typeof CvmInfoV20260121Schema>;
 
+export const CvmInfoV20260522Schema = CvmInfoV20260121Schema.extend({
+  id: z.string(),
+});
+export type CvmInfoV20260522 = z.infer<typeof CvmInfoV20260522Schema>;
+
 export const CvmInfoDetailV20260121Schema = CvmInfoV20260121Schema.extend({
   compose_file: z
     .union([z.record(z.any()), z.string()])
@@ -130,6 +135,14 @@ export const CvmInfoDetailV20260121Schema = CvmInfoV20260121Schema.extend({
     .optional(),
 });
 export type CvmInfoDetailV20260121 = z.infer<typeof CvmInfoDetailV20260121Schema>;
+
+export const CvmInfoDetailV20260522Schema = CvmInfoV20260522Schema.extend({
+  compose_file: z
+    .union([z.record(z.any()), z.string()])
+    .nullable()
+    .optional(),
+});
+export type CvmInfoDetailV20260522 = z.infer<typeof CvmInfoDetailV20260522Schema>;
 
 export const PaginatedCvmInfosV20260121Schema = z.object({
   items: z.array(CvmInfoV20260121Schema),
@@ -139,3 +152,8 @@ export const PaginatedCvmInfosV20260121Schema = z.object({
   pages: z.number(),
 });
 export type PaginatedCvmInfosV20260121 = z.infer<typeof PaginatedCvmInfosV20260121Schema>;
+
+export const PaginatedCvmInfosV20260522Schema = PaginatedCvmInfosV20260121Schema.extend({
+  items: z.array(CvmInfoV20260522Schema),
+});
+export type PaginatedCvmInfosV20260522 = z.infer<typeof PaginatedCvmInfosV20260522Schema>;

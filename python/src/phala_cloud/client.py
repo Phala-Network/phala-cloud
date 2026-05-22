@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from typing import Any, Literal, TypeVar
 
 import httpx
+from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
 
 from .errors import (
@@ -30,15 +31,20 @@ from .models import (
     PaginatedCvmInfos,
     PaginatedCvmInfosV20251028,
     PaginatedCvmInfosV20260121,
+    PaginatedCvmInfosV20260522,
 )
 from .result import SafeResult
 
-ApiVersion = Literal["2025-10-28", "2026-01-21"]
-SUPPORTED_API_VERSIONS: tuple[ApiVersion, ...] = ("2025-10-28", "2026-01-21")
-DEFAULT_API_VERSION: ApiVersion = "2026-01-21"
+ApiVersion = Literal["2025-10-28", "2026-01-21", "2026-05-22"]
+SUPPORTED_API_VERSIONS: tuple[ApiVersion, ...] = (
+    "2025-10-28",
+    "2026-01-21",
+    "2026-05-22",
+)
+DEFAULT_API_VERSION: ApiVersion = "2026-05-22"
 DEFAULT_BASE_URL = "https://cloud-api.phala.com/api/v1"
 
-T = TypeVar("T")
+T = TypeVar("T", bound=BaseModel)
 
 
 class _BaseConfig:
@@ -204,7 +210,9 @@ class AsyncPhalaCloud:
         data = await self.get("/cvms/paginated", params=req.model_dump(exclude_none=True))
         if self.config.version == "2025-10-28":
             return self._validate(PaginatedCvmInfosV20251028, data)
-        return self._validate(PaginatedCvmInfosV20260121, data)
+        if self.config.version == "2026-01-21":
+            return self._validate(PaginatedCvmInfosV20260121, data)
+        return self._validate(PaginatedCvmInfosV20260522, data)
 
     async def safe_get_cvm_list(
         self,
@@ -437,7 +445,9 @@ class PhalaCloud:
         data = self.get("/cvms/paginated", params=req.model_dump(exclude_none=True))
         if self.config.version == "2025-10-28":
             return self._validate(PaginatedCvmInfosV20251028, data)
-        return self._validate(PaginatedCvmInfosV20260121, data)
+        if self.config.version == "2026-01-21":
+            return self._validate(PaginatedCvmInfosV20260121, data)
+        return self._validate(PaginatedCvmInfosV20260522, data)
 
     def safe_get_cvm_list(
         self,

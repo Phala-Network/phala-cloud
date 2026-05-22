@@ -36,6 +36,15 @@ func (c *Client) CommitCVMProvision(ctx context.Context, req *CommitCVMProvision
 	return &result, nil
 }
 
+// CommitCVMProvisionV20260121 commits a provisioned CVM using the pre-hashid response schema.
+func (c *Client) CommitCVMProvisionV20260121(ctx context.Context, req *CommitCVMProvisionRequest) (*CommitCVMProvisionResponseV20260121, error) {
+	var result CommitCVMProvisionResponseV20260121
+	if err := c.doJSON(ctx, "POST", "/cvms", req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // GetCVMList returns a paginated list of CVMs.
 func (c *Client) GetCVMList(ctx context.Context, opts *GetCVMListOptions) (*PaginatedCVMInfos, error) {
 	path := "/cvms/paginated"
@@ -58,9 +67,40 @@ func (c *Client) GetCVMList(ctx context.Context, opts *GetCVMListOptions) (*Pagi
 	return &result, nil
 }
 
+// GetCVMListV20260121 returns a paginated list of CVMs using the pre-hashid response schema.
+func (c *Client) GetCVMListV20260121(ctx context.Context, opts *GetCVMListOptions) (*PaginatedCVMInfosV20260121, error) {
+	path := "/cvms/paginated"
+	if opts != nil {
+		q := url.Values{}
+		if opts.Page != nil {
+			q.Set("page", fmt.Sprintf("%d", *opts.Page))
+		}
+		if opts.PageSize != nil {
+			q.Set("page_size", fmt.Sprintf("%d", *opts.PageSize))
+		}
+		if encoded := q.Encode(); encoded != "" {
+			path += "?" + encoded
+		}
+	}
+	var result PaginatedCVMInfosV20260121
+	if err := c.doJSON(ctx, "GET", path, nil, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // GetCVMInfo returns detailed information about a CVM.
 func (c *Client) GetCVMInfo(ctx context.Context, cvmID string) (*CVMInfo, error) {
 	var result CVMInfo
+	if err := c.doJSON(ctx, "GET", cvmPath(cvmID), nil, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// GetCVMInfoV20260121 returns CVM information using the pre-hashid response schema.
+func (c *Client) GetCVMInfoV20260121(ctx context.Context, cvmID string) (*CVMInfoV20260121, error) {
+	var result CVMInfoV20260121
 	if err := c.doJSON(ctx, "GET", cvmPath(cvmID), nil, &result); err != nil {
 		return nil, err
 	}
@@ -227,6 +267,15 @@ func (c *Client) ConfirmCVMPatch(ctx context.Context, cvmID string, req *Confirm
 // CheckCvmIsAllowed checks if a CVM deployment is allowed by its on-chain contract.
 func (c *Client) CheckCvmIsAllowed(ctx context.Context, cvmID string, req *CheckCvmIsAllowedRequest) (*IsAllowedResult, error) {
 	var result IsAllowedResult
+	if err := c.doJSON(ctx, "POST", cvmPath(cvmID, "is-allowed"), req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// CheckCvmIsAllowedV20260121 checks CVM allowance using the pre-hashid response schema.
+func (c *Client) CheckCvmIsAllowedV20260121(ctx context.Context, cvmID string, req *CheckCvmIsAllowedRequest) (*IsAllowedResultV20260121, error) {
+	var result IsAllowedResultV20260121
 	if err := c.doJSON(ctx, "POST", cvmPath(cvmID, "is-allowed"), req, &result); err != nil {
 		return nil, err
 	}
