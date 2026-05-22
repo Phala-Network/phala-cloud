@@ -948,6 +948,16 @@
     "tags": ["LLM Inference & Model Serving", "AI Agents"]
   },
   {
+    "id": "localai",
+    "name": "mudler/LocalAI",
+    "description": "CPU-safe LocalAI deployment with an OpenAI-compatible API, web interface, and tiny no-secret smoke-test model for /v1/models checks.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/localai",
+    "author": "mudler",
+    "icon": "localai.svg",
+    "defaultResource": { "vCPU": 2, "memory": 4096, "diskSize": 20 },
+    "tags": ["LLM Inference & Model Serving", "Developer Tools", "AI Agents"]
+  },
+  {
     "id": "primus-attestor-node",
     "name": "Primus Attestor Node",
     "description": "An attestor node is a computing node of the Primus network, which forms a secure computation layer for executing zkTLS protocol. The attestor node is designated to run zkTLS tasks with zkTLS software including web version (Primus extension) and mobile versions (Primus AppClips and Primus Instant Apps) on indicated data sources. For security consideration, the attestor node runs inside a Trusted Execution Environment (TEE), ensuring runtime integrity and providing stronger version control.",

@@ -1,0 +1,65 @@
+services:
+  model-init:
+    image: curlimages/curl:8.11.1
+    user: root
+    restart: "no"
+    environment:
+      MODEL_URL: https://huggingface.co/ggml-org/test-model-stories260K/resolve/main/stories260K-f32.gguf
+      MODEL_FILE: stories260K-f32.gguf
+    volumes:
+      - localai_models:/models
+    entrypoint: ["/bin/sh", "-lc"]
+    command:
+      - |
+        set -eu
+        case "$$MODEL_FILE" in
+          ""|/*|*/*|*..*)
+            echo "MODEL_FILE must be a plain file name inside /models" >&2
+            exit 1
+            ;;
+        esac
+        model_path="/models/$$MODEL_FILE"
+        if [ ! -s "$$model_path" ]; then
+          tmp_path="$${model_path}.tmp"
+          rm -f "$$tmp_path"
+          curl -fL --retry 5 --retry-delay 2 --connect-timeout 20 --output "$$tmp_path" "$$MODEL_URL"
+          mv "$$tmp_path" "$$model_path"
+        fi
+        ls -lh "$$model_path"
+
+  localai:
+    image: localai/localai:latest-cpu
+    restart: unless-stopped
+    depends_on:
+      model-init:
+        condition: service_completed_successfully
+    ports:
+      - "8080:8080"
+    environment:
+      MODELS_PATH: /models
+    volumes:
+      - localai_models:/models
+    configs:
+      - source: localai_smoke_model
+        target: /models/localai-smoke.yaml
+    command: ["--models-path", "/models"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/v1/models"]
+      interval: 30s
+      timeout: 10s
+      retries: 6
+      start_period: 30s
+
+configs:
+  localai_smoke_model:
+    content: |
+      name: localai-smoke
+      backend: llama-cpp
+      parameters:
+        model: stories260K-f32.gguf
+        temperature: 0.2
+      context_size: 512
+      threads: 1
+
+volumes:
+  localai_models:
