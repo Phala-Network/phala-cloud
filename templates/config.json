@@ -285,6 +285,66 @@
     "tags": ["AI Agents", "Data & Storage"]
   },
   {
+    "id": "llama-cpp",
+    "name": "ggerganov/llama.cpp",
+    "description": "C/C++ LLM inference engine; runs on CPU/GPU, deployable anywhere",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/llama-cpp",
+    "author": "llama.cpp / ggml-org / ggerganov",
+    "icon": "llama-cpp.svg",
+    "envs": [
+      {
+        "key": "MODEL_URL",
+        "required": false,
+        "default": "https://huggingface.co/ggml-org/test-model-stories260K/resolve/main/stories260K-f32.gguf",
+        "description": "Public HTTPS URL for the GGUF model downloaded at startup. Use only model URLs you trust."
+      },
+      {
+        "key": "MODEL_FILE",
+        "required": false,
+        "default": "stories260K-f32.gguf",
+        "description": "Plain file name used for the downloaded model inside the /models volume."
+      },
+      {
+        "key": "LLAMA_ARG_MODEL",
+        "required": false,
+        "default": "",
+        "description": "Optional explicit model path for llama-server. Leave empty to use /models/$MODEL_FILE."
+      },
+      {
+        "key": "LLAMA_ARG_CTX_SIZE",
+        "required": false,
+        "default": "512",
+        "description": "Context size for the demo server."
+      },
+      {
+        "key": "LLAMA_ARG_HOST",
+        "required": false,
+        "default": "0.0.0.0",
+        "description": "Listen address inside the container. Keep 0.0.0.0 on Phala Cloud."
+      },
+      {
+        "key": "LLAMA_ARG_PORT",
+        "required": false,
+        "default": "8080",
+        "description": "Internal llama.cpp server port. Caddy proxies to this port."
+      },
+      {
+        "key": "LLAMA_ARG_THREADS",
+        "required": false,
+        "default": "1",
+        "description": "CPU worker threads. The default is conservative for small CVMs."
+      },
+      {
+        "key": "LLAMA_ARG_N_PREDICT",
+        "required": false,
+        "default": "64",
+        "description": "Default generation limit for llama.cpp requests that do not specify their own limit."
+      }
+    ],
+    "defaultResource": { "vCPU": 1, "memory": 1024, "diskSize": 10 },
+    "tags": ["LLM Inference", "Developer Tools", "TEE & Privacy"]
+  },
+  {
     "id": "anyone-anon-service",
     "name": "Anyone Anon Service",
     "description": "Sets up a Anyone Anon (hidden) service and serves an nginx website from that.",
