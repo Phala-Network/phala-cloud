@@ -1,49 +1,247 @@
+![Phala Cloud project dashboard showing CVM, app, workspace, GPU TEE, model, and billing controls](./docs/assets/phala-cloud-dashboard.svg)
+
 # Phala Cloud
 
-[![](https://cloud.phala.com/deploy-button.svg)](https://cloud.phala.com/templates)
+**Deploy Docker workloads to Confidential VMs from the command line.**
 
-Welcome to the Phala Cloud Open Source!
+[Cloud](https://cloud.phala.com) · [Docs](https://docs.phala.com) · [Trust Center](https://trust.phala.com) · [Templates](https://cloud.phala.com/templates)
 
-This space is designed for developers like you to explore, collaborate, and participate in the evolution of [Phala Cloud](https://cloud.phala.com/register?invite=PHALAWIKI). Whether you're here to submit feature requests, report bugs, share your innovative projects and tools built on [Phala Cloud](https://cloud.phala.com/register?invite=PHALAWIKI), or contribute to our documentation, you've come to the right place. This repository also hosts open source tools and SDKs for Phala Cloud.
+[![Deploy on Phala Cloud](https://cloud.phala.com/deploy-button.svg)](https://cloud.phala.com/templates)
 
-A curated list of awesome Phala Cloud resources, tools, and templates.
+Phala Cloud lets you run existing containers inside hardware-backed Trusted
+Execution Environments. Bring a `docker-compose.yml`, deploy it as a
+Confidential VM, seal secrets to the measured build, and fetch attestation proof
+for what is running.
 
-## About Phala Cloud
+- [x] Deploy Docker Compose services as Confidential VMs with the `phala` CLI
+- [x] Seal environment variables to the measured build instead of shipping raw secrets
+- [x] Stream logs, SSH, copy files, and manage linked CVMs from the terminal
+- [x] Fetch attestation proof for deployed workloads
+- [x] Start from templates for agents, MCP servers, GPU inference, and apps
 
-[Phala Cloud](https://cloud.phala.com/register?invite=PHALAWIKI) is a Confidential Computing native cloud platform that offers secure and scalable computing. By leveraging Trusted Execution Environments (TEEs), Phala ensures that your applications run in a trustless environment, providing both security and privacy.
+The main developer surface in this repository is the `phala` CLI.
 
-## What's in This Repository
+## Install the CLI
 
-- **CLI** (`/cli`) - Official Phala Cloud CLI tools
-- **JavaScript/TypeScript SDK** (`/js`) - Official Phala Cloud API client for managing cloud resources
-- **Terraform Provider** (`/terraform`) - Official Phala Cloud Terraform provider. Published on the Terraform Registry as `phala-network/phala` and vendored here as a git submodule from `terraform-provider-phala`
-- **Documentation & Guides** (`/docs`) - Integration guides and examples  
-- **Templates** (`/templates`) - Curated collection of Phala Cloud templates and prebuilt applications
-- **Community Issues** - Feature requests, bug reports, and discussions
+```bash
+npm install -g phala
+```
 
-## Clone With Submodules
+Or run it without installing:
 
-This repository uses git submodules for components that live in their own repositories.
-Today that includes the Terraform provider in [`/terraform`](./terraform), and the clone
-commands below will also pick up any future submodules automatically.
+```bash
+npx phala <command>
+bunx phala <command>
+```
 
-Clone this repository with:
+Authenticate with Phala Cloud:
+
+```bash
+phala login
+```
+
+Headless environment:
+
+```bash
+phala login --no-open
+phala login phak_xxx
+```
+
+## Deploy a Confidential VM
+
+From a project that has a `docker-compose.yml`:
+
+```bash
+phala deploy -n my-app -c docker-compose.yml -e .env --wait
+```
+
+The CLI creates or updates a CVM, seals environment variables when you pass
+`-e`, schedules the workload on TDX infrastructure, and waits until the CVM is
+ready when `--wait` is set.
+
+After the first deploy, link the directory to the CVM:
+
+```bash
+phala link
+git add phala.toml
+```
+
+`phala.toml` contains no secrets. Once it exists, day-to-day commands can target
+the linked CVM automatically:
+
+```bash
+phala deploy          # update the linked CVM
+phala ps              # list containers
+phala logs -f         # stream app logs
+phala ssh             # open a shell
+phala cp ./file :~/   # copy to the linked CVM
+```
+
+## Verify What Ran
+
+Fetch the CVM attestation:
+
+```bash
+phala cvms attestation
+phala cvms attestation --json > attestation.json
+```
+
+The attestation binds the running CVM to its measured runtime and compose hash,
+so users and auditors can verify that the deployed workload is the workload that
+was registered.
+
+For confidential agents, mount the dstack socket inside the container to use KMS,
+Sign-RPC, and attestation from the workload:
+
+```yaml
+services:
+  agent:
+    image: ghcr.io/your-org/agent:latest
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
+    ports:
+      - "8080:8080"
+```
+
+Deploy with sealed credentials:
+
+```bash
+phala deploy -n my-agent -c docker-compose.yml -e .env --wait
+```
+
+## Common CLI Commands
+
+| Command | Purpose |
+| --- | --- |
+| `phala deploy` | Deploy a new CVM or update the linked CVM |
+| `phala link` | Bind the current directory to a CVM with `phala.toml` |
+| `phala apps` | List deployed applications |
+| `phala cvms` | Manage CVMs: get, start, stop, restart, resize, delete, attest |
+| `phala logs` | Read container, serial, or CVM stderr logs |
+| `phala ps` | List containers in a CVM |
+| `phala ssh` | SSH into a CVM |
+| `phala cp` | Copy files to or from a CVM |
+| `phala instance-types` | List available CPU/GPU TEE instance types |
+| `phala nodes` | List available TEE worker nodes |
+| `phala profiles` | Manage multiple Phala Cloud workspaces |
+
+Full command docs live in [`cli/docs`](./cli/docs).
+
+## What Is in This Repository
+
+| Path | Purpose |
+| --- | --- |
+| [`cli`](./cli) | Official Phala Cloud CLI, published as `phala` on npm |
+| [`js`](./js) | TypeScript SDK, published as `@phala/cloud` |
+| [`python`](./python) | Python SDK, published as `phala-cloud` |
+| [`go`](./go) | Go SDK for Phala Cloud API automation |
+| [`templates`](./templates) | Curated prebuilt templates for MCP servers, agents, model serving, apps, and infrastructure |
+| [`skills`](./skills) | Agent-readable workflows for Claude Code, Codex, Cursor, and other coding agents |
+| [`terraform`](./terraform) | Terraform provider submodule |
+
+## SDKs
+
+Use the CLI for deployment workflows. Use the SDKs when you need to integrate
+Phala Cloud into another product, service, or automation system.
+
+TypeScript:
+
+```bash
+npm install @phala/cloud
+```
+
+```ts
+import { createClient } from '@phala/cloud'
+
+const client = createClient({
+  apiKey: process.env.PHALA_CLOUD_API_KEY,
+})
+
+const me = await client.getCurrentUser()
+```
+
+Python:
+
+```bash
+pip install phala-cloud
+```
+
+```python
+from phala_cloud import create_client
+
+client = create_client(api_key="<api-key>")
+me = client.get_current_user()
+```
+
+Go:
+
+```bash
+go get github.com/Phala-Network/phala-cloud/sdks/go
+```
+
+```go
+client, err := phala.NewClient(phala.WithAPIKey("<api-key>"))
+```
+
+## Templates
+
+The [`templates`](./templates) directory contains prebuilt Phala Cloud
+deployments for:
+
+- MCP servers and AI agent tools
+- LLM inference and model-serving demos
+- Web apps and developer utilities
+- Blockchain, oracle, and data workloads
+- Confidential computing starter kits
+
+Each prebuilt template includes a `docker-compose.yml` and README. The template
+catalog is generated from [`templates/config.json`](./templates/config.json).
+
+Validate template metadata before opening a PR:
+
+```bash
+python3 templates/validate.py
+```
+
+## Agent Workflows
+
+The [`skills`](./skills) directory turns Phala Cloud workflows into concise
+instructions that AI coding agents can follow.
+
+Examples:
+
+- [`skills/phala-cli/SKILL.md`](./skills/phala-cli/SKILL.md) — deploy, update,
+  debug, SSH, CI/CD, and attestation with the CLI
+- [`skills/usecase/agent-deploy.md`](./skills/usecase/agent-deploy.md) — deploy
+  a confidential AI agent with sealed credentials and signed action logs
+- [`skills/usecase/gpu-vllm-deploy.md`](./skills/usecase/gpu-vllm-deploy.md) —
+  self-host an OpenAI-compatible LLM on GPU TEE
+- [`skills/usecase/verify-attestation.md`](./skills/usecase/verify-attestation.md)
+  — verify a Phala Cloud TEE attestation end to end
+
+These files are designed to be fetched by coding agents and executed as
+step-by-step runbooks.
+
+## Terraform
+
+This repository vendors the Terraform provider as a submodule in
+[`terraform`](./terraform).
+
+Clone with submodules:
 
 ```bash
 git clone --recurse-submodules git@github.com:Phala-Network/phala-cloud.git
 ```
 
-If you already cloned it without submodules, run:
+If you already cloned without submodules:
 
 ```bash
 git submodule update --init --recursive
 ```
 
-## Use Phala Cloud
-
-It's easy to deploy arbitrary dockerized applications on Phala Cloud. Check the [documentation](https://docs.phala.network/overview/phala-network/phala-cloud) for more information.
-
-Terraform users can install the public provider directly from the Terraform Registry:
+Terraform Registry:
 
 ```hcl
 terraform {
@@ -56,104 +254,50 @@ terraform {
 }
 ```
 
-Provider registry page: https://registry.terraform.io/providers/phala-network/phala/latest
+Provider page: <https://registry.terraform.io/providers/phala-network/phala/latest>
 
-Phala Cloud is built on top of [dstack](https://github.com/dstack-TEE/dstack/). To simulate the TEE-specific features, you can use the [tappd simulator](https://github.com/leechael/tappd-simulator/). There are several starter templates available that you can check out to learn more:
+## Development
 
-- Phala Cloud Python Starter, with FastAPI: https://github.com/Phala-Network/phala-cloud-python-starter
-- Phala Cloud Bun Starter, using Bun + TypeScript: https://github.com/Phala-Network/phala-cloud-bun-starter
-- Phala Cloud NextJS Starter: https://github.com/Phala-Network/nextjs-viem-tee-sim-template
+Install dependencies:
 
-If you want to integrate the SDK into your existing apps, here are the SDKs we currently have:
+```bash
+bun install
+```
 
-- JavaScript/TypeScript: https://www.npmjs.com/package/@phala/dstack-sdk
-- Python: https://pypi.org/project/dstack-sdk/
-- Golang: https://pkg.go.dev/github.com/Dstack-TEE/dstack/sdk/go/tappd
+CLI development:
 
-## Templates
+```bash
+cd cli
+bun run src/index.ts --help
+bun run check
+```
 
-### MCP (Model Context Protocol) Servers
+SDK checks:
 
-- [**DeMCP Defillama**](https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/demap-defilama) - A DeFiLlama MCP server deployed on Phala Cloud that enables AI agents to fetch real-time DeFi data, including protocol TVL (Total Value Locked), chain metrics, and token prices. *by DeMCP*
-- [**Context7 MCP**](https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/context7-mcp) - A Context7 MCP server deployed on Phala Cloud that enables AI agents to fetch real-time Context7 data, including protocol TVL (Total Value Locked), chain metrics, and token prices. *by Phala-Network*
-- [**MCP Server Fetch**](https://github.com/Leechael/mcp-servers/tree/main/src/fetch) - A MCP server deployed on Phala Cloud that enables AI agents to fetch real-time data from a given URL. *by Leechael*
-- [**MCP Server Sequential Thinking**](https://github.com/Leechael/mcp-servers/tree/main/src/sequentialthinking) - A MCP server deployed on Phala Cloud that enables AI agents to think sequentially. *by Leechael*
-- [**Swarms Agent in Phala TEE**](https://github.com/The-Swarm-Corporation/Phala-Deployment-Template) - A Swarms agent deployed on Phala Cloud that perform a comprehensive legal team swarm for contract creation and management. *by The-Swarm-Corporation*
-- [**Armor Crypto**](https://github.com/HashWarlock/armor-crypto-mcp/tree/phala-mcp) - A single source for integrating AI Agents with the Crypto ecosystem. This includes Wallet creation and management, swaps, transfers, event-based trades like DCA, stop loss and take profit, and much more. The Armor MCP supports Solana in Alpha and, when in beta, will support more than a dozen blockchains, including Ethereum. Base, Avalanche, Bitcoin, Sui, Berachain, megaETH, Optimism, Ton, BNB, and Arbitrum, among others. Using Armor's MCP you can bring all of crypto into your AI Agent with unified logic and a complete set of tools. *by Armor Crypto*
-- [**Moralis MCP**](https://github.com/HashWarlock/moralis-mcp-server) - The Moralis MCP Server is a local or cloud-deployable engine that connects natural language prompts to real blockchain insights — allowing AI models to query wallet activity, token metrics, dapp usage, and more without custom code or SQL. *by Moralis*
-- [**Zep Graphiti MCP**](https://github.com/HashWarlock/graphiti/tree/main/mcp_server) - The [Zep Graphiti MCP Server](https://www.getzep.com/product/knowledge-graph-mcp/) is a framework for building and querying temporally-aware knowledge graphs, specifically tailored for AI agents operating in dynamic environments. Unlike traditional retrieval-augmented generation (RAG) methods, Graphiti continuously integrates user interactions, structured and unstructured enterprise data, and external information into a coherent, queryable graph. The framework supports incremental data updates, efficient retrieval, and precise historical queries without requiring complete graph recomputation, making it suitable for developing interactive, context-aware AI applications. **by Zep**
+```bash
+cd js && bun run check
+cd python && make check
+cd go && go test ./...
+```
 
-### Starter Templates
+## Useful Links
 
-- [**Next.js Starter**](https://github.com/Phala-Network/phala-cloud-nextjs-starter) - Template for developing a Next.js-based app with boilerplate code targeting deployment on Phala Cloud and DStack. It includes the SDK by default to make integration with TEE features easier. *by Phala-Network*
-- [**Python Starter**](https://github.com/Phala-Network/phala-cloud-python-starter) - Template for developing a FastAPI-based app with boilerplate code targeting deployment on Phala Cloud and DStack. It includes the SDK by default to make integration with TEE features easier. *by Phala-Network*
-- [**Bun + TypeScript Starter**](https://github.com/Phala-Network/phala-cloud-bun-starter) - Template for developing a Bun-based app with boilerplate code targeting deployment on Phala Cloud and DStack. It includes the SDK by default to make integration with TEE features easier. *by Phala-Network*
-- [**Node.js + Express + TypeScript Starter**](https://github.com/Gldywn/phala-cloud-node-starter) - Template for developing a Node.js (Typescript) w/ Express app with boilerplate code targeting deployment on Phala Cloud and DStack. It includes the SDK by default to make integration with TEE features easier. *by [Gldywn](https://github.com/Gldywn)*
+- Phala Cloud: <https://cloud.phala.com>
+- Phala Cloud docs: <https://docs.phala.com>
+- Trust Center: <https://trust.phala.com>
+- API reference: <https://cloud-api.phala.network/docs>
+- dstack: <https://github.com/Dstack-TEE/dstack>
+- Phala Network: <https://phala.network>
 
-### Oracles & Data Feeds
+## Contributing
 
-- [**Node.js Oracle Template**](https://github.com/Gldywn/phala-cloud-oracle-template) - A template for building high-integrity oracles that provides a two-fold guarantee: verifiable computation and verifiable networking. It includes a price aggregator example that demonstrates how to securely fetch, aggregate, and attest to external data, making it a robust foundation for any oracle use case. *by [Gldywn](https://github.com/Gldywn)*
-- [**VRF in TEE**](https://github.com/Phala-Network/phala-cloud-vrf-template) - This is a template for developing a VRF generator on Phala Cloud and DStack. It delivers cryptographically verifiable randomness for Web3 applications with hardware-backed security and unprecedented efficiency. *by Phala-Network*
-- [**NEAR Shade Agent**](https://github.com/HashWarlock/shade-agent-template/tree/phala-cloud) - Deploy verifiable blockchain agents and oracles on NEAR Protocol using Phala Cloud's TEE infrastructure. Includes ETH price oracle example and framework for custom agent development with hardware-backed security, private key management, and attestation. *by Near*
+Issues and pull requests are welcome. For templates, include validation output
+and a short smoke-test note. For CLI and SDK changes, include focused tests or a
+clear manual verification path.
 
-### Other Templates
-
-- [**n8n Workflow Automation**](https://github.com/Marvin-Cypher/phala-n8n-template) - A powerful workflow automation tool deployed on Phala Cloud with OAuth2 authentication fixes for TEE environment. Build complex automations, integrate with 400+ services, and run workflows securely within the TEE. *by n8n*
-- [**Maybe Finance**](https://github.com/Phala-Network/phala-cloud/tree/main/templates/maybe-ai) - A comprehensive open-source personal finance management app deployed on Phala Cloud. Track expenses, budgets, investments, and net worth with bank syncing, AI insights, and beautiful analytics - all secured within TEE infrastructure. *by Maybe Finance*
-- [**Anyone Anon Service**](https://github.com/rA3ka/dstack-examples/tree/main/anyone-anon-service) - Sets up a Anyone Anon (hidden) service and serves an nginx website from that. *by Anyone*
-- [**Anyone Network Relay**](https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/anyone-anon-relay) - Set up a Anon relay and participate in expanding the Anyone Network by providing bandwidth to earn recognition rewards. *by Anyone*
-- [**TEE Tor Hidden Service**](https://github.com/Dstack-TEE/dstack-examples/tree/main/tor-hidden-service) - This docker compose example sets up a Tor hidden service and serves an nginx website from that. *by Dstack-TEE*
-- [**TEE Coprocessors in Dstack**](https://github.com/Dstack-TEE/dstack-examples/tree/main/lightclient) - Minimal docker file for using the Helios light client to provide a trustworthy view of the blockchain. *by Dstack-TEE*
-- [**Webshell**](https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/webshell) - This guide outlines the steps to set up and use a webshell with the ttyd service. *by Dstack-TEE*
-- [**Coinbase x402 TEE**](https://github.com/HashWarlock/402-api-test/tree/phala-cloud) - A demonstration of a Node.js Express server that integrates TEE and the [X402 payment protocol](https://www.x402.org/) for monetizing API endpoints. *by Phala-Network*
-- [**Microsoft Presidio in TEE**](https://github.com/HashWarlock/presidio/tree/phala-cloud/docs/samples/python/streamlit) - This is a demo application for Microsoft Presidio, a powerful open-source framework for PII (Personally Identifiable Information) detection and de-identification. This demo is optimized for deployment on Phala Cloud's Confidential Virtual Machines (CVMs). *by Microsoft*
-- [**NEAR Shade Agent**](https://github.com/HashWarlock/shade-agent-template/tree/phala-cloud) - Deploy verifiable blockchain agents and oracles on NEAR Protocol using Phala Cloud's TEE infrastructure. Includes ETH price oracle example and framework for custom agent development with hardware-backed security, private key management, and attestation. *by Near*
-- [**bytebot**](https://github.com/bytebot-ai/bytebot) - Bytebot is a desktop AI agent with its own virtual computer—not just a browser script or RPA bot. It can use any app, manage files, log in with a password manager, read PDFs and spreadsheets, and execute complex multi-step workflows. Think of it as a virtual employee that sees the screen, moves the mouse, types, and gets work done like a human. *by bytebot*
-- [**Primus Attestor Node**](https://github.com/primus-labs/primus-network-startup) - An attestor node is a computing node of the Primus network, which forms a secure computation layer for executing zkTLS protocol. The attestor node is designated to run zkTLS tasks with zkTLS software including web version (Primus extension) and mobile versions (Primus AppClips and Primus Instant Apps) on indicated data sources. For security consideration, the attestor node runs inside a Trusted Execution Environment (TEE), ensuring runtime integrity and providing stronger version control.
-
-## Build on Phala Cloud
-
-Phala Cloud API allows you to build your own applications programmatically. It offers all the features availabe on the Cloud Platform.
-
-- [Phala Cloud SDK](./js)
-- [Phala Cloud API](https://cloud-api.phala.network/docs)
-- [Cloud API Examples](https://github.com/Leechael/phala-cloud-api-example) (by @Leechael)
-- [Phala Cloud CLI](https://github.com/Phala-Network/tee-cloud-cli.git)
-- [Phala Cloud CI/CD GitHub Action Template](https://github.com/Phala-Network/cloud-tee-starter-template)
-
-## Contribution Guidelines
-
-For Feature Requests and Bug Reports:
-
-- Search existing issues to avoid duplicates.
-- Provide detailed information about the issue or feature you need.
-
-For Documentation Contributions:
-
-- Fork the repository and create a new branch for your changes.
-- Write clear, concise documentation that helps other developers.
-- Submit a pull request with a clear description of your changes.
-
-For Code Contributions:
-
-- You can contribute to open-source tools and integrations.
-- Fork the repository and create a new branch for your feature or fix.
-- Write clean, well-documented code with tests where appropriate.
-- Submit a pull request with a clear description of your changes.
-
-For detailed guidelines, please refer to our [Contributing guidelines](CONTRIBUTING.md).
+See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Stay Connected
-
-Keep up with the latest developments:
-- [Phala Cloud](https://cloud.phala.com)
-- [Documentation](https://docs.phala.com)
-- Telegram Community: [🌍 Global](https://t.me/+nbhjx1ADG9EyYmI9), [🇨🇳 中文](https://t.me/+4PcAE9qTZ1kzM2M9)
-- [Phala Network Website](https://phala.network)
-- [Phala Discord](https://discord.gg/phala-network)
-
-Join the community and help build the future of confidential computing!
+This repository is licensed under the MIT License. Some packages and submodules
+may carry their own license files.

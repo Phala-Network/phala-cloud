@@ -1,0 +1,121 @@
+<svg width="2048" height="946" viewBox="0 0 2048 946" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Phala Cloud project dashboard</title>
+  <desc id="desc">A Phala Cloud dashboard mockup with workspace metrics, CVM controls, GPU TEE, confidential model, and billing shortcuts.</desc>
+  <defs>
+    <style>
+      .sans { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .serif { font-family: Georgia, "Times New Roman", serif; }
+      .label { fill: #666a64; font-size: 24px; font-weight: 500; letter-spacing: 7px; }
+      .body { fill: #626760; font-size: 26px; font-weight: 400; }
+      .title { fill: #242824; font-size: 50px; font-weight: 700; }
+      .metric { fill: #242824; font-size: 34px; font-weight: 500; }
+      .lime { stroke: #7ba10d; }
+      .ink { stroke: #292d29; }
+    </style>
+    <filter id="softShadow" x="-8%" y="-20%" width="116%" height="140%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#101510" flood-opacity=".06"/>
+    </filter>
+    <symbol id="chip" viewBox="0 0 32 32">
+      <rect x="8" y="8" width="16" height="16" rx="2" stroke-width="2"/>
+      <rect x="12" y="12" width="8" height="8" rx="1" stroke-width="2"/>
+      <path d="M4 11h4M4 16h4M4 21h4M24 11h4M24 16h4M24 21h4M11 4v4M16 4v4M21 4v4M11 24v4M16 24v4M21 24v4" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="cube" viewBox="0 0 32 32">
+      <path d="M16 3 27 9v14l-11 6L5 23V9l11-6Z" stroke-width="2" stroke-linejoin="round"/>
+      <path d="m5 9 11 6 11-6M16 15v14" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M10.5 6 21.5 12.5M21.5 6 10.5 12.5" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="briefcase" viewBox="0 0 32 32">
+      <rect x="5" y="10" width="22" height="16" rx="3" stroke-width="2"/>
+      <path d="M12 10V7.5A2.5 2.5 0 0 1 14.5 5h3A2.5 2.5 0 0 1 20 7.5V10M5 16h22M14 16v3h4v-3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="card" viewBox="0 0 32 32">
+      <rect x="4" y="8" width="24" height="16" rx="2" stroke-width="2"/>
+      <path d="M4 13h24" stroke-width="2"/>
+    </symbol>
+    <symbol id="shield" viewBox="0 0 32 32">
+      <path d="M16 4 25 8v7.5C25 21.5 21.3 26 16 28 10.7 26 7 21.5 7 15.5V8l9-4Z" stroke-width="2" stroke-linejoin="round"/>
+      <path d="m12 16 3 3 6-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="spark" viewBox="0 0 32 32">
+      <path d="M16 3c1.2 7 3 10.8 10 13-7 1.2-10.8 3-13 10-1.2-7-3-10.8-10-13 7-1.2 10.8-3 13-10Z" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M24 3c.5 3.1 1.4 4.8 5 6-3.1.5-4.8 1.4-6 5-.5-3.1-1.4-4.8-5-6 3.1-.5 4.8-1.4 6-5Z" stroke-width="2" stroke-linejoin="round"/>
+    </symbol>
+  </defs>
+
+  <rect width="2048" height="946" fill="#FAFBF8"/>
+
+  <text x="80" y="60" class="sans body" fill="#5C625B">marvin@phala.network</text>
+  <text x="80" y="132" class="serif title">Project Dashboard</text>
+  <text x="80" y="186" class="sans body">Choose a workspace, review workload metrics, or create a new environment for CVMs, GPU rentals, model</text>
+  <text x="80" y="220" class="sans body">keys, and billing.</text>
+
+  <rect x="1728" y="35" width="300" height="70" rx="6" fill="#C9F34F"/>
+  <path d="M1773 60v18M1764 69h18" stroke="#151915" stroke-width="2.5" stroke-linecap="round"/>
+  <text x="1802" y="78" class="sans" fill="#101510" font-size="25" font-weight="600">Create Workspace</text>
+
+  <g filter="url(#softShadow)">
+    <rect x="80" y="265" width="470" height="138" rx="6" fill="#FFFFFF" stroke="#DCDDDA"/>
+    <rect x="102" y="303" width="62" height="62" rx="3" fill="#F6F8F5" stroke="#E0E4DD"/>
+    <use href="#chip" x="115" y="316" width="36" height="36" class="lime"/>
+    <text x="185" y="318" class="sans label">RUNNING CVMS</text>
+    <text x="185" y="358" class="sans metric">27</text>
+
+    <rect x="572" y="265" width="470" height="138" rx="6" fill="#FFFFFF" stroke="#DCDDDA"/>
+    <rect x="594" y="303" width="62" height="62" rx="3" fill="#F6F8F5" stroke="#E0E4DD"/>
+    <use href="#cube" x="607" y="316" width="36" height="36" class="lime"/>
+    <text x="677" y="318" class="sans label">APPS</text>
+    <text x="677" y="358" class="sans metric">968</text>
+
+    <rect x="1064" y="265" width="470" height="138" rx="6" fill="#FFFFFF" stroke="#DCDDDA"/>
+    <rect x="1087" y="303" width="62" height="62" rx="3" fill="#F6F8F5" stroke="#E0E4DD"/>
+    <use href="#briefcase" x="1100" y="316" width="36" height="36" class="ink"/>
+    <text x="1169" y="318" class="sans label">TOTAL CVMS</text>
+    <text x="1169" y="358" class="sans metric">130</text>
+
+    <rect x="1557" y="265" width="470" height="138" rx="6" fill="#FFFFFF" stroke="#DCDDDA"/>
+    <rect x="1580" y="303" width="62" height="62" rx="3" fill="#F6F8F5" stroke="#E0E4DD"/>
+    <use href="#card" x="1593" y="316" width="36" height="36" class="lime"/>
+    <text x="1662" y="318" class="sans label">WORKSPACES</text>
+    <text x="1662" y="358" class="sans metric">3</text>
+  </g>
+
+  <rect x="79" y="439" width="1949" height="471" rx="6" fill="#FBFEF6" stroke="#DDF6A0"/>
+
+  <rect x="109" y="469" width="282" height="43" rx="2" fill="#FFFFFF" stroke="#DCF699"/>
+  <use href="#shield" x="128" y="478" width="24" height="24" class="lime"/>
+  <text x="165" y="499" class="sans" fill="#789A18" font-size="22" font-weight="700" letter-spacing="6">ACCOUNT READY</text>
+
+  <text x="109" y="572" class="serif" fill="#242824" font-size="34" font-weight="700">marvintong's projects</text>
+  <text x="109" y="626" class="sans body">Continue from your default workspace, or use the project cards below to open a specific environment.</text>
+
+  <rect x="109" y="813" width="282" height="69" rx="6" fill="#C9F34F"/>
+  <use href="#briefcase" x="137" y="835" width="25" height="25" class="ink"/>
+  <text x="181" y="855" class="sans" fill="#111511" font-size="25" font-weight="500">Open workspace</text>
+
+  <rect x="406" y="813" width="238" height="69" rx="6" fill="#FFFFFF" stroke="#D0D3CE"/>
+  <use href="#chip" x="436" y="835" width="25" height="25" class="ink"/>
+  <text x="477" y="855" class="sans" fill="#303530" font-size="25" font-weight="500">Deploy CVM</text>
+
+  <g filter="url(#softShadow)">
+    <rect x="1268" y="469" width="357" height="128" fill="#FFFFFF" stroke="#DCDDDA"/>
+    <use href="#chip" x="1291" y="493" width="26" height="26" class="lime"/>
+    <text x="1289" y="566" class="sans" fill="#242824" font-size="25" font-weight="500">1 running CVMs</text>
+
+    <rect x="1641" y="469" width="357" height="128" fill="#FFFFFF" stroke="#DCDDDA"/>
+    <use href="#cube" x="1664" y="493" width="26" height="26" class="lime"/>
+    <text x="1662" y="566" class="sans" fill="#242824" font-size="25" font-weight="500">3 apps</text>
+
+    <rect x="1268" y="612" width="357" height="128" fill="#FFFFFF" stroke="#DCDDDA"/>
+    <use href="#chip" x="1291" y="636" width="26" height="26" class="lime"/>
+    <text x="1289" y="707" class="sans" fill="#242824" font-size="25" font-weight="500">GPU TEE</text>
+
+    <rect x="1641" y="612" width="357" height="128" fill="#FFFFFF" stroke="#DCDDDA"/>
+    <use href="#spark" x="1664" y="634" width="26" height="26" class="lime"/>
+    <text x="1662" y="707" class="sans" fill="#242824" font-size="25" font-weight="500">Confidential Models</text>
+
+    <rect x="1268" y="754" width="357" height="128" fill="#FFFFFF" stroke="#DCDDDA"/>
+    <use href="#card" x="1291" y="779" width="26" height="26" class="ink"/>
+    <text x="1289" y="850" class="sans" fill="#242824" font-size="25" font-weight="500">Billing</text>
+  </g>
+</svg>
