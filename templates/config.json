@@ -864,6 +864,16 @@
     "tags": ["AI Agents", "Web Apps", "TEE & Privacy"]
   },
   {
+    "id": "ollama",
+    "name": "ollama/ollama",
+    "description": "Lightweight Go framework to run LLMs locally or on cloud VMs; REST API compatible.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/ollama",
+    "author": "ollama",
+    "icon": "ollama.svg",
+    "defaultResource": { "vCPU": 2, "memory": 4096, "diskSize": 40 },
+    "tags": ["LLM Inference & Model Serving", "AI Agents"]
+  },
+  {
     "id": "primus-attestor-node",
     "name": "Primus Attestor Node",
     "description": "An attestor node is a computing node of the Primus network, which forms a secure computation layer for executing zkTLS protocol. The attestor node is designated to run zkTLS tasks with zkTLS software including web version (Primus extension) and mobile versions (Primus AppClips and Primus Instant Apps) on indicated data sources. For security consideration, the attestor node runs inside a Trusted Execution Environment (TEE), ensuring runtime integrity and providing stronger version control.",
