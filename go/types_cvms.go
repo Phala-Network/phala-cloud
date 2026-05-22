@@ -291,12 +291,26 @@ type CVMContainersStats = GenericObject
 // CVMUserConfig represents CVM user configuration.
 type CVMUserConfig = GenericObject
 
-// CVMActionResponse is the generic response for CVM lifecycle actions.
-type CVMActionResponse struct {
-	ID     any    `json:"id,omitempty"`
+// CVMActionResponseFields contains shared lifecycle action response fields.
+type CVMActionResponseFields struct {
 	Name   string `json:"name,omitempty"`
 	Status string `json:"status,omitempty"`
 }
+
+// CVMActionResponseV20260121 is a lifecycle action response before hashed CVM IDs.
+type CVMActionResponseV20260121 struct {
+	ID int `json:"id,omitempty"`
+	CVMActionResponseFields
+}
+
+// CVMActionResponseV20260522 is a lifecycle action response with hashed CVM IDs.
+type CVMActionResponseV20260522 struct {
+	ID string `json:"id,omitempty"`
+	CVMActionResponseFields
+}
+
+// CVMActionResponse is the latest lifecycle action response schema.
+type CVMActionResponse = CVMActionResponseV20260522
 
 // ReplicateCVMOptions holds options for replicating a CVM.
 type ReplicateCVMOptions struct {

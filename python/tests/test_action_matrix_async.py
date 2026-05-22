@@ -132,7 +132,7 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
     if method == "POST" and path == "/api/v1/cvms/provision":
         return httpx.Response(200, json={"compose_hash": "h"})
     if method == "POST" and path == "/api/v1/cvms":
-        return httpx.Response(200, json={"id": 1, "name": "n", "status": "running"})
+        return httpx.Response(200, json={"id": "cvm_1", "name": "n", "status": "running"})
     if method == "GET" and path.startswith("/api/v1/cvms/"):
         if path.endswith("/state"):
             return httpx.Response(200, json={"status": "running"})
@@ -140,7 +140,7 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
             200, json={"id": "1", "name": "n", "status": "running", "resource": {}}
         )
     if method == "POST" and path.endswith("/start"):
-        return httpx.Response(200, json={"id": 1, "name": "n", "status": "running"})
+        return httpx.Response(200, json={"id": "cvm_1", "name": "n", "status": "running"})
     if method == "DELETE" and path.startswith("/api/v1/cvms/"):
         return httpx.Response(204)
     if method == "PATCH" and path.endswith("/envs"):

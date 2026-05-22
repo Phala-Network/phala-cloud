@@ -61,10 +61,20 @@ class ProvisionCvmComposeFileUpdateResult(CloudModel):
     compose_hash_registered: bool = False
 
 
-class CommitCvmProvisionResponse(CloudModel):
-    id: int | str
+class CommitCvmProvisionResponseBase(CloudModel):
     name: str
     status: str
+
+
+class CommitCvmProvisionResponseV20260121(CommitCvmProvisionResponseBase):
+    id: int
+
+
+class CommitCvmProvisionResponseV20260522(CommitCvmProvisionResponseBase):
+    id: str
+
+
+CommitCvmProvisionResponse = CommitCvmProvisionResponseV20260522
 
 
 class ComposeHashPreconditionResponse(CloudModel):
@@ -146,20 +156,40 @@ class WorkspaceQuotasResponse(CloudModel):
     as_of: str | None = None
 
 
-class CvmInfoResponse(CloudModel):
-    id: str | int | None = None
+class CvmInfoResponseBase(CloudModel):
     name: str | None = None
     status: str | None = None
+
+
+class CvmInfoResponseV20260121(CvmInfoResponseBase):
+    id: int | None = None
+
+
+class CvmInfoResponseV20260522(CvmInfoResponseBase):
+    id: str | None = None
+
+
+CvmInfoResponse = CvmInfoResponseV20260522
 
 
 class ComposeFileResponse(CloudModel):
     docker_compose_file: str | None = None
 
 
-class CvmActionResponse(CloudModel):
-    id: int | str | None = None
+class CvmActionResponseBase(CloudModel):
     name: str | None = None
     status: str | None = None
+
+
+class CvmActionResponseV20260121(CvmActionResponseBase):
+    id: int | None = None
+
+
+class CvmActionResponseV20260522(CvmActionResponseBase):
+    id: str | None = None
+
+
+CvmActionResponse = CvmActionResponseV20260522
 
 
 class CvmStatsResponse(CloudModel):
@@ -188,11 +218,28 @@ class CvmUserConfigResponse(CloudModel):
     ssh_authorized_keys: list[str] = Field(default_factory=list)
 
 
-class RefreshInstanceIdResponse(CloudModel):
-    status: str | None = None
+class RefreshInstanceIdResponseBase(CloudModel):
+    identifier: str
+    status: str
+    old_instance_id: str | None = None
+    new_instance_id: str | None = None
+    source: str
+    verified_with_gateway: bool
+    reason: str | None = None
 
 
-class RefreshInstanceIdsResponse(CloudModel):
+class RefreshInstanceIdResponseV20260121(RefreshInstanceIdResponseBase):
+    cvm_id: int | None = None
+
+
+class RefreshInstanceIdResponseV20260522(RefreshInstanceIdResponseBase):
+    cvm_id: str | None = None
+
+
+RefreshInstanceIdResponse = RefreshInstanceIdResponseV20260522
+
+
+class RefreshInstanceIdsResponseBase(CloudModel):
     total: int
     scanned: int
     updated: int
@@ -200,7 +247,17 @@ class RefreshInstanceIdsResponse(CloudModel):
     skipped: int
     conflicts: int
     errors: int
-    items: list[GenericObject] = Field(default_factory=list)
+
+
+class RefreshInstanceIdsResponseV20260121(RefreshInstanceIdsResponseBase):
+    items: list[RefreshInstanceIdResponseV20260121] = Field(default_factory=list)
+
+
+class RefreshInstanceIdsResponseV20260522(RefreshInstanceIdsResponseBase):
+    items: list[RefreshInstanceIdResponseV20260522] = Field(default_factory=list)
+
+
+RefreshInstanceIdsResponse = RefreshInstanceIdsResponseV20260522
 
 
 class AppListResponse(CloudModel):

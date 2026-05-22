@@ -31,7 +31,7 @@ describe("startCvm", () => {
   describe("startCvm", () => {
     it("should call POST /cvms/{id}/start", async () => {
       const mockResponse = {
-        id: 1,
+        id: "cvm_1",
         name: "test-cvm",
         status: "starting",
         teepod_id: 1,
@@ -63,7 +63,7 @@ describe("startCvm", () => {
   describe("safeStartCvm", () => {
     it("should return success result", async () => {
       const mockResponse = {
-        id: 1,
+        id: "cvm_1",
         name: "test-cvm",
         status: "starting",
         teepod_id: 1,

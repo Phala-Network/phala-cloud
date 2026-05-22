@@ -40,16 +40,18 @@ export type DeviceAllowlistResponseV20260522 = z.infer<
   typeof DeviceAllowlistResponseV20260522Schema
 >;
 
-const DeviceAllowlistItemSchema = z.union([
+const DeviceAllowlistItemAnySchema = z.union([
   DeviceAllowlistItemV20260121Schema,
   DeviceAllowlistItemV20260522Schema,
 ]);
-const DeviceAllowlistResponseSchema = z.union([
+const DeviceAllowlistResponseAnySchema = z.union([
   DeviceAllowlistResponseV20260121Schema,
   DeviceAllowlistResponseV20260522Schema,
 ]);
-export type DeviceAllowlistItem = z.infer<typeof DeviceAllowlistItemSchema>;
+const DeviceAllowlistResponseSchema = DeviceAllowlistResponseV20260522Schema;
+export type DeviceAllowlistItem = z.infer<typeof DeviceAllowlistItemV20260522Schema>;
 export type DeviceAllowlistResponse = z.infer<typeof DeviceAllowlistResponseSchema>;
+export { DeviceAllowlistItemAnySchema, DeviceAllowlistResponseAnySchema };
 
 export const GetAppDeviceAllowlistRequestSchema = z
   .object({

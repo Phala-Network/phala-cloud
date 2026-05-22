@@ -109,7 +109,8 @@ class DeviceAllowlistItemV20260522(DeviceAllowlistItemBase):
     cvm_ids: list[str] = Field(default_factory=list)
 
 
-DeviceAllowlistItem = DeviceAllowlistItemV20260522 | DeviceAllowlistItemV20260121
+DeviceAllowlistItemAny = DeviceAllowlistItemV20260522 | DeviceAllowlistItemV20260121
+DeviceAllowlistItem = DeviceAllowlistItemV20260522
 
 
 class DeviceAllowlistResponseBase(CloudModel):
@@ -127,7 +128,10 @@ class DeviceAllowlistResponseV20260522(DeviceAllowlistResponseBase):
     devices: list[DeviceAllowlistItemV20260522] = Field(default_factory=list)
 
 
-class DeviceAllowlistResponse(DeviceAllowlistResponseBase):
+class DeviceAllowlistResponseAny(DeviceAllowlistResponseBase):
     devices: list[DeviceAllowlistItemV20260522 | DeviceAllowlistItemV20260121] = Field(
         default_factory=list
     )
+
+
+DeviceAllowlistResponse = DeviceAllowlistResponseV20260522

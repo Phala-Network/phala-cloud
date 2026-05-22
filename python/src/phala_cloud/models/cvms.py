@@ -281,9 +281,10 @@ class CvmAttestation(CloudModel):
     compose_file: str | None = None
 
 
-PaginatedCvmInfos = (
+PaginatedCvmInfosAny = (
     PaginatedCvmInfosV20260522 | PaginatedCvmInfosV20260121 | PaginatedCvmInfosV20251028
 )
+PaginatedCvmInfos = PaginatedCvmInfosV20260522
 
 
 # Is-Allowed types
@@ -315,7 +316,8 @@ class IsAllowedResultV20260522(IsAllowedResultBase):
     cvm_id: str | None = None
 
 
-IsAllowedResult = IsAllowedResultV20260522 | IsAllowedResultV20260121
+IsAllowedResultAny = IsAllowedResultV20260522 | IsAllowedResultV20260121
+IsAllowedResult = IsAllowedResultV20260522
 
 
 class CheckAppIsAllowedRequest(AliasModel):
@@ -348,6 +350,9 @@ class AppCvmsBatchIsAllowedResponseV20260522(AppCvmsBatchIsAllowedResponseBase):
     skipped_cvm_ids: list[str] = Field(default_factory=list)
 
 
-class AppCvmsBatchIsAllowedResponse(AppCvmsBatchIsAllowedResponseBase):
+class AppCvmsBatchIsAllowedResponseAny(AppCvmsBatchIsAllowedResponseBase):
     results: list[IsAllowedResultV20260522 | IsAllowedResultV20260121] = Field(default_factory=list)
     skipped_cvm_ids: list[int | str] = Field(default_factory=list)
+
+
+AppCvmsBatchIsAllowedResponse = AppCvmsBatchIsAllowedResponseV20260522

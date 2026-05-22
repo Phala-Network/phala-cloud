@@ -31,7 +31,7 @@ describe("shutdownCvm", () => {
   describe("shutdownCvm", () => {
     it("should call POST /cvms/{id}/shutdown", async () => {
       const mockResponse = {
-        id: 1,
+        id: "cvm_1",
         name: "test-cvm",
         status: "shutting_down",
         teepod_id: 1,
@@ -63,7 +63,7 @@ describe("shutdownCvm", () => {
   describe("safeShutdownCvm", () => {
     it("should return success result", async () => {
       const mockResponse = {
-        id: 1,
+        id: "cvm_1",
         name: "test-cvm",
         status: "shutting_down",
         teepod_id: 1,

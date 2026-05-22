@@ -182,6 +182,18 @@ func (c *Client) StartCVM(ctx context.Context, cvmID string) (*CVMActionResponse
 	return &result, nil
 }
 
+// StartCVMV20260121 starts a CVM using the pre-hashid response schema.
+func (c *Client) StartCVMV20260121(ctx context.Context, cvmID string) (*CVMActionResponseV20260121, error) {
+	var result CVMActionResponseV20260121
+	err := c.doWithRetry(ctx, func() error {
+		return c.doJSON(ctx, "POST", cvmPath(cvmID, "start"), nil, &result)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // StopCVM stops a CVM.
 func (c *Client) StopCVM(ctx context.Context, cvmID string) (*CVMActionResponse, error) {
 	var result CVMActionResponse
@@ -194,9 +206,33 @@ func (c *Client) StopCVM(ctx context.Context, cvmID string) (*CVMActionResponse,
 	return &result, nil
 }
 
+// StopCVMV20260121 stops a CVM using the pre-hashid response schema.
+func (c *Client) StopCVMV20260121(ctx context.Context, cvmID string) (*CVMActionResponseV20260121, error) {
+	var result CVMActionResponseV20260121
+	err := c.doWithRetry(ctx, func() error {
+		return c.doJSON(ctx, "POST", cvmPath(cvmID, "stop"), nil, &result)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // ShutdownCVM gracefully shuts down a CVM.
 func (c *Client) ShutdownCVM(ctx context.Context, cvmID string) (*CVMActionResponse, error) {
 	var result CVMActionResponse
+	err := c.doWithRetry(ctx, func() error {
+		return c.doJSON(ctx, "POST", cvmPath(cvmID, "shutdown"), nil, &result)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// ShutdownCVMV20260121 gracefully shuts down a CVM using the pre-hashid response schema.
+func (c *Client) ShutdownCVMV20260121(ctx context.Context, cvmID string) (*CVMActionResponseV20260121, error) {
+	var result CVMActionResponseV20260121
 	err := c.doWithRetry(ctx, func() error {
 		return c.doJSON(ctx, "POST", cvmPath(cvmID, "shutdown"), nil, &result)
 	})
@@ -227,6 +263,22 @@ func (c *Client) RestartCVM(ctx context.Context, cvmID string, opts *RestartCVMO
 	return &result, nil
 }
 
+// RestartCVMV20260121 restarts a CVM using the pre-hashid response schema.
+func (c *Client) RestartCVMV20260121(ctx context.Context, cvmID string, opts *RestartCVMOptions) (*CVMActionResponseV20260121, error) {
+	body := map[string]bool{"force": false}
+	if opts != nil {
+		body["force"] = opts.Force
+	}
+	var result CVMActionResponseV20260121
+	err := c.doWithRetry(ctx, func() error {
+		return c.doJSON(ctx, "POST", cvmPath(cvmID, "restart"), body, &result)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // DeleteCVM deletes a CVM.
 func (c *Client) DeleteCVM(ctx context.Context, cvmID string) error {
 	return c.doWithRetry(ctx, func() error {
@@ -237,6 +289,15 @@ func (c *Client) DeleteCVM(ctx context.Context, cvmID string) error {
 // ReplicateCVM replicates a CVM to another node.
 func (c *Client) ReplicateCVM(ctx context.Context, cvmID string, opts *ReplicateCVMOptions) (*CVMActionResponse, error) {
 	var result CVMActionResponse
+	if err := c.doJSON(ctx, "POST", cvmPath(cvmID, "replicas"), opts, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// ReplicateCVMV20260121 replicates a CVM using the pre-hashid response schema.
+func (c *Client) ReplicateCVMV20260121(ctx context.Context, cvmID string, opts *ReplicateCVMOptions) (*CVMActionResponseV20260121, error) {
+	var result CVMActionResponseV20260121
 	if err := c.doJSON(ctx, "POST", cvmPath(cvmID, "replicas"), opts, &result); err != nil {
 		return nil, err
 	}
@@ -258,6 +319,15 @@ func (c *Client) PatchCVM(ctx context.Context, cvmID string, req *PatchCVMReques
 // ConfirmCVMPatch confirms a CVM patch with on-chain transaction hash.
 func (c *Client) ConfirmCVMPatch(ctx context.Context, cvmID string, req *ConfirmCVMPatchRequest) (*CVMActionResponse, error) {
 	var result CVMActionResponse
+	if err := c.doJSON(ctx, "PATCH", cvmPath(cvmID), req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// ConfirmCVMPatchV20260121 confirms a CVM patch using the pre-hashid response schema.
+func (c *Client) ConfirmCVMPatchV20260121(ctx context.Context, cvmID string, req *ConfirmCVMPatchRequest) (*CVMActionResponseV20260121, error) {
+	var result CVMActionResponseV20260121
 	if err := c.doJSON(ctx, "PATCH", cvmPath(cvmID), req, &result); err != nil {
 		return nil, err
 	}

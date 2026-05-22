@@ -25,7 +25,7 @@ describe("createAppInstance", () => {
 
   it("sends the custom instance name in the create request body", async () => {
     const response = {
-      id: 123,
+      id: "cvm_123",
       app_id: "app-123",
       vm_uuid: "vm-123",
       instance_id: "instance-123",

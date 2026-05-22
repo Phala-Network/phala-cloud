@@ -23,10 +23,11 @@ export const IsAllowedResultV20260522Schema = IsAllowedResultBaseSchema.extend({
 });
 export type IsAllowedResultV20260522 = z.infer<typeof IsAllowedResultV20260522Schema>;
 
-export const IsAllowedResultSchema = z.union([
+export const IsAllowedResultAnySchema = z.union([
   IsAllowedResultV20260121Schema,
   IsAllowedResultV20260522Schema,
 ]);
+export const IsAllowedResultSchema = IsAllowedResultV20260522Schema;
 export type IsAllowedResult = z.infer<typeof IsAllowedResultSchema>;
 
 const CheckCvmIsAllowedInputSchema = z.object({

@@ -244,7 +244,7 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
     if method == "POST" and path == "/api/v1/cvms/provision":
         return _json_response({"compose_hash": "hash", "app_id": "app_1"})
     if method == "POST" and path == "/api/v1/cvms":
-        return _json_response({"id": 1, "name": "n", "status": "running"})
+        return _json_response({"id": "cvm_1", "name": "n", "status": "running"})
     if method == "POST" and path.endswith("/compose_file/provision"):
         return _json_response({"compose_hash": "hash", "app_id": "app_1"})
     if method == "PATCH" and path.endswith("/compose_file"):
@@ -259,7 +259,7 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
     if method == "POST" and any(
         path.endswith(s) for s in ["/start", "/stop", "/shutdown", "/restart", "/replicas"]
     ):
-        return _json_response({"id": 1, "name": "n", "status": "running"})
+        return _json_response({"id": "cvm_1", "name": "n", "status": "running"})
     if method == "DELETE" and path.startswith("/api/v1/cvms/"):
         return httpx.Response(204)
     if method == "PATCH" and any(path.endswith(s) for s in ["/resources", "/os-image"]):
@@ -291,7 +291,15 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
     if method == "PATCH" and path.endswith("/visibility"):
         return _json_response({"status": "running"})
     if method == "PATCH" and path.endswith("/instance-id"):
-        return _json_response({"status": "updated"})
+        return _json_response(
+            {
+                "cvm_id": "cvm_1",
+                "identifier": "c1",
+                "status": "updated",
+                "source": "gateway",
+                "verified_with_gateway": True,
+            }
+        )
     if method == "PATCH" and path == "/api/v1/cvms/instance-ids":
         return _json_response(
             {

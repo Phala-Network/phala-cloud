@@ -26,10 +26,11 @@ export type InstanceIdRefreshResultV20260522 = z.infer<
   typeof InstanceIdRefreshResultV20260522Schema
 >;
 
-export const InstanceIdRefreshResultSchema = z.union([
+export const InstanceIdRefreshResultAnySchema = z.union([
   InstanceIdRefreshResultV20260121Schema,
   InstanceIdRefreshResultV20260522Schema,
 ]);
+export const InstanceIdRefreshResultSchema = InstanceIdRefreshResultV20260522Schema;
 export type InstanceIdRefreshResult = z.infer<typeof InstanceIdRefreshResultSchema>;
 
 export const RefreshCvmInstanceIdRequestSchema = refineCvmId(

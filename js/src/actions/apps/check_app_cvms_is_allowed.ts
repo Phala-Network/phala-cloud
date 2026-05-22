@@ -32,10 +32,11 @@ export type AppCvmsBatchIsAllowedResponseV20260522 = z.infer<
   typeof AppCvmsBatchIsAllowedResponseV20260522Schema
 >;
 
-export const AppCvmsBatchIsAllowedResponseSchema = z.union([
+export const AppCvmsBatchIsAllowedResponseAnySchema = z.union([
   AppCvmsBatchIsAllowedResponseV20260121Schema,
   AppCvmsBatchIsAllowedResponseV20260522Schema,
 ]);
+export const AppCvmsBatchIsAllowedResponseSchema = AppCvmsBatchIsAllowedResponseV20260522Schema;
 export type AppCvmsBatchIsAllowedResponse = z.infer<typeof AppCvmsBatchIsAllowedResponseSchema>;
 
 export const CheckAppCvmsIsAllowedRequestSchema = z.object({

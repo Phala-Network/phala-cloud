@@ -188,10 +188,11 @@ export const CommitCvmProvisionV20260522Schema = CommitCvmProvisionBaseSchema.ex
 });
 export type CommitCvmProvisionV20260522 = z.infer<typeof CommitCvmProvisionV20260522Schema>;
 
-export const CommitCvmProvisionSchema = z.union([
+export const CommitCvmProvisionAnySchema = z.union([
   CommitCvmProvisionV20260121Schema,
   CommitCvmProvisionV20260522Schema,
 ]);
+export const CommitCvmProvisionSchema = CommitCvmProvisionV20260522Schema;
 export type CommitCvmProvision = z.infer<typeof CommitCvmProvisionSchema>;
 
 // Request schema

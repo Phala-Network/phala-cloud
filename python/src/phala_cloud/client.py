@@ -28,7 +28,7 @@ from .models import (
     GetCvmListRequest,
     GetKmsListRequest,
     GetKmsListResponse,
-    PaginatedCvmInfos,
+    PaginatedCvmInfosAny,
     PaginatedCvmInfosV20251028,
     PaginatedCvmInfosV20260121,
     PaginatedCvmInfosV20260522,
@@ -205,7 +205,7 @@ class AsyncPhalaCloud:
     async def get_cvm_list(
         self,
         request: GetCvmListRequest | Mapping[str, Any] | None = None,
-    ) -> PaginatedCvmInfos:
+    ) -> PaginatedCvmInfosAny:
         req = self._coerce(GetCvmListRequest, request)
         data = await self.get("/cvms/paginated", params=req.model_dump(exclude_none=True))
         if self.config.version == "2025-10-28":
@@ -217,7 +217,7 @@ class AsyncPhalaCloud:
     async def safe_get_cvm_list(
         self,
         request: GetCvmListRequest | Mapping[str, Any] | None = None,
-    ) -> SafeResult[PaginatedCvmInfos]:
+    ) -> SafeResult[PaginatedCvmInfosAny]:
         return await self.safe(self.get_cvm_list, request)
 
     async def get_kms_list(
@@ -440,7 +440,7 @@ class PhalaCloud:
     def get_cvm_list(
         self,
         request: GetCvmListRequest | Mapping[str, Any] | None = None,
-    ) -> PaginatedCvmInfos:
+    ) -> PaginatedCvmInfosAny:
         req = self._coerce(GetCvmListRequest, request)
         data = self.get("/cvms/paginated", params=req.model_dump(exclude_none=True))
         if self.config.version == "2025-10-28":
@@ -452,7 +452,7 @@ class PhalaCloud:
     def safe_get_cvm_list(
         self,
         request: GetCvmListRequest | Mapping[str, Any] | None = None,
-    ) -> SafeResult[PaginatedCvmInfos]:
+    ) -> SafeResult[PaginatedCvmInfosAny]:
         return self.safe(self.get_cvm_list, request)
 
     def get_kms_list(

@@ -90,6 +90,16 @@ func (c *Client) ReplicateAppCVM(ctx context.Context, appID, vmUUID string, opts
 	return &result, nil
 }
 
+// ReplicateAppCVMV20260121 creates an app CVM replica using the pre-hashid response schema.
+func (c *Client) ReplicateAppCVMV20260121(ctx context.Context, appID, vmUUID string, opts *ReplicateCVMOptions) (*CVMActionResponseV20260121, error) {
+	var result CVMActionResponseV20260121
+	path := "/apps/" + appID + "/cvms/" + vmUUID + "/replicas"
+	if err := c.doJSON(ctx, "POST", path, opts, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // GetAppRevisions returns revisions for an application.
 func (c *Client) GetAppRevisions(ctx context.Context, appID string, opts *PaginationOptions) (*AppRevisionsResponse, error) {
 	path := "/apps/" + appID + "/revisions"

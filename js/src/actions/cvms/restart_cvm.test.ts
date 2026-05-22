@@ -31,7 +31,7 @@ describe("restartCvm", () => {
   describe("restartCvm", () => {
     it("should call POST /cvms/{id}/restart", async () => {
       const mockResponse = {
-        id: 1,
+        id: "cvm_1",
         name: "test-cvm",
         status: "restarting",
         teepod_id: 1,
@@ -63,7 +63,7 @@ describe("restartCvm", () => {
   describe("safeRestartCvm", () => {
     it("should return success result", async () => {
       const mockResponse = {
-        id: 1,
+        id: "cvm_1",
         name: "test-cvm",
         status: "restarting",
         teepod_id: 1,
