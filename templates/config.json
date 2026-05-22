@@ -239,6 +239,20 @@
     "tags": ["AI Agents", "Automation"]
   },
   {
+    "id": "fastchat",
+    "name": "FastChat",
+    "description": "A CPU-safe FastChat OpenAI-compatible API demo that starts the real FastChat controller and REST API server without a model worker by default.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/fastchat",
+    "author": "LMSYS Org / lm-sys",
+    "icon": "fastchat.jpeg",
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 40
+    },
+    "tags": ["LLM Inference", "API"]
+  },
+  {
     "id": "llm-wiki",
     "name": "LLM Wiki",
     "description": "A personal knowledge-base app that turns unstructured documents into an interlinked wiki with source traceability, graph insights, review queues, and deep research workflows. This template provides a confidential browser-accessible development preview for the upstream Tauri desktop app.",
