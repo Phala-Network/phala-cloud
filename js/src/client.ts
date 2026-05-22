@@ -136,7 +136,7 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
 
     this.fetchInstance = ofetch.create({
       baseURL,
-      timeout: timeout || 30000,
+      timeout: timeout || 60000,
       headers: requestHeaders,
       ...(useCookieAuth ? { credentials: "include" } : {}),
       ...fetchOptions,
