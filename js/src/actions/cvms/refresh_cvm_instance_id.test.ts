@@ -52,4 +52,18 @@ describe("refreshCvmInstanceId", () => {
 
     expect(result.success).toBe(true);
   });
+
+  it("accepts skipped results without a resolved CVM ID", async () => {
+    const skippedResponse = {
+      ...mockResponse,
+      cvm_id: null,
+      status: "skipped" as const,
+      reason: "invalid_identifier",
+    };
+    mockPatch.mockResolvedValue(skippedResponse);
+
+    const result = await refreshCvmInstanceId(client, { id: "101" });
+
+    expect(result.cvm_id).toBeNull();
+  });
 });

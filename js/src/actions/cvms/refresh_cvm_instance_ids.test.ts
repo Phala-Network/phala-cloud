@@ -26,14 +26,14 @@ describe("refreshCvmInstanceIds", () => {
         reason: null,
       },
       {
-        cvm_id: "cvm_102",
+        cvm_id: null,
         identifier: "102",
-        status: "unchanged" as const,
+        status: "skipped" as const,
         old_instance_id: "inst-def",
-        new_instance_id: "inst-def",
+        new_instance_id: null,
         source: "teepod_state" as const,
         verified_with_gateway: false,
-        reason: "already_synced",
+        reason: "not_found",
       },
     ],
   };
