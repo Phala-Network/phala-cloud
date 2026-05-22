@@ -1,0 +1,246 @@
+services:
+  app:
+    image: python:3.11-slim-bookworm
+    ports:
+      - "8080:8080"
+    environment:
+      - AUTOGEN_VERSION=${AUTOGEN_VERSION:-0.7.5}
+      - AUTOGEN_DISABLE_RUNTIME_TRACING=true
+      - PIP_DISABLE_PIP_VERSION_CHECK=1
+      - PIP_NO_CACHE_DIR=1
+      - PIP_ROOT_USER_ACTION=ignore
+      - PORT=8080
+      - PYTHONUNBUFFERED=1
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        python -m pip install --no-cache-dir "autogen-core==$${AUTOGEN_VERSION}" "autogen-agentchat==$${AUTOGEN_VERSION}"
+        exec python /server.py
+    configs:
+      - source: server_py
+        target: /server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    restart: unless-stopped
+
+configs:
+  server_py:
+    content: |
+      import asyncio
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from dataclasses import dataclass
+      from datetime import datetime, timezone
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+      STARTED_AT = time.time()
+      IMPORT_ERROR = None
+
+      try:
+          from autogen_agentchat.messages import TextMessage
+          from autogen_core import (
+              AgentId,
+              MessageContext,
+              RoutedAgent,
+              SingleThreadedAgentRuntime,
+              message_handler,
+          )
+      except Exception as exc:
+          IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+
+
+      def package_version(name):
+          try:
+              return importlib.metadata.version(name)
+          except Exception as exc:
+              return f"unavailable: {type(exc).__name__}: {exc}"
+
+
+      def base_payload():
+          return {
+              "service": "autogen-demo",
+              "upstream": "https://github.com/microsoft/autogen",
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "package_versions": {
+                  "autogen-core": package_version("autogen-core"),
+                  "autogen-agentchat": package_version("autogen-agentchat"),
+              },
+          }
+
+
+      if IMPORT_ERROR is None:
+          @dataclass(frozen=True)
+          class TaskRequest:
+              content: str
+
+
+          @dataclass(frozen=True)
+          class PlanReply:
+              content: str
+              steps: tuple[str, ...]
+
+
+          @dataclass(frozen=True)
+          class FinalReply:
+              content: str
+
+
+          class PlannerAgent(RoutedAgent):
+              def __init__(self):
+                  super().__init__("Deterministic AutoGen planner agent")
+
+              @message_handler
+              async def handle_task(self, message: TaskRequest, ctx: MessageContext) -> PlanReply:
+                  return PlanReply(
+                      content=f"plan accepted: {message.content}",
+                      steps=("inspect", "respond"),
+                  )
+
+
+          class ResponderAgent(RoutedAgent):
+              def __init__(self):
+                  super().__init__("Deterministic AutoGen responder agent")
+
+              @message_handler
+              async def handle_plan(self, message: PlanReply, ctx: MessageContext) -> FinalReply:
+                  return FinalReply(content="AutoGen local agents completed: " + " -> ".join(message.steps))
+
+
+      async def run_autogen_demo():
+          if IMPORT_ERROR is not None:
+              raise RuntimeError(IMPORT_ERROR)
+
+          runtime = SingleThreadedAgentRuntime()
+          await PlannerAgent.register(runtime, "planner", lambda: PlannerAgent())
+          await ResponderAgent.register(runtime, "responder", lambda: ResponderAgent())
+
+          task_message = TextMessage(
+              id="demo-task-1",
+              source="user",
+              content="coordinate a deterministic smoke test",
+              created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+          )
+
+          runtime.start()
+          try:
+              plan = await runtime.send_message(TaskRequest(task_message.content), AgentId("planner", "default"))
+              final = await runtime.send_message(plan, AgentId("responder", "default"))
+          finally:
+              await runtime.stop()
+
+          return {
+              "task": {
+                  "id": task_message.id,
+                  "source": task_message.source,
+                  "content": task_message.content,
+              },
+              "agents": ["planner", "responder"],
+              "plan": {
+                  "content": plan.content,
+                  "steps": list(plan.steps),
+              },
+              "final": final.content,
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "autogen-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              path = urlparse(self.path).path
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  payload.update({
+                      "ok": IMPORT_ERROR is None,
+                      "status": "ready" if IMPORT_ERROR is None else "import_failed",
+                      "credentials_required": False,
+                      "remote_calls": False,
+                  })
+                  if IMPORT_ERROR is not None:
+                      payload["error"] = IMPORT_ERROR
+                  self.respond_json(200 if IMPORT_ERROR is None else 500, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  payload.update({
+                      "ok": IMPORT_ERROR is None,
+                      "cpu_only": True,
+                      "model_downloaded": False,
+                      "model_loaded": False,
+                      "remote_calls": False,
+                      "check": "AutoGen Core SingleThreadedAgentRuntime two-agent message exchange",
+                  })
+                  if IMPORT_ERROR is not None:
+                      payload["error"] = IMPORT_ERROR
+                      self.respond_json(500, payload)
+                      return
+
+                  try:
+                      payload["demo"] = asyncio.run(run_autogen_demo())
+                  except Exception as exc:
+                      payload["ok"] = False
+                      payload["error"] = f"{type(exc).__name__}: {exc}"
+                      self.respond_json(500, payload)
+                      return
+
+                  self.respond_json(200, payload)
+                  return
+
+              if path == "/v1/models":
+                  payload = {
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "autogen-local-deterministic-smoke",
+                              "object": "model",
+                              "created": 1704067200,
+                              "owned_by": "microsoft-autogen-template",
+                              "description": "Local deterministic AutoGen agent-runtime smoke endpoint; no LLM is loaded.",
+                          }
+                      ],
+                      "package_versions": base_payload()["package_versions"],
+                  }
+                  self.respond_json(200, payload)
+                  return
+
+              self.respond_json(404, {"ok": False, "error": "not found"})
+
+
+      def main():
+          port = int(os.environ.get("PORT", "8080"))
+          server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+          print(f"autogen demo server listening on 0.0.0.0:{port}", flush=True)
+          server.serve_forever()
+
+
+      if __name__ == "__main__":
+          main()
