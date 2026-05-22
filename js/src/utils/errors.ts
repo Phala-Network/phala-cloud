@@ -190,14 +190,39 @@ export class RequestError extends PhalaCloudError implements ApiError {
       });
     }
 
-    // Fallback to raw error data
+    // Detect ofetch timeout (AbortController fired due to options.timeout):
+    // ofetch wraps the underlying TimeoutError in FetchError.cause and prepends
+    // "[TimeoutError]:" to the message.
+    const cause = (error as { cause?: { name?: string } }).cause;
+    if (cause?.name === "TimeoutError" || error.message?.includes("[TimeoutError]")) {
+      // Put the actionable hint in `detail` so parseApiError's
+      // extractPrimaryMessage surfaces it (it prefers detail over the bare
+      // FetchError message like "[POST] ...: <no response>").
+      const friendly =
+        "Request timed out. The server did not respond in time. " +
+        "Increase the timeout via createClient({ timeout }) or the CLI --timeout flag.";
+      return new RequestError(friendly, {
+        status: 0,
+        statusText: "Request Timeout",
+        data: error.data,
+        request: error.request ?? undefined,
+        response: error.response ?? undefined,
+        detail: friendly,
+        code: "TIMEOUT",
+        requestId,
+      });
+    }
+
+    // Fallback to raw error data — preserve the underlying error message so
+    // callers see something actionable (e.g. ofetch's "[GET] ...: <no response>"
+    // for network failures) instead of a generic "Unknown API error".
     return new RequestError(error.message, {
       status: error.status ?? undefined,
       statusText: error.statusText ?? undefined,
       data: error.data,
       request: error.request ?? undefined,
       response: error.response ?? undefined,
-      detail: error.data?.detail || "Unknown API error",
+      detail: error.data?.detail || error.message || "Unknown API error",
       code: error.status?.toString() ?? undefined,
       requestId,
     });

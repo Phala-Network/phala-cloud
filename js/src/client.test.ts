@@ -98,7 +98,9 @@ describe("RequestError", () => {
 
 			expect(error.message).toBe("Network Error");
 			expect(error.status).toBe(500);
-			expect(error.detail).toBe("Unknown API error");
+			// Preserve original error message as detail (was previously
+			// overwritten with the unhelpful "Unknown API error" placeholder).
+			expect(error.detail).toBe("Network Error");
 			expect(error.code).toBe("500");
 		});
 
