@@ -359,6 +359,72 @@
     "tags": ["LLM Inference", "Developer Tools", "TEE & Privacy"]
   },
   {
+    "id": "llamafile",
+    "name": "mozilla-ai/llamafile",
+    "description": "CPU-safe llamafile HTTP server demo using the official thin runtime and a tiny public GGUF model for smoke testing on small CVMs.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/llamafile",
+    "author": "mozilla-ai",
+    "icon": "llamafile.png",
+    "envs": [
+      {
+        "key": "LLAMAFILE_URL",
+        "required": false,
+        "default": "https://huggingface.co/mozilla-ai/llamafile_0.10/resolve/main/llamafile-0.10.1-thin",
+        "description": "Public HTTPS URL for the llamafile runtime or bundled .llamafile downloaded at startup."
+      },
+      {
+        "key": "LLAMAFILE_BIN",
+        "required": false,
+        "default": "llamafile-0.10.1-thin",
+        "description": "Plain file name used inside /data for the downloaded runtime."
+      },
+      {
+        "key": "MODEL_URL",
+        "required": false,
+        "default": "https://huggingface.co/ggml-org/test-model-stories260K/resolve/main/stories260K-f32.gguf",
+        "description": "Public HTTPS URL for the GGUF model downloaded at startup. Leave MODEL_URL and MODEL_FILE empty for a bundled .llamafile."
+      },
+      {
+        "key": "MODEL_FILE",
+        "required": false,
+        "default": "stories260K-f32.gguf",
+        "description": "Plain file name used inside /data for the downloaded model. Leave MODEL_URL and MODEL_FILE empty for a bundled .llamafile."
+      },
+      {
+        "key": "HOST",
+        "required": false,
+        "default": "0.0.0.0",
+        "description": "Listen address inside the container. Keep 0.0.0.0 on Phala Cloud."
+      },
+      {
+        "key": "PORT",
+        "required": false,
+        "default": "8080",
+        "description": "Internal llamafile HTTP server port. Caddy proxies to this port and publishes the public app endpoint on host port 8080."
+      },
+      {
+        "key": "CTX_SIZE",
+        "required": false,
+        "default": "512",
+        "description": "Context size for the demo server."
+      },
+      {
+        "key": "THREADS",
+        "required": false,
+        "default": "1",
+        "description": "CPU worker threads. The default is conservative for small CVMs."
+      },
+      {
+        "key": "N_PREDICT",
+        "required": false,
+        "default": "64",
+        "description": "Default generation limit for requests that do not specify their own limit."
+      }
+    ],
+    "defaultResource": { "vCPU": 1, "memory": 2048, "diskSize": 10 },
+    "tags": ["LLM Inference & Model Serving", "Developer Tools", "TEE & Privacy"]
+  },
+  {
     "id": "anyone-anon-service",
     "name": "Anyone Anon Service",
     "description": "Sets up a Anyone Anon (hidden) service and serves an nginx website from that.",

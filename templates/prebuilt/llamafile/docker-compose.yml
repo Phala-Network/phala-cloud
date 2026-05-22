@@ -1,0 +1,129 @@
+services:
+  llamafile:
+    image: curlimages/curl:8.11.1
+    user: root
+    restart: unless-stopped
+    working_dir: /data
+    environment:
+      LLAMAFILE_URL: ${LLAMAFILE_URL:-https://huggingface.co/mozilla-ai/llamafile_0.10/resolve/main/llamafile-0.10.1-thin}
+      LLAMAFILE_BIN: ${LLAMAFILE_BIN:-llamafile-0.10.1-thin}
+      MODEL_URL: ${MODEL_URL-https://huggingface.co/ggml-org/test-model-stories260K/resolve/main/stories260K-f32.gguf}
+      MODEL_FILE: ${MODEL_FILE-stories260K-f32.gguf}
+      HOST: ${HOST:-0.0.0.0}
+      PORT: ${PORT:-8080}
+      CTX_SIZE: ${CTX_SIZE:-512}
+      THREADS: ${THREADS:-1}
+      N_PREDICT: ${N_PREDICT:-64}
+    volumes:
+      - llamafile_data:/data
+    expose:
+      - "${PORT:-8080}"
+    entrypoint: ["/bin/sh", "-lc"]
+    command:
+      - |
+        set -eu
+
+        case "$$LLAMAFILE_BIN" in
+          ""|/*|*/*|*..*)
+            echo "LLAMAFILE_BIN must be a plain file name inside /data" >&2
+            exit 1
+            ;;
+        esac
+
+        case "$$LLAMAFILE_URL" in
+          http://*|https://*) ;;
+          *)
+            echo "LLAMAFILE_URL must be an http(s) URL" >&2
+            exit 1
+            ;;
+        esac
+
+        if [ ! -s "$$LLAMAFILE_BIN" ]; then
+          tmp="$${LLAMAFILE_BIN}.tmp"
+          rm -f "$$tmp"
+          curl -fL --retry 5 --retry-delay 2 --connect-timeout 20 --output "$$tmp" "$$LLAMAFILE_URL"
+          mv "$$tmp" "$$LLAMAFILE_BIN"
+        fi
+
+        if [ -n "$$MODEL_URL" ] || [ -n "$$MODEL_FILE" ]; then
+          if [ -z "$$MODEL_URL" ] || [ -z "$$MODEL_FILE" ]; then
+            echo "MODEL_URL and MODEL_FILE must both be set, or both be empty for a bundled llamafile" >&2
+            exit 1
+          fi
+
+          case "$$MODEL_FILE" in
+            /*|*/*|*..*)
+              echo "MODEL_FILE must be a plain file name inside /data" >&2
+              exit 1
+              ;;
+          esac
+
+          case "$$MODEL_URL" in
+            http://*|https://*) ;;
+            *)
+              echo "MODEL_URL must be an http(s) URL" >&2
+              exit 1
+              ;;
+          esac
+
+          if [ ! -s "$$MODEL_FILE" ]; then
+            tmp="$${MODEL_FILE}.tmp"
+            rm -f "$$tmp"
+            curl -fL --retry 5 --retry-delay 2 --connect-timeout 20 --output "$$tmp" "$$MODEL_URL"
+            mv "$$tmp" "$$MODEL_FILE"
+          fi
+
+          set -- -m "$$MODEL_FILE"
+        else
+          set --
+        fi
+
+        chmod +x "$$LLAMAFILE_BIN"
+
+        exec "./$$LLAMAFILE_BIN" \
+          "$@" \
+          --server \
+          --host "$$HOST" \
+          --port "$$PORT" \
+          --ctx-size "$$CTX_SIZE" \
+          --threads "$$THREADS" \
+          --n-predict "$$N_PREDICT" \
+          --gpu disable
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:$${PORT:-8080}/health >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    depends_on:
+      llamafile:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    environment:
+      PORT: ${PORT:-8080}
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          reverse_proxy llamafile:{env.PORT}
+      }
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  llamafile_data:
