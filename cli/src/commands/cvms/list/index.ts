@@ -39,6 +39,7 @@ async function runCvmsListCommand(
 		});
 
 		if (result.success === false) {
+			logger.logDetailedError(result.error.cause ?? result.error);
 			context.fail(result.error.message);
 			return 1;
 		}

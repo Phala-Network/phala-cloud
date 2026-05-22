@@ -57,7 +57,13 @@ export async function listAppsWithCvmStatus(
 	});
 
 	if (!appListResult.success) {
-		return { success: false, error: { message: appListResult.error.message } };
+		return {
+			success: false,
+			error: {
+				message: appListResult.error.message,
+				cause: appListResult.error,
+			},
+		};
 	}
 
 	const appList = appListResult.data;
@@ -86,7 +92,13 @@ export async function listAppsWithCvmStatus(
 	for (const uuids of chunk(vmUuids, 100)) {
 		const batchResult = await safeGetCvmStatusBatch(client, { vmUuids: uuids });
 		if (!batchResult.success) {
-			return { success: false, error: { message: batchResult.error.message } };
+			return {
+				success: false,
+				error: {
+					message: batchResult.error.message,
+					cause: batchResult.error,
+				},
+			};
 		}
 
 		for (const [uuid, status] of Object.entries(batchResult.data)) {

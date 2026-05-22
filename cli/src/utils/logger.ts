@@ -462,24 +462,21 @@ export const logger = {
 
 		const prefix = context ? `[${context}] ` : "";
 
-		// Type guard for request errors (RequestError from SDK)
-		const isRequestError = (
+		// SDK errors (RequestError and its PhalaCloudError subclasses share
+		// `status` / `statusText` / `detail` / `data` / `requestId` fields).
+		const isSdkError = (
 			err: unknown,
 		): err is {
-			isRequestError: true;
-			status: number;
-			statusText: string;
-			message: string;
+			status?: number;
+			statusText?: string;
 			data?: unknown;
+			detail?: unknown;
+			requestId?: string;
 		} => {
 			return (
 				err !== null &&
 				typeof err === "object" &&
-				"isRequestError" in err &&
-				err.isRequestError === true &&
-				"status" in err &&
-				"message" in err &&
-				"data" in err
+				("status" in err || "detail" in err || "requestId" in err)
 			);
 		};
 
@@ -493,16 +490,7 @@ export const logger = {
 			);
 		};
 
-		// Check if it's a SafeResult request error
-		if (isRequestError(error)) {
-			process.stderr.write(`${prefix}HTTP ${error.status}: ${error.message}\n`);
-			if (error.data !== undefined && error.data !== null) {
-				process.stderr.write(`${JSON.stringify(error.data, null, 2)}\n`);
-			}
-			return;
-		}
-
-		// Check if it's a validation error
+		// Validation errors: surface the structured issues.
 		if (isValidationError(error)) {
 			process.stderr.write(
 				`${prefix}Validation error: ${JSON.stringify(error.issues)}\n`,
@@ -510,7 +498,30 @@ export const logger = {
 			return;
 		}
 
-		// Regular error
+		// SDK errors: print only the supplementary info that complements
+		// whatever message the caller already showed (typically via context.fail).
+		// Avoids duplicating the primary error line.
+		if (isSdkError(error)) {
+			const lines: string[] = [];
+			if (typeof error.status === "number" && error.status > 0) {
+				const statusText = error.statusText ?? "";
+				lines.push(
+					`${prefix}HTTP ${error.status}${statusText ? ` ${statusText}` : ""}`,
+				);
+			}
+			if (typeof error.requestId === "string" && error.requestId.length > 0) {
+				lines.push(`${prefix}Request ID: ${error.requestId}`);
+			}
+			if (error.data !== undefined && error.data !== null) {
+				lines.push(JSON.stringify(error.data, null, 2));
+			}
+			if (lines.length > 0) {
+				process.stderr.write(`${lines.join("\n")}\n`);
+			}
+			return;
+		}
+
+		// Regular error: only print if it adds something beyond the caller's message.
 		if (error instanceof Error) {
 			process.stderr.write(`${prefix}${error.message}\n`);
 		} else {
