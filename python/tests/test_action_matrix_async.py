@@ -44,13 +44,13 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
                 "nodes": [],
                 "kms_nodes": [
                     {
-                        "id": 201,
+                        "id": "kms_201",
                         "slug": "kms-base",
                         "url": "https://kms-base.example.com",
                         "version": "0.5.0",
                         "kms_type": "BASE",
                         "chain_id": 8453,
-                        "kms_contract_id": 301,
+                        "kms_contract_id": "kc_301",
                         "kms_contract_address": "0xbase",
                         "gateway_app_id": "0xgateway",
                         "supported_os_images": ["dstack-0.5.0"],
@@ -59,18 +59,18 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
                 "node_kms_relations": [
                     {
                         "teepod_id": 11,
-                        "kms_id": 201,
+                        "kms_id": "kms_201",
                         "kms_type": "BASE",
-                        "kms_contract_id": 301,
+                        "kms_contract_id": "kc_301",
                         "kms_contract_address": "0xbase",
                         "supported_os_images": ["dstack-0.5.0"],
                     }
                 ],
                 "gateway_nodes": [
                     {
-                        "id": 401,
+                        "id": "gn_401",
                         "teepod_id": 11,
-                        "kms_contract_id": 301,
+                        "kms_contract_id": "kc_301",
                         "rpc_url": "https://gateway.example.com/rpc",
                         "domain_suffix": "example.app",
                         "enabled": True,

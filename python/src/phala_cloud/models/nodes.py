@@ -52,7 +52,7 @@ class AvailableNodes(CloudModel):
     gpu_availability: GpuAvailability | None = None
 
 
-class CvmCreateKmsResource(CloudModel):
+class CvmCreateKmsResourceV20260121(CloudModel):
     id: int | str
     slug: str | None = None
     url: str
@@ -65,7 +65,7 @@ class CvmCreateKmsResource(CloudModel):
     supported_os_images: list[str] = Field(default_factory=list)
 
 
-class CvmCreateNodeKmsRelation(CloudModel):
+class CvmCreateNodeKmsRelationV20260121(CloudModel):
     teepod_id: int
     kms_id: int | str
     kms_type: str
@@ -74,13 +74,33 @@ class CvmCreateNodeKmsRelation(CloudModel):
     supported_os_images: list[str] = Field(default_factory=list)
 
 
-class CvmCreateGatewayResource(CloudModel):
+class CvmCreateGatewayResourceV20260121(CloudModel):
     id: int | str
     teepod_id: int | None = None
     kms_contract_id: int | str
     rpc_url: str | None = None
     domain_suffix: str | None = None
     enabled: bool
+
+
+class CvmCreateKmsResourceV20260522(CvmCreateKmsResourceV20260121):
+    id: str
+    kms_contract_id: str | None = None
+
+
+class CvmCreateNodeKmsRelationV20260522(CvmCreateNodeKmsRelationV20260121):
+    kms_id: str
+    kms_contract_id: str | None = None
+
+
+class CvmCreateGatewayResourceV20260522(CvmCreateGatewayResourceV20260121):
+    id: str
+    kms_contract_id: str
+
+
+CvmCreateKmsResource = CvmCreateKmsResourceV20260522
+CvmCreateNodeKmsRelation = CvmCreateNodeKmsRelationV20260522
+CvmCreateGatewayResource = CvmCreateGatewayResourceV20260522
 
 
 class CvmCreateInstanceTypeResource(CloudModel):
@@ -95,12 +115,27 @@ class CvmCreateInstanceTypeResource(CloudModel):
     display_order: int | None = None
 
 
-class CvmCreateResourceGraph(CloudModel):
+class CvmCreateResourceGraphV20260121(CloudModel):
     tier: str
     capacity: ResourceThreshold
     nodes: list[TeepodCapacity]
-    kms_nodes: list[CvmCreateKmsResource]
-    node_kms_relations: list[CvmCreateNodeKmsRelation]
-    gateway_nodes: list[CvmCreateGatewayResource]
+    kms_nodes: list[CvmCreateKmsResourceV20260121]
+    node_kms_relations: list[CvmCreateNodeKmsRelationV20260121]
+    gateway_nodes: list[CvmCreateGatewayResourceV20260121]
     instance_types: list[CvmCreateInstanceTypeResource]
     gpu_availability: GpuAvailability = Field(default_factory=GpuAvailability)
+
+
+class CvmCreateResourceGraphV20260522(CloudModel):
+    tier: str
+    capacity: ResourceThreshold
+    nodes: list[TeepodCapacity]
+    kms_nodes: list[CvmCreateKmsResourceV20260522]
+    node_kms_relations: list[CvmCreateNodeKmsRelationV20260522]
+    gateway_nodes: list[CvmCreateGatewayResourceV20260522]
+    instance_types: list[CvmCreateInstanceTypeResource]
+    gpu_availability: GpuAvailability = Field(default_factory=GpuAvailability)
+
+
+CvmCreateResourceGraph = CvmCreateResourceGraphV20260522
+CvmCreateResourceGraphAny = CvmCreateResourceGraphV20260522 | CvmCreateResourceGraphV20260121

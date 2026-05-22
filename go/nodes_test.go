@@ -37,13 +37,13 @@ func TestGetCVMCreateResources(t *testing.T) {
 			],
 			"kms_nodes": [
 				{
-					"id": 201,
+					"id": "kms_201",
 					"slug": "kms-base",
 					"url": "https://kms-base.example.com",
 					"version": "0.5.0",
 					"kms_type": "BASE",
 					"chain_id": 8453,
-					"kms_contract_id": 301,
+					"kms_contract_id": "kc_301",
 					"kms_contract_address": "0xbase",
 					"gateway_app_id": "0xgateway",
 					"supported_os_images": ["dstack-0.5.0"]
@@ -52,18 +52,18 @@ func TestGetCVMCreateResources(t *testing.T) {
 			"node_kms_relations": [
 				{
 					"teepod_id": 11,
-					"kms_id": 201,
+					"kms_id": "kms_201",
 					"kms_type": "BASE",
-					"kms_contract_id": 301,
+					"kms_contract_id": "kc_301",
 					"kms_contract_address": "0xbase",
 					"supported_os_images": ["dstack-0.5.0"]
 				}
 			],
 			"gateway_nodes": [
 				{
-					"id": 401,
+					"id": "gn_401",
 					"teepod_id": 11,
-					"kms_contract_id": 301,
+					"kms_contract_id": "kc_301",
 					"rpc_url": "https://gateway.example.com/rpc",
 					"domain_suffix": "example.app",
 					"enabled": true
@@ -107,17 +107,39 @@ func TestGetCVMCreateResources(t *testing.T) {
 	if result.KMSNodes[0].KMSType != "BASE" {
 		t.Errorf("KMSType = %q, want BASE", result.KMSNodes[0].KMSType)
 	}
-	if id, ok := result.KMSNodes[0].ID.IntValue(); !ok || id != 201 {
-		t.Errorf("KMS ID = %v/%v, want 201/true", id, ok)
+	if result.KMSNodes[0].ID != "kms_201" {
+		t.Errorf("KMS ID = %q, want kms_201", result.KMSNodes[0].ID)
 	}
-	if id, ok := result.KMSNodes[0].KMSContractID.IntValue(); !ok || id != 301 {
-		t.Errorf("KMSContractID = %v/%v, want 301/true", id, ok)
+	if result.KMSNodes[0].KMSContractID == nil || *result.KMSNodes[0].KMSContractID != "kc_301" {
+		t.Errorf("KMSContractID = %v, want kc_301", result.KMSNodes[0].KMSContractID)
 	}
 	if result.GatewayNodes[0].Enabled != true {
 		t.Errorf("Gateway enabled = %v, want true", result.GatewayNodes[0].Enabled)
 	}
 	if result.InstanceTypes[0].ID != "tdx.small" {
 		t.Errorf("Instance type ID = %q, want tdx.small", result.InstanceTypes[0].ID)
+	}
+}
+
+func TestCVMCreateResourcesV20260121NumericIDs(t *testing.T) {
+	var result CVMCreateResourcesV20260121
+	if err := json.Unmarshal([]byte(`{
+		"tier": "free",
+		"capacity": {},
+		"nodes": [],
+		"kms_nodes": [{"id": 201, "url": "https://kms.example.com", "kms_type": "BASE", "kms_contract_id": 301}],
+		"node_kms_relations": [{"teepod_id": 11, "kms_id": 201, "kms_type": "BASE", "kms_contract_id": 301}],
+		"gateway_nodes": [{"id": 401, "kms_contract_id": 301, "enabled": true}],
+		"instance_types": [],
+		"gpu_availability": {}
+	}`), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if id, ok := result.KMSNodes[0].ID.IntValue(); !ok || id != 201 {
+		t.Errorf("KMS ID = %v/%v, want 201/true", id, ok)
+	}
+	if id, ok := result.GatewayNodes[0].KMSContractID.IntValue(); !ok || id != 301 {
+		t.Errorf("KMSContractID = %v/%v, want 301/true", id, ok)
 	}
 }
 

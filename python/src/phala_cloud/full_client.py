@@ -71,7 +71,11 @@ from .models.cvms import (
     PaginatedCvmInfosV20260522,
 )
 from .models.kms import GetKmsListResponse, GetKmsOnChainDetailResponse, KmsInfo
-from .models.nodes import AvailableNodes, CvmCreateResourceGraph
+from .models.nodes import (
+    AvailableNodes,
+    CvmCreateResourceGraphV20260121,
+    CvmCreateResourceGraphV20260522,
+)
 from .models.os_images import GetOsImagesRequest, GetOsImagesResponse
 from .result import SafeResult
 
@@ -330,7 +334,11 @@ class _ExtMixin:
         if m == "GET" and path == "/teepods/available":
             return AvailableNodes
         if m == "GET" and path == "/teepods/cvm-create-resources":
-            return CvmCreateResourceGraph
+            return (
+                CvmCreateResourceGraphV20260121
+                if self.config.version == "2026-01-21"
+                else CvmCreateResourceGraphV20260522
+            )
         if m == "GET" and path == "/cvms/paginated":
             if self.config.version == "2025-10-28":
                 return PaginatedCvmInfosV20251028

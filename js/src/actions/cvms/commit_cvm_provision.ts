@@ -156,7 +156,6 @@ const CommitCvmProvisionBaseSchema = z
         name: z.string(),
       })
       .nullable(),
-    user_id: z.number().nullable(),
     app_id: z.string().nullable(),
     vm_uuid: z.string().nullable(),
     instance_id: z.string().nullable(),
@@ -180,11 +179,13 @@ const CommitCvmProvisionBaseSchema = z
 
 export const CommitCvmProvisionV20260121Schema = CommitCvmProvisionBaseSchema.extend({
   id: z.number(),
+  user_id: z.number().nullable(),
 });
 export type CommitCvmProvisionV20260121 = z.infer<typeof CommitCvmProvisionV20260121Schema>;
 
 export const CommitCvmProvisionV20260522Schema = CommitCvmProvisionBaseSchema.extend({
   id: z.string(),
+  user_id: z.string().nullable(),
 });
 export type CommitCvmProvisionV20260522 = z.infer<typeof CommitCvmProvisionV20260522Schema>;
 

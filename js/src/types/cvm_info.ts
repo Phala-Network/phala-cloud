@@ -22,7 +22,6 @@ const VMBaseSchema = z.object({
     })
     .optional()
     .nullable(),
-  user_id: z.number().optional().nullable(),
   app_id: z.string(),
   vm_uuid: z.string().nullable(),
   instance_id: z.string().nullable(),
@@ -42,11 +41,13 @@ const VMBaseSchema = z.object({
 
 export const VMV20260121Schema = VMBaseSchema.extend({
   id: z.number(),
+  user_id: z.number().optional().nullable(),
 });
 export type VMV20260121 = z.infer<typeof VMV20260121Schema>;
 
 export const VMV20260522Schema = VMBaseSchema.extend({
   id: z.string(),
+  user_id: z.string().optional().nullable(),
 });
 export type VMV20260522 = z.infer<typeof VMV20260522Schema>;
 
