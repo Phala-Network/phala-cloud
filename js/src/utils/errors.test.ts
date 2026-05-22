@@ -572,10 +572,12 @@ describe("RequestError.fromFetchError with timeout/network errors", () => {
     expect(requestError.code).toBe("TIMEOUT");
     expect(requestError.status).toBe(0);
     expect(requestError.statusText).toBe("Request Timeout");
-    expect(requestError.message).toContain("Request timed out");
-    expect(requestError.message).toContain("--timeout");
-    expect(requestError.detail).toContain("Request timed out");
-    expect(requestError.detail).toContain("--timeout");
+    expect(requestError.message).toBe(
+      "Request timed out. The server did not respond in time.",
+    );
+    expect(requestError.detail).toBe(
+      "Request timed out. The server did not respond in time.",
+    );
   });
 
   it("should detect timeout via message prefix when cause is missing", () => {
@@ -591,6 +593,26 @@ describe("RequestError.fromFetchError with timeout/network errors", () => {
     const requestError = RequestError.fromFetchError(fetchError as never);
 
     expect(requestError.code).toBe("TIMEOUT");
+  });
+
+  it("should expose code on the PhalaCloudError subclass via parseApiError", () => {
+    const fetchError = {
+      message: '[POST] "/api/v1/status/batch": <no response> [TimeoutError]',
+      status: undefined,
+      statusText: undefined,
+      data: undefined,
+      request: "/api/v1/status/batch",
+      response: undefined,
+      cause: Object.assign(new Error(""), { name: "TimeoutError" }),
+    } as unknown;
+
+    const requestError = RequestError.fromFetchError(fetchError as never);
+    const error = parseApiError(requestError);
+
+    // parseApiError must forward the code so downstream consumers (CLI, JS apps)
+    // can discriminate timeouts without string matching on message/statusText.
+    expect(error.code).toBe("TIMEOUT");
+    expect(error.statusText).toBe("Request Timeout");
   });
 
   it("should preserve raw error message for non-timeout failures with no response body", () => {
