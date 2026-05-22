@@ -187,6 +187,18 @@ export async function dispatchCommand(
 			parsedArguments,
 		);
 
+		const rawTimeout = schemaInput.options.timeout;
+		let timeoutSeconds: number | undefined;
+		if (typeof rawTimeout === "number") {
+			if (!Number.isFinite(rawTimeout) || rawTimeout <= 0) {
+				stderr.write(
+					`Invalid --timeout value "${rawTimeout}". Must be a positive number of seconds.\n`,
+				);
+				return 1;
+			}
+			timeoutSeconds = rawTimeout;
+		}
+
 		const globalOptions = {
 			apiToken:
 				typeof schemaInput.options.apiToken === "string"
@@ -202,6 +214,7 @@ export async function dispatchCommand(
 					? schemaInput.options.profile
 					: undefined,
 			apiVersion: typeof rawApiVersion === "string" ? rawApiVersion : undefined,
+			timeout: timeoutSeconds,
 		} as const;
 
 		const mergedInput = {

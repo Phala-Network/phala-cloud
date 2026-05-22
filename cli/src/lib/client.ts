@@ -50,10 +50,12 @@ export async function getClient(
 ): Promise<CliApiClient> {
 	const auth = resolveAuthForContext(context, options);
 	const version = getApiVersionOverride() ?? API_VERSION;
+	const timeoutSeconds = context?.globalOptions?.timeout;
 	return createClient({
 		apiKey: auth.apiKey ?? undefined,
 		baseURL: auth.baseURL,
 		version,
+		...(timeoutSeconds !== undefined ? { timeout: timeoutSeconds * 1000 } : {}),
 	}) as CliApiClient;
 }
 

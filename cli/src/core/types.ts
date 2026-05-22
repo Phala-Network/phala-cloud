@@ -85,6 +85,8 @@ export interface CommandGlobalOptions {
 	readonly interactive: boolean;
 	readonly profile?: string;
 	readonly apiVersion?: string;
+	/** Request timeout in seconds (overrides SDK default). */
+	readonly timeout?: number;
 }
 
 export interface CommandContext {

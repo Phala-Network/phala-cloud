@@ -70,6 +70,15 @@ export const apiVersionOption: CommandOption = {
 	group: "advanced",
 };
 
+export const timeoutOption: CommandOption = {
+	name: "timeout",
+	description: "Request timeout in seconds (default 60)",
+	type: "number",
+	target: "timeout",
+	argumentName: "seconds",
+	group: "advanced",
+};
+
 export const commonAuthOptions: readonly CommandOption[] = [apiTokenOption];
 
 /**
@@ -159,4 +168,5 @@ export const globalCommandOptions: readonly CommandOption[] = [
 	cvmIdOption,
 	profileOption,
 	apiVersionOption,
+	timeoutOption,
 ];
