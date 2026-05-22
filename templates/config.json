@@ -253,6 +253,28 @@
     "tags": ["LLM Inference", "API"]
   },
   {
+    "id": "openllm",
+    "name": "bentoml/OpenLLM",
+    "description": "CPU-safe OpenLLM package-load demo with health and OpenAI-compatible model-list endpoints, without downloading model weights or requiring GPU credentials.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/openllm",
+    "author": "BentoML Team / bentoml",
+    "icon": "openllm.jpg",
+    "envs": [
+      {
+        "key": "OPENLLM_PYTHON_VERSION",
+        "required": false,
+        "description": "OpenLLM Python package version installed at container startup.",
+        "default": "0.6.30"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 10
+    },
+    "tags": ["LLM Inference & Model Serving", "AI", "Developer Tools"]
+  },
+  {
     "id": "llm-wiki",
     "name": "LLM Wiki",
     "description": "A personal knowledge-base app that turns unstructured documents into an interlinked wiki with source traceability, graph insights, review queues, and deep research workflows. This template provides a confidential browser-accessible development preview for the upstream Tauri desktop app.",
