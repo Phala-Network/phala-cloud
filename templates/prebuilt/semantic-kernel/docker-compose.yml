@@ -1,0 +1,158 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile_inline: |
+        # syntax=docker/dockerfile:1.6
+        FROM python:3.11-slim
+
+        ENV PYTHONDONTWRITEBYTECODE=1 \
+            PYTHONUNBUFFERED=1 \
+            OTEL_SDK_DISABLED=true
+
+        WORKDIR /app
+
+        RUN python -m pip install --no-cache-dir --upgrade pip \
+            && python -m pip install --no-cache-dir \
+                semantic-kernel==1.42.0 \
+                fastapi==0.115.6 \
+                "uvicorn[standard]==0.34.0"
+
+        COPY <<'PY' /app/app.py
+        import hashlib
+        import os
+        from importlib.metadata import version
+
+        from fastapi import FastAPI, Query
+        from semantic_kernel import Kernel
+        from semantic_kernel.functions import kernel_function
+
+
+        PACKAGE_NAME = "semantic-kernel"
+        PACKAGE_VERSION = version(PACKAGE_NAME)
+        DEFAULT_TOPIC = os.getenv("DEMO_TOPIC", "Phala Cloud").strip() or "Phala Cloud"
+        MAX_TOPIC_LENGTH = 160
+
+
+        class LocalDemoPlugin:
+            @kernel_function(
+                name="deterministic_summary",
+                description="Return a deterministic CPU-only Semantic Kernel demo response.",
+            )
+            def deterministic_summary(self, topic: str = DEFAULT_TOPIC) -> str:
+                normalized = " ".join(topic.split())[:MAX_TOPIC_LENGTH] or DEFAULT_TOPIC
+                digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
+                return (
+                    "Semantic Kernel invoked LocalDemoPlugin for "
+                    f"'{normalized}' with sha256:{digest}."
+                )
+
+
+        kernel = Kernel()
+        local_demo_plugin = kernel.add_plugin(LocalDemoPlugin(), plugin_name="local_demo")
+        deterministic_summary = local_demo_plugin["deterministic_summary"]
+
+        app = FastAPI(title="Semantic Kernel Local Demo", version=PACKAGE_VERSION)
+
+
+        def package_info() -> dict[str, str]:
+            return {"package": PACKAGE_NAME, "version": PACKAGE_VERSION}
+
+
+        @app.get("/healthz")
+        async def healthz() -> dict[str, str]:
+            return {
+                "status": "ok",
+                **package_info(),
+                "kernel": kernel.__class__.__name__,
+            }
+
+
+        @app.get("/demo")
+        async def demo(
+            topic: str = Query(
+                default=DEFAULT_TOPIC,
+                min_length=1,
+                max_length=MAX_TOPIC_LENGTH,
+                description="Short local demo topic.",
+            )
+        ) -> dict[str, object]:
+            result = await kernel.invoke(deterministic_summary, topic=topic)
+            return {
+                **package_info(),
+                "kernel": kernel.__class__.__name__,
+                "plugin": "local_demo.deterministic_summary",
+                "input": {"topic": topic},
+                "result": str(result),
+            }
+
+
+        @app.get("/v1/models")
+        async def models() -> dict[str, object]:
+            return {
+                "object": "list",
+                "data": [
+                    {
+                        "id": "semantic-kernel-local-demo",
+                        "object": "model",
+                        "created": 0,
+                        "owned_by": "microsoft",
+                    }
+                ],
+            }
+        PY
+
+        RUN useradd --create-home --uid 10001 appuser \
+            && chown -R appuser:appuser /app
+
+        USER appuser
+        EXPOSE 8000
+        CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+    image: semantic-kernel-demo:latest
+    pull_policy: build
+    environment:
+      DEMO_TOPIC: ${DEMO_TOPIC:-Phala Cloud}
+      OTEL_SDK_DISABLED: "true"
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).read()",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    ports:
+      - "80:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          reverse_proxy app:8000
+      }
+
+networks:
+  internal:
+    driver: bridge
