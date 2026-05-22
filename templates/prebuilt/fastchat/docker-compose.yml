@@ -1,0 +1,46 @@
+services:
+  fastchat:
+    image: python:3.10-slim
+    container_name: fastchat
+    restart: unless-stopped
+    environment:
+      PYTHONUNBUFFERED: "1"
+    command: >
+      sh -lc "
+        set -eu;
+        python -m pip install --no-cache-dir --upgrade pip;
+        python -m pip install --no-cache-dir fschat==0.2.36;
+        python -m fastchat.serve.controller --host 127.0.0.1 --port 21001 &
+        until python -c \"import urllib.request; urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:21001/list_models', data=b''), timeout=2).read()\"; do
+          sleep 1;
+        done;
+        exec python -m fastchat.serve.openai_api_server --host 0.0.0.0 --port 8000 --controller-address http://127.0.0.1:21001
+      "
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/models', timeout=5).read()\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 240s
+
+  proxy:
+    image: caddy:2-alpine
+    container_name: fastchat-proxy
+    restart: unless-stopped
+    depends_on:
+      - fastchat
+    ports:
+      - "8080:8080"
+    command:
+      [
+        "caddy",
+        "reverse-proxy",
+        "--from",
+        ":8080",
+        "--to",
+        "fastchat:8000",
+      ]
