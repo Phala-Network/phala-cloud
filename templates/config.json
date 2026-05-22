@@ -1747,5 +1747,27 @@
       "diskSize": 20
     },
     "tags": ["MCP Servers", "Data & Storage", "Infrastructure"]
+  },
+  {
+    "id": "gpt4all",
+    "name": "nomic-ai/gpt4all",
+    "description": "CPU-safe GPT4All Python bindings demo with health and package-load endpoints, without downloading multi-GB model weights.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/gpt4all",
+    "author": "nomic-ai",
+    "icon": "gpt4all.svg",
+    "envs": [
+      {
+        "key": "GPT4ALL_PYTHON_VERSION",
+        "required": false,
+        "description": "GPT4All Python package version installed at container startup.",
+        "default": "2.8.2"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 10
+    },
+    "tags": ["LLM Inference & Model Serving", "AI", "Developer Tools"]
   }
 ]
