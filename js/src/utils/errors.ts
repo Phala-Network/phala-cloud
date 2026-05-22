@@ -67,6 +67,8 @@ export class PhalaCloudError extends Error {
     | Record<string, unknown>
     | Array<{ msg: string; type?: string; ctx?: Record<string, unknown> }>;
   public readonly requestId?: string;
+  /** Machine-readable error code (e.g. "TIMEOUT", HTTP status as string). */
+  public readonly code?: string;
 
   constructor(
     message: string,
@@ -78,6 +80,7 @@ export class PhalaCloudError extends Error {
         | Record<string, unknown>
         | Array<{ msg: string; type?: string; ctx?: Record<string, unknown> }>;
       requestId?: string;
+      code?: string;
     },
   ) {
     super(message);
@@ -86,6 +89,7 @@ export class PhalaCloudError extends Error {
     this.statusText = data.statusText;
     this.detail = data.detail;
     this.requestId = data.requestId;
+    this.code = data.code;
 
     // Maintains proper stack trace for where error was thrown (only available on V8)
     if (Error.captureStackTrace) {
@@ -104,7 +108,6 @@ export class RequestError extends PhalaCloudError implements ApiError {
   public readonly data?: unknown;
   public readonly request?: FetchRequest | undefined;
   public readonly response?: Response | undefined;
-  public readonly code?: string | undefined;
   public readonly type?: string | undefined;
 
   constructor(
@@ -137,12 +140,12 @@ export class RequestError extends PhalaCloudError implements ApiError {
       statusText: options?.statusText ?? "Unknown Error",
       detail: options?.detail || message,
       requestId: options?.requestId,
+      code: options?.code,
     });
 
     this.data = options?.data;
     this.request = options?.request;
     this.response = options?.response;
-    this.code = options?.code;
     this.type = options?.type;
   }
 
@@ -190,14 +193,39 @@ export class RequestError extends PhalaCloudError implements ApiError {
       });
     }
 
-    // Fallback to raw error data
+    // Detect ofetch timeout (AbortController fired due to options.timeout):
+    // ofetch wraps the underlying TimeoutError in FetchError.cause and prepends
+    // "[TimeoutError]:" to the message.
+    const cause = (error as { cause?: { name?: string } }).cause;
+    if (cause?.name === "TimeoutError" || error.message?.includes("[TimeoutError]")) {
+      // Keep the SDK-facing message generic; callers (including the CLI) can
+      // discriminate via `code === "TIMEOUT"` and append their own remediation
+      // hint (e.g. the CLI surfaces the configured timeout + --timeout flag).
+      // Put the same text in `detail` so parseApiError's extractPrimaryMessage
+      // surfaces it instead of the bare ofetch message ("[POST] ...: <no response>").
+      const message = "Request timed out. The server did not respond in time.";
+      return new RequestError(message, {
+        status: 0,
+        statusText: "Request Timeout",
+        data: error.data,
+        request: error.request ?? undefined,
+        response: error.response ?? undefined,
+        detail: message,
+        code: "TIMEOUT",
+        requestId,
+      });
+    }
+
+    // Fallback to raw error data — preserve the underlying error message so
+    // callers see something actionable (e.g. ofetch's "[GET] ...: <no response>"
+    // for network failures) instead of a generic "Unknown API error".
     return new RequestError(error.message, {
       status: error.status ?? undefined,
       statusText: error.statusText ?? undefined,
       data: error.data,
       request: error.request ?? undefined,
       response: error.response ?? undefined,
-      detail: error.data?.detail || "Unknown API error",
+      detail: error.data?.detail || error.message || "Unknown API error",
       code: error.status?.toString() ?? undefined,
       requestId,
     });
@@ -483,7 +511,13 @@ export function parseApiError(requestError: RequestError): PhalaCloudError {
   // Fallback to original logic for backward compatibility
   const errorType = categorizeErrorType(status);
   const message = extractPrimaryMessage(status, detail, requestError.message);
-  const commonData = { status, statusText, detail, requestId: requestError.requestId };
+  const commonData = {
+    status,
+    statusText,
+    detail,
+    requestId: requestError.requestId,
+    code: requestError.code,
+  };
 
   // Return appropriate error subclass
   if (errorType === "validation" && Array.isArray(detail)) {

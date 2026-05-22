@@ -549,3 +549,87 @@ describe("RequestError.fromFetchError with StructuredError responses", () => {
     expect(formatStructuredError(error as ResourceError)).toContain("Request ID: rid-header-456");
   });
 });
+
+describe("RequestError.fromFetchError with timeout/network errors", () => {
+  it("should produce a friendly Request Timeout error when ofetch aborts on timeout", () => {
+    const timeoutCause = Object.assign(
+      new Error("[TimeoutError]: The operation was aborted due to timeout"),
+      { name: "TimeoutError", code: 23 },
+    );
+    const fetchError = {
+      message:
+        '[POST] "/api/v1/status/batch": <no response> [TimeoutError]: The operation was aborted due to timeout',
+      status: undefined,
+      statusText: undefined,
+      data: undefined,
+      request: "/api/v1/status/batch",
+      response: undefined,
+      cause: timeoutCause,
+    } as unknown;
+
+    const requestError = RequestError.fromFetchError(fetchError as never);
+
+    expect(requestError.code).toBe("TIMEOUT");
+    expect(requestError.status).toBe(0);
+    expect(requestError.statusText).toBe("Request Timeout");
+    expect(requestError.message).toBe(
+      "Request timed out. The server did not respond in time.",
+    );
+    expect(requestError.detail).toBe(
+      "Request timed out. The server did not respond in time.",
+    );
+  });
+
+  it("should detect timeout via message prefix when cause is missing", () => {
+    const fetchError = {
+      message: '[GET] "/api/v1/apps": <no response> [TimeoutError]: aborted',
+      status: undefined,
+      statusText: undefined,
+      data: undefined,
+      request: "/api/v1/apps",
+      response: undefined,
+    } as unknown;
+
+    const requestError = RequestError.fromFetchError(fetchError as never);
+
+    expect(requestError.code).toBe("TIMEOUT");
+  });
+
+  it("should expose code on the PhalaCloudError subclass via parseApiError", () => {
+    const fetchError = {
+      message: '[POST] "/api/v1/status/batch": <no response> [TimeoutError]',
+      status: undefined,
+      statusText: undefined,
+      data: undefined,
+      request: "/api/v1/status/batch",
+      response: undefined,
+      cause: Object.assign(new Error(""), { name: "TimeoutError" }),
+    } as unknown;
+
+    const requestError = RequestError.fromFetchError(fetchError as never);
+    const error = parseApiError(requestError);
+
+    // parseApiError must forward the code so downstream consumers (CLI, JS apps)
+    // can discriminate timeouts without string matching on message/statusText.
+    expect(error.code).toBe("TIMEOUT");
+    expect(error.statusText).toBe("Request Timeout");
+  });
+
+  it("should preserve raw error message for non-timeout failures with no response body", () => {
+    const fetchError = {
+      message: '[GET] "/api/v1/apps": <no response> connect ECONNREFUSED',
+      status: undefined,
+      statusText: undefined,
+      data: undefined,
+      request: "/api/v1/apps",
+      response: undefined,
+    } as unknown;
+
+    const requestError = RequestError.fromFetchError(fetchError as never);
+
+    expect(requestError.code).toBeUndefined();
+    expect(requestError.message).toContain("ECONNREFUSED");
+    expect(requestError.detail).toContain("ECONNREFUSED");
+    expect(requestError.detail).not.toBe("Unknown API error");
+  });
+});

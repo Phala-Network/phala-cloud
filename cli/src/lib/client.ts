@@ -6,7 +6,15 @@ import { resolveAuth, type ResolvedAuth } from "@/src/utils/credentials";
 
 const API_VERSION = "2026-01-21" as const;
 
+/** Default request timeout (seconds) when no --timeout flag is supplied. */
+export const DEFAULT_TIMEOUT_SECONDS = 60;
+
 export type CliApiClient = Client<typeof API_VERSION>;
+
+/** Resolve the request timeout (seconds) the CLI will use for this command. */
+export function resolveTimeoutSeconds(context?: AuthContextLike): number {
+	return context?.globalOptions?.timeout ?? DEFAULT_TIMEOUT_SECONDS;
+}
 
 export interface ClientWithAuth {
 	readonly client: CliApiClient;
@@ -50,10 +58,12 @@ export async function getClient(
 ): Promise<CliApiClient> {
 	const auth = resolveAuthForContext(context, options);
 	const version = getApiVersionOverride() ?? API_VERSION;
+	const timeoutSeconds = resolveTimeoutSeconds(context);
 	return createClient({
 		apiKey: auth.apiKey ?? undefined,
 		baseURL: auth.baseURL,
 		version,
+		timeout: timeoutSeconds * 1000,
 	}) as CliApiClient;
 }
 

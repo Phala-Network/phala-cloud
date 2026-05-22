@@ -1,10 +1,23 @@
 import chalk from "chalk";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
-import { getClient } from "@/src/lib/client";
+import { getClient, resolveTimeoutSeconds } from "@/src/lib/client";
 import { listAppsWithCvmStatus } from "@/src/lib/apps/list-apps-with-cvm-status";
 import { printTable } from "@/src/lib/table";
 import { logger } from "@/src/utils/logger";
+
+function isTimeoutCause(cause: unknown): boolean {
+	return (
+		cause !== null &&
+		typeof cause === "object" &&
+		"code" in cause &&
+		(cause as { code?: unknown }).code === "TIMEOUT"
+	);
+}
+
+function formatTimeoutMessage(timeoutSeconds: number): string {
+	return `Request timed out after ${timeoutSeconds}s.\n  Retry with --timeout <seconds> to allow more time.`;
+}
 
 import {
 	cvmsListCommandMeta,
@@ -39,7 +52,12 @@ async function runCvmsListCommand(
 		});
 
 		if (result.success === false) {
-			context.fail(result.error.message);
+			const cause = result.error.cause;
+			logger.logDetailedError(cause ?? result.error);
+			const message = isTimeoutCause(cause)
+				? formatTimeoutMessage(resolveTimeoutSeconds(context))
+				: result.error.message;
+			context.fail(message);
 			return 1;
 		}
 
