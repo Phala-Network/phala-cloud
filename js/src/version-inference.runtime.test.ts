@@ -6,10 +6,46 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createClient } from "./create-client";
+import {
+  AppCvmsBatchIsAllowedResponseSchema,
+  AppCvmsBatchIsAllowedResponseV20260121Schema,
+  AppCvmsBatchIsAllowedResponseV20260522Schema,
+} from "./actions/apps/check_app_cvms_is_allowed";
+import {
+  DeviceAllowlistResponseAnySchema,
+  DeviceAllowlistResponseV20260121Schema,
+  DeviceAllowlistResponseV20260522Schema,
+} from "./actions/apps/get_app_device_allowlist";
+import {
+  CommitCvmProvisionSchema,
+  CommitCvmProvisionV20260121Schema,
+  CommitCvmProvisionV20260522Schema,
+} from "./actions/cvms/commit_cvm_provision";
+import {
+  IsAllowedResultSchema,
+  IsAllowedResultV20260121Schema,
+  IsAllowedResultV20260522Schema,
+} from "./actions/cvms/check_cvm_is_allowed";
+import {
+  InstanceIdRefreshResultSchema,
+  InstanceIdRefreshResultV20260121Schema,
+  InstanceIdRefreshResultV20260522Schema,
+} from "./actions/cvms/refresh_cvm_instance_id";
+import {
+  RefreshCvmInstanceIdsResponseSchema,
+  RefreshCvmInstanceIdsResponseV20260121Schema,
+  RefreshCvmInstanceIdsResponseV20260522Schema,
+} from "./actions/cvms/refresh_cvm_instance_ids";
 import { PaginatedCvmInfosV20251028Schema } from "./types/cvm_info_v20251028";
-import { PaginatedCvmInfosV20260121Schema } from "./types/cvm_info_v20260121";
+import {
+  CvmInfoV20260121Schema,
+  CvmInfoV20260522Schema,
+  PaginatedCvmInfosV20260121Schema,
+  PaginatedCvmInfosV20260522Schema,
+} from "./types/cvm_info_v20260121";
 import { CvmDetailV20251028Schema } from "./types/cvm_info_v20251028";
 import { CvmInfoDetailV20260121Schema } from "./types/cvm_info_v20260121";
+import { VMSchema, VMV20260121Schema, VMV20260522Schema } from "./types/cvm_info";
 
 // Sample v20251028 CVM list response
 const mockCvmListV20251028 = {
@@ -148,6 +184,50 @@ const mockCvmDetailV20260121 = {
   compose_file: null,
 };
 
+const mockCvmListV20260522 = {
+  ...mockCvmListV20260121,
+  items: [{ ...mockCvmListV20260121.items[0], id: "cvm_ykL5lbAn" }],
+};
+
+const mockCvmDetailV20260522 = {
+  ...mockCvmListV20260522.items[0],
+  compose_file: null,
+};
+
+const mockIsAllowedResult = {
+  cvm_id: "cvm_ykL5lbAn",
+  app_contract_address: "0x123",
+  compose_hash: "compose-hash",
+  device_id: "dev-1",
+  compose_hash_allowed: true,
+  allow_any_device: false,
+  device_id_allowed: true,
+  is_allowed: true,
+  error: null,
+};
+
+const mockInstanceRefreshResult = {
+  cvm_id: "cvm_ykL5lbAn",
+  identifier: "cvm_ykL5lbAn",
+  status: "updated",
+  old_instance_id: null,
+  new_instance_id: "inst-1",
+  source: "teepod_state",
+  verified_with_gateway: false,
+  reason: null,
+};
+
+const mockBatchRefreshResult = {
+  total: 1,
+  scanned: 1,
+  updated: 1,
+  unchanged: 0,
+  skipped: 0,
+  conflicts: 0,
+  errors: 0,
+  items: [mockInstanceRefreshResult],
+};
+
 describe("version-based schema validation", () => {
   describe("schema validation for v20251028", () => {
     it("should validate v20251028 CVM list response", () => {
@@ -192,6 +272,103 @@ describe("version-based schema validation", () => {
     it("should reject v20251028 format with v20260121 schema", () => {
       const result = PaginatedCvmInfosV20260121Schema.safeParse(mockCvmListV20251028);
       expect(result.success).toBe(false);
+    });
+  });
+
+  describe("CVM hashid schema compatibility", () => {
+    it("keeps numeric CVM IDs in 2026-01-21 schemas", () => {
+      expect(CvmInfoV20260121Schema.safeParse(mockCvmListV20260121.items[0]).success).toBe(true);
+      expect(PaginatedCvmInfosV20260121Schema.safeParse(mockCvmListV20260121).success).toBe(true);
+      expect(CvmInfoDetailV20260121Schema.safeParse(mockCvmDetailV20260121).success).toBe(true);
+      expect(VMV20260121Schema.safeParse({ ...mockCvmDetailV20251028, created_at: "2026-05-22T00:00:00Z" }).success).toBe(true);
+    });
+
+    it("uses hashed CVM IDs in 2026-05-22 and default schemas", () => {
+      expect(CvmInfoV20260522Schema.safeParse(mockCvmListV20260522.items[0]).success).toBe(true);
+      expect(PaginatedCvmInfosV20260522Schema.safeParse(mockCvmListV20260522).success).toBe(true);
+      expect(VMV20260522Schema.safeParse({ ...mockCvmDetailV20251028, id: "cvm_ykL5lbAn", created_at: "2026-05-22T00:00:00Z" }).success).toBe(true);
+      expect(VMSchema.safeParse({ ...mockCvmDetailV20251028, id: "cvm_ykL5lbAn", created_at: "2026-05-22T00:00:00Z" }).success).toBe(true);
+    });
+
+    it("rejects numeric CVM IDs in latest schemas", () => {
+      expect(CvmInfoV20260522Schema.safeParse(mockCvmListV20260121.items[0]).success).toBe(false);
+      expect(PaginatedCvmInfosV20260522Schema.safeParse(mockCvmListV20260121).success).toBe(false);
+      expect(CommitCvmProvisionSchema.safeParse({ id: 123 }).success).toBe(false);
+      expect(IsAllowedResultSchema.safeParse({ ...mockIsAllowedResult, cvm_id: 123 }).success).toBe(false);
+      expect(InstanceIdRefreshResultSchema.safeParse({ ...mockInstanceRefreshResult, cvm_id: 123 }).success).toBe(false);
+    });
+  });
+
+  describe("action response hashid compatibility", () => {
+    const commitBase = {
+      id: "cvm_ykL5lbAn",
+      name: "test-cvm",
+      status: "running",
+      teepod_id: 1,
+      app_id: "app-123",
+      vm_uuid: null,
+      instance_id: null,
+      teepod: null,
+      user_id: null,
+      base_image: null,
+      vcpu: 2,
+      memory: 4096,
+      disk_size: 100,
+      docker_compose_file: null,
+      created_at: "2026-05-22T00:00:00Z",
+      encrypted_env_pubkey: null,
+    };
+
+    it("validates commit and lifecycle response versions", () => {
+      expect(CommitCvmProvisionV20260121Schema.safeParse({ ...commitBase, id: 123 }).success).toBe(true);
+      expect(CommitCvmProvisionV20260522Schema.safeParse(commitBase).success).toBe(true);
+      expect(CommitCvmProvisionSchema.safeParse(commitBase).success).toBe(true);
+    });
+
+    it("validates allowance response versions", () => {
+      expect(IsAllowedResultV20260121Schema.safeParse({ ...mockIsAllowedResult, cvm_id: 123 }).success).toBe(true);
+      expect(IsAllowedResultV20260522Schema.safeParse(mockIsAllowedResult).success).toBe(true);
+      expect(AppCvmsBatchIsAllowedResponseV20260121Schema.safeParse({
+        is_onchain: true,
+        results: [{ ...mockIsAllowedResult, cvm_id: 123 }],
+        skipped_cvm_ids: [456],
+      }).success).toBe(true);
+      expect(AppCvmsBatchIsAllowedResponseV20260522Schema.safeParse({
+        is_onchain: true,
+        results: [mockIsAllowedResult],
+        skipped_cvm_ids: ["cvm_ykL5lbAn"],
+      }).success).toBe(true);
+      expect(AppCvmsBatchIsAllowedResponseSchema.safeParse({
+        is_onchain: true,
+        results: [mockIsAllowedResult],
+        skipped_cvm_ids: ["cvm_ykL5lbAn"],
+      }).success).toBe(true);
+    });
+
+    it("validates device allowlist response versions", () => {
+      const oldResponse = {
+        is_onchain_kms: true,
+        devices: [{ device_id: "dev-1", node_name: "node-1", allowed_onchain: true, status: "allowed", cvm_ids: [123] }],
+      };
+      const newResponse = {
+        is_onchain_kms: true,
+        devices: [{ device_id: "dev-1", node_name: "node-1", allowed_onchain: true, status: "allowed", cvm_ids: ["cvm_ykL5lbAn"] }],
+      };
+      expect(DeviceAllowlistResponseV20260121Schema.safeParse(oldResponse).success).toBe(true);
+      expect(DeviceAllowlistResponseV20260522Schema.safeParse(newResponse).success).toBe(true);
+      expect(DeviceAllowlistResponseAnySchema.safeParse(oldResponse).success).toBe(true);
+      expect(DeviceAllowlistResponseAnySchema.safeParse(newResponse).success).toBe(true);
+    });
+
+    it("validates refresh instance ID response versions", () => {
+      expect(InstanceIdRefreshResultV20260121Schema.safeParse({ ...mockInstanceRefreshResult, cvm_id: 123 }).success).toBe(true);
+      expect(InstanceIdRefreshResultV20260522Schema.safeParse(mockInstanceRefreshResult).success).toBe(true);
+      expect(RefreshCvmInstanceIdsResponseV20260121Schema.safeParse({
+        ...mockBatchRefreshResult,
+        items: [{ ...mockInstanceRefreshResult, cvm_id: 123 }],
+      }).success).toBe(true);
+      expect(RefreshCvmInstanceIdsResponseV20260522Schema.safeParse(mockBatchRefreshResult).success).toBe(true);
+      expect(RefreshCvmInstanceIdsResponseSchema.safeParse(mockBatchRefreshResult).success).toBe(true);
     });
   });
 
