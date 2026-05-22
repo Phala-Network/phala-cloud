@@ -27,7 +27,7 @@ export const composeFileSchema = z
 
 // POST request CVM Response Schema
 export const postCvmResponseSchema = z.object({
-	id: z.number(),
+	id: z.string(),
 	name: z.string(),
 	status: z.string(),
 	teepod_id: z.number().nullable(),
@@ -37,7 +37,7 @@ export const postCvmResponseSchema = z.object({
 			name: z.string(),
 		})
 		.nullable(),
-	user_id: z.number().nullable(),
+	user_id: z.string().nullable(),
 	app_id: z.string(),
 	vm_uuid: z.string().nullable(),
 	instance_id: z.string().nullable(),
@@ -140,7 +140,7 @@ export interface TCBInfo {
 
 // Replicate CVM Response Schema
 export const replicateCvmResponseSchema = z.object({
-	id: z.number(),
+	id: z.string(),
 	name: z.string(),
 	status: z.string(),
 	teepod_id: z.number(),
@@ -148,7 +148,7 @@ export const replicateCvmResponseSchema = z.object({
 		id: z.number(),
 		name: z.string(),
 	}),
-	user_id: z.number().nullable().optional(),
+	user_id: z.string().nullable().optional(),
 	app_id: z.string(),
 	vm_uuid: z.string().nullable().optional(),
 	instance_id: z.string().nullable().optional(),
@@ -276,7 +276,7 @@ export interface KmsListItem {
 	url: string;
 	version: string;
 	kms_type?: string;
-	kms_contract_id?: string | number | null;
+	kms_contract_id?: string | null;
 	chain_id?: number | null;
 	kms_contract_address?: string | null;
 	gateway_app_id?: string | null;
@@ -285,17 +285,17 @@ export interface KmsListItem {
 
 export interface CvmCreateNodeKmsRelation {
 	teepod_id: number;
-	kms_id: string | number;
+	kms_id: string;
 	kms_type: string;
-	kms_contract_id?: string | number | null;
+	kms_contract_id?: string | null;
 	kms_contract_address?: string | null;
 	supported_os_images?: string[];
 }
 
 export interface CvmCreateGatewayResource {
-	id: string | number;
+	id: string;
 	teepod_id?: number | null;
-	kms_contract_id: string | number;
+	kms_contract_id: string;
 	rpc_url?: string | null;
 	domain_suffix?: string | null;
 	enabled: boolean;
