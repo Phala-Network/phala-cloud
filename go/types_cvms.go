@@ -378,7 +378,7 @@ type CVMVisibility struct {
 
 // IsAllowedResult represents the result of an on-chain allowance check.
 type IsAllowedResult struct {
-	CvmID              int     `json:"cvm_id,omitempty"`
+	CvmID              string  `json:"cvm_id,omitempty"`
 	AppContractAddress string  `json:"app_contract_address"`
 	ComposeHash        string  `json:"compose_hash"`
 	DeviceID           string  `json:"device_id"`
@@ -412,7 +412,7 @@ type AppCvmsBatchIsAllowedResponse struct {
 	AllowedCount  int               `json:"allowed_count"`
 	DeniedCount   int               `json:"denied_count"`
 	ErrorCount    int               `json:"error_count"`
-	SkippedCvmIDs []int             `json:"skipped_cvm_ids"`
+	SkippedCvmIDs []string          `json:"skipped_cvm_ids"`
 }
 
 // OSImage represents an available OS image.

@@ -249,7 +249,7 @@ class CheckCvmIsAllowedRequest(AliasModel):
 
 
 class IsAllowedResult(CloudModel):
-    cvm_id: int | None = None
+    cvm_id: str | None = None
     app_contract_address: str
     compose_hash: str
     device_id: str
@@ -279,4 +279,4 @@ class AppCvmsBatchIsAllowedResponse(CloudModel):
     allowed_count: int = 0
     denied_count: int = 0
     error_count: int = 0
-    skipped_cvm_ids: list[int] = Field(default_factory=list)
+    skipped_cvm_ids: list[str] = Field(default_factory=list)

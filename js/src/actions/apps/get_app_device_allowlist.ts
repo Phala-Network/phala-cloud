@@ -5,7 +5,7 @@ import type { ApiVersion } from "../../types/client";
 const DeviceAllowlistItemSchema = z.object({
   device_id: z.string(),
   node_name: z.string().nullable(),
-  cvm_ids: z.array(z.number()),
+  cvm_ids: z.array(z.string()),
   allowed_onchain: z.boolean(),
   status: z.string(),
 });

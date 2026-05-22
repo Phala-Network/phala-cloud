@@ -75,7 +75,7 @@ class AppRevisionsResponse(CloudModel):
 class DeviceAllowlistItem(CloudModel):
     device_id: str
     node_name: str | None = None
-    cvm_ids: list[int] = Field(default_factory=list)
+    cvm_ids: list[str] = Field(default_factory=list)
     allowed_onchain: bool
     status: str
 
