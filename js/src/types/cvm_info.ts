@@ -53,9 +53,7 @@ export type VMV20260522 = z.infer<typeof VMV20260522Schema>;
 export const VMAnySchema = z.union([VMV20260121Schema, VMV20260522Schema]);
 export const VMSchema = VMV20260522Schema;
 export type VM = z.infer<typeof VMSchema>;
-export type VMForVersion<V extends ApiVersion> = V extends "2026-01-21"
-  ? VMV20260121
-  : VMV20260522;
+export type VMForVersion<V extends ApiVersion> = V extends "2026-01-21" ? VMV20260121 : VMV20260522;
 
 export function getVMSchemaForVersion(version: ApiVersion) {
   if (version === "2026-01-21") return VMV20260121Schema;
