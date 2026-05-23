@@ -2902,5 +2902,23 @@
     "Developer Tools",
     "AI"
   ]
+},
+{
+  "id": "genkit",
+  "name": "genkit-ai/genkit",
+  "description": "A CPU-safe Genkit HTTP demo that installs the real JavaScript Genkit packages and runs a deterministic local flow/tool without LLM provider credentials, model downloads, Firebase, or GCP.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/genkit",
+  "author": "Google / genkit-ai",
+  "icon": "genkit.png",
+  "defaultResource": {
+    "vCPU": 2,
+    "memory": 4096,
+    "diskSize": 20
+  },
+  "tags": [
+    "Developer Tools",
+    "AI Agents",
+    "Starter Kits"
+  ]
 }
 ]
