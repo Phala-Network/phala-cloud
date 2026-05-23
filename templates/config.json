@@ -1,5 +1,27 @@
 [
   {
+    "id": "autogen",
+    "name": "microsoft/autogen",
+    "description": "Microsoft's multi-agent conversation framework; Azure-integrated. This template runs a CPU-only HTTP smoke demo that installs AutoGen Core and AgentChat packages and executes a deterministic local two-agent interaction without external LLM credentials.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/autogen",
+    "author": "microsoft",
+    "icon": "autogen.svg",
+    "envs": [
+      {
+        "key": "AUTOGEN_VERSION",
+        "required": false,
+        "default": "0.7.5",
+        "description": "Version used for both autogen-core and autogen-agentchat at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Agent Frameworks", "Orchestration"]
+  },
+  {
     "id": "VibeVM",
     "name": "VibeVM",
     "description": "Vibe Code in a Tamper-Proof Isolated Sandbox Running in a Confidential VM on Phala Cloud. A place to develop your applications in peace with security, privacy, and verifiability baked in. When your applications are ready, deploy them to a production CVM on Phala Cloud.",
