@@ -2482,5 +2482,43 @@
     "Web Data & Search",
     "RAG"
   ]
+},
+{
+  "id": "llm-app",
+  "name": "pathwaycom/llm-app",
+  "description": "CPU-safe Pathway AI Pipelines verifier for the pathwaycom/llm-app RAG template collection. It imports the real Pathway package and serves deterministic local RAG demo endpoints without model downloads, provider credentials, external databases, or GPU access.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/llm-app",
+  "author": "pathwaycom",
+  "icon": "llm-app.png",
+  "envs": [
+    {
+      "key": "PATHWAY_PACKAGE_VERSION",
+      "required": false,
+      "description": "Pathway Python package version installed during the inline image build.",
+      "default": "0.30.1"
+    },
+    {
+      "key": "LLM_APP_DEMO_TITLE",
+      "required": false,
+      "description": "Optional label returned by the demo health and metadata endpoints.",
+      "default": "Pathway llm-app CPU demo"
+    },
+    {
+      "key": "LLM_APP_DEMO_TOP_K",
+      "required": false,
+      "description": "Number of bundled local context records returned by /demo.",
+      "default": "2"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": [
+    "RAG",
+    "Developer Tools",
+    "Data & Storage"
+  ]
 }
 ]
