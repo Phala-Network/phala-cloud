@@ -2552,5 +2552,43 @@
     "Developer Tools",
     "Data & Storage"
   ]
+},
+{
+  "id": "scrapegraph-ai",
+  "name": "ScrapeGraphAI/Scrapegraph-ai",
+  "description": "AI-powered web scraping pipeline and cloud-deployable Python library. This template runs a CPU-safe HTTP demo that installs and imports ScrapeGraphAI, converts bundled HTML locally, and avoids browser launches, model downloads, GPU use, and provider credentials by default.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/scrapegraph-ai",
+  "author": "ScrapeGraphAI",
+  "icon": "scrapegraph-ai.svg",
+  "envs": [
+    {
+      "key": "SCRAPEGRAPHAI_VERSION",
+      "required": false,
+      "default": "2.1.1",
+      "description": "ScrapeGraphAI Python package version installed by the inline Dockerfile build and reported by the runtime."
+    },
+    {
+      "key": "SCRAPEGRAPHAI_TELEMETRY_ENABLED",
+      "required": false,
+      "default": "false",
+      "description": "Sets the upstream ScrapeGraphAI telemetry opt-out variable. Keep false for the default smoke demo."
+    },
+    {
+      "key": "SCRAPEGRAPHAI_DEMO_TITLE",
+      "required": false,
+      "default": "Phala Cloud ScrapeGraphAI demo",
+      "description": "Default title inserted into the bundled HTML converted by the /demo endpoint."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 20
+  },
+  "tags": [
+    "RAG",
+    "Web Scraping",
+    "AI Pipelines"
+  ]
 }
 ]
