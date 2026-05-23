@@ -2870,5 +2870,37 @@
     "Developer Tools",
     "App Builder"
   ]
+},
+{
+  "id": "promptflow",
+  "name": "microsoft/promptflow",
+  "description": "CPU-safe Promptflow HTTP demo that installs the real Python package, verifies imports, and executes a deterministic local DAG flow without provider credentials, model downloads, GPU, or external databases.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/promptflow",
+  "author": "microsoft",
+  "icon": "promptflow.svg",
+  "envs": [
+    {
+      "key": "PROMPTFLOW_VERSION",
+      "required": false,
+      "description": "Promptflow Python package version installed at container startup.",
+      "default": "1.18.5"
+    },
+    {
+      "key": "PROMPTFLOW_DEMO_TOPIC",
+      "required": false,
+      "description": "Default topic used by the deterministic local /demo flow when no query parameter is supplied.",
+      "default": "Phala Cloud prompt orchestration"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": [
+    "Agent Frameworks & Orchestration",
+    "Developer Tools",
+    "AI"
+  ]
 }
 ]

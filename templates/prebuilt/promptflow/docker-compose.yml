@@ -1,0 +1,340 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.11-bookworm-slim
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8000"
+    environment:
+      APP_PORT: "8000"
+      PROMPTFLOW_VERSION: ${PROMPTFLOW_VERSION:-1.18.5}
+      PROMPTFLOW_DEMO_TOPIC: ${PROMPTFLOW_DEMO_TOPIC:-Phala Cloud prompt orchestration}
+      OTEL_SDK_DISABLED: "true"
+      PF_TRACING_SKIP_LOCAL_SETUP: "true"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PYTHONUNBUFFERED: "1"
+      UV_SYSTEM_PYTHON: "1"
+    configs:
+      - source: promptflow_demo_server
+        target: /opt/promptflow-demo/server.py
+      - source: promptflow_demo_dag
+        target: /opt/promptflow-demo/flow/flow.dag.yaml
+      - source: promptflow_demo_normalize
+        target: /opt/promptflow-demo/flow/normalize.py
+      - source: promptflow_demo_compose
+        target: /opt/promptflow-demo/flow/compose.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache "promptflow==$${PROMPTFLOW_VERSION}"
+        exec python /opt/promptflow-demo/server.py
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5).read()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+configs:
+  promptflow_demo_server:
+    content: |
+      import importlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path
+      from urllib.parse import parse_qs, urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "promptflow"
+      UPSTREAM = "https://github.com/microsoft/promptflow"
+      FLOW_SOURCE = Path("/opt/promptflow-demo/flow")
+      DEFAULT_TOPIC = os.environ.get("PROMPTFLOW_DEMO_TOPIC", "Phala Cloud prompt orchestration")
+      MAX_TOPIC_LENGTH = 160
+
+      FLOW_CACHE = None
+      FLOW_LOAD_ERROR = None
+
+
+      def package_metadata():
+          result = {
+              "distribution": PACKAGE_NAME,
+              "distribution_version": None,
+              "module_version": None,
+              "import_ok": False,
+              "checks": {},
+              "error": None,
+          }
+          try:
+              result["distribution_version"] = importlib.metadata.version(PACKAGE_NAME)
+              promptflow = importlib.import_module("promptflow")
+              core = importlib.import_module("promptflow.core")
+              result["module_version"] = getattr(promptflow, "__version__", None)
+              result["checks"] = {
+                  "promptflow_module": bool(promptflow),
+                  "promptflow_core_flow": hasattr(core, "Flow"),
+                  "promptflow_core_tool": hasattr(core, "tool"),
+              }
+              result["import_ok"] = all(result["checks"].values())
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      IMPORT_STATUS = package_metadata()
+
+
+      def clean_topic(raw):
+          normalized = " ".join(str(raw or "").split())[:MAX_TOPIC_LENGTH].strip()
+          return normalized or DEFAULT_TOPIC
+
+
+      def base_payload():
+          return {
+              "service": "promptflow-local-demo",
+              "upstream": UPSTREAM,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "promptflow": IMPORT_STATUS,
+          }
+
+
+      def load_demo_flow():
+          global FLOW_CACHE, FLOW_LOAD_ERROR
+          if FLOW_CACHE is not None:
+              return FLOW_CACHE
+          try:
+              from promptflow.core import Flow
+
+              FLOW_CACHE = Flow.load(FLOW_SOURCE)
+              FLOW_LOAD_ERROR = None
+              return FLOW_CACHE
+          except Exception as exc:
+              FLOW_LOAD_ERROR = f"{type(exc).__name__}: {exc}"
+              raise
+
+
+      def run_demo(topic):
+          if not IMPORT_STATUS["import_ok"]:
+              raise RuntimeError(IMPORT_STATUS["error"] or "promptflow import check failed")
+
+          flow = load_demo_flow()
+          outputs = flow(topic=topic)
+          return {
+              "input": {"topic": topic},
+              "flow": {
+                  "kind": "standard_dag",
+                  "source": str(FLOW_SOURCE / "flow.dag.yaml"),
+                  "nodes": [
+                      {"name": "normalize_topic", "type": "python"},
+                      {"name": "compose_response", "type": "python"},
+                  ],
+                  "credential_free": True,
+              },
+              "outputs": outputs,
+          }
+
+
+      def response_body(path, query):
+          if path in ("/", "/healthz"):
+              ok = IMPORT_STATUS["import_ok"]
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": ok,
+                      "status": "ready" if ok else "import_failed",
+                      "credentials_required": False,
+                      "remote_calls": False,
+                      "flow_source": str(FLOW_SOURCE / "flow.dag.yaml"),
+                  }
+              )
+              if FLOW_LOAD_ERROR:
+                  payload["last_flow_load_error"] = FLOW_LOAD_ERROR
+              return HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/demo":
+              topic = clean_topic(query.get("topic", [DEFAULT_TOPIC])[0])
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": True,
+                      "cpu_only": True,
+                      "credentials_required": False,
+                      "model_downloaded": False,
+                      "model_loaded": False,
+                      "remote_calls": False,
+                      "demo": None,
+                  }
+              )
+              try:
+                  payload["demo"] = run_demo(topic)
+              except Exception as exc:
+                  payload["ok"] = False
+                  payload["error"] = f"{type(exc).__name__}: {exc}"
+                  return HTTPStatus.INTERNAL_SERVER_ERROR, payload
+              return HTTPStatus.OK, payload
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": [],
+                  "demo": {
+                      "message": (
+                          "This Promptflow template does not host an LLM model. "
+                          "It exposes /demo to execute a deterministic local Promptflow DAG."
+                      ),
+                      "credentials_required": False,
+                      "remote_calls": False,
+                      "model_downloaded": False,
+                      "openai_compatible_shape": True,
+                  },
+              }
+
+          return HTTPStatus.NOT_FOUND, {
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "promptflow-demo"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      },
+                      sort_keys=True,
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              parsed = urlparse(self.path)
+              path = parsed.path.rstrip("/") or "/"
+              query = parse_qs(parsed.query)
+              status, payload = response_body(path, query)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8000"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "promptflow": IMPORT_STATUS,
+                      "flow_source": str(FLOW_SOURCE / "flow.dag.yaml"),
+                      "remote_calls": False,
+                  },
+                  sort_keys=True,
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+
+  promptflow_demo_dag:
+    content: |
+      $$schema: https://azuremlschemas.azureedge.net/promptflow/latest/Flow.schema.json
+      inputs:
+        topic:
+          type: string
+          default: Phala Cloud prompt orchestration
+      outputs:
+        normalized_topic:
+          type: string
+          reference: $${normalize_topic.output}
+        response:
+          type: string
+          reference: $${compose_response.output.response}
+        trace_id:
+          type: string
+          reference: $${compose_response.output.trace_id}
+        steps:
+          type: list
+          reference: $${compose_response.output.steps}
+        remote_calls:
+          type: bool
+          reference: $${compose_response.output.remote_calls}
+        credentials_required:
+          type: bool
+          reference: $${compose_response.output.credentials_required}
+        model_downloaded:
+          type: bool
+          reference: $${compose_response.output.model_downloaded}
+      nodes:
+        - name: normalize_topic
+          type: python
+          source:
+            type: code
+            path: normalize.py
+          inputs:
+            topic: $${inputs.topic}
+        - name: compose_response
+          type: python
+          source:
+            type: code
+            path: compose.py
+          inputs:
+            normalized_topic: $${normalize_topic.output}
+
+  promptflow_demo_normalize:
+    content: |
+      from promptflow.core import tool
+
+
+      MAX_TOPIC_LENGTH = 160
+
+
+      @tool
+      def normalize_topic(topic: str) -> str:
+          normalized = " ".join(str(topic or "").split())[:MAX_TOPIC_LENGTH].strip()
+          return normalized or "Promptflow local demo"
+
+  promptflow_demo_compose:
+    content: |
+      import hashlib
+
+      from promptflow.core import tool
+
+
+      @tool
+      def compose_response(normalized_topic: str) -> dict:
+          digest = hashlib.sha256(normalized_topic.encode("utf-8")).hexdigest()[:12]
+          return {
+              "response": (
+                  "Promptflow executed a deterministic local DAG flow for "
+                  f"{normalized_topic}."
+              ),
+              "trace_id": f"pf-demo-{digest}",
+              "steps": ["normalize_topic", "compose_response"],
+              "remote_calls": False,
+              "credentials_required": False,
+              "model_downloaded": False,
+          }
