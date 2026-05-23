@@ -1,0 +1,366 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        VANNA_PACKAGE_VERSION: ${VANNA_PACKAGE_VERSION:-2.0.2}
+      dockerfile_inline: |
+        # syntax=docker/dockerfile:1.9
+        FROM python:3.11-slim-bookworm
+
+        ARG VANNA_PACKAGE_VERSION=2.0.2
+
+        ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+            PIP_NO_CACHE_DIR=1 \
+            PYTHONDONTWRITEBYTECODE=1 \
+            PYTHONUNBUFFERED=1
+
+        RUN python -m pip install --upgrade pip \
+            && python -m pip install "vanna==$${VANNA_PACKAGE_VERSION}" \
+            && python - <<'PY'
+        import importlib
+        import importlib.metadata
+
+        importlib.import_module("vanna")
+        print("Installed vanna", importlib.metadata.version("vanna"))
+        PY
+
+        WORKDIR /app
+
+        RUN groupadd --system app \
+            && useradd --system --create-home --home-dir /app --gid app app \
+            && chown -R app:app /app
+
+        USER app
+
+        EXPOSE 8080
+    image: phala-vanna-demo:2.0.2
+    pull_policy: build
+    restart: unless-stopped
+    environment:
+      VANNA_DEMO_TITLE: ${VANNA_DEMO_TITLE:-Vanna CPU Text-to-SQL demo}
+    ports:
+      - "8080:8080"
+    configs:
+      - source: server_py
+        target: /app/server.py
+        mode: 0444
+    command:
+      - python
+      - /app/server.py
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import json, urllib.request; data = json.load(urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5)); assert data["ok"] is True
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+configs:
+  server_py:
+    content: |
+      import asyncio
+      import importlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import re
+      import sys
+      import time
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import parse_qs, urlparse
+
+      STARTED_AT = time.time()
+      UPSTREAM = "https://github.com/vanna-ai/vanna"
+      DEFAULT_QUESTION = "Which customer plans generated the most revenue?"
+
+      IMPORT_ERROR = None
+      PACKAGE = {}
+
+      try:
+          vanna = importlib.import_module("vanna")
+          from vanna.core.llm import LlmMessage, LlmRequest
+          from vanna.core.user import User
+          from vanna.integrations.mock import MockLlmService
+
+          metadata = importlib.metadata.metadata("vanna")
+          PACKAGE = {
+              "distribution": "vanna",
+              "version": importlib.metadata.version("vanna"),
+              "module": vanna.__name__,
+              "summary": metadata.get("Summary", ""),
+              "requires_python": metadata.get("Requires-Python", ""),
+              "license": metadata.get("License-Expression", metadata.get("License", "")),
+              "components": [
+                  User.__name__,
+                  LlmMessage.__name__,
+                  LlmRequest.__name__,
+                  MockLlmService.__name__,
+              ],
+          }
+      except Exception as exc:
+          IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+          LlmMessage = None
+          LlmRequest = None
+          User = None
+          MockLlmService = None
+
+      SCHEMA_DOCUMENTS = [
+          {
+              "id": "customers",
+              "table": "customers",
+              "columns": ["customer_id", "name", "plan", "created_at"],
+              "description": "Customer account records with subscription plan metadata.",
+          },
+          {
+              "id": "orders",
+              "table": "orders",
+              "columns": ["order_id", "customer_id", "order_date", "total_usd"],
+              "description": "Order facts linked to customers with revenue totals.",
+          },
+          {
+              "id": "support_tickets",
+              "table": "support_tickets",
+              "columns": ["ticket_id", "customer_id", "status", "priority", "created_at"],
+              "description": "Support ticket records for operational reporting.",
+          },
+      ]
+
+      QUESTION_SQL_EXAMPLES = [
+          {
+              "question": "How much revenue did each plan generate?",
+              "sql": (
+                  "SELECT c.plan, SUM(o.total_usd) AS revenue_usd "
+                  "FROM customers c JOIN orders o ON o.customer_id = c.customer_id "
+                  "GROUP BY c.plan ORDER BY revenue_usd DESC;"
+              ),
+          },
+          {
+              "question": "How many tickets are open by priority?",
+              "sql": (
+                  "SELECT priority, COUNT(*) AS ticket_count "
+                  "FROM support_tickets WHERE status = 'open' "
+                  "GROUP BY priority ORDER BY ticket_count DESC;"
+              ),
+          },
+          {
+              "question": "How many customers are on each plan?",
+              "sql": (
+                  "SELECT plan, COUNT(*) AS customer_count "
+                  "FROM customers GROUP BY plan ORDER BY customer_count DESC;"
+              ),
+          },
+      ]
+
+
+      def tokenize(text):
+          return set(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+      SCHEMA_TOKENS = {
+          document["id"]: tokenize(
+              " ".join(
+                  [
+                      document["table"],
+                      " ".join(document["columns"]),
+                      document["description"],
+                  ]
+              )
+          )
+          for document in SCHEMA_DOCUMENTS
+      }
+
+
+      def retrieve_schema(question):
+          question_tokens = tokenize(question)
+          scored = []
+          for document in SCHEMA_DOCUMENTS:
+              matches = sorted(question_tokens & SCHEMA_TOKENS[document["id"]])
+              score = len(matches)
+              if document["id"] == "orders" and question_tokens & {"revenue", "sales", "order", "orders"}:
+                  score += 2
+              if document["id"] == "support_tickets" and question_tokens & {"ticket", "tickets", "support", "priority"}:
+                  score += 2
+              if document["id"] == "customers" and question_tokens & {"customer", "customers", "plan", "plans"}:
+                  score += 2
+              scored.append((score, matches, document))
+
+          scored.sort(key=lambda item: (-item[0], item[2]["id"]))
+          return [
+              {
+                  "id": document["id"],
+                  "table": document["table"],
+                  "columns": document["columns"],
+                  "score": score,
+                  "matched_terms": matches,
+              }
+              for score, matches, document in scored
+          ]
+
+
+      def choose_sql(question):
+          tokens = tokenize(question)
+
+          if tokens & {"ticket", "tickets", "support", "priority"}:
+              return QUESTION_SQL_EXAMPLES[1]
+
+          if tokens & {"revenue", "sales", "order", "orders", "spend", "spent"}:
+              return QUESTION_SQL_EXAMPLES[0]
+
+          return QUESTION_SQL_EXAMPLES[2]
+
+
+      async def run_vanna_mock(question):
+          if IMPORT_ERROR:
+              raise RuntimeError(IMPORT_ERROR)
+
+          user = User(
+              id="demo-user",
+              username="demo",
+              group_memberships=["local-demo"],
+              metadata={"template": "vanna", "external_calls": False},
+          )
+          service = MockLlmService(
+              response_content=(
+                  "Vanna mock LLM service accepted a local Text-to-SQL request; "
+                  "the HTTP demo generated SQL deterministically."
+              )
+          )
+          request = LlmRequest(
+              messages=[
+                  LlmMessage(
+                      role="system",
+                      content="Return metadata only. Do not call providers or databases.",
+                  ),
+                  LlmMessage(role="user", content=question),
+              ],
+              user=user,
+              stream=False,
+              temperature=0.0,
+              max_tokens=64,
+              system_prompt="Local CPU-only Vanna package smoke test.",
+              metadata={"demo": True, "network": "disabled"},
+          )
+          response = await service.send_request(request)
+          return {
+              "content": response.content,
+              "finish_reason": response.finish_reason,
+              "usage": response.usage,
+              "mock_service_call_count": service.call_count,
+          }
+
+
+      def run_demo(question):
+          retrieved_schema = retrieve_schema(question)
+          selected = choose_sql(question)
+          vanna_mock_response = asyncio.run(run_vanna_mock(question))
+
+          return {
+              "question": question,
+              "retrieved_schema": retrieved_schema,
+              "selected_example": selected["question"],
+              "generated_sql": selected["sql"],
+              "vanna_runtime_smoke": vanna_mock_response,
+              "deterministic_answer": (
+                  "The bundled demo ranks local schema documents, chooses a canned "
+                  "Text-to-SQL pattern, and exercises Vanna's mock LLM request models "
+                  "without calling an LLM provider or database."
+              ),
+              "llm_provider": "none",
+              "database": "none",
+              "external_calls": False,
+              "credentials_used": False,
+              "model_downloaded": False,
+              "gpu_required": False,
+          }
+
+
+      def base_payload():
+          return {
+              "ok": IMPORT_ERROR is None,
+              "service": "vanna-text-to-sql-demo",
+              "title": os.environ.get("VANNA_DEMO_TITLE", "Vanna CPU Text-to-SQL demo"),
+              "upstream": UPSTREAM,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "package": PACKAGE,
+              "cpu_only": True,
+              "external_calls": False,
+              "credentials_used": False,
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "vanna-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              parsed = urlparse(self.path)
+
+              if parsed.path in ("/", "/healthz"):
+                  payload = base_payload()
+                  payload["status"] = "ready" if IMPORT_ERROR is None else "import_failed"
+                  if IMPORT_ERROR:
+                      payload["error"] = IMPORT_ERROR
+                  self.respond_json(200 if IMPORT_ERROR is None else 500, payload)
+                  return
+
+              if parsed.path == "/demo":
+                  question = parse_qs(parsed.query).get("q", [DEFAULT_QUESTION])[0]
+                  payload = base_payload()
+                  if IMPORT_ERROR:
+                      payload["error"] = IMPORT_ERROR
+                      self.respond_json(500, payload)
+                      return
+                  payload["demo"] = run_demo(question)
+                  self.respond_json(200, payload)
+                  return
+
+              if parsed.path == "/v1/models":
+                  payload = {
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "vanna-local-text-to-sql-demo",
+                              "object": "model",
+                              "created": 0,
+                              "owned_by": "vanna-ai/vanna",
+                              "metadata": {
+                                  "package": PACKAGE,
+                                  "llm_provider": "none",
+                                  "database": "none",
+                                  "external_calls": False,
+                                  "credentials_used": False,
+                              },
+                          }
+                      ],
+                  }
+                  self.respond_json(200, payload)
+                  return
+
+              self.respond_json(404, {"ok": False, "error": "not found"})
+
+
+      port = 8080
+      server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+      print(f"Vanna demo server listening on 0.0.0.0:{port}", flush=True)
+      server.serve_forever()
