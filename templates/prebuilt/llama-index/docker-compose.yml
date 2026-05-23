@@ -1,0 +1,281 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.11-slim-bookworm
+        ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+            PIP_NO_CACHE_DIR=1 \
+            PIP_ROOT_USER_ACTION=ignore \
+            PYTHONUNBUFFERED=1
+        RUN python -m pip install --no-cache-dir --upgrade pip \
+            && python -m pip install --no-cache-dir "llama-index==0.14.22"
+        WORKDIR /app
+        EXPOSE 8080
+        CMD ["python", "/app/server.py"]
+    image: llama-index-demo:latest
+    pull_policy: build
+    environment:
+      LLAMA_INDEX_DEMO_TOP_K: ${LLAMA_INDEX_DEMO_TOP_K:-2}
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "8080:8080"
+    configs:
+      - source: server_py
+        target: /app/server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+configs:
+  server_py:
+    content: |
+      import importlib.metadata
+      import json
+      import math
+      import os
+      import platform
+      import re
+      import sys
+      import time
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import parse_qs, urlparse
+
+      STARTED_AT = time.time()
+      IMPORT_ERROR = None
+      PACKAGE = {}
+
+      try:
+          import llama_index.core as llama_core
+          from llama_index.core import Document, Settings, VectorStoreIndex
+          from llama_index.core.embeddings import BaseEmbedding
+          from llama_index.core.llms import MockLLM
+
+          PACKAGE = {
+              "distribution": "llama-index",
+              "version": importlib.metadata.version("llama-index"),
+              "core_distribution": "llama-index-core",
+              "core_version": importlib.metadata.version("llama-index-core"),
+              "core_module": llama_core.__name__,
+              "document_class": Document.__name__,
+              "index_class": VectorStoreIndex.__name__,
+              "embedding_base_class": BaseEmbedding.__name__,
+              "llm_class": MockLLM.__name__,
+          }
+      except Exception as exc:
+          IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+          Document = None
+          Settings = None
+          VectorStoreIndex = None
+          BaseEmbedding = None
+          MockLLM = None
+
+      if BaseEmbedding is not None:
+          class KeywordEmbedding(BaseEmbedding):
+              vocab: tuple[str, ...] = (
+                  "phala",
+                  "confidential",
+                  "docker",
+                  "llamaindex",
+                  "rag",
+                  "retrieval",
+                  "index",
+                  "embedding",
+                  "hosted",
+                  "credential",
+                  "download",
+                  "gpu",
+                  "local",
+              )
+
+              def _embed(self, text: str) -> list[float]:
+                  normalized = text.lower()
+                  normalized = normalized.replace("llama-index", "llamaindex")
+                  normalized = normalized.replace("llama index", "llamaindex")
+                  tokens = re.findall(r"[a-z0-9]+", normalized)
+                  values = [
+                      float(sum(1 for token in tokens if token == term or token.startswith(term)))
+                      for term in self.vocab
+                  ]
+                  norm = math.sqrt(sum(value * value for value in values)) or 1.0
+                  return [value / norm for value in values]
+
+              def _get_text_embedding(self, text: str) -> list[float]:
+                  return self._embed(text)
+
+              def _get_query_embedding(self, query: str) -> list[float]:
+                  return self._embed(query)
+
+              async def _aget_query_embedding(self, query: str) -> list[float]:
+                  return self._get_query_embedding(query)
+      else:
+          KeywordEmbedding = None
+
+      DOCUMENTS = [
+          {
+              "id": "phala-cloud",
+              "text": (
+                  "Phala Cloud runs Docker Compose workloads in confidential VMs "
+                  "and exposes HTTP services through public endpoints."
+              ),
+          },
+          {
+              "id": "llama-index",
+              "text": (
+                  "LlamaIndex builds retrieval augmented generation apps with "
+                  "documents, indexes, retrievers, query engines, and integrations."
+              ),
+          },
+          {
+              "id": "cpu-safe",
+              "text": (
+                  "This demo uses local deterministic embeddings and no hosted LLM "
+                  "provider credentials, model downloads, or GPU devices."
+              ),
+          },
+      ]
+      DEFAULT_QUERY = "How does this template avoid hosted model calls?"
+
+      def base_payload():
+          return {
+              "service": "llama-index-local-rag-demo",
+              "upstream": "https://github.com/run-llama/llama_index",
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "package": PACKAGE,
+          }
+
+      def get_top_k(params):
+          raw = params.get("top_k", [os.environ.get("LLAMA_INDEX_DEMO_TOP_K", "2")])[0]
+          try:
+              value = int(raw)
+          except (TypeError, ValueError):
+              value = 2
+          return max(1, min(value, len(DOCUMENTS)))
+
+      def run_demo(query, top_k):
+          if IMPORT_ERROR:
+              raise RuntimeError(IMPORT_ERROR)
+
+          Settings.embed_model = KeywordEmbedding()
+          Settings.llm = MockLLM(max_tokens=64)
+
+          documents = [
+              Document(text=item["text"], metadata={"id": item["id"]})
+              for item in DOCUMENTS
+          ]
+          index = VectorStoreIndex.from_documents(documents)
+          hits = index.as_retriever(similarity_top_k=top_k).retrieve(query)
+          contexts = []
+          for hit in hits:
+              contexts.append({
+                  "id": hit.node.metadata.get("id"),
+                  "score": round(float(hit.score or 0.0), 6),
+                  "text": hit.node.get_content(),
+              })
+
+          top_context = contexts[0]["id"] if contexts else None
+          return {
+              "query": query,
+              "top_k": top_k,
+              "retrieved_contexts": contexts,
+              "answer": (
+                  "Deterministic local retrieval selected "
+                  f"{top_context!r} as the strongest context. No LLM was called."
+              ),
+              "llm_provider": "none",
+              "embed_model": "local KeywordEmbedding(BaseEmbedding)",
+              "network_calls": False,
+              "model_downloaded": False,
+              "hosted_llm_called": False,
+              "gpu_required": False,
+          }
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "llama-index-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              parsed = urlparse(self.path)
+              path = parsed.path
+              params = parse_qs(parsed.query)
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  payload.update({
+                      "ok": IMPORT_ERROR is None,
+                      "status": "ready" if IMPORT_ERROR is None else "import_failed",
+                      "checks": [
+                          "import llama_index.core",
+                          "from llama_index.core import Document, VectorStoreIndex, Settings",
+                          "from llama_index.core.embeddings import BaseEmbedding",
+                          "from llama_index.core.llms import MockLLM",
+                      ],
+                  })
+                  if IMPORT_ERROR:
+                      payload["error"] = IMPORT_ERROR
+                  self.respond_json(200 if IMPORT_ERROR is None else 500, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  if IMPORT_ERROR:
+                      payload.update({"ok": False, "error": IMPORT_ERROR})
+                      self.respond_json(500, payload)
+                      return
+
+                  query = params.get("query", [DEFAULT_QUERY])[0][:300] or DEFAULT_QUERY
+                  payload.update({
+                      "ok": True,
+                      "cpu_only": True,
+                      "demo": run_demo(query, get_top_k(params)),
+                  })
+                  self.respond_json(200, payload)
+                  return
+
+              if path == "/v1/models":
+                  payload = {
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "llama-index-local-rag-demo",
+                              "object": "model",
+                              "created": 0,
+                              "owned_by": "run-llama",
+                              "description": (
+                                  "CPU-safe local LlamaIndex retrieval demo. "
+                                  "No hosted LLM or downloaded model is loaded."
+                              ),
+                          }
+                      ],
+                  }
+                  if IMPORT_ERROR:
+                      payload["error"] = IMPORT_ERROR
+                  self.respond_json(200 if IMPORT_ERROR is None else 500, payload)
+                  return
+
+              self.respond_json(404, {"ok": False, "error": "not found"})
+
+      port = int(os.environ.get("PORT", "8080"))
+      server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+      print(f"llama-index demo server listening on 0.0.0.0:{port}", flush=True)
+      server.serve_forever()

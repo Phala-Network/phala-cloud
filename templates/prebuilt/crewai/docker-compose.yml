@@ -1,0 +1,220 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8000"
+    environment:
+      APP_PORT: ${APP_PORT:-8000}
+      CREWAI_PACKAGE_VERSION: ${CREWAI_PACKAGE_VERSION:-1.14.5}
+      CREWAI_DISABLE_TELEMETRY: ${CREWAI_DISABLE_TELEMETRY:-true}
+      CREWAI_DISABLE_VERSION_CHECK: ${CREWAI_DISABLE_VERSION_CHECK:-true}
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-true}
+      PYTHONUNBUFFERED: "1"
+      UV_SYSTEM_PYTHON: "1"
+    configs:
+      - source: crewai_demo_app
+        target: /opt/crewai-demo/main.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache "crewai==$${CREWAI_PACKAGE_VERSION}"
+        exec python /opt/crewai-demo/main.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8000'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+          reverse_proxy app:8000
+      }
+
+  crewai_demo_app:
+    content: |
+      import importlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "crewai"
+
+
+      def import_checks():
+          result = {
+              "package": PACKAGE_NAME,
+              "distribution_version": None,
+              "module_version": None,
+              "import_ok": False,
+              "checks": {},
+              "error": None,
+          }
+          try:
+              result["distribution_version"] = importlib.metadata.version(PACKAGE_NAME)
+              crewai = importlib.import_module(PACKAGE_NAME)
+              result["module_version"] = getattr(crewai, "__version__", None)
+              for symbol in ("Agent", "Crew", "Task", "Process", "Flow", "LLM"):
+                  result["checks"][symbol] = hasattr(crewai, symbol)
+              result["import_ok"] = (
+                  bool(result["distribution_version"])
+                  and bool(result["module_version"])
+                  and all(result["checks"].values())
+              )
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      IMPORT_STATUS = import_checks()
+
+
+      def response_body(path):
+          uptime_seconds = round(time.time() - STARTED_AT, 3)
+          if path == "/healthz":
+              status = "ok" if IMPORT_STATUS["import_ok"] else "unhealthy"
+              return HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE, {
+                  "status": status,
+                  "uptime_seconds": uptime_seconds,
+                  "crewai": IMPORT_STATUS,
+              }
+
+          if path == "/demo":
+              return HTTPStatus.OK, {
+                  "name": "CrewAI metadata demo",
+                  "description": (
+                      "This service imports the real CrewAI Python package and reports "
+                      "package metadata without running crews or calling external LLM APIs."
+                  ),
+                  "llm_provider_calls": False,
+                  "credentials_required": False,
+                  "building_blocks": ["Agent", "Task", "Crew", "Flow", "Process"],
+                  "example_flow": {
+                      "topic": "AI Agents",
+                      "steps": [
+                          "Define agents and tasks",
+                          "Group them into a crew or flow",
+                          "Kick off execution only after configuring an LLM provider",
+                      ],
+                  },
+                  "crewai": IMPORT_STATUS,
+              }
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "crewai/no-llm-demo",
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "crewAIInc",
+                          "description": (
+                              "Placeholder metadata endpoint. The default template "
+                              "does not host or call an LLM model."
+                          ),
+                      }
+                  ],
+              }
+
+          if path == "/":
+              return HTTPStatus.OK, {
+                  "service": "crewai-demo",
+                  "endpoints": ["/healthz", "/demo", "/v1/models"],
+                  "python": sys.version.split()[0],
+                  "platform": platform.platform(),
+                  "crewai_import_ok": IMPORT_STATUS["import_ok"],
+              }
+
+          return HTTPStatus.NOT_FOUND, {
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "crewai-demo"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+              status, payload = response_body(path)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8000"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "crewai": IMPORT_STATUS,
+                      "llm_provider_calls": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+
+networks:
+  internal:
+    driver: bridge

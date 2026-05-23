@@ -60,10 +60,10 @@ curl -fsS https://<your-app-domain>/demo
 Run locally from the repository root:
 
 ```bash
-docker compose -f sdks/templates/prebuilt/gpt4all/docker-compose.yml up -d
+docker compose -f templates/prebuilt/gpt4all/docker-compose.yml up -d
 curl -fsS http://localhost:8080/healthz
 curl -fsS http://localhost:8080/demo
-docker compose -f sdks/templates/prebuilt/gpt4all/docker-compose.yml down
+docker compose -f templates/prebuilt/gpt4all/docker-compose.yml down
 ```
 
 Expected `/demo` fields include:
@@ -81,9 +81,9 @@ Expected `/demo` fields include:
 Template validation commands:
 
 ```bash
-python sdks/templates/validate.py
-git -C sdks diff --check origin/main...HEAD
-docker compose -f sdks/templates/prebuilt/gpt4all/docker-compose.yml config >/dev/null
+python3 templates/validate.py
+git diff --check origin/main...HEAD
+docker compose -f templates/prebuilt/gpt4all/docker-compose.yml config >/dev/null
 ```
 
 ## Security Notes

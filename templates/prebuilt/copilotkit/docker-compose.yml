@@ -1,0 +1,277 @@
+services:
+  app:
+    image: node:22-slim
+    ports:
+      - "8080:8080"
+    environment:
+      NODE_ENV: production
+      COPILOTKIT_PACKAGE_VERSION: ${COPILOTKIT_PACKAGE_VERSION:-1.57.4}
+      COPILOTKIT_DEMO_LABEL: ${COPILOTKIT_DEMO_LABEL:-Phala CopilotKit smoke demo}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY:-}
+      SCARF_NO_ANALYTICS: "true"
+      DO_NOT_TRACK: "1"
+      NPM_CONFIG_AUDIT: "false"
+      NPM_CONFIG_FUND: "false"
+      NPM_CONFIG_UPDATE_NOTIFIER: "false"
+      NPM_CONFIG_CACHE: /tmp/.npm-cache
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        mkdir -p /tmp/copilotkit-demo
+        cp /package.json /tmp/copilotkit-demo/package.json
+        cp /server.mjs /tmp/copilotkit-demo/server.mjs
+        cd /tmp/copilotkit-demo
+        package_version="$${COPILOTKIT_PACKAGE_VERSION:-1.57.4}"
+        npm install --omit=dev --no-audit --no-fund \
+          "@copilotkit/runtime@$${package_version}" \
+          "@copilotkit/react-core@$${package_version}" \
+          "@copilotkit/react-ui@$${package_version}" \
+          "react@19.1.1" \
+          "react-dom@19.1.1" \
+          "zod@3.25.76"
+        exec node server.mjs
+    configs:
+      - source: package_json
+        target: /package.json
+      - source: server_mjs
+        target: /server.mjs
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch('http://127.0.0.1:8080/healthz').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 240s
+    restart: unless-stopped
+
+configs:
+  package_json:
+    content: |
+      {
+        "name": "copilotkit-phala-smoke",
+        "private": true,
+        "type": "module",
+        "description": "CPU-safe CopilotKit package import smoke demo for Phala Cloud"
+      }
+  server_mjs:
+    content: |
+      import http from "node:http";
+      import os from "node:os";
+      import process from "node:process";
+      import { createRequire } from "node:module";
+
+      const require = createRequire(import.meta.url);
+      const startedAt = Date.now();
+      const requestedVersion = process.env.COPILOTKIT_PACKAGE_VERSION || "1.57.4";
+
+      const packageNames = [
+        "@copilotkit/runtime",
+        "@copilotkit/react-core",
+        "@copilotkit/react-ui"
+      ];
+
+      const importChecks = [
+        {
+          packageName: "@copilotkit/runtime",
+          importPath: "@copilotkit/runtime",
+          expectedExports: ["CopilotRuntime", "OpenAIAdapter", "EmptyAdapter"]
+        },
+        {
+          packageName: "@copilotkit/runtime",
+          importPath: "@copilotkit/runtime/v2",
+          expectedExports: ["CopilotRuntime", "CopilotSseRuntime", "VERSION"]
+        },
+        {
+          packageName: "@copilotkit/react-core",
+          importPath: "@copilotkit/react-core",
+          expectedExports: ["CopilotKit", "CopilotContext", "useCopilotAction"]
+        },
+        {
+          packageName: "@copilotkit/react-core",
+          importPath: "@copilotkit/react-core/v2/headless",
+          expectedExports: ["CopilotKitCoreReact", "useAgent", "useFrontendTool"]
+        },
+        {
+          packageName: "@copilotkit/react-ui",
+          importPath: "@copilotkit/react-ui",
+          expectedExports: ["CopilotChat", "CopilotPopup", "CopilotSidebar"]
+        }
+      ];
+
+      function packageMetadata(name) {
+        try {
+          const metadata = require(name + "/package.json");
+          return {
+            ok: true,
+            name: metadata.name,
+            version: metadata.version,
+            license: metadata.license || null,
+            repository: metadata.repository || null
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            name,
+            error: error.name + ": " + error.message
+          };
+        }
+      }
+
+      async function checkImport(check) {
+        try {
+          const module = await import(check.importPath);
+          const exports = Object.keys(module).sort();
+          const missingExports = check.expectedExports.filter((name) => !exports.includes(name));
+          return {
+            ok: missingExports.length === 0,
+            package: check.packageName,
+            import: check.importPath,
+            expected_exports: check.expectedExports,
+            missing_exports: missingExports,
+            export_sample: exports.slice(0, 16)
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            package: check.packageName,
+            import: check.importPath,
+            expected_exports: check.expectedExports,
+            error: error.name + ": " + error.message
+          };
+        }
+      }
+
+      async function runSmokeChecks() {
+        const packages = packageNames.map(packageMetadata);
+        const imports = [];
+        for (const check of importChecks) {
+          imports.push(await checkImport(check));
+        }
+        const ok = packages.every((result) => result.ok) && imports.every((result) => result.ok);
+        return {
+          ok,
+          status: ok ? "ready" : "import_failed",
+          package: {
+            requested_version: requestedVersion,
+            installed: packages
+          },
+          imports
+        };
+      }
+
+      const smoke = await runSmokeChecks();
+
+      function optionalEnvStatus() {
+        return [
+          {
+            key: "OPENAI_API_KEY",
+            configured: Boolean(process.env.OPENAI_API_KEY),
+            used_by_default: false
+          },
+          {
+            key: "ANTHROPIC_API_KEY",
+            configured: Boolean(process.env.ANTHROPIC_API_KEY),
+            used_by_default: false
+          },
+          {
+            key: "GOOGLE_GENERATIVE_AI_API_KEY",
+            configured: Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY),
+            used_by_default: false
+          }
+        ];
+      }
+
+      function basePayload() {
+        return {
+          service: "copilotkit-phala-smoke",
+          label: process.env.COPILOTKIT_DEMO_LABEL || "Phala CopilotKit smoke demo",
+          template_id: "copilotkit",
+          upstream: "https://github.com/CopilotKit/CopilotKit",
+          docs: "https://docs.copilotkit.ai/",
+          node: process.version,
+          platform: os.platform(),
+          arch: os.arch(),
+          uptime_seconds: Math.round((Date.now() - startedAt) / 1000)
+        };
+      }
+
+      function respondJson(response, statusCode, payload) {
+        const body = JSON.stringify(payload, null, 2);
+        response.writeHead(statusCode, {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": Buffer.byteLength(body)
+        });
+        response.end(body);
+      }
+
+      const server = http.createServer((request, response) => {
+        const url = new URL(request.url, "http://127.0.0.1");
+
+        if (request.method !== "GET") {
+          respondJson(response, 405, { ok: false, error: "method not allowed" });
+          return;
+        }
+
+        if (url.pathname === "/" || url.pathname === "/healthz") {
+          respondJson(response, smoke.ok ? 200 : 500, {
+            ...basePayload(),
+            ok: smoke.ok,
+            status: smoke.status,
+            smoke_test: "Installed and imported CopilotKit runtime plus React package entrypoints without calling an LLM provider.",
+            package: smoke.package,
+            imports: smoke.imports
+          });
+          return;
+        }
+
+        if (url.pathname === "/demo") {
+          respondJson(response, smoke.ok ? 200 : 500, {
+            ...basePayload(),
+            ok: smoke.ok,
+            status: smoke.status,
+            capability: "Starter service for verifying CopilotKit package and runtime readiness on Phala Cloud.",
+            default_behavior: {
+              installs_real_copilotkit_packages: true,
+              imports_runtime_and_react_entrypoints: true,
+              serves_http: true,
+              downloads_models: false,
+              calls_external_llms: false,
+              requires_gpu: false
+            },
+            optional_envs: optionalEnvStatus(),
+            endpoints: {
+              health: "GET /healthz",
+              demo: "GET /demo",
+              model_stub: "GET /v1/models"
+            },
+            next_steps: [
+              "Replace this smoke server with a real React or Next.js app when building a production CopilotKit experience.",
+              "Wire CopilotKit runtime adapters and provider keys only after choosing an LLM backend and auth model."
+            ],
+            package: smoke.package,
+            imports: smoke.imports
+          });
+          return;
+        }
+
+        if (url.pathname === "/v1/models") {
+          respondJson(response, smoke.ok ? 200 : 500, {
+            object: "list",
+            data: [],
+            ok: smoke.ok,
+            demo: "No model provider is configured or called by the default CopilotKit smoke demo."
+          });
+          return;
+        }
+
+        respondJson(response, 404, { ok: false, error: "not found" });
+      });
+
+      server.listen(8080, "0.0.0.0", () => {
+        console.log("CopilotKit smoke demo listening on 0.0.0.0:8080");
+      });

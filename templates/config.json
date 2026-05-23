@@ -1,5 +1,27 @@
 [
   {
+    "id": "autogen",
+    "name": "microsoft/autogen",
+    "description": "Microsoft's multi-agent conversation framework; Azure-integrated. This template runs a CPU-only HTTP smoke demo that installs AutoGen Core and AgentChat packages and executes a deterministic local two-agent interaction without external LLM credentials.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/autogen",
+    "author": "microsoft",
+    "icon": "autogen.svg",
+    "envs": [
+      {
+        "key": "AUTOGEN_VERSION",
+        "required": false,
+        "default": "0.7.5",
+        "description": "Version used for both autogen-core and autogen-agentchat at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Agent Frameworks", "Orchestration"]
+  },
+  {
     "id": "VibeVM",
     "name": "VibeVM",
     "description": "Vibe Code in a Tamper-Proof Isolated Sandbox Running in a Confidential VM on Phala Cloud. A place to develop your applications in peace with security, privacy, and verifiability baked in. When your applications are ready, deploy them to a production CVM on Phala Cloud.",
@@ -72,6 +94,40 @@
       "diskSize": 40
     },
     "tags": ["AI Agents", "Automation"]
+  },
+  {
+    "id": "crewai",
+    "name": "crewAIInc/crewAI",
+    "description": "Role-playing multi-agent framework. This CPU-safe demo installs and imports the real CrewAI Python package, exposes package metadata through Caddy, and avoids external LLM calls or provider credentials by default.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/crewai",
+    "author": "crewAIInc",
+    "icon": "crewai.svg",
+    "envs": [
+      {
+        "key": "CREWAI_PACKAGE_VERSION",
+        "required": false,
+        "default": "1.14.5",
+        "description": "Pinned CrewAI Python package version installed by the demo service at container startup."
+      },
+      {
+        "key": "CREWAI_DISABLE_TELEMETRY",
+        "required": false,
+        "default": "true",
+        "description": "Disables CrewAI telemetry for the default metadata demo."
+      },
+      {
+        "key": "OTEL_SDK_DISABLED",
+        "required": false,
+        "default": "true",
+        "description": "Disables OpenTelemetry SDK activity in the default metadata demo."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["AI Agents", "Developer Tools"]
   },
   {
     "id": "ironclaw",
@@ -239,6 +295,38 @@
     "tags": ["AI Agents", "Automation"]
   },
   {
+    "id": "jarvis",
+    "name": "microsoft/JARVIS",
+    "description": "HuggingGPT/JARVIS connects LLMs with Hugging Face models as tools.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/jarvis",
+    "author": "Microsoft/JARVIS",
+    "icon": "jarvis.png",
+    "envs": [
+      {
+        "key": "JARVIS_REF",
+        "required": false,
+        "description": "Optional microsoft/JARVIS git ref for the source-verifier demo.",
+        "default": "7624cf388b47334ff8a0868e7d862dde18cfda86"
+      },
+      {
+        "key": "OPENAI_API_KEY",
+        "required": false,
+        "description": "Optional OpenAI API key, only needed if you extend this demo to run real JARVIS."
+      },
+      {
+        "key": "HUGGINGFACE_ACCESS_TOKEN",
+        "required": false,
+        "description": "Optional Hugging Face token, only needed if you extend this demo to run real JARVIS."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 40
+    },
+    "tags": ["AI Agents", "Automation", "Developer Tools"]
+  },
+  {
     "id": "fastchat",
     "name": "FastChat",
     "description": "A CPU-safe FastChat OpenAI-compatible API demo that starts the real FastChat controller and REST API server without a model worker by default.",
@@ -265,6 +353,28 @@
         "required": false,
         "description": "OpenLLM Python package version installed at container startup.",
         "default": "0.6.30"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 10
+    },
+    "tags": ["LLM Inference & Model Serving", "AI", "Developer Tools"]
+  },
+  {
+    "id": "bentoml",
+    "name": "bentoml/BentoML",
+    "description": "CPU-safe BentoML demo API that starts the real BentoML HTTP server without model downloads, GPU access, or credentials.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/bentoml",
+    "author": "BentoML Team / bentoml",
+    "icon": "bentoml.png",
+    "envs": [
+      {
+        "key": "BENTOML_VERSION",
+        "required": false,
+        "description": "BentoML Python package version installed at container startup.",
+        "default": "1.4.39"
       }
     ],
     "defaultResource": {
@@ -1026,6 +1136,34 @@
     "tags": ["AI Agents", "Web Apps", "TEE & Privacy"]
   },
   {
+    "id": "anything-llm",
+    "name": "Mintplex-Labs/anything-llm",
+    "description": "All-in-one private AI app, RAG, and agent workspace platform running on Phala Cloud with persistent local storage and post-deploy LLM provider configuration.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/anything-llm",
+    "author": "Mintplex-Labs",
+    "icon": "anything-llm.png",
+    "envs": [
+      {
+        "key": "AUTH_TOKEN",
+        "required": false,
+        "description": "Optional password gate for remotely hosted AnythingLLM. Generate a long random value and keep it stable across redeploys."
+      },
+      {
+        "key": "JWT_SECRET",
+        "required": false,
+        "description": "Optional JWT signing secret used when AUTH_TOKEN is set. Generate with openssl rand -hex 32."
+      },
+      {
+        "key": "DISABLE_TELEMETRY",
+        "required": false,
+        "default": "true",
+        "description": "Set to true to opt out of AnythingLLM telemetry."
+      }
+    ],
+    "defaultResource": { "vCPU": 2, "memory": 2048, "diskSize": 20 },
+    "tags": ["AI Agents", "Web Apps", "Data & Storage"]
+  },
+  {
     "id": "ollama",
     "name": "ollama/ollama",
     "description": "Lightweight Go framework to run LLMs locally or on cloud VMs; REST API compatible.",
@@ -1129,6 +1267,28 @@
       "diskSize": 20
     },
     "tags": ["MCP Servers", "Data & Storage"]
+  },
+  {
+    "id": "semantic-kernel",
+    "name": "Semantic Kernel",
+    "description": "Microsoft Semantic Kernel FastAPI demo with a deterministic local plugin invocation deployed on Phala Cloud behind Caddy.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/semantic-kernel",
+    "author": "microsoft",
+    "icon": "semantic-kernel.png",
+    "envs": [
+      {
+        "key": "DEMO_TOPIC",
+        "required": false,
+        "description": "Default topic used by the local deterministic Semantic Kernel demo endpoint.",
+        "default": "Phala Cloud"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 40
+    },
+    "tags": ["AI", "Agents", "Framework"]
   },
   {
     "id": "netdata-mcp-server",
@@ -1861,6 +2021,28 @@
     "tags": ["MCP Servers", "Data & Storage", "Infrastructure"]
   },
   {
+    "id": "langgraph",
+    "name": "langchain-ai/langgraph",
+    "description": "Stateful, graph-based agent orchestration; LangGraph Cloud for managed deployment. This template runs a CPU-safe Python StateGraph demo without external LLMs or credentials by default.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/langgraph",
+    "author": "langchain-ai",
+    "icon": "langgraph.svg",
+    "envs": [
+      {
+        "key": "LANGGRAPH_VERSION",
+        "required": false,
+        "description": "LangGraph Python package version installed at container startup.",
+        "default": "1.2.1"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 40
+    },
+    "tags": ["Agent", "Framework"]
+  },
+  {
     "id": "gpt4all",
     "name": "nomic-ai/gpt4all",
     "description": "CPU-safe GPT4All Python bindings demo with health and package-load endpoints, without downloading multi-GB model weights.",
@@ -1908,6 +2090,218 @@
       "memory": 2048,
       "diskSize": 10
     },
-    "tags": ["AI", "Developer Tools", "Data & Storage"]
-  }
+    "tags": [
+      "AI",
+      "Developer Tools",
+      "Data & Storage"
+    ]
+  },
+  {
+    "id": "langchain",
+    "name": "langchain-ai/langchain",
+    "description": "CPU-safe LangChain HTTP demo that imports the framework and runs a deterministic local chain without model downloads, API keys, or external provider calls.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/langchain",
+    "author": "langchain-ai",
+    "icon": "langchain.svg",
+    "envs": [
+      {
+        "key": "LANGCHAIN_VERSION",
+        "required": false,
+        "description": "LangChain Python package version installed at container startup.",
+        "default": "0.3.27"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 10
+    },
+    "tags": ["Agent Frameworks & Orchestration", "Developer Tools"]
+  },
+{
+  "id": "text-generation-webui",
+  "name": "oobabooga/textgen",
+  "description": "CPU-safe oobabooga/textgen source-check demo with health and OpenAI-compatible model-list endpoints, without downloading model weights or requiring GPU credentials.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/text-generation-webui",
+  "author": "oobabooga",
+  "icon": "text-generation-webui.png",
+  "envs": [
+    {
+      "key": "TEXTGEN_SOURCE_REF",
+      "required": false,
+      "description": "Upstream oobabooga/text-generation-webui branch, tag, or commit used for the source-check demo.",
+      "default": "main"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": [
+    "LLM Inference & Model Serving",
+    "AI",
+    "Developer Tools"
+  ]
+},
+{
+  "id": "lmdeploy",
+  "name": "InternLM/lmdeploy",
+  "description": "Toolkit for compressing, deploying, and serving LLMs; TurboMind engine",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/lmdeploy",
+  "author": "InternLM / OpenMMLab",
+  "icon": "lmdeploy.svg",
+  "envs": [
+    {
+      "key": "LMDEPLOY_REF",
+      "required": false,
+      "description": "LMDeploy Git tag, commit, or simple branch ref used for CPU-safe source checks.",
+      "default": "v0.13.0"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": [
+    "LLM Inference & Model Serving",
+    "Developer Tools",
+    "TEE & Privacy"
+  ]
+},
+{
+  "id": "swarm",
+  "name": "OpenAI Swarm",
+  "description": "CPU-safe OpenAI Swarm framework demo with health, deterministic agent/tool/handoff output, and an OpenAI-compatible model-list smoke endpoint. Runs without provider credentials, model downloads, or GPU requirements.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/swarm",
+  "author": "OpenAI",
+  "icon": "swarm.png",
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": [
+    "AI Agents",
+    "Developer Tools",
+    "API"
+  ]
+},
+{
+  "id": "copilotkit",
+  "name": "CopilotKit/CopilotKit",
+  "description": "React framework for in-app AI copilots and agents. This template runs a CPU-safe package import demo with health and demo endpoints, without external LLM calls by default.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/copilotkit",
+  "author": "CopilotKit",
+  "icon": "copilotkit.svg",
+  "envs": [
+    {
+      "key": "COPILOTKIT_PACKAGE_VERSION",
+      "required": false,
+      "description": "CopilotKit npm package version installed at container startup.",
+      "default": "1.57.4"
+    },
+    {
+      "key": "COPILOTKIT_DEMO_LABEL",
+      "required": false,
+      "description": "Label returned in JSON responses.",
+      "default": "Phala CopilotKit smoke demo"
+    },
+    {
+      "key": "OPENAI_API_KEY",
+      "required": false,
+      "description": "Optional OpenAI API key for users who extend this starter; unused by the default smoke demo."
+    },
+    {
+      "key": "ANTHROPIC_API_KEY",
+      "required": false,
+      "description": "Optional Anthropic API key for users who extend this starter; unused by the default smoke demo."
+    },
+    {
+      "key": "GOOGLE_GENERATIVE_AI_API_KEY",
+      "required": false,
+      "description": "Optional Google Generative AI API key for users who extend this starter; unused by the default smoke demo."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": [
+    "AI Agents",
+    "Developer Tools"
+  ]
+},
+{
+  "id": "beeai-framework",
+  "name": "i-am-bee/beeai-framework",
+  "description": "CPU-safe BeeAI Framework Python package-load demo with health, deterministic framework API smoke, and OpenAI-compatible model-list endpoints, without external LLM credentials, model downloads, or GPU.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/beeai-framework",
+  "author": "BeeAI project / i-am-bee / IBM",
+  "icon": "beeai-framework.svg",
+  "envs": [
+    {
+      "key": "BEEAI_FRAMEWORK_PYTHON_VERSION",
+      "required": false,
+      "description": "BeeAI Framework Python package version installed at container startup.",
+      "default": "0.1.80"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": [
+    "AI Agents",
+    "Developer Tools",
+    "Automation"
+  ]
+},
+{
+  "id": "ragflow",
+  "name": "infiniflow/ragflow",
+  "description": "Deep document understanding RAG engine; Docker-based, cloud-deployable",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/ragflow",
+  "author": "infiniflow",
+  "icon": "ragflow.svg",
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": [
+    "AI Agents",
+    "Data & Storage",
+    "Developer Tools"
+  ]
+},
+{
+  "id": "llama-index",
+  "name": "run-llama/llama_index",
+  "description": "CPU-safe LlamaIndex local RAG demo API with health, deterministic in-memory retrieval, and model-list endpoints, without hosted LLM calls or model downloads.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/llama-index",
+  "author": "LlamaIndex / run-llama",
+  "icon": "llama-index.svg",
+  "envs": [
+    {
+      "key": "LLAMA_INDEX_DEMO_TOP_K",
+      "required": false,
+      "description": "Number of local demo contexts returned by /demo. Values are clamped to the bundled demo document count.",
+      "default": "2"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": [
+    "RAG",
+    "Developer Tools",
+    "AI Agents"
+  ]
+}
 ]
