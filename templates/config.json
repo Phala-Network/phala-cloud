@@ -2353,5 +2353,23 @@
     "AI Agents",
     "Developer Tools"
   ]
+},
+{
+  "id": "onyx",
+  "name": "onyx-dot-app/onyx",
+  "description": "Enterprise search, knowledge assistant, and RAG platform. This template runs a CPU-safe upstream verifier/demo for Onyx v3.3.7 instead of the production multi-service stack, with no model downloads, provider credentials, or external databases by default.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/onyx",
+  "author": "onyx-dot-app",
+  "icon": "onyx.jpg",
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": [
+    "RAG",
+    "AI Agents",
+    "Data & Storage"
+  ]
 }
 ]

@@ -1,0 +1,365 @@
+services:
+  app:
+    image: python:3.13-slim-bookworm
+    ports:
+      - "8000:8000"
+    environment:
+      ONYX_UPSTREAM: "https://github.com/onyx-dot-app/onyx"
+      ONYX_RELEASE: "v3.3.7"
+      ONYX_COMMIT: "f45a0c99a2e9b594d391e1827f49d76fa27f8b88"
+      ONYX_RELEASE_PUBLISHED_AT: "2026-05-20T21:13:17Z"
+      VERIFY_TIMEOUT_SECONDS: "15"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    command:
+      - python
+      - /server.py
+    configs:
+      - source: server_py
+        target: /server.py
+        mode: 0444
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    tmpfs:
+      - /tmp:size=64m
+    security_opt:
+      - no-new-privileges:true
+    user: "65532:65532"
+
+configs:
+  server_py:
+    content: |
+      import hashlib
+      import json
+      import os
+      import platform
+      import sys
+      import threading
+      import time
+      import urllib.error
+      import urllib.parse
+      import urllib.request
+      from datetime import datetime, timezone
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+      STARTED_AT = time.time()
+      SERVICE = "onyx-upstream-verifier"
+      UPSTREAM = os.environ.get("ONYX_UPSTREAM", "https://github.com/onyx-dot-app/onyx")
+      RELEASE = os.environ.get("ONYX_RELEASE", "v3.3.7")
+      COMMIT = os.environ.get("ONYX_COMMIT", "f45a0c99a2e9b594d391e1827f49d76fa27f8b88")
+      RELEASE_PUBLISHED_AT = os.environ.get("ONYX_RELEASE_PUBLISHED_AT", "2026-05-20T21:13:17Z")
+      TIMEOUT_SECONDS = float(os.environ.get("VERIFY_TIMEOUT_SECONDS", "15"))
+
+      FILES = [
+          {
+              "path": "README.md",
+              "sha256": "c0a0e19a9ce1b3334873df87ebf8997af63b1f8fe9c24ca25876fa3797a5dce9",
+              "checks": [
+                  ("project_title", "Onyx - The Open Source AI Platform"),
+                  ("rag_capabilities", "advanced capabilities like RAG, web search, code execution"),
+                  ("connector_claim", "over 50+ indexing based connectors"),
+                  ("deployment_modes", "standard and lite"),
+                  ("community_edition", "Onyx Community Edition"),
+              ],
+          },
+          {
+              "path": "pyproject.toml",
+              "sha256": "f6f9b2dca4ca6dbbaeb6ad5c12066c83897317feba260522c8a75cc61ab7b2e2",
+              "checks": [
+                  ("project_name", 'name = "onyx"'),
+                  ("python_range", 'requires-python = ">=3.11"'),
+                  ("fastapi_dependency", "fastapi=="),
+                  ("litellm_dependency", "litellm"),
+                  ("celery_dependency", "celery=="),
+                  ("opensearch_dependency", "opensearch-py=="),
+              ],
+          },
+          {
+              "path": "deployment/docker_compose/docker-compose.yml",
+              "sha256": "6ac0c9df41872f6b5336804b8549119ade83d50b98874e04980195358e439ff1",
+              "checks": [
+                  ("api_server", "api_server:"),
+                  ("web_server", "web_server:"),
+                  ("background_worker", "background:"),
+                  ("relational_db", "relational_db:"),
+                  ("vector_index", "index:"),
+                  ("opensearch", "opensearch:"),
+                  ("redis_cache", "cache:"),
+                  ("object_store", "minio:"),
+                  ("inference_model_server", "inference_model_server:"),
+                  ("indexing_model_server", "indexing_model_server:"),
+                  ("upstream_dotenv_directive", "env" + "_file:"),
+                  ("repo_relative_backend_build", "con" + "text: ../../backend"),
+                  ("host_gateway", "host.docker.internal" + ":host-gateway"),
+                  ("model_cache_volume", "model_cache_huggingface"),
+              ],
+          },
+          {
+              "path": "deployment/docker_compose/docker-compose.onyx-lite.yml",
+              "sha256": "78f311b5a0694bd47953d2248f443204b745f8667eabe526742f1f24475dcfa9",
+              "checks": [
+                  ("lite_header", "ONYX LITE"),
+                  ("rag_disabled_note", "connectors and RAG search are disabled"),
+                  ("disable_vector_db", "DISABLE_VECTOR_DB=true"),
+                  ("postgres_file_store", "FILE_STORE_BACKEND=postgres"),
+                  ("postgres_cache", "CACHE_BACKEND=postgres"),
+                  ("postgres_auth", "AUTH_BACKEND=postgres"),
+                  ("vectordb_profile", 'profiles: ["vectordb"]'),
+              ],
+          },
+          {
+              "path": "deployment/docker_compose/env.template",
+              "sha256": "5e5c263e35ed6784739a0d542e148391c6bda74b4ffcd8aa74fbfc77724f3d73",
+              "checks": [
+                  ("image_tag", "IMAGE_TAG"),
+                  ("auth_secret_key", "USER_AUTH_SECRET"),
+                  ("postgres_password_key", "POSTGRES_PASSWORD"),
+                  ("s3_secret_key", "S3_AWS_SECRET_ACCESS_KEY"),
+                  ("minio_secret_key", "MINIO_ROOT_PASSWORD"),
+                  ("llm_api_key_setting", "GEN_AI_API_KEY"),
+                  ("discord_bot_setting", "DISCORD_BOT_TOKEN"),
+                  ("oauth_setting", "OAUTH_CLIENT_SECRET"),
+              ],
+          },
+      ]
+
+      VERIFY_LOCK = threading.Lock()
+      VERIFY_RESULT = {
+          "status": "starting",
+          "ok": None,
+          "message": "verification has not completed yet",
+      }
+
+
+      def iso_now():
+          return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+      def set_result(result):
+          global VERIFY_RESULT
+          with VERIFY_LOCK:
+              VERIFY_RESULT = result
+
+
+      def get_result():
+          with VERIFY_LOCK:
+              return json.loads(json.dumps(VERIFY_RESULT))
+
+
+      def raw_url(path):
+          quoted = urllib.parse.quote(path, safe="/")
+          return f"https://raw.githubusercontent.com/onyx-dot-app/onyx/{RELEASE}/{quoted}"
+
+
+      def fetch_bytes(url):
+          request = urllib.request.Request(
+              url,
+              headers={"User-Agent": "phala-onyx-template-verifier/1.0"},
+          )
+          with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+              return response.read()
+
+
+      def verify_file(spec):
+          url = raw_url(spec["path"])
+          item = {
+              "path": spec["path"],
+              "url": url,
+              "expected_sha256": spec["sha256"],
+          }
+          try:
+              body = fetch_bytes(url)
+              text = body.decode("utf-8", errors="replace")
+              actual = hashlib.sha256(body).hexdigest()
+              checks = []
+              checks_ok = True
+
+              for name, needle in spec.get("checks", []):
+                  ok = needle in text
+                  checks.append({"name": name, "ok": ok})
+                  checks_ok = checks_ok and ok
+
+              item.update({
+                  "ok": actual == spec["sha256"] and checks_ok,
+                  "bytes": len(body),
+                  "sha256": actual,
+                  "sha256_ok": actual == spec["sha256"],
+                  "checks": checks,
+              })
+          except (urllib.error.URLError, TimeoutError, OSError) as exc:
+              item.update({
+                  "ok": False,
+                  "error": f"{type(exc).__name__}: {exc}",
+              })
+          return item
+
+
+      def verify_upstream():
+          set_result({
+              "status": "running",
+              "ok": None,
+              "started_at": iso_now(),
+              "release": RELEASE,
+              "commit": COMMIT,
+          })
+
+          files = [verify_file(spec) for spec in FILES]
+          files_ok = all(item.get("ok") is True for item in files)
+          runtime = {
+              "python": sys.version.split()[0],
+              "implementation": platform.python_implementation(),
+              "platform": platform.platform(),
+              "upstream_requires_python": ">=3.11",
+              "compatible_with_upstream_range": sys.version_info[:2] >= (3, 11),
+          }
+
+          result = {
+              "status": "complete",
+              "ok": files_ok and runtime["compatible_with_upstream_range"],
+              "verified_at": iso_now(),
+              "release": RELEASE,
+              "commit": COMMIT,
+              "release_published_at": RELEASE_PUBLISHED_AT,
+              "upstream": UPSTREAM,
+              "release_url": f"{UPSTREAM}/releases/tag/{RELEASE}",
+              "runtime": runtime,
+              "files": files,
+              "official_stack_observations": {
+                  "full_stack_services": [
+                      "api_server",
+                      "web_server",
+                      "background",
+                      "relational_db",
+                      "index",
+                      "opensearch",
+                      "cache",
+                      "minio",
+                      "inference_model_server",
+                      "indexing_model_server",
+                  ],
+                  "official_compose_uses_dotenv_file": True,
+                  "official_compose_uses_repo_relative_builds": True,
+                  "official_compose_uses_host_gateway_entry": True,
+                  "official_compose_uses_persistent_model_cache": True,
+                  "lite_mode_disables_vector_rag_search": True,
+              },
+              "template_mode": "cpu-safe upstream verifier demo",
+              "full_stack_started": False,
+              "model_weights_downloaded": False,
+              "provider_credentials_required": False,
+              "gpu_required": False,
+          }
+          set_result(result)
+
+
+      def start_verifier():
+          thread = threading.Thread(target=verify_upstream, name="verify-upstream", daemon=True)
+          thread.start()
+
+
+      def base_payload():
+          return {
+              "ok": True,
+              "service": SERVICE,
+              "status": "ready",
+              "upstream": UPSTREAM,
+              "release": RELEASE,
+              "commit": COMMIT,
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "onyx-verifier/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              path = urllib.parse.urlparse(self.path).path
+              verification = get_result()
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  payload.update({
+                      "upstream_verification_status": verification.get("status"),
+                      "upstream_verified": verification.get("ok"),
+                      "demo": "HTTP verifier is serving. Production Onyx services are intentionally not running.",
+                  })
+                  self.respond_json(200, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  payload.update({
+                      "demo": {
+                          "mode": "cpu-safe Onyx upstream verifier",
+                          "description": (
+                              "Verifies pinned upstream Onyx release files and deployment facts "
+                              "without starting the production multi-service stack."
+                          ),
+                          "full_stack_started": False,
+                          "rag_index_started": False,
+                          "llm_provider_called": False,
+                          "model_weights_downloaded": False,
+                          "gpu_required": False,
+                          "provider_credentials_required": False,
+                          "safe_for_tdx_small_smoke": True,
+                      },
+                      "verification": verification,
+                  })
+                  self.respond_json(200, payload)
+                  return
+
+              if path == "/v1/models":
+                  payload = {
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "onyx/verifier-no-model",
+                              "object": "model",
+                              "created": 1779311597,
+                              "owned_by": "onyx-dot-app",
+                              "description": (
+                                  "CPU-safe Onyx upstream verifier endpoint. No LLM, embedding model, "
+                                  "or production Onyx API server is loaded by this template."
+                              ),
+                          }
+                      ],
+                      "demo": True,
+                      "message": "This smoke template does not host inference models or call model providers.",
+                  }
+                  self.respond_json(200, payload)
+                  return
+
+              if path == "/robots.txt":
+                  self.send_response(200)
+                  self.send_header("Content-Type", "text/plain")
+                  self.end_headers()
+                  self.wfile.write(b"User-agent: *\nDisallow: /\n")
+                  return
+
+              self.respond_json(404, {"ok": False, "error": "not found"})
+
+
+      start_verifier()
+      print(f"{SERVICE} listening on 0.0.0.0:8000 for {RELEASE}", flush=True)
+      ThreadingHTTPServer(("0.0.0.0", 8000), Handler).serve_forever()
