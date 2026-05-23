@@ -2727,5 +2727,64 @@
     "Developer Tools",
     "Web Apps"
   ]
+},
+{
+  "id": "activepieces",
+  "name": "activepieces/activepieces",
+  "description": "Open-source Zapier/Make alternative for AI agents, scheduled automations, webhooks, and low-code workflows. This template runs the official Activepieces image in a CPU-safe single-container Compose setup with PGLite, an in-memory queue, and named Docker volumes.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/activepieces",
+  "author": "activepieces",
+  "icon": "activepieces.svg",
+  "envs": [
+    {
+      "key": "AP_ENCRYPTION_KEY",
+      "required": true,
+      "description": "Stable 32-character hexadecimal key used to encrypt saved connections and credentials. Generate with openssl rand -hex 16."
+    },
+    {
+      "key": "AP_JWT_SECRET",
+      "required": true,
+      "description": "Stable random JWT signing secret. Generate with openssl rand -hex 32 and keep it unchanged across redeploys."
+    },
+    {
+      "key": "AP_FRONTEND_URL",
+      "required": false,
+      "description": "Optional public base URL used for webhooks, redirects, and OAuth callbacks. Defaults to the Phala app domain when available."
+    },
+    {
+      "key": "AP_TELEMETRY_ENABLED",
+      "required": false,
+      "default": "false",
+      "description": "Set to true to enable upstream Activepieces telemetry."
+    },
+    {
+      "key": "AP_CLOUD_AUTH_ENABLED",
+      "required": false,
+      "default": "false",
+      "description": "Set to true to enable upstream-managed OAuth application behavior for supported integrations."
+    },
+    {
+      "key": "AP_WORKER_CONCURRENCY",
+      "required": false,
+      "default": "2",
+      "description": "Number of concurrent jobs handled by the built-in worker. Keep low for tdx.small smoke deployments."
+    },
+    {
+      "key": "AP_DEFAULT_CONCURRENT_JOBS_LIMIT",
+      "required": false,
+      "default": "2",
+      "description": "Default per-project concurrent run limit for the CPU-safe single-container deployment."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 2,
+    "memory": 2048,
+    "diskSize": 20
+  },
+  "tags": [
+    "Automation",
+    "Web Apps",
+    "AI"
+  ]
 }
 ]
