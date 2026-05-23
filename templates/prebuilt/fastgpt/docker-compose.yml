@@ -1,0 +1,362 @@
+services:
+  app:
+    image: python:3.13-slim-bookworm
+    ports:
+      - "8000:8000"
+    environment:
+      FASTGPT_UPSTREAM: "https://github.com/labring/FastGPT"
+      FASTGPT_RELEASE: "v4.14.22"
+      FASTGPT_COMMIT: "71354ffadaa8d255a2d55af3abaad798311f35a2"
+      FASTGPT_RELEASE_PUBLISHED_AT: "2026-05-22T14:38:53Z"
+      VERIFY_TIMEOUT_SECONDS: "15"
+      PYTHONUNBUFFERED: "1"
+    command:
+      - python
+      - /server.py
+    configs:
+      - source: server_py
+        target: /server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+configs:
+  server_py:
+    content: |
+      import hashlib
+      import json
+      import os
+      import platform
+      import sys
+      import threading
+      import time
+      import urllib.error
+      import urllib.parse
+      import urllib.request
+      from datetime import datetime, timezone
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+      STARTED_AT = time.time()
+      SERVICE = "fastgpt-source-runtime-verifier"
+      UPSTREAM = os.environ.get("FASTGPT_UPSTREAM", "https://github.com/labring/FastGPT")
+      RELEASE = os.environ.get("FASTGPT_RELEASE", "v4.14.22")
+      COMMIT = os.environ.get("FASTGPT_COMMIT", "71354ffadaa8d255a2d55af3abaad798311f35a2")
+      RELEASE_PUBLISHED_AT = os.environ.get("FASTGPT_RELEASE_PUBLISHED_AT", "2026-05-22T14:38:53Z")
+      TIMEOUT_SECONDS = float(os.environ.get("VERIFY_TIMEOUT_SECONDS", "15"))
+
+      FILES = [
+          {
+              "path": "README_en.md",
+              "sha256": "010ef3ad7b7ee9af9cbc829ed6fda3800453086906d16e1eaf37058c6f736775",
+              "checks": [
+                  ("platform_description", "AI Agent building platform"),
+                  ("data_processing", "data processing and model invocation"),
+                  ("workflow_visualization", "Flow visualization"),
+                  ("knowledge_base", "Knowledge Base"),
+                  ("openapi", "OpenAPI Interface"),
+                  ("docker_quick_start", "quickly start FastGPT using Docker"),
+              ],
+          },
+          {
+              "path": "package.json",
+              "sha256": "e2f38c8de577edbdbdbb1a1396da2f440975ab5fb124b408c348366a934100e6",
+              "checks": [
+                  ("workspace_name", '"name": "fastgpt"'),
+                  ("root_version", '"version": "4.0"'),
+                  ("node_engine", '"node": ">=20"'),
+                  ("pnpm_version", '"packageManager": "pnpm@10.33.2"'),
+                  ("turbo_dev_script", "turbo run dev:pro"),
+              ],
+          },
+          {
+              "path": "projects/app/package.json",
+              "sha256": "f989f0091e37d0d063b993f257c1bcd09f5b8a32c4063396a3f8a1c92a0fe344",
+              "checks": [
+                  ("app_package", '"name": "@fastgpt/app"'),
+                  ("app_version", '"version": "4.14.20"'),
+                  ("next_dependency", '"next": "catalog:"'),
+                  ("mongodb_dependency", '"mongoose": "catalog:"'),
+                  ("object_storage_dependency", '"minio": "catalog:"'),
+                  ("mcp_dependency", '"@modelcontextprotocol/sdk": "catalog:"'),
+              ],
+          },
+          {
+              "path": "deploy/docker/global/docker-compose.pg.yml",
+              "sha256": "bdc22538093301bc2443ad24914ac483f13964838f077838893979a8deff2e21",
+              "checks": [
+                  ("fastgpt_app_service", "fastgpt-app:"),
+                  ("official_fastgpt_image", "image: ghcr.io/labring/fastgpt:"),
+                  ("mongo_service", "fastgpt-mongo:"),
+                  ("pgvector_service", "fastgpt-vector:"),
+                  ("redis_service", "fastgpt-redis:"),
+                  ("minio_service", "fastgpt-minio:"),
+                  ("aiproxy_service", "fastgpt-aiproxy:"),
+                  ("opensandbox_service", "opensandbox-server:"),
+                  ("docker_socket_mount", "/var/run/docker.sock:/var/run/docker.sock"),
+                  ("config_bind_mount", "./config.json:/app/data/config.json"),
+                  ("root_key_env", "ROOT_KEY:"),
+                  ("aiproxy_token_env", "AIPROXY_API_TOKEN:"),
+              ],
+          },
+          {
+              "path": "LICENSE",
+              "sha256": "84569a7a2a79f9f97093019ae12d914b975db773ed17443fb726a0b6f585bc24",
+              "checks": [
+                  ("license_title", "FastGPT Open Source License"),
+                  ("apache_2", "Apache License 2.0"),
+                  ("additional_conditions", "additional conditions"),
+              ],
+          },
+          {
+              "path": ".github/imgs/logo.svg",
+              "sha256": "84883c62fa9fb19595f13f81d2f41910f1440e814f0904eaf0ec242b5ab32f38",
+              "checks": [
+                  ("svg_tag", "<svg"),
+                  ("gradient", "linearGradient"),
+                  ("brand_blue", "#326DFF"),
+              ],
+          },
+      ]
+
+      VERIFY_LOCK = threading.Lock()
+      VERIFY_RESULT = {
+          "status": "starting",
+          "ok": None,
+          "message": "verification has not completed yet",
+      }
+
+
+      def iso_now():
+          return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+      def set_result(result):
+          global VERIFY_RESULT
+          with VERIFY_LOCK:
+              VERIFY_RESULT = result
+
+
+      def get_result():
+          with VERIFY_LOCK:
+              return json.loads(json.dumps(VERIFY_RESULT))
+
+
+      def raw_url(path):
+          quoted = urllib.parse.quote(path, safe="/")
+          return f"https://raw.githubusercontent.com/labring/FastGPT/{RELEASE}/{quoted}"
+
+
+      def fetch_bytes(url):
+          request = urllib.request.Request(
+              url,
+              headers={"User-Agent": "phala-fastgpt-template-verifier/1.0"},
+          )
+          with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+              return response.read()
+
+
+      def verify_file(spec):
+          url = raw_url(spec["path"])
+          item = {
+              "path": spec["path"],
+              "url": url,
+              "expected_sha256": spec["sha256"],
+          }
+          try:
+              body = fetch_bytes(url)
+              text = body.decode("utf-8", errors="replace")
+              actual = hashlib.sha256(body).hexdigest()
+              checks = []
+              checks_ok = True
+              for name, needle in spec.get("checks", []):
+                  ok = needle in text
+                  checks.append({"name": name, "ok": ok})
+                  checks_ok = checks_ok and ok
+
+              item.update({
+                  "ok": actual == spec["sha256"] and checks_ok,
+                  "bytes": len(body),
+                  "sha256": actual,
+                  "sha256_ok": actual == spec["sha256"],
+                  "checks": checks,
+              })
+          except (urllib.error.URLError, TimeoutError, OSError) as exc:
+              item.update({
+                  "ok": False,
+                  "error": f"{type(exc).__name__}: {exc}",
+              })
+          return item
+
+
+      def verify_upstream():
+          set_result({
+              "status": "running",
+              "ok": None,
+              "started_at": iso_now(),
+              "release": RELEASE,
+              "commit": COMMIT,
+          })
+
+          files = [verify_file(spec) for spec in FILES]
+          files_ok = all(item.get("ok") is True for item in files)
+          runtime = {
+              "python": sys.version.split()[0],
+              "implementation": platform.python_implementation(),
+              "platform": platform.platform(),
+              "requires_python": ">=3.13,<3.14 for this verifier image",
+              "node_required_by_upstream": ">=20",
+              "pnpm_required_by_upstream": "10.x",
+          }
+
+          result = {
+              "status": "complete",
+              "ok": files_ok,
+              "verified_at": iso_now(),
+              "release": RELEASE,
+              "commit": COMMIT,
+              "release_published_at": RELEASE_PUBLISHED_AT,
+              "upstream": UPSTREAM,
+              "release_url": f"{UPSTREAM}/releases/tag/{RELEASE}",
+              "runtime": runtime,
+              "files": files,
+              "production_fastgpt_stack": {
+                  "app_port": 3000,
+                  "services": [
+                      "FastGPT app",
+                      "MongoDB",
+                      "Redis",
+                      "PostgreSQL with pgvector",
+                      "MinIO",
+                      "FastGPT plugin service",
+                      "FastGPT code sandbox",
+                      "OpenSandbox",
+                      "FastGPT volume manager",
+                      "AI Proxy",
+                      "AI Proxy PostgreSQL",
+                  ],
+                  "requires_real_credentials": True,
+                  "uses_host_docker_socket_upstream": True,
+                  "uses_host_config_bind_mount_upstream": True,
+              },
+              "template_mode": "cpu-safe source and deployment verifier demo",
+              "full_stack_started": False,
+              "model_weights_downloaded": False,
+              "provider_credentials_required": False,
+              "gpu_required": False,
+          }
+          set_result(result)
+
+
+      def start_verifier():
+          thread = threading.Thread(target=verify_upstream, daemon=True)
+          thread.start()
+
+
+      def json_response(handler, status, payload):
+          body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+          handler.send_response(status)
+          handler.send_header("Content-Type", "application/json; charset=utf-8")
+          handler.send_header("Content-Length", str(len(body)))
+          handler.end_headers()
+          handler.wfile.write(body)
+
+
+      def readiness_payload():
+          result = get_result()
+          return {
+              "service": SERVICE,
+              "status": "ok",
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "template_mode": "cpu-safe FastGPT verifier demo",
+              "full_stack_started": False,
+              "verification": {
+                  "status": result.get("status"),
+                  "ok": result.get("ok"),
+                  "release": result.get("release", RELEASE),
+              },
+          }
+
+
+      def demo_payload():
+          return {
+              "demo": {
+                  "mode": "cpu-safe FastGPT source and deployment verifier",
+                  "safe_for_tdx_small_smoke": True,
+                  "full_stack_started": False,
+                  "model_weights_downloaded": False,
+                  "gpu_required": False,
+                  "provider_credentials_required": False,
+                  "network_fetches": "public pinned files from GitHub only",
+                  "why_not_full_stack": (
+                      "The upstream Docker deployment includes several stateful services, "
+                      "fixed example credentials, a local config bind mount, and Docker socket "
+                      "mounts for sandbox components. This template verifies the pinned release "
+                      "without starting that production stack."
+                  ),
+              },
+              "upstream": {
+                  "repository": UPSTREAM,
+                  "release": RELEASE,
+                  "commit": COMMIT,
+                  "release_published_at": RELEASE_PUBLISHED_AT,
+              },
+              "verification": get_result(),
+              "endpoints": {
+                  "healthz": "/healthz",
+                  "demo": "/demo",
+                  "models": "/v1/models",
+              },
+          }
+
+
+      def models_payload():
+          return {
+              "object": "list",
+              "data": [],
+              "template": {
+                  "id": "fastgpt",
+                  "mode": "verifier-demo",
+                  "reason": "No model provider or inference server is configured in the smoke-safe template.",
+              },
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "FastGPTVerifier/1.0"
+
+          def log_message(self, fmt, *args):
+              sys.stdout.write("%s - - [%s] %s\n" % (
+                  self.client_address[0],
+                  self.log_date_time_string(),
+                  fmt % args,
+              ))
+              sys.stdout.flush()
+
+          def do_GET(self):
+              parsed = urllib.parse.urlparse(self.path)
+              if parsed.path in ("", "/", "/healthz"):
+                  json_response(self, 200, readiness_payload())
+              elif parsed.path == "/demo":
+                  json_response(self, 200, demo_payload())
+              elif parsed.path == "/v1/models":
+                  json_response(self, 200, models_payload())
+              else:
+                  json_response(self, 404, {
+                      "error": "not_found",
+                      "available": ["/healthz", "/demo", "/v1/models"],
+                  })
+
+
+      if __name__ == "__main__":
+          start_verifier()
+          server = ThreadingHTTPServer(("0.0.0.0", 8000), Handler)
+          print(f"{SERVICE} listening on 0.0.0.0:8000 for {UPSTREAM} {RELEASE}", flush=True)
+          server.serve_forever()

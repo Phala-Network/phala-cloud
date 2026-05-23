@@ -2335,5 +2335,23 @@
     "Developer Tools",
     "AI"
   ]
+},
+{
+  "id": "fastgpt",
+  "name": "labring/FastGPT",
+  "description": "Knowledge-base platform with visual workflow builder; cloud-hosted option",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/fastgpt",
+  "author": "labring",
+  "icon": "fastgpt.svg",
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": [
+    "RAG",
+    "AI Agents",
+    "Developer Tools"
+  ]
 }
 ]
