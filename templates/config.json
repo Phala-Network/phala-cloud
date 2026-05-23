@@ -2812,5 +2812,37 @@
     "Automation",
     "Developer Tools"
   ]
+},
+{
+  "id": "supabase",
+  "name": "supabase/supabase",
+  "description": "CPU-safe Supabase-style Postgres and pgvector demo with PostgREST endpoints for seeded vector similarity search. It demonstrates the AI-relevant data layer without the full multi-service Supabase stack.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/supabase",
+  "author": "supabase",
+  "envs": [
+    {
+      "key": "POSTGRES_PASSWORD",
+      "required": false,
+      "default": "change-this-demo-password",
+      "description": "Demo Postgres password used by Postgres and PostgREST. Replace with a long random value before retaining data."
+    },
+    {
+      "key": "POSTGRES_DB",
+      "required": false,
+      "default": "supabase_demo",
+      "description": "Database initialized with pgvector, seeded demo documents, and the match_documents vector RPC."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "icon": "supabase.png",
+  "tags": [
+    "Data & Storage",
+    "Vector Database",
+    "AI Apps"
+  ]
 }
 ]
