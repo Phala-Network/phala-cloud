@@ -2065,6 +2065,38 @@
     "tags": ["LLM Inference & Model Serving", "AI", "Developer Tools"]
   },
   {
+    "id": "graphrag",
+    "name": "microsoft/graphrag",
+    "description": "CPU-safe GraphRAG package/runtime demo that imports the real microsoft/graphrag Python package and serves deterministic local graph retrieval JSON endpoints without provider credentials.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/graphrag",
+    "author": "microsoft/graphrag",
+    "icon": "graphrag.png",
+    "envs": [
+      {
+        "key": "GRAPHRAG_PACKAGE_VERSION",
+        "required": false,
+        "description": "GraphRAG Python package version used by the inline image build.",
+        "default": "3.0.9"
+      },
+      {
+        "key": "GRAPHRAG_DEMO_TITLE",
+        "required": false,
+        "description": "Optional label returned by the demo health and metadata endpoints.",
+        "default": "GraphRAG CPU demo"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 10
+    },
+    "tags": [
+      "AI",
+      "Developer Tools",
+      "Data & Storage"
+    ]
+  },
+  {
     "id": "langchain",
     "name": "langchain-ai/langchain",
     "description": "CPU-safe LangChain HTTP demo that imports the framework and runs a deterministic local chain without model downloads, API keys, or external provider calls.",
