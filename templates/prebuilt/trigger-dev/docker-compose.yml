@@ -1,0 +1,302 @@
+services:
+  app:
+    image: node:22-bookworm-slim
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      TRIGGER_DEV_SDK_VERSION: ${TRIGGER_DEV_SDK_VERSION:-4.4.6}
+      NPM_CONFIG_AUDIT: "false"
+      NPM_CONFIG_FUND: "false"
+      NPM_CONFIG_UPDATE_NOTIFIER: "false"
+    working_dir: /opt/trigger-dev-demo
+    configs:
+      - source: trigger_dev_demo_server
+        target: /opt/trigger-dev-demo/server.mjs
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        npm install --omit=dev --no-audit --no-fund --no-package-lock "@trigger.dev/sdk@$${TRIGGER_DEV_SDK_VERSION}"
+        exec node /opt/trigger-dev-demo/server.mjs
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:' + (process.env.PORT || '8080') + '/healthz').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+
+configs:
+  trigger_dev_demo_server:
+    content: |
+      import http from "node:http";
+      import os from "node:os";
+      import process from "node:process";
+      import { createRequire } from "node:module";
+
+      const require = createRequire(import.meta.url);
+      const startedAt = Date.now();
+      const serviceName = "trigger-dev-demo";
+      const upstreamRepo = "https://github.com/triggerdotdev/trigger.dev";
+      const endpointList = ["/healthz", "/demo", "/v1/models"];
+
+      let sdkModule = null;
+      let demoQueue = null;
+      let demoTask = null;
+      let sdkStatus = {
+        package: "@trigger.dev/sdk",
+        version: null,
+        import_ok: false,
+        expected_exports: {},
+        export_count: 0,
+        sample_exports: [],
+        error: null,
+      };
+
+      function errorMessage(error) {
+        if (!error) {
+          return "unknown error";
+        }
+        const name = error.name || "Error";
+        const message = error.message || String(error);
+        return name + ": " + message;
+      }
+
+      function pickExports(module) {
+        const names = Object.keys(module).sort();
+        return names.filter((name) => [
+          "batch",
+          "configure",
+          "logger",
+          "queue",
+          "runs",
+          "schedules",
+          "task",
+          "tasks",
+          "wait",
+        ].includes(name));
+      }
+
+      try {
+        const packageJson = require("@trigger.dev/sdk/package.json");
+        sdkModule = await import("@trigger.dev/sdk");
+        const expectedExports = {};
+        for (const name of ["task", "queue", "runs", "schedules", "tasks", "logger"]) {
+          expectedExports[name] = Object.prototype.hasOwnProperty.call(sdkModule, name);
+        }
+
+        demoQueue = sdkModule.queue({
+          name: "phala-smoke-queue",
+          concurrencyLimit: 1,
+        });
+
+        demoTask = sdkModule.task({
+          id: "phala-cloud-smoke-job",
+          queue: demoQueue,
+          retry: {
+            maxAttempts: 1,
+          },
+          run: async (payload) => ({
+            accepted: true,
+            payload,
+          }),
+        });
+
+        sdkStatus = {
+          package: "@trigger.dev/sdk",
+          version: packageJson.version,
+          import_ok: true,
+          expected_exports: expectedExports,
+          export_count: Object.keys(sdkModule).length,
+          sample_exports: pickExports(sdkModule),
+          error: null,
+        };
+      } catch (error) {
+        sdkStatus = {
+          package: "@trigger.dev/sdk",
+          version: null,
+          import_ok: false,
+          expected_exports: {},
+          export_count: 0,
+          sample_exports: [],
+          error: errorMessage(error),
+        };
+      }
+
+      function runtimeEvidence() {
+        return {
+          node: process.version,
+          platform: process.platform,
+          arch: process.arch,
+          hostname: os.hostname(),
+          uptime_seconds: Math.round((Date.now() - startedAt) / 100) / 10,
+        };
+      }
+
+      function healthPayload() {
+        return {
+          status: sdkStatus.import_ok ? "ok" : "unhealthy",
+          ok: sdkStatus.import_ok,
+          service: serviceName,
+          upstream: upstreamRepo,
+          credentials_required: false,
+          remote_calls: false,
+          runtime: runtimeEvidence(),
+          trigger_dev_sdk: sdkStatus,
+        };
+      }
+
+      function demoPayload() {
+        const queue = demoQueue
+          ? {
+              name: demoQueue.name,
+              concurrency_limit: demoQueue.concurrencyLimit,
+            }
+          : {
+              name: "phala-smoke-queue",
+              concurrency_limit: 1,
+            };
+
+        const taskId = demoTask && demoTask.id ? demoTask.id : "phala-cloud-smoke-job";
+
+        return {
+          ok: sdkStatus.import_ok,
+          service: serviceName,
+          demo: "deterministic Trigger.dev SDK background-job workflow",
+          credentials_required: false,
+          remote_calls: false,
+          cpu_only: true,
+          model_downloaded: false,
+          model_loaded: false,
+          trigger_dev_sdk: sdkStatus,
+          workflow: {
+            id: "workflow-demo-001",
+            task_id: taskId,
+            queue,
+            trigger_mode: "local_metadata_only",
+            input: {
+              account_id: "demo-account",
+              objective: "prepare a queued AI agent workflow summary",
+            },
+            steps: [
+              {
+                order: 1,
+                name: "accept",
+                result: "request accepted for background processing",
+              },
+              {
+                order: 2,
+                name: "plan",
+                result: "agent workflow split into fetch, reason, and respond stages",
+              },
+              {
+                order: 3,
+                name: "complete",
+                result: "deterministic smoke response generated without external services",
+              },
+            ],
+            result: {
+              status: "completed",
+              run_id: "run_demo_0001",
+              checksum: "trigger-dev-phala-smoke-0001",
+            },
+          },
+        };
+      }
+
+      function modelsPayload() {
+        return {
+          object: "list",
+          data: [
+            {
+              id: "trigger-dev/local-background-job-demo",
+              object: "model",
+              created: 0,
+              owned_by: "triggerdotdev",
+              description: "Compatibility endpoint for the local Trigger.dev SDK smoke demo. No LLM model is loaded.",
+            },
+          ],
+          trigger_dev_sdk: {
+            package: sdkStatus.package,
+            version: sdkStatus.version,
+            import_ok: sdkStatus.import_ok,
+          },
+        };
+      }
+
+      function rootPayload() {
+        return {
+          service: serviceName,
+          status: sdkStatus.import_ok ? "ok" : "unhealthy",
+          upstream: upstreamRepo,
+          endpoints: endpointList,
+          credentials_required: false,
+          remote_calls: false,
+        };
+      }
+
+      function sendJson(response, statusCode, payload) {
+        const body = Buffer.from(JSON.stringify(payload, null, 2) + "\n", "utf8");
+        response.writeHead(statusCode, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Content-Length": body.length,
+        });
+        response.end(body);
+      }
+
+      const server = http.createServer((request, response) => {
+        const url = new URL(request.url || "/", "http://localhost");
+        const path = url.pathname.replace(/\/+$/, "") || "/";
+
+        if (request.method !== "GET") {
+          sendJson(response, 405, {
+            ok: false,
+            error: "method_not_allowed",
+            endpoints: endpointList,
+          });
+          return;
+        }
+
+        if (path === "/" || path === "/healthz") {
+          const payload = path === "/" ? rootPayload() : healthPayload();
+          sendJson(response, sdkStatus.import_ok ? 200 : 503, payload);
+          return;
+        }
+
+        if (path === "/demo") {
+          sendJson(response, sdkStatus.import_ok ? 200 : 503, demoPayload());
+          return;
+        }
+
+        if (path === "/v1/models") {
+          sendJson(response, sdkStatus.import_ok ? 200 : 503, modelsPayload());
+          return;
+        }
+
+        sendJson(response, 404, {
+          ok: false,
+          error: "not_found",
+          endpoints: endpointList,
+        });
+      });
+
+      const port = Number(process.env.PORT || "8080");
+      server.listen(port, "0.0.0.0", () => {
+        console.log(JSON.stringify({
+          event: "startup",
+          service: serviceName,
+          port,
+          sdk: sdkStatus,
+          credentials_required: false,
+          remote_calls: false,
+        }));
+      });

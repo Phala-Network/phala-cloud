@@ -2786,5 +2786,31 @@
     "Web Apps",
     "AI"
   ]
+},
+{
+  "id": "trigger-dev",
+  "name": "Trigger.dev",
+  "description": "Background jobs and AI agent workflows; Trigger.dev Cloud managed service. This template runs a CPU-safe HTTP SDK smoke demo with deterministic endpoints and no required external credentials.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/trigger-dev",
+  "author": "triggerdotdev",
+  "icon": "trigger-dev.png",
+  "envs": [
+    {
+      "key": "TRIGGER_DEV_SDK_VERSION",
+      "required": false,
+      "default": "4.4.6",
+      "description": "Version of @trigger.dev/sdk installed at container startup."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": [
+    "AI Agents",
+    "Automation",
+    "Developer Tools"
+  ]
 }
 ]
