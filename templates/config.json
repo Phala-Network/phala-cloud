@@ -1219,6 +1219,28 @@
     "tags": ["MCP Servers", "Data & Storage"]
   },
   {
+    "id": "semantic-kernel",
+    "name": "Semantic Kernel",
+    "description": "Microsoft Semantic Kernel FastAPI demo with a deterministic local plugin invocation deployed on Phala Cloud behind Caddy.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/semantic-kernel",
+    "author": "microsoft",
+    "icon": "semantic-kernel.png",
+    "envs": [
+      {
+        "key": "DEMO_TOPIC",
+        "required": false,
+        "description": "Default topic used by the local deterministic Semantic Kernel demo endpoint.",
+        "default": "Phala Cloud"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 40
+    },
+    "tags": ["AI", "Agents", "Framework"]
+  },
+  {
     "id": "netdata-mcp-server",
     "name": "Netdata",
     "description": "Real-time infrastructure monitoring with metrics, logs, alerts, and ML-based anomaly detection deployed on Phala Cloud with a protected MCP endpoint.",
