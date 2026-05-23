@@ -2590,5 +2590,23 @@
     "Web Scraping",
     "AI Pipelines"
   ]
+},
+{
+  "id": "dify",
+  "name": "langgenius/dify",
+  "description": "Production-ready agentic workflow platform. This template runs a CPU-safe Dify source/runtime verifier that pins upstream release 1.14.2, checks official Dify files, and exposes HTTP smoke endpoints without credentials, model downloads, GPUs, host mounts, or external databases.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/dify",
+  "author": "langgenius",
+  "icon": "dify.svg",
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": [
+    "AI Agents",
+    "Automation",
+    "Web Apps"
+  ]
 }
 ]
