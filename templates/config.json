@@ -2085,5 +2085,191 @@
       "diskSize": 10
     },
     "tags": ["Agent Frameworks & Orchestration", "Developer Tools"]
-  }
+  },
+{
+  "id": "text-generation-webui",
+  "name": "oobabooga/textgen",
+  "description": "CPU-safe oobabooga/textgen source-check demo with health and OpenAI-compatible model-list endpoints, without downloading model weights or requiring GPU credentials.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/text-generation-webui",
+  "author": "oobabooga",
+  "icon": "text-generation-webui.png",
+  "envs": [
+    {
+      "key": "TEXTGEN_SOURCE_REF",
+      "required": false,
+      "description": "Upstream oobabooga/text-generation-webui branch, tag, or commit used for the source-check demo.",
+      "default": "main"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": [
+    "LLM Inference & Model Serving",
+    "AI",
+    "Developer Tools"
+  ]
+},
+{
+  "id": "lmdeploy",
+  "name": "InternLM/lmdeploy",
+  "description": "Toolkit for compressing, deploying, and serving LLMs; TurboMind engine",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/lmdeploy",
+  "author": "InternLM / OpenMMLab",
+  "icon": "lmdeploy.svg",
+  "envs": [
+    {
+      "key": "LMDEPLOY_REF",
+      "required": false,
+      "description": "LMDeploy Git tag, commit, or simple branch ref used for CPU-safe source checks.",
+      "default": "v0.13.0"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": [
+    "LLM Inference & Model Serving",
+    "Developer Tools",
+    "TEE & Privacy"
+  ]
+},
+{
+  "id": "swarm",
+  "name": "OpenAI Swarm",
+  "description": "CPU-safe OpenAI Swarm framework demo with health, deterministic agent/tool/handoff output, and an OpenAI-compatible model-list smoke endpoint. Runs without provider credentials, model downloads, or GPU requirements.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/swarm",
+  "author": "OpenAI",
+  "icon": "swarm.png",
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": [
+    "AI Agents",
+    "Developer Tools",
+    "API"
+  ]
+},
+{
+  "id": "copilotkit",
+  "name": "CopilotKit/CopilotKit",
+  "description": "React framework for in-app AI copilots and agents. This template runs a CPU-safe package import demo with health and demo endpoints, without external LLM calls by default.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/copilotkit",
+  "author": "CopilotKit",
+  "icon": "copilotkit.svg",
+  "envs": [
+    {
+      "key": "COPILOTKIT_PACKAGE_VERSION",
+      "required": false,
+      "description": "CopilotKit npm package version installed at container startup.",
+      "default": "1.57.4"
+    },
+    {
+      "key": "COPILOTKIT_DEMO_LABEL",
+      "required": false,
+      "description": "Label returned in JSON responses.",
+      "default": "Phala CopilotKit smoke demo"
+    },
+    {
+      "key": "OPENAI_API_KEY",
+      "required": false,
+      "description": "Optional OpenAI API key for users who extend this starter; unused by the default smoke demo."
+    },
+    {
+      "key": "ANTHROPIC_API_KEY",
+      "required": false,
+      "description": "Optional Anthropic API key for users who extend this starter; unused by the default smoke demo."
+    },
+    {
+      "key": "GOOGLE_GENERATIVE_AI_API_KEY",
+      "required": false,
+      "description": "Optional Google Generative AI API key for users who extend this starter; unused by the default smoke demo."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": [
+    "AI Agents",
+    "Developer Tools"
+  ]
+},
+{
+  "id": "beeai-framework",
+  "name": "i-am-bee/beeai-framework",
+  "description": "CPU-safe BeeAI Framework Python package-load demo with health, deterministic framework API smoke, and OpenAI-compatible model-list endpoints, without external LLM credentials, model downloads, or GPU.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/beeai-framework",
+  "author": "BeeAI project / i-am-bee / IBM",
+  "icon": "beeai-framework.svg",
+  "envs": [
+    {
+      "key": "BEEAI_FRAMEWORK_PYTHON_VERSION",
+      "required": false,
+      "description": "BeeAI Framework Python package version installed at container startup.",
+      "default": "0.1.80"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": [
+    "AI Agents",
+    "Developer Tools",
+    "Automation"
+  ]
+},
+{
+  "id": "ragflow",
+  "name": "infiniflow/ragflow",
+  "description": "Deep document understanding RAG engine; Docker-based, cloud-deployable",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/ragflow",
+  "author": "infiniflow",
+  "icon": "ragflow.svg",
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": [
+    "AI Agents",
+    "Data & Storage",
+    "Developer Tools"
+  ]
+},
+{
+  "id": "llama-index",
+  "name": "run-llama/llama_index",
+  "description": "CPU-safe LlamaIndex local RAG demo API with health, deterministic in-memory retrieval, and model-list endpoints, without hosted LLM calls or model downloads.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/llama-index",
+  "author": "LlamaIndex / run-llama",
+  "icon": "llama-index.svg",
+  "envs": [
+    {
+      "key": "LLAMA_INDEX_DEMO_TOP_K",
+      "required": false,
+      "description": "Number of local demo contexts returned by /demo. Values are clamped to the bundled demo document count.",
+      "default": "2"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": [
+    "RAG",
+    "Developer Tools",
+    "AI Agents"
+  ]
+}
 ]
