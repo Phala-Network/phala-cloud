@@ -2608,5 +2608,61 @@
     "Automation",
     "Web Apps"
   ]
+},
+{
+  "id": "flowise",
+  "name": "FlowiseAI/Flowise",
+  "description": "Low-code visual builder for AI agents, chatflows, and customized LLM orchestration. This template runs the official Flowise Docker image as a self-contained CPU web app with persistent local state and no model-provider credentials required at startup.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/flowise",
+  "author": "FlowiseAI",
+  "icon": "flowise.png",
+  "envs": [
+    {
+      "key": "FLOWISE_LOG_LEVEL",
+      "required": false,
+      "default": "info",
+      "description": "Flowise log level."
+    },
+    {
+      "key": "DISABLE_FLOWISE_TELEMETRY",
+      "required": false,
+      "default": "true",
+      "description": "Disable Flowise telemetry in the default deployment."
+    },
+    {
+      "key": "SHOW_COMMUNITY_NODES",
+      "required": false,
+      "default": "false",
+      "description": "Whether to show Flowise community nodes."
+    },
+    {
+      "key": "FLOWISE_FILE_SIZE_LIMIT",
+      "required": false,
+      "default": "50mb",
+      "description": "Maximum uploaded file size accepted by Flowise."
+    },
+    {
+      "key": "SECURE_COOKIES",
+      "required": false,
+      "default": "true",
+      "description": "Use secure cookies for the HTTPS Phala Cloud app endpoint."
+    },
+    {
+      "key": "TRUST_PROXY",
+      "required": false,
+      "default": "true",
+      "description": "Trust the Phala Cloud reverse proxy."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 2,
+    "memory": 4096,
+    "diskSize": 40
+  },
+  "tags": [
+    "Web Apps",
+    "AI Agents",
+    "Agent Frameworks & Orchestration"
+  ]
 }
 ]

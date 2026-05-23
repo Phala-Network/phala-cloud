@@ -1,0 +1,36 @@
+services:
+  flowise:
+    image: flowiseai/flowise:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: "3000"
+      NODE_ENV: production
+      APP_URL: https://${DSTACK_APP_DOMAIN:-localhost}
+      DATABASE_PATH: /root/.flowise
+      SECRETKEY_STORAGE_TYPE: local
+      SECRETKEY_PATH: /root/.flowise
+      STORAGE_TYPE: local
+      BLOB_STORAGE_PATH: /root/.flowise/storage
+      LOG_PATH: /root/.flowise/logs
+      LOG_LEVEL: ${FLOWISE_LOG_LEVEL:-info}
+      DISABLE_FLOWISE_TELEMETRY: ${DISABLE_FLOWISE_TELEMETRY:-true}
+      SHOW_COMMUNITY_NODES: ${SHOW_COMMUNITY_NODES:-false}
+      FLOWISE_FILE_SIZE_LIMIT: ${FLOWISE_FILE_SIZE_LIMIT:-50mb}
+      SECURE_COOKIES: ${SECURE_COOKIES:-true}
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+      HTTP_SECURITY_CHECK: ${HTTP_SECURITY_CHECK:-true}
+      PATH_TRAVERSAL_SAFETY: ${PATH_TRAVERSAL_SAFETY:-true}
+      CUSTOM_MCP_SECURITY_CHECK: ${CUSTOM_MCP_SECURITY_CHECK:-true}
+    volumes:
+      - flowise_data:/root/.flowise
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/api/v1/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  flowise_data:
