@@ -1,0 +1,254 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.12-slim-bookworm
+        ARG SCRAPEGRAPHAI_VERSION=2.1.1
+        ENV PIP_DEFAULT_TIMEOUT=120 \
+            PIP_DISABLE_PIP_VERSION_CHECK=1 \
+            PIP_NO_CACHE_DIR=1 \
+            PIP_ROOT_USER_ACTION=ignore \
+            PYTHONUNBUFFERED=1
+        RUN python -m pip install --no-cache-dir --upgrade pip \
+            && python -m pip install --no-cache-dir "scrapegraphai==$${SCRAPEGRAPHAI_VERSION}"
+        WORKDIR /app
+        EXPOSE 8080
+        CMD ["python", "/app/server.py"]
+      args:
+        SCRAPEGRAPHAI_VERSION: "${SCRAPEGRAPHAI_VERSION:-2.1.1}"
+    image: scrapegraph-ai-demo:latest
+    pull_policy: build
+    environment:
+      PORT: "8080"
+      PYTHONUNBUFFERED: "1"
+      SCRAPEGRAPHAI_DEMO_TITLE: "${SCRAPEGRAPHAI_DEMO_TITLE:-Phala Cloud ScrapeGraphAI demo}"
+      SCRAPEGRAPHAI_TELEMETRY_ENABLED: "${SCRAPEGRAPHAI_TELEMETRY_ENABLED:-false}"
+      SCRAPEGRAPHAI_VERSION: "${SCRAPEGRAPHAI_VERSION:-2.1.1}"
+    ports:
+      - "8080:8080"
+    configs:
+      - source: server_py
+        target: /app/server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    restart: unless-stopped
+
+configs:
+  server_py:
+    content: |
+      import html
+      import importlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import parse_qs, urlparse
+
+      STARTED_AT = time.time()
+      UPSTREAM = "https://github.com/ScrapeGraphAI/Scrapegraph-ai"
+      IMPORT_ERROR = None
+      PACKAGE = {}
+      convert_to_md = None
+
+      try:
+          import scrapegraphai
+
+          convert_mod = importlib.import_module("scrapegraphai.utils.convert_to_md")
+          convert_to_md = convert_mod.convert_to_md
+          PACKAGE = {
+              "distribution": "scrapegraphai",
+              "version": importlib.metadata.version("scrapegraphai"),
+              "module": scrapegraphai.__name__,
+              "utility": "scrapegraphai.utils.convert_to_md.convert_to_md",
+          }
+      except Exception as exc:
+          IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+
+
+      def base_payload():
+          return {
+              "service": "scrapegraph-ai-local-demo",
+              "upstream": UPSTREAM,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "package": PACKAGE,
+              "telemetry_enabled": os.environ.get(
+                  "SCRAPEGRAPHAI_TELEMETRY_ENABLED", "false"
+              ),
+          }
+
+
+      def demo_html(title):
+          safe_title = html.escape(title or os.environ.get("SCRAPEGRAPHAI_DEMO_TITLE", "ScrapeGraphAI demo"))
+          return f"""
+          <html>
+            <head><title>{safe_title}</title></head>
+            <body>
+              <main>
+                <h1>{safe_title}</h1>
+                <p>ScrapeGraphAI builds AI-powered web scraping pipelines for websites and local documents.</p>
+                <section>
+                  <h2>Smoke Test Guarantees</h2>
+                  <ul>
+                    <li>No hosted LLM provider is called.</li>
+                    <li>No browser is launched and no webpage is fetched.</li>
+                    <li>No model weights are downloaded.</li>
+                    <li>The installed ScrapeGraphAI package converts this bundled HTML to Markdown locally.</li>
+                  </ul>
+                </section>
+              </main>
+            </body>
+          </html>
+          """
+
+
+      def run_demo(params):
+          if IMPORT_ERROR:
+              raise RuntimeError(IMPORT_ERROR)
+
+          requested_title = params.get(
+              "title",
+              [os.environ.get("SCRAPEGRAPHAI_DEMO_TITLE", "Phala Cloud ScrapeGraphAI demo")],
+          )[0][:160]
+          source_html = demo_html(requested_title)
+          markdown = convert_to_md(source_html)
+          preview = [line for line in markdown.splitlines() if line.strip()][:8]
+          return {
+              "input": {
+                  "source": "bundled HTML string",
+                  "title": requested_title,
+              },
+              "scrapegraphai_utility": PACKAGE.get("utility"),
+              "markdown_preview": preview,
+              "markdown_bytes": len(markdown.encode("utf-8")),
+              "cpu_only": True,
+              "external_provider_calls": False,
+              "browser_launched": False,
+              "webpage_fetched": False,
+              "model_downloaded": False,
+              "full_pipeline_note": (
+                  "SmartScraperGraph, SearchGraph, browser fetching, and hosted or "
+                  "local LLM execution need additional provider/model/browser "
+                  "configuration and are intentionally not run by this smoke demo."
+              ),
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "scrapegraph-ai-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              parsed = urlparse(self.path)
+              path = parsed.path.rstrip("/") or "/"
+              params = parse_qs(parsed.query)
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  payload.update(
+                      {
+                          "ok": IMPORT_ERROR is None,
+                          "status": "ready" if IMPORT_ERROR is None else "import_failed",
+                          "checks": [
+                              "import scrapegraphai",
+                              "import scrapegraphai.utils.convert_to_md",
+                          ],
+                          "endpoints": ["/healthz", "/demo", "/v1/models", "/capabilities"],
+                      }
+                  )
+                  if IMPORT_ERROR:
+                      payload["error"] = IMPORT_ERROR
+                  self.respond_json(200 if IMPORT_ERROR is None else 500, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  if IMPORT_ERROR:
+                      payload.update({"ok": False, "error": IMPORT_ERROR})
+                      self.respond_json(500, payload)
+                      return
+
+                  payload.update({"ok": True, "demo": run_demo(params)})
+                  self.respond_json(200, payload)
+                  return
+
+              if path == "/v1/models":
+                  payload = {
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "scrapegraphai-local-markdownify-demo",
+                              "object": "model",
+                              "created": 0,
+                              "owned_by": "ScrapeGraphAI",
+                              "description": (
+                                  "CPU-safe local ScrapeGraphAI package demo. "
+                                  "This is not an inference model and does not call an LLM."
+                              ),
+                          }
+                      ],
+                  }
+                  if IMPORT_ERROR:
+                      payload["error"] = IMPORT_ERROR
+                  self.respond_json(200 if IMPORT_ERROR is None else 500, payload)
+                  return
+
+              if path == "/capabilities":
+                  payload = base_payload()
+                  payload.update(
+                      {
+                          "ok": IMPORT_ERROR is None,
+                          "default_demo": [
+                              "package import",
+                              "local HTML to Markdown conversion",
+                              "credential-free health and metadata API",
+                          ],
+                          "upstream_pipeline_examples": [
+                              "SmartScraperGraph",
+                              "SearchGraph",
+                              "SpeechGraph",
+                              "ScriptCreatorGraph",
+                              "SmartScraperMultiGraph",
+                          ],
+                          "requires_extra_configuration": [
+                              "hosted LLM API keys or local model runtime",
+                              "Playwright browser installation for website fetching",
+                              "provider-specific model names and rate limits",
+                          ],
+                      }
+                  )
+                  if IMPORT_ERROR:
+                      payload["error"] = IMPORT_ERROR
+                  self.respond_json(200 if IMPORT_ERROR is None else 500, payload)
+                  return
+
+              self.respond_json(404, {"ok": False, "error": "not found"})
+
+
+      port = int(os.environ.get("PORT", "8080"))
+      server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+      print(f"scrapegraph-ai demo server listening on 0.0.0.0:{port}", flush=True)
+      server.serve_forever()
