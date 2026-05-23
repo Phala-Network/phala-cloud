@@ -2415,5 +2415,31 @@
     "AI Agents",
     "Developer Tools"
   ]
+},
+{
+  "id": "maxkb",
+  "name": "1Panel-dev/MaxKB",
+  "description": "Open-source enterprise-grade agent and RAG platform. This template runs a CPU-safe HTTP verifier that checks selected MaxKB upstream source/runtime facts without starting the full PostgreSQL, Redis, pgvector, vector-model, and LLM-provider stack.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/maxkb",
+  "author": "1Panel-dev",
+  "icon": "maxkb.png",
+  "envs": [
+    {
+      "key": "APP_PORT",
+      "required": false,
+      "default": "8080",
+      "description": "HTTP port used by the MaxKB verifier service. The compose file publishes the same port and defaults to 8080:8080."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": [
+    "AI Agents",
+    "RAG",
+    "Developer Tools"
+  ]
 }
 ]
