@@ -96,6 +96,40 @@
     "tags": ["AI Agents", "Automation"]
   },
   {
+    "id": "crewai",
+    "name": "crewAIInc/crewAI",
+    "description": "Role-playing multi-agent framework. This CPU-safe demo installs and imports the real CrewAI Python package, exposes package metadata through Caddy, and avoids external LLM calls or provider credentials by default.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/crewai",
+    "author": "crewAIInc",
+    "icon": "crewai.svg",
+    "envs": [
+      {
+        "key": "CREWAI_PACKAGE_VERSION",
+        "required": false,
+        "default": "1.14.5",
+        "description": "Pinned CrewAI Python package version installed by the demo service at container startup."
+      },
+      {
+        "key": "CREWAI_DISABLE_TELEMETRY",
+        "required": false,
+        "default": "true",
+        "description": "Disables CrewAI telemetry for the default metadata demo."
+      },
+      {
+        "key": "OTEL_SDK_DISABLED",
+        "required": false,
+        "default": "true",
+        "description": "Disables OpenTelemetry SDK activity in the default metadata demo."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["AI Agents", "Developer Tools"]
+  },
+  {
     "id": "ironclaw",
     "name": "IronClaw",
     "description": "A self-hosted AI agent runtime with an HTTP gateway. This template runs the official IronClaw image in a confidential VM with persistent local state and a production Postgres/pgvector sidecar.",
