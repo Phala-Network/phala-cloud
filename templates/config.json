@@ -2441,5 +2441,46 @@
     "RAG",
     "Developer Tools"
   ]
+},
+{
+  "id": "gpt-researcher",
+  "name": "assafelovic/gpt-researcher",
+  "description": "CPU-safe GPT Researcher upstream verifier and deterministic research-flow demo API with health, /demo, and /v1/models endpoints. Runs without provider credentials, browser automation, model downloads, or GPU by default.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/gpt-researcher",
+  "author": "Assaf Elovic / assafelovic",
+  "icon": "gpt-researcher.png",
+  "envs": [
+    {
+      "key": "GPTR_DEMO_MAX_SOURCES",
+      "required": false,
+      "description": "Number of bundled local demo source summaries returned by /demo.",
+      "default": "3"
+    },
+    {
+      "key": "OPENAI_API_KEY",
+      "required": false,
+      "description": "Optional OpenAI or OpenAI-compatible provider API key for users who extend this template to run full GPT Researcher. Unused by the default demo."
+    },
+    {
+      "key": "TAVILY_API_KEY",
+      "required": false,
+      "description": "Optional Tavily search API key for users who extend this template to run full GPT Researcher web research. Unused by the default demo."
+    },
+    {
+      "key": "OPENAI_BASE_URL",
+      "required": false,
+      "description": "Optional OpenAI-compatible API base URL for full research deployments that use a custom provider. Unused by the default demo."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": [
+    "AI Agents",
+    "Web Data & Search",
+    "RAG"
+  ]
 }
 ]
