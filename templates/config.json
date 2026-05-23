@@ -2371,5 +2371,23 @@
     "AI Agents",
     "Data & Storage"
   ]
+},
+{
+  "id": "quivr",
+  "name": "QuivrHQ/quivr",
+  "description": "CPU-safe Quivr source/runtime verifier for quivr-core RAG package metadata, docs, provider requirements, and OpenAI-compatible empty model-list smoke testing.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/quivr",
+  "author": "QuivrHQ",
+  "icon": "quivr.png",
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": [
+    "RAG",
+    "AI Agents",
+    "Developer Tools"
+  ]
 }
 ]
