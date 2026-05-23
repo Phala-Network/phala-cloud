@@ -2389,5 +2389,31 @@
     "AI Agents",
     "Developer Tools"
   ]
+},
+{
+  "id": "khoj",
+  "name": "khoj-ai/khoj",
+  "description": "CPU-safe Khoj source and package verifier for the self-hostable AI second brain, with smoke endpoints that require no provider credentials, GPU, model downloads, or backing databases.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/khoj",
+  "author": "khoj-ai",
+  "icon": "khoj.png",
+  "envs": [
+    {
+      "key": "KHOJ_VERIFY_TIMEOUT_SECONDS",
+      "required": false,
+      "description": "Timeout in seconds for each public upstream GitHub or PyPI verification request.",
+      "default": "15"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": [
+    "RAG",
+    "AI Agents",
+    "Developer Tools"
+  ]
 }
 ]

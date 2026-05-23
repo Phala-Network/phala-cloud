@@ -1,0 +1,384 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    ports:
+      - "42110:42110"
+    environment:
+      KHOJ_UPSTREAM: "https://github.com/khoj-ai/khoj"
+      KHOJ_RELEASE: "2.0.0-beta.28"
+      KHOJ_COMMIT: "9258f57dceab19d52a1a0bdac54eb38576c29187"
+      KHOJ_RELEASE_PUBLISHED_AT: "2026-03-26T03:36:04Z"
+      KHOJ_PYPI_VERSION: "2.0.0b28"
+      KHOJ_VERIFY_TIMEOUT_SECONDS: "${KHOJ_VERIFY_TIMEOUT_SECONDS:-15}"
+      PYTHONUNBUFFERED: "1"
+    command: ["python", "/server.py"]
+    configs:
+      - source: server_py
+        target: /server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:42110/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+configs:
+  server_py:
+    content: |
+      import hashlib
+      import json
+      import os
+      import platform
+      import sys
+      import threading
+      import time
+      import urllib.error
+      import urllib.parse
+      import urllib.request
+      from datetime import datetime, timezone
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+      STARTED_AT = time.time()
+      SERVICE = "khoj-source-package-verifier"
+      UPSTREAM = os.environ.get("KHOJ_UPSTREAM", "https://github.com/khoj-ai/khoj")
+      RELEASE = os.environ.get("KHOJ_RELEASE", "2.0.0-beta.28")
+      COMMIT = os.environ.get("KHOJ_COMMIT", "9258f57dceab19d52a1a0bdac54eb38576c29187")
+      RELEASE_PUBLISHED_AT = os.environ.get("KHOJ_RELEASE_PUBLISHED_AT", "2026-03-26T03:36:04Z")
+      PYPI_VERSION = os.environ.get("KHOJ_PYPI_VERSION", "2.0.0b28")
+      TIMEOUT_SECONDS = float(os.environ.get("KHOJ_VERIFY_TIMEOUT_SECONDS", "15"))
+
+      FILES = [
+          {
+              "path": "README.md",
+              "sha256": "f43b29f1ad9d5792d4a2b1d46454c26249212c5f93e59923adc718463a3ac1ba",
+              "checks": [
+                  ("product_positioning", "Your AI second brain"),
+                  ("self_hostable", "Khoj is open-source, self-hostable"),
+                  ("cloud_option", "https://app.khoj.dev"),
+                  ("docs_link", "https://docs.khoj.dev"),
+              ],
+          },
+          {
+              "path": "pyproject.toml",
+              "sha256": "4d55a8598ca3b55a34eed0741d6e3e0a52c7267c019c71c42efe09d3dba47a5b",
+              "checks": [
+                  ("package_name", 'name = "khoj"'),
+                  ("python_range", 'requires-python = ">=3.10, <3.13"'),
+                  ("license", 'license = "AGPL-3.0-or-later"'),
+                  ("torch_dependency", '"torch == 2.6.0"'),
+                  ("sentence_transformers_dependency", '"sentence-transformers == 3.4.1"'),
+                  ("django_dependency", '"django == 5.1.15"'),
+                  ("pgvector_dependency", '"pgvector == 0.2.4"'),
+              ],
+          },
+          {
+              "path": "docker-compose.yml",
+              "sha256": "e8fe3d366819be8e7f8d3fe84b05cebeb938cc48a8390177b36b4fa161723039",
+              "checks": [
+                  ("postgres_service", "pgvector/pgvector:pg15"),
+                  ("official_server_image", "ghcr.io/khoj-ai/khoj:latest"),
+                  ("official_server_port", "42110:42110"),
+                  ("admin_password_placeholder", "KHOJ_ADMIN_PASSWORD=password"),
+                  ("django_secret_placeholder", "KHOJ_DJANGO_SECRET_KEY=secret"),
+                  ("model_cache_volume", "/root/.cache/huggingface"),
+                  ("terrarium_sandbox", "KHOJ_TERRARIUM_URL=http://sandbox:8080"),
+                  ("searxng_search", "KHOJ_SEARXNG_URL=http://search:8080"),
+                  ("provider_key_examples", "OPENAI_API_KEY=your_openai_api_key"),
+              ],
+          },
+      ]
+
+      VERIFY_LOCK = threading.Lock()
+      VERIFY_RESULT = {
+          "status": "starting",
+          "ok": None,
+          "message": "verification has not completed yet",
+      }
+
+
+      def iso_now():
+          return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+      def set_result(result):
+          global VERIFY_RESULT
+          with VERIFY_LOCK:
+              VERIFY_RESULT = result
+
+
+      def get_result():
+          with VERIFY_LOCK:
+              return json.loads(json.dumps(VERIFY_RESULT))
+
+
+      def raw_url(path):
+          quoted = urllib.parse.quote(path, safe="/")
+          return f"https://raw.githubusercontent.com/khoj-ai/khoj/{RELEASE}/{quoted}"
+
+
+      def fetch_bytes(url):
+          request = urllib.request.Request(
+              url,
+              headers={"User-Agent": "phala-khoj-template-verifier/1.0"},
+          )
+          with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+              return response.read()
+
+
+      def fetch_json(url):
+          return json.loads(fetch_bytes(url).decode("utf-8"))
+
+
+      def verify_file(spec):
+          url = raw_url(spec["path"])
+          item = {
+              "path": spec["path"],
+              "url": url,
+              "expected_sha256": spec["sha256"],
+          }
+          try:
+              body = fetch_bytes(url)
+              text = body.decode("utf-8", errors="replace")
+              actual = hashlib.sha256(body).hexdigest()
+              checks = []
+              checks_ok = True
+              for name, needle in spec.get("checks", []):
+                  ok = needle in text
+                  checks.append({"name": name, "ok": ok})
+                  checks_ok = checks_ok and ok
+
+              item.update({
+                  "ok": actual == spec["sha256"] and checks_ok,
+                  "bytes": len(body),
+                  "sha256": actual,
+                  "sha256_ok": actual == spec["sha256"],
+                  "checks": checks,
+              })
+          except (urllib.error.URLError, TimeoutError, OSError) as exc:
+              item.update({
+                  "ok": False,
+                  "error": f"{type(exc).__name__}: {exc}",
+              })
+          return item
+
+
+      def dependency_present(requirements, needle):
+          compact_needle = needle.lower().replace(" ", "")
+          for requirement in requirements:
+              compact_requirement = requirement.lower().replace(" ", "")
+              if compact_needle in compact_requirement:
+                  return True
+          return False
+
+
+      def verify_pypi():
+          url = f"https://pypi.org/pypi/khoj/{PYPI_VERSION}/json"
+          item = {
+              "url": url,
+              "expected_name": "khoj",
+              "expected_version": PYPI_VERSION,
+              "expected_requires_python": "<3.13,>=3.10",
+          }
+          try:
+              payload = fetch_json(url)
+              info = payload.get("info", {})
+              requirements = info.get("requires_dist") or []
+              checks = [
+                  {"name": "name", "ok": info.get("name") == "khoj"},
+                  {"name": "version", "ok": info.get("version") == PYPI_VERSION},
+                  {"name": "summary", "ok": info.get("summary") == "Your Second Brain"},
+                  {"name": "requires_python", "ok": info.get("requires_python") == "<3.13,>=3.10"},
+                  {"name": "torch_dependency", "ok": dependency_present(requirements, "torch==2.6.0")},
+                  {
+                      "name": "sentence_transformers_dependency",
+                      "ok": dependency_present(requirements, "sentence-transformers==3.4.1"),
+                  },
+                  {"name": "django_dependency", "ok": dependency_present(requirements, "django==5.1.15")},
+                  {"name": "pgvector_dependency", "ok": dependency_present(requirements, "pgvector==0.2.4")},
+              ]
+              item.update({
+                  "ok": all(check["ok"] for check in checks),
+                  "name": info.get("name"),
+                  "version": info.get("version"),
+                  "summary": info.get("summary"),
+                  "requires_python": info.get("requires_python"),
+                  "requires_dist_count": len(requirements),
+                  "checks": checks,
+              })
+          except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+              item.update({
+                  "ok": False,
+                  "error": f"{type(exc).__name__}: {exc}",
+              })
+          return item
+
+
+      def runtime_facts():
+          version = sys.version_info[:2]
+          return {
+              "python": sys.version.split()[0],
+              "implementation": platform.python_implementation(),
+              "platform": platform.platform(),
+              "khoj_requires_python": ">=3.10,<3.13",
+              "compatible_with_khoj_python_range": (3, 10) <= version < (3, 13),
+          }
+
+
+      def demo_facts():
+          return {
+              "mode": "cpu-safe Khoj source and package verifier",
+              "full_khoj_server_started": False,
+              "postgres_started": False,
+              "searxng_started": False,
+              "terrarium_started": False,
+              "external_llm_provider_called": False,
+              "provider_credentials_required": False,
+              "model_weights_downloaded": False,
+              "gpu_required": False,
+              "safe_for_tdx_small_smoke": True,
+              "production_port_reference": 42110,
+          }
+
+
+      def verify_upstream():
+          set_result({
+              "status": "running",
+              "ok": None,
+              "started_at": iso_now(),
+              "release": RELEASE,
+              "commit": COMMIT,
+              "pypi_version": PYPI_VERSION,
+          })
+
+          try:
+              files = [verify_file(spec) for spec in FILES]
+              pypi = verify_pypi()
+              runtime = runtime_facts()
+              files_ok = all(item.get("ok") is True for item in files)
+              ok = files_ok and pypi.get("ok") is True and runtime["compatible_with_khoj_python_range"]
+
+              set_result({
+                  "status": "complete",
+                  "ok": ok,
+                  "verified_at": iso_now(),
+                  "release": RELEASE,
+                  "commit": COMMIT,
+                  "release_published_at": RELEASE_PUBLISHED_AT,
+                  "pypi_version": PYPI_VERSION,
+                  "upstream": UPSTREAM,
+                  "files": files,
+                  "pypi": pypi,
+                  "runtime": runtime,
+                  "demo": demo_facts(),
+              })
+          except Exception as exc:
+              set_result({
+                  "status": "failed",
+                  "ok": False,
+                  "verified_at": iso_now(),
+                  "error": f"{type(exc).__name__}: {exc}",
+                  "runtime": runtime_facts(),
+                  "demo": demo_facts(),
+              })
+
+
+      def base_payload():
+          return {
+              "service": SERVICE,
+              "upstream": UPSTREAM,
+              "release": RELEASE,
+              "commit": COMMIT,
+              "release_published_at": RELEASE_PUBLISHED_AT,
+              "pypi_version": PYPI_VERSION,
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "khoj-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              path = urllib.parse.urlparse(self.path).path
+              verification = get_result()
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  payload.update({
+                      "ok": True,
+                      "status": "ready",
+                      "verification": {
+                          "status": verification.get("status"),
+                          "ok": verification.get("ok"),
+                          "message": verification.get("message"),
+                      },
+                      "checks": [
+                          "pinned upstream README.md",
+                          "pinned upstream pyproject.toml",
+                          "pinned upstream docker-compose.yml",
+                          "PyPI khoj package metadata",
+                          "Python runtime compatibility",
+                      ],
+                  })
+                  self.respond_json(200, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  payload.update({
+                      "ok": verification.get("ok"),
+                      "verification": verification,
+                      "demo": demo_facts(),
+                  })
+                  self.respond_json(200, payload)
+                  return
+
+              if path == "/v1/models":
+                  payload = {
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "khoj-demo-verifier",
+                              "object": "model",
+                              "created": int(STARTED_AT),
+                              "owned_by": "khoj-ai",
+                              "root": "khoj-demo-verifier",
+                              "parent": None,
+                              "metadata": {
+                                  "upstream": UPSTREAM,
+                                  "release": RELEASE,
+                                  "pypi_version": PYPI_VERSION,
+                                  "llm_provider": "none",
+                                  "full_khoj_server_started": False,
+                                  "model_weights_downloaded": False,
+                                  "gpu_required": False,
+                              },
+                          }
+                      ],
+                  }
+                  self.respond_json(200, payload)
+                  return
+
+              self.respond_json(404, {"ok": False, "error": "not found", "path": path})
+
+
+      if __name__ == "__main__":
+          threading.Thread(target=verify_upstream, daemon=True).start()
+          server = ThreadingHTTPServer(("0.0.0.0", 42110), Handler)
+          print("Khoj verifier listening on 0.0.0.0:42110", flush=True)
+          server.serve_forever()
