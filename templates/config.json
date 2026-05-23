@@ -2664,5 +2664,68 @@
     "AI Agents",
     "Agent Frameworks & Orchestration"
   ]
+},
+{
+  "id": "langflow",
+  "name": "langflow-ai/langflow",
+  "description": "Visual low-code platform for building AI agents and workflows. This template runs the official Langflow container with authentication enabled, persistent local app data, and optional external provider API keys.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/langflow",
+  "author": "langflow-ai / Langflow",
+  "icon": "langflow.svg",
+  "envs": [
+    {
+      "key": "LANGFLOW_SUPERUSER_PASSWORD",
+      "required": true,
+      "description": "Password for the initial Langflow superuser. Generate a long random value and keep it stable for this deployment."
+    },
+    {
+      "key": "LANGFLOW_SECRET_KEY",
+      "required": true,
+      "description": "Stable secret key used by Langflow for signing and encryption. Generate once and keep it across redeploys."
+    },
+    {
+      "key": "LANGFLOW_SUPERUSER",
+      "required": false,
+      "default": "admin",
+      "description": "Initial Langflow superuser username."
+    },
+    {
+      "key": "LANGFLOW_AUTO_LOGIN",
+      "required": false,
+      "default": "false",
+      "description": "Whether to bypass login. Keep false for public Phala Cloud deployments."
+    },
+    {
+      "key": "LANGFLOW_WORKERS",
+      "required": false,
+      "default": "1",
+      "description": "Number of Langflow workers. The default is conservative for small CPU deployments."
+    },
+    {
+      "key": "OPENAI_API_KEY",
+      "required": false,
+      "description": "Optional OpenAI API key for flows that call OpenAI models."
+    },
+    {
+      "key": "ANTHROPIC_API_KEY",
+      "required": false,
+      "description": "Optional Anthropic API key for flows that call Anthropic models."
+    },
+    {
+      "key": "GOOGLE_API_KEY",
+      "required": false,
+      "description": "Optional Google Gemini API key for flows that call Google models."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 20
+  },
+  "tags": [
+    "AI Agents",
+    "Developer Tools",
+    "Web Apps"
+  ]
 }
 ]

@@ -1,0 +1,37 @@
+services:
+  langflow:
+    image: langflowai/langflow:latest
+    user: root
+    command: ["/bin/sh", "-ec", "mkdir -p /app/langflow && chown -R user /app/langflow && exec langflow run --host 0.0.0.0 --port 7860"]
+    restart: unless-stopped
+    ports:
+      - "80:7860"
+    environment:
+      LANGFLOW_HOST: 0.0.0.0
+      LANGFLOW_PORT: "7860"
+      LANGFLOW_CONFIG_DIR: /app/langflow
+      LANGFLOW_SAVE_DB_IN_CONFIG_DIR: "true"
+      LANGFLOW_AUTO_LOGIN: ${LANGFLOW_AUTO_LOGIN:-false}
+      LANGFLOW_SUPERUSER: ${LANGFLOW_SUPERUSER:-admin}
+      LANGFLOW_SUPERUSER_PASSWORD: ${LANGFLOW_SUPERUSER_PASSWORD}
+      LANGFLOW_SECRET_KEY: ${LANGFLOW_SECRET_KEY}
+      LANGFLOW_REMOVE_API_KEYS: ${LANGFLOW_REMOVE_API_KEYS:-true}
+      LANGFLOW_STORE_ENVIRONMENT_VARIABLES: ${LANGFLOW_STORE_ENVIRONMENT_VARIABLES:-false}
+      LANGFLOW_FALLBACK_TO_ENV_VAR: ${LANGFLOW_FALLBACK_TO_ENV_VAR:-true}
+      LANGFLOW_WORKERS: ${LANGFLOW_WORKERS:-1}
+      DO_NOT_TRACK: ${DO_NOT_TRACK:-true}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+    volumes:
+      - langflow_data:/app/langflow
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/', timeout=10).read()\""]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 120s
+
+volumes:
+  langflow_data:
+    driver: local
