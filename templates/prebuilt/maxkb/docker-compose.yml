@@ -1,0 +1,295 @@
+services:
+  app:
+    image: python:3.11-slim-bookworm
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${APP_PORT:-8080}:${APP_PORT:-8080}"
+    environment:
+      APP_PORT: ${APP_PORT:-8080}
+      PYTHONUNBUFFERED: "1"
+    configs:
+      - source: maxkb_verifier_app
+        target: /opt/maxkb-verifier/server.py
+    command:
+      - python
+      - /opt/maxkb-verifier/server.py
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, urllib.request; port = os.environ.get('APP_PORT', '8080'); urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5).read()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+configs:
+  maxkb_verifier_app:
+    content: |
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      import tomllib
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      UPSTREAM_REPO = "https://github.com/1Panel-dev/MaxKB"
+      UPSTREAM_COMMIT = "61ac793b3a82ea086cbd14203b2e076845290bc4"
+      ICON_SHA256 = "a75e812b7d55d6f568e6df8c60db8a5cf9484e2847f61b518c2987529b8fcffd"
+
+      PYPROJECT_EXCERPT = """
+      [project]
+      name = "maxkb"
+      version = "2.0.0"
+      description = "Open-source enterprise-grade agent platform"
+      requires-python = "~=3.11.0"
+      dependencies = [
+          "django==5.2.14",
+          "drf-spectacular[sidecar]==0.28.0",
+          "django-redis==6.0.0",
+          "django-db-connection-pool==1.2.6",
+          "djangorestframework==3.17.1",
+          "psycopg[binary]==3.2.9",
+          "python-dotenv==1.2.2",
+          "langchain==1.2.18",
+          "langchain-core==1.3.3",
+          "langchain-openai==1.2.1",
+          "langchain-anthropic==1.4.3",
+          "langchain-community==0.4.1",
+          "langchain-mcp-adapters==0.2.2",
+          "langgraph==1.1.10",
+          "torch==2.8.0",
+          "sentence-transformers==5.0.0",
+          "celery[sqlalchemy]==5.5.3",
+          "gunicorn==23.0.0",
+      ]
+
+      [tool.uv]
+      package = false
+      """
+
+      OFFICIAL_RUNTIME_FACTS = {
+          "readme_quick_start_image": "1panel/maxkb",
+          "readme_public_port": "8080",
+          "backend": "Python / Django",
+          "frontend": "Vue.js",
+          "llm_framework": "LangChain",
+          "database": "PostgreSQL + pgvector",
+          "docker_runtime_base": "ghcr.io/1panel-dev/maxkb-base:python3.11-pg17.9-20260326",
+          "vector_model_image": "ghcr.io/1panel-dev/maxkb-vector-model:v2.0.3",
+          "bundled_services": ["PostgreSQL 17", "Redis", "pgvector", "AGE", "ffmpeg"],
+          "default_admin_path": "/admin",
+          "default_chat_path": "/chat",
+          "source_paths": [
+              "README.md",
+              "pyproject.toml",
+              "installer/Dockerfile",
+              "installer/Dockerfile-base",
+              "installer/start-all.sh",
+              "installer/init.sql",
+              "ui/src/assets/logo/logo.png",
+          ],
+      }
+
+
+      def dependency_map(dependencies):
+          result = {}
+          for item in dependencies:
+              name = item.split("==", 1)[0]
+              result[name] = item
+          return result
+
+
+      def run_checks():
+          parsed = tomllib.loads(PYPROJECT_EXCERPT)
+          project = parsed["project"]
+          deps = dependency_map(project["dependencies"])
+
+          checks = {
+              "project_name": project["name"] == "maxkb",
+              "project_version": project["version"] == "2.0.0",
+              "python_runtime_matches": sys.version_info[:2] == (3, 11),
+              "requires_python": project["requires-python"] == "~=3.11.0",
+              "uv_package_false": parsed["tool"]["uv"]["package"] is False,
+              "django_dependency": deps.get("django") == "django==5.2.14",
+              "langchain_dependency": deps.get("langchain") == "langchain==1.2.18",
+              "torch_dependency": deps.get("torch") == "torch==2.8.0",
+              "sentence_transformers_dependency": (
+                  deps.get("sentence-transformers") == "sentence-transformers==5.0.0"
+              ),
+              "postgres_pgvector_runtime": OFFICIAL_RUNTIME_FACTS["database"] == "PostgreSQL + pgvector",
+              "vector_model_runtime": OFFICIAL_RUNTIME_FACTS["vector_model_image"].endswith("maxkb-vector-model:v2.0.3"),
+              "no_model_downloads": True,
+              "no_llm_credentials_required": True,
+              "no_backing_services_started": True,
+          }
+          return {
+              "ok": all(checks.values()),
+              "checks": checks,
+              "project": {
+                  "name": project["name"],
+                  "version": project["version"],
+                  "requires_python": project["requires-python"],
+                  "uv_package": parsed["tool"]["uv"]["package"],
+                  "dependency_count_in_excerpt": len(project["dependencies"]),
+                  "selected_dependencies": {
+                      name: deps[name]
+                      for name in (
+                          "django",
+                          "djangorestframework",
+                          "psycopg[binary]",
+                          "langchain",
+                          "langchain-openai",
+                          "langchain-anthropic",
+                          "torch",
+                          "sentence-transformers",
+                          "celery[sqlalchemy]",
+                          "gunicorn",
+                      )
+                      if name in deps
+                  },
+              },
+          }
+
+
+      VERIFICATION = run_checks()
+
+
+      def base_payload():
+          return {
+              "service": "maxkb-verifier",
+              "upstream": {
+                  "repo": UPSTREAM_REPO,
+                  "commit": UPSTREAM_COMMIT,
+                  "author": "1Panel-dev",
+                  "license": "GPL-3.0",
+                  "icon_source": "ui/src/assets/logo/logo.png",
+                  "icon_sha256": ICON_SHA256,
+              },
+              "runtime": {
+                  "python": sys.version.split()[0],
+                  "platform": platform.platform(),
+                  "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              },
+              "template_mode": {
+                  "type": "cpu-safe verifier",
+                  "full_maxkb_web_ui_started": False,
+                  "model_downloaded": False,
+                  "llm_provider_calls": False,
+                  "credentials_required": False,
+                  "backing_services_started": False,
+              },
+          }
+
+
+      def response_for(path):
+          payload = base_payload()
+
+          if path in ("/", "/healthz"):
+              payload.update(
+                  {
+                      "ok": VERIFICATION["ok"],
+                      "status": "ready" if VERIFICATION["ok"] else "failed",
+                      "endpoints": ["/healthz", "/demo", "/v1/models"],
+                      "verification": VERIFICATION,
+                  }
+              )
+              return HTTPStatus.OK if VERIFICATION["ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/demo":
+              payload.update(
+                  {
+                      "ok": VERIFICATION["ok"],
+                      "description": (
+                          "This endpoint verifies MaxKB source and runtime facts from the "
+                          "upstream tree without starting the production MaxKB stack."
+                      ),
+                      "official_runtime_facts": OFFICIAL_RUNTIME_FACTS,
+                      "verification": VERIFICATION,
+                      "limitations": [
+                          "The full MaxKB web UI is not running in this template.",
+                          "No PostgreSQL, Redis, pgvector, AGE, or vector model sidecar is started.",
+                          "No LLM provider is configured or called.",
+                          "Use this template for deterministic Phala smoke tests, not production MaxKB chat.",
+                      ],
+                  }
+              )
+              return HTTPStatus.OK if VERIFICATION["ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "maxkb/no-llm-verifier",
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "1Panel-dev",
+                          "description": (
+                              "Metadata-only verifier endpoint. The default template does not host, "
+                              "download, or call an LLM model."
+                          ),
+                      }
+                  ],
+              }
+
+          return HTTPStatus.NOT_FOUND, {
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "maxkb-verifier/1.0"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      },
+                      sort_keys=True,
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+              status, payload = response_for(path)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8080"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "upstream_commit": UPSTREAM_COMMIT,
+                      "verification_ok": VERIFICATION["ok"],
+                      "full_maxkb_web_ui_started": False,
+                  },
+                  sort_keys=True,
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
