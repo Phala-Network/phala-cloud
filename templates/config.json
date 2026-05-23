@@ -2844,5 +2844,31 @@
     "Vector Database",
     "AI Apps"
   ]
+},
+{
+  "id": "bolt-diy",
+  "name": "stackblitz-labs/bolt.diy",
+  "description": "Open-source AI full-stack app builder from stackblitz-labs. This CPU-safe Phala template runs a metadata verifier that checks the real upstream bolt.diy package manifest, AI route, WebContainer runtime, and icon source from public/favicon.svg, then exposes health/demo/model-like endpoints without requiring provider credentials.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/bolt-diy",
+  "author": "stackblitz-labs",
+  "icon": "bolt-diy.svg",
+  "envs": [
+    {
+      "key": "BOLT_DIY_REF",
+      "required": false,
+      "default": "2e254ac19a696394030601bc602f54945b12bfc4",
+      "description": "Git branch, tag, or commit from stackblitz-labs/bolt.diy to verify at startup."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": [
+    "AI Agents",
+    "Developer Tools",
+    "App Builder"
+  ]
 }
 ]
