@@ -1,0 +1,225 @@
+services:
+  app:
+    image: python:3.11-slim-bookworm
+    ports:
+      - "8080:8080"
+    environment:
+      - LMDEPLOY_REF=${LMDEPLOY_REF:-v0.13.0}
+      - PYTHONUNBUFFERED=1
+    command:
+      - python
+      - /server.py
+    configs:
+      - source: server_py
+        target: /server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    restart: unless-stopped
+
+configs:
+  server_py:
+    content: |
+      import hashlib
+      import json
+      import os
+      import platform
+      import re
+      import sys
+      import time
+      import urllib.parse
+      import urllib.request
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+      STARTED_AT = time.time()
+      UPSTREAM = "https://github.com/InternLM/lmdeploy"
+      RAW_BASE = "https://raw.githubusercontent.com/InternLM/lmdeploy"
+      DEFAULT_REF = "v0.13.0"
+      MAX_SOURCE_BYTES = 2 * 1024 * 1024
+
+      REQUIRED_SOURCES = [
+          ("README.md", "project README"),
+          ("pyproject.toml", "build metadata"),
+          ("lmdeploy/__init__.py", "Python package exports"),
+          ("lmdeploy/version.py", "package version metadata"),
+          ("lmdeploy/serve/openai/api_server.py", "OpenAI-compatible API server source"),
+          ("lmdeploy/serve/openai/protocol.py", "OpenAI-compatible protocol source"),
+          ("lmdeploy/turbomind/__init__.py", "TurboMind engine package"),
+          ("lmdeploy/turbomind/turbomind.py", "TurboMind engine source"),
+      ]
+
+
+      def read_env(name, default):
+          value = os.environ.get(name, "").strip()
+          return value or default
+
+
+      def source_url(ref, path):
+          encoded_ref = urllib.parse.quote(ref, safe="")
+          encoded_path = urllib.parse.quote(path, safe="/")
+          return f"{RAW_BASE}/{encoded_ref}/{encoded_path}"
+
+
+      def fetch_source(ref, path):
+          url = source_url(ref, path)
+          request = urllib.request.Request(url, headers={"User-Agent": "phala-cloud-lmdeploy-template"})
+          with urllib.request.urlopen(request, timeout=30) as response:
+              data = response.read(MAX_SOURCE_BYTES + 1)
+          if len(data) > MAX_SOURCE_BYTES:
+              raise RuntimeError(f"{path} is larger than {MAX_SOURCE_BYTES} bytes")
+          return {
+              "path": path,
+              "url": url,
+              "bytes": len(data),
+              "sha256": hashlib.sha256(data).hexdigest(),
+              "text": data.decode("utf-8", errors="replace"),
+          }
+
+
+      def build_check():
+          ref = read_env("LMDEPLOY_REF", DEFAULT_REF)
+          files = []
+          errors = []
+          sources = {}
+
+          for path, purpose in REQUIRED_SOURCES:
+              try:
+                  source = fetch_source(ref, path)
+                  files.append({
+                      "path": path,
+                      "purpose": purpose,
+                      "bytes": source["bytes"],
+                      "sha256": source["sha256"],
+                      "url": source["url"],
+                  })
+                  source["purpose"] = purpose
+                  files[-1]["present"] = True
+                  files[-1]["contains_expected_content"] = True
+                  sources[path] = source
+              except Exception as exc:
+                  errors.append({"path": path, "purpose": purpose, "error": f"{type(exc).__name__}: {exc}"})
+
+          readme = sources.get("README.md", {}).get("text", "")
+          version_py = sources.get("lmdeploy/version.py", {}).get("text", "")
+          pyproject = sources.get("pyproject.toml", {}).get("text", "")
+          api_server = sources.get("lmdeploy/serve/openai/api_server.py", {}).get("text", "")
+          turbomind = sources.get("lmdeploy/turbomind/turbomind.py", {}).get("text", "")
+
+          content_checks = {
+              "readme_describes_lmdeploy": "compressing, deploying, and serving LLM" in readme,
+              "readme_mentions_turbomind": "TurboMind" in readme,
+              "pyproject_has_build_system": "[build-system]" in pyproject,
+              "openai_api_server_source_present": "api_server" in api_server and "FastAPI" in api_server,
+              "turbomind_source_present": "TurboMind" in turbomind or "turbomind" in turbomind.lower(),
+          }
+
+          version_match = re.search(r"__version__\s*=\s*['\"]([^'\"]+)['\"]", version_py)
+          version = version_match.group(1) if version_match else None
+          if not version:
+              errors.append({"path": "lmdeploy/version.py", "error": "Could not parse __version__"})
+
+          for name, ok in content_checks.items():
+              if not ok:
+                  errors.append({"check": name, "error": "Expected source marker was not found"})
+
+          return {
+              "ok": not errors,
+              "ref": ref,
+              "version": version,
+              "upstream": UPSTREAM,
+              "raw_base": RAW_BASE,
+              "files": files,
+              "content_checks": content_checks,
+              "errors": errors,
+          }
+
+
+      SOURCE_CHECK = build_check()
+
+
+      def base_payload():
+          return {
+              "service": "lmdeploy-demo",
+              "upstream": UPSTREAM,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "source_check": SOURCE_CHECK,
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "lmdeploy-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              path = urllib.parse.urlparse(self.path).path
+              status = 200 if SOURCE_CHECK["ok"] else 500
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  payload.update({
+                      "ok": SOURCE_CHECK["ok"],
+                      "status": "ready" if SOURCE_CHECK["ok"] else "source_check_failed",
+                      "cpu_only": True,
+                      "model_downloaded": False,
+                      "model_loaded": False,
+                      "inference_started": False,
+                  })
+                  self.respond_json(status, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  payload.update({
+                      "ok": SOURCE_CHECK["ok"],
+                      "check": "Fetch release-tagged LMDeploy source files and verify package, API server, and TurboMind source markers.",
+                      "cpu_only": True,
+                      "model_downloaded": False,
+                      "model_loaded": False,
+                      "inference_started": False,
+                      "message": (
+                          "This template proves the LMDeploy project source is reachable and shaped as expected. "
+                          "It does not install CUDA wheels, download model weights, or start real inference."
+                      ),
+                  })
+                  self.respond_json(status, payload)
+                  return
+
+              if path == "/v1/models":
+                  payload = {
+                      "object": "list",
+                      "data": [],
+                      "demo": "No LMDeploy inference server or model worker is running in this CPU-safe source-check template.",
+                      "source_ok": SOURCE_CHECK["ok"],
+                      "source_ref": SOURCE_CHECK["ref"],
+                      "lmdeploy_version": SOURCE_CHECK["version"],
+                  }
+                  if SOURCE_CHECK["errors"]:
+                      payload["errors"] = SOURCE_CHECK["errors"]
+                  self.respond_json(status, payload)
+                  return
+
+              self.respond_json(404, {"ok": False, "error": "not found"})
+
+
+      server = ThreadingHTTPServer(("0.0.0.0", 8080), Handler)
+      print("lmdeploy demo server listening on 0.0.0.0:8080", flush=True)
+      server.serve_forever()

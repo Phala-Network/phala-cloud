@@ -1,0 +1,189 @@
+services:
+  app:
+    image: python:3.11-slim-bookworm
+    ports:
+      - "8080:8080"
+    environment:
+      - BEEAI_FRAMEWORK_PYTHON_VERSION=${BEEAI_FRAMEWORK_PYTHON_VERSION:-0.1.80}
+      - PIP_DISABLE_PIP_VERSION_CHECK=1
+      - PIP_NO_CACHE_DIR=1
+      - PIP_ROOT_USER_ACTION=ignore
+      - PYTHONUNBUFFERED=1
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        python -m pip install --no-cache-dir "beeai-framework==$${BEEAI_FRAMEWORK_PYTHON_VERSION}"
+        exec python /server.py
+    configs:
+      - source: server_py
+        target: /server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+    restart: unless-stopped
+
+configs:
+  server_py:
+    content: |
+      import asyncio
+      import importlib.metadata
+      import json
+      import platform
+      import sys
+      import time
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+      STARTED_AT = time.time()
+      LOAD_ERROR = None
+      PACKAGE = {}
+      DEMO = {}
+
+      try:
+          import beeai_framework
+          from beeai_framework.backend import AssistantMessage, SystemMessage, UserMessage
+          from beeai_framework.memory import UnconstrainedMemory
+          from beeai_framework.template import PromptTemplate
+          from beeai_framework.tools.think import ThinkTool
+          from pydantic import BaseModel, Field
+
+          class DemoPromptInput(BaseModel):
+              task: str = Field(description="Task to describe for the deterministic demo.")
+              checks: int = Field(description="Number of local checks to summarize.")
+
+          async def build_demo():
+              prompt = PromptTemplate(
+                  schema=DemoPromptInput,
+                  template="Prepare {{checks}} local BeeAI Framework checks for: {{task}}.",
+              )
+              rendered_prompt = prompt.render(
+                  {"task": "Phala Cloud credential-free smoke test", "checks": 3}
+              )
+
+              memory = UnconstrainedMemory()
+              await memory.add(SystemMessage("Use local framework primitives only."))
+              await memory.add(UserMessage.from_text("Verify the BeeAI Framework package loaded."))
+              await memory.add(AssistantMessage("Imported backend messages, memory, templates, and tools."))
+
+              think_tool = ThinkTool()
+              return {
+                  "prompt_rendered": rendered_prompt,
+                  "memory": {
+                      "type": type(memory).__name__,
+                      "message_count": len(memory.messages),
+                      "messages": [message.to_json_safe() for message in memory.messages],
+                  },
+                  "tool": {
+                      "name": think_tool.name,
+                      "description": think_tool.description,
+                      "input_schema": think_tool.input_schema.model_json_schema(),
+                  },
+              }
+
+          PACKAGE = {
+              "distribution": "beeai-framework",
+              "version": importlib.metadata.version("beeai-framework"),
+              "module": beeai_framework.__name__,
+              "imports": [
+                  "beeai_framework.backend",
+                  "beeai_framework.memory",
+                  "beeai_framework.template",
+                  "beeai_framework.tools.think",
+              ],
+          }
+          DEMO = asyncio.run(build_demo())
+      except Exception as exc:
+          LOAD_ERROR = f"{type(exc).__name__}: {exc}"
+
+
+      def base_payload():
+          return {
+              "service": "beeai-framework-demo",
+              "upstream": "https://github.com/i-am-bee/beeai-framework",
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "package": PACKAGE,
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "beeai-framework-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              path = urlparse(self.path).path
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  payload.update({
+                      "ok": LOAD_ERROR is None,
+                      "status": "ready" if LOAD_ERROR is None else "load_failed",
+                      "cpu_only": True,
+                      "credential_free": True,
+                      "external_model_calls": False,
+                      "model_downloaded": False,
+                  })
+                  if LOAD_ERROR:
+                      payload["error"] = LOAD_ERROR
+                  self.respond_json(200 if LOAD_ERROR is None else 500, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  payload.update({
+                      "ok": LOAD_ERROR is None,
+                      "cpu_only": True,
+                      "credential_free": True,
+                      "external_model_calls": False,
+                      "model_downloaded": False,
+                      "model_loaded": False,
+                      "check": (
+                          "Import BeeAI Framework and exercise message, memory, "
+                          "template, and tool primitives without configuring an LLM backend."
+                      ),
+                      "demo": DEMO,
+                  })
+                  if LOAD_ERROR:
+                      payload["error"] = LOAD_ERROR
+                  self.respond_json(200 if LOAD_ERROR is None else 500, payload)
+                  return
+
+              if path == "/v1/models":
+                  payload = {
+                      "object": "list",
+                      "data": [],
+                      "demo": (
+                          "No BeeAI ChatModel backend or external LLM provider is configured. "
+                          "Use /demo for the deterministic framework smoke test."
+                      ),
+                  }
+                  if LOAD_ERROR:
+                      payload["error"] = LOAD_ERROR
+                  self.respond_json(200 if LOAD_ERROR is None else 500, payload)
+                  return
+
+              self.respond_json(404, {"ok": False, "error": "not found"})
+
+
+      server = ThreadingHTTPServer(("0.0.0.0", 8080), Handler)
+      print("beeai-framework demo server listening on 0.0.0.0:8080", flush=True)
+      server.serve_forever()

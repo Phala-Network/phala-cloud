@@ -1,0 +1,226 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.11-slim-bookworm
+        ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+            PIP_NO_CACHE_DIR=1 \
+            PIP_ROOT_USER_ACTION=ignore \
+            PYTHONDONTWRITEBYTECODE=1 \
+            PYTHONUNBUFFERED=1
+        RUN python -m pip install --no-cache-dir --upgrade pip \
+            && python -m pip install --no-cache-dir "openai==1.51.2" \
+            && python -m pip install --no-cache-dir --no-deps "swarm @ https://github.com/openai/swarm/archive/6af0b4caf37dca4526dfd98e9fbd8ce36e7eeb22.tar.gz"
+        WORKDIR /app
+        EXPOSE 8000
+        CMD ["python", "/app/server.py"]
+    image: swarm-demo:latest
+    pull_policy: build
+    ports:
+      - "8000:8000"
+    configs:
+      - source: server_py
+        target: /app/server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+
+configs:
+  server_py:
+    content: |
+      import importlib.metadata
+      import json
+      import platform
+      import sys
+      import time
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+      SERVICE = "swarm-demo"
+      UPSTREAM = "https://github.com/openai/swarm"
+      UPSTREAM_COMMIT = "6af0b4caf37dca4526dfd98e9fbd8ce36e7eeb22"
+      STARTED_AT = time.time()
+      IMPORT_ERROR = None
+      PACKAGE = {}
+      SYMBOLS = {}
+
+      try:
+          import swarm
+          from swarm import Agent, Response, Swarm
+          from swarm.types import Result
+          from swarm.util import function_to_json
+
+          PACKAGE = {
+              "distribution": "swarm",
+              "version": importlib.metadata.version("swarm"),
+              "module": swarm.__name__,
+              "upstream": UPSTREAM,
+              "upstream_commit": UPSTREAM_COMMIT,
+              "openai_version": importlib.metadata.version("openai"),
+          }
+          SYMBOLS = {
+              "Agent": callable(Agent),
+              "Swarm": callable(Swarm),
+              "Response": callable(Response),
+              "Result": callable(Result),
+          }
+      except Exception as exc:
+          IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+
+
+      def topic_summary(topic: str = "confidential-ai") -> str:
+          """Return a deterministic local summary for the requested topic."""
+          return f"{topic}: local Swarm demo result generated without an LLM call"
+
+
+      def build_demo():
+          reviewer = Agent(
+              name="Review Agent",
+              instructions="Review deterministic local tool results.",
+          )
+
+          def transfer_to_review() -> Agent:
+              """Hand off the local smoke-test conversation to the review agent."""
+              return reviewer
+
+          triage = Agent(
+              name="Triage Agent",
+              instructions="Route local demo requests to a tool or another agent.",
+              functions=[topic_summary, transfer_to_review],
+          )
+          client = Swarm(client=object())
+          handoff = client.handle_function_result(transfer_to_review(), debug=False)
+          context_result = client.handle_function_result(
+              Result(
+                  value="local context updated",
+                  agent=reviewer,
+                  context_variables={"phase": "smoke-test", "llm_called": False},
+              ),
+              debug=False,
+          )
+          schema = function_to_json(topic_summary)
+
+          return {
+              "agents": [
+                  {
+                      "name": triage.name,
+                      "model": triage.model,
+                      "instructions": triage.instructions,
+                      "functions": [fn.__name__ for fn in triage.functions],
+                  },
+                  {
+                      "name": reviewer.name,
+                      "model": reviewer.model,
+                      "instructions": reviewer.instructions,
+                      "functions": [],
+                  },
+              ],
+              "tool": {
+                  "name": topic_summary.__name__,
+                  "schema": schema["function"],
+                  "result": topic_summary(),
+              },
+              "handoff": {
+                  "from": triage.name,
+                  "to": handoff.agent.name if handoff.agent else None,
+                  "serialized_value": json.loads(handoff.value),
+              },
+              "context_update": context_result.context_variables,
+              "llm_called": False,
+              "external_network_called": False,
+          }
+
+
+      def base_payload():
+          return {
+              "service": SERVICE,
+              "ok": IMPORT_ERROR is None,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "package": PACKAGE,
+              "symbols": SYMBOLS,
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "swarm-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              path = urlparse(self.path).path
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  payload.update(
+                      {
+                          "status": "ready" if IMPORT_ERROR is None else "import_failed",
+                          "check": "import swarm; from swarm import Agent, Swarm, Response; from swarm.types import Result",
+                          "core_symbols_ready": all(SYMBOLS.values()) if SYMBOLS else False,
+                      }
+                  )
+                  if IMPORT_ERROR:
+                      payload["error"] = IMPORT_ERROR
+                  self.respond_json(200 if IMPORT_ERROR is None else 500, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  if IMPORT_ERROR:
+                      payload["error"] = IMPORT_ERROR
+                      self.respond_json(500, payload)
+                      return
+                  payload.update(
+                      {
+                          "demo": build_demo(),
+                          "message": "Deterministic local Swarm agent, tool, and handoff demo. No OpenAI or provider API call is made.",
+                      }
+                  )
+                  self.respond_json(200, payload)
+                  return
+
+              if path == "/v1/models":
+                  payload = {
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "swarm-local-demo",
+                              "object": "model",
+                              "created": 0,
+                              "owned_by": "openai/swarm-demo",
+                          }
+                      ],
+                      "demo": "OpenAI-compatible model-list smoke endpoint for the local Swarm demo.",
+                  }
+                  if IMPORT_ERROR:
+                      payload["error"] = IMPORT_ERROR
+                      self.respond_json(500, payload)
+                      return
+                  self.respond_json(200, payload)
+                  return
+
+              self.respond_json(404, {"ok": False, "error": "not found"})
+
+
+      server = ThreadingHTTPServer(("0.0.0.0", 8000), Handler)
+      print("swarm demo server listening on 0.0.0.0:8000", flush=True)
+      server.serve_forever()
