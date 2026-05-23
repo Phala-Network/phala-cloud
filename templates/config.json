@@ -1026,6 +1026,34 @@
     "tags": ["AI Agents", "Web Apps", "TEE & Privacy"]
   },
   {
+    "id": "anything-llm",
+    "name": "Mintplex-Labs/anything-llm",
+    "description": "All-in-one private AI app, RAG, and agent workspace platform running on Phala Cloud with persistent local storage and post-deploy LLM provider configuration.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/anything-llm",
+    "author": "Mintplex-Labs",
+    "icon": "anything-llm.png",
+    "envs": [
+      {
+        "key": "AUTH_TOKEN",
+        "required": false,
+        "description": "Optional password gate for remotely hosted AnythingLLM. Generate a long random value and keep it stable across redeploys."
+      },
+      {
+        "key": "JWT_SECRET",
+        "required": false,
+        "description": "Optional JWT signing secret used when AUTH_TOKEN is set. Generate with openssl rand -hex 32."
+      },
+      {
+        "key": "DISABLE_TELEMETRY",
+        "required": false,
+        "default": "true",
+        "description": "Set to true to opt out of AnythingLLM telemetry."
+      }
+    ],
+    "defaultResource": { "vCPU": 2, "memory": 2048, "diskSize": 20 },
+    "tags": ["AI Agents", "Web Apps", "Data & Storage"]
+  },
+  {
     "id": "ollama",
     "name": "ollama/ollama",
     "description": "Lightweight Go framework to run LLMs locally or on cloud VMs; REST API compatible.",

@@ -1,0 +1,35 @@
+services:
+  anything-llm:
+    image: mintplexlabs/anythingllm:latest
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - SERVER_PORT=3001
+      - STORAGE_DIR=/app/server/storage
+      - DISABLE_TELEMETRY=${DISABLE_TELEMETRY:-true}
+      - AUTH_TOKEN
+      - JWT_SECRET
+    entrypoint:
+      - /bin/bash
+      - -lc
+      - |
+        set -e
+        mkdir -p /app/server/storage
+        if [ ! -f /app/server/storage/.env ]; then
+          cp /app/server/.env /app/server/storage/.env
+        fi
+        rm -f /app/server/.env
+        ln -s /app/server/storage/.env /app/server/.env
+        exec /bin/bash /usr/local/bin/docker-entrypoint.sh
+    volumes:
+      - anythingllm_storage:/app/server/storage
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3001/api/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  anythingllm_storage:
