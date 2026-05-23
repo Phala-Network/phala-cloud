@@ -2013,5 +2013,27 @@
       "diskSize": 10
     },
     "tags": ["LLM Inference & Model Serving", "AI", "Developer Tools"]
+  },
+  {
+    "id": "langchain",
+    "name": "langchain-ai/langchain",
+    "description": "CPU-safe LangChain HTTP demo that imports the framework and runs a deterministic local chain without model downloads, API keys, or external provider calls.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/langchain",
+    "author": "langchain-ai",
+    "icon": "langchain.svg",
+    "envs": [
+      {
+        "key": "LANGCHAIN_VERSION",
+        "required": false,
+        "description": "LangChain Python package version installed at container startup.",
+        "default": "0.3.27"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 10
+    },
+    "tags": ["Agent Frameworks & Orchestration", "Developer Tools"]
   }
 ]
