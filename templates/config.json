@@ -295,6 +295,38 @@
     "tags": ["AI Agents", "Automation"]
   },
   {
+    "id": "jarvis",
+    "name": "microsoft/JARVIS",
+    "description": "HuggingGPT/JARVIS connects LLMs with Hugging Face models as tools.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/jarvis",
+    "author": "Microsoft/JARVIS",
+    "icon": "jarvis.png",
+    "envs": [
+      {
+        "key": "JARVIS_REF",
+        "required": false,
+        "description": "Optional microsoft/JARVIS git ref for the source-verifier demo.",
+        "default": "7624cf388b47334ff8a0868e7d862dde18cfda86"
+      },
+      {
+        "key": "OPENAI_API_KEY",
+        "required": false,
+        "description": "Optional OpenAI API key, only needed if you extend this demo to run real JARVIS."
+      },
+      {
+        "key": "HUGGINGFACE_ACCESS_TOKEN",
+        "required": false,
+        "description": "Optional Hugging Face token, only needed if you extend this demo to run real JARVIS."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 40
+    },
+    "tags": ["AI Agents", "Automation", "Developer Tools"]
+  },
+  {
     "id": "fastchat",
     "name": "FastChat",
     "description": "A CPU-safe FastChat OpenAI-compatible API demo that starts the real FastChat controller and REST API server without a model worker by default.",
