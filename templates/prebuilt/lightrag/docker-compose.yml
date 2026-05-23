@@ -1,0 +1,435 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        LIGHTRAG_PACKAGE_VERSION: ${LIGHTRAG_PACKAGE_VERSION:-1.4.16}
+      dockerfile_inline: |
+        # syntax=docker/dockerfile:1.9
+        FROM python:3.11-slim-bookworm
+
+        ARG LIGHTRAG_PACKAGE_VERSION=1.4.16
+
+        ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+            PIP_NO_CACHE_DIR=1 \
+            PIP_ROOT_USER_ACTION=ignore \
+            PYTHONDONTWRITEBYTECODE=1 \
+            PYTHONUNBUFFERED=1
+
+        RUN python -m pip install --upgrade pip \
+            && python -m pip install "lightrag-hku==$${LIGHTRAG_PACKAGE_VERSION}" \
+            && python - <<'PY'
+        import importlib.metadata
+        from lightrag.lightrag import EmbeddingFunc, LightRAG, QueryParam
+        from lightrag.utils import compute_mdhash_id, cosine_similarity
+
+        print("Installed lightrag-hku", importlib.metadata.version("lightrag-hku"))
+        print("Verified symbols", LightRAG.__name__, QueryParam.__name__, EmbeddingFunc.__name__)
+        print("Verified utility", compute_mdhash_id("lightrag", prefix="doc-"), callable(cosine_similarity))
+        PY
+
+        WORKDIR /app
+
+        RUN groupadd --system app \
+            && useradd --system --create-home --home-dir /app --gid app app \
+            && chown -R app:app /app
+
+        USER app
+
+        EXPOSE 8080
+    image: phala-lightrag-demo:1.4.16
+    pull_policy: build
+    restart: unless-stopped
+    environment:
+      LIGHTRAG_DEMO_TOP_K: ${LIGHTRAG_DEMO_TOP_K:-2}
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "8080:8080"
+    configs:
+      - source: server_py
+        target: /app/server.py
+        mode: 0444
+    command:
+      - python
+      - /app/server.py
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import json, urllib.request; data = json.load(urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5)); assert data["ok"] is True
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+
+configs:
+  server_py:
+    content: |
+      import atexit
+      import asyncio
+      import importlib
+      import importlib.metadata
+      import json
+      import logging
+      import math
+      import os
+      import platform
+      import re
+      import sys
+      import time
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import parse_qs, urlparse
+
+      STARTED_AT = time.time()
+      UPSTREAM = "https://github.com/HKUDS/LightRAG"
+      DEFAULT_QUERY = "How does this LightRAG demo retrieve context without provider credentials?"
+      WORKING_DIR = "/tmp/lightrag-runtime"
+
+      IMPORT_ERROR = None
+      RUNTIME_ERROR = None
+      RAG_INSTANCE = None
+      RAG_INITIALIZED = False
+      PACKAGE = {}
+      DEMO_EMBEDDING = None
+
+      try:
+          import numpy as np
+          lightrag_module = importlib.import_module("lightrag")
+          from lightrag.lightrag import EmbeddingFunc, LightRAG, QueryParam
+          from lightrag.utils import compute_mdhash_id, cosine_similarity
+
+          metadata = importlib.metadata.metadata("lightrag-hku")
+          PACKAGE = {
+              "distribution": "lightrag-hku",
+              "version": importlib.metadata.version("lightrag-hku"),
+              "module": lightrag_module.__name__,
+              "summary": metadata.get("Summary", ""),
+              "requires_python": metadata.get("Requires-Python", ""),
+              "core_symbols": [
+                  "LightRAG",
+                  "QueryParam",
+                  "EmbeddingFunc",
+                  "compute_mdhash_id",
+                  "cosine_similarity",
+              ],
+          }
+      except Exception as exc:
+          IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+
+      VOCAB = (
+          "lightrag",
+          "rag",
+          "retrieval",
+          "knowledge",
+          "graph",
+          "vector",
+          "embedding",
+          "chunk",
+          "provider",
+          "credential",
+          "local",
+          "phala",
+          "cloud",
+          "demo",
+          "other",
+      )
+
+      DOCUMENTS = [
+          {
+              "slug": "framework",
+              "title": "LightRAG framework",
+              "text": (
+                  "LightRAG is a simple and fast retrieval augmented generation framework "
+                  "that combines graph context, vector retrieval, chunks, and knowledge "
+                  "relationships for RAG applications."
+              ),
+          },
+          {
+              "slug": "runtime",
+              "title": "Runtime verifier",
+              "text": (
+                  "This Phala Cloud demo installs lightrag-hku, imports LightRAG, "
+                  "constructs local storage with deterministic embeddings, and returns "
+                  "JSON without using external provider credentials."
+              ),
+          },
+          {
+              "slug": "production",
+              "title": "Production configuration",
+              "text": (
+                  "A production LightRAG server usually needs documents, an LLM model "
+                  "function, an embedding model, storage choices, and provider-specific "
+                  "environment variables."
+              ),
+          },
+          {
+              "slug": "safety",
+              "title": "CPU-safe behavior",
+              "text": (
+                  "The bundled demo uses local keyword vectors, avoids GPU devices, "
+                  "does not download model weights, and does not call OpenAI, Azure, "
+                  "Ollama, Gemini, or any hosted model service."
+              ),
+          },
+      ]
+
+
+      def normalize(text):
+          normalized = text.lower()
+          normalized = normalized.replace("light-rag", "lightrag")
+          normalized = normalized.replace("light rag", "lightrag")
+          return re.findall(r"[a-z0-9]+", normalized)
+
+
+      def vectorize(text):
+          tokens = normalize(text)
+          values = [
+              float(sum(1 for token in tokens if token == term or token.startswith(term)))
+              for term in VOCAB
+          ]
+          if not any(values):
+              values[-1] = 1.0
+          norm = math.sqrt(sum(value * value for value in values)) or 1.0
+          return [value / norm for value in values]
+
+
+      if IMPORT_ERROR is None:
+
+          async def deterministic_embedding(texts):
+              return np.array([vectorize(text) for text in texts], dtype=np.float32)
+
+
+          async def local_llm_model_func(
+              prompt, system_prompt=None, history_messages=None, **kwargs
+          ):
+              return (
+                  "Local deterministic LightRAG verifier response. "
+                  "No hosted model provider was called."
+              )
+
+
+          DEMO_EMBEDDING = EmbeddingFunc(
+              embedding_dim=len(VOCAB),
+              max_token_size=2048,
+              func=deterministic_embedding,
+          )
+
+
+          async def initialize_lightrag_runtime():
+              global RAG_INSTANCE, RAG_INITIALIZED
+              os.makedirs(WORKING_DIR, exist_ok=True)
+              RAG_INSTANCE = LightRAG(
+                  working_dir=WORKING_DIR,
+                  embedding_func=DEMO_EMBEDDING,
+                  llm_model_func=local_llm_model_func,
+                  llm_model_name="local-deterministic-verifier",
+                  chunk_token_size=256,
+                  chunk_overlap_token_size=32,
+                  embedding_batch_num=4,
+                  max_parallel_insert=1,
+                  log_level=logging.WARNING,
+              )
+              await RAG_INSTANCE.initialize_storages()
+              RAG_INITIALIZED = True
+
+
+          try:
+              asyncio.run(initialize_lightrag_runtime())
+          except Exception as exc:
+              RUNTIME_ERROR = f"{type(exc).__name__}: {exc}"
+
+
+      def finalize_lightrag_runtime():
+          if RAG_INSTANCE is None or not RAG_INITIALIZED:
+              return
+          try:
+              asyncio.run(RAG_INSTANCE.finalize_storages())
+          except Exception as exc:
+              print(f"LightRAG finalize failed: {type(exc).__name__}: {exc}", flush=True)
+
+
+      atexit.register(finalize_lightrag_runtime)
+
+
+      def is_ready():
+          return IMPORT_ERROR is None and RUNTIME_ERROR is None and RAG_INITIALIZED
+
+
+      def get_top_k(params):
+          raw = params.get("top_k", [os.environ.get("LIGHTRAG_DEMO_TOP_K", "2")])[0]
+          try:
+              value = int(raw)
+          except (TypeError, ValueError):
+              value = 2
+          return max(1, min(value, len(DOCUMENTS)))
+
+
+      def get_query(params):
+          values = params.get("query") or params.get("q") or [DEFAULT_QUERY]
+          query = values[0].strip()
+          return query or DEFAULT_QUERY
+
+
+      def run_demo(query, top_k):
+          if not is_ready():
+              raise RuntimeError(IMPORT_ERROR or RUNTIME_ERROR or "LightRAG runtime is not ready")
+
+          query_param = QueryParam(mode="naive", top_k=top_k, chunk_top_k=top_k)
+          texts = [f"{item['title']} {item['text']}" for item in DOCUMENTS]
+          query_vector = asyncio.run(DEMO_EMBEDDING([query]))[0]
+          doc_vectors = asyncio.run(DEMO_EMBEDDING(texts))
+          query_tokens = set(normalize(query))
+
+          scored = []
+          for item, vector in zip(DOCUMENTS, doc_vectors):
+              score = float(cosine_similarity(query_vector, vector))
+              text_tokens = set(normalize(f"{item['title']} {item['text']}"))
+              scored.append(
+                  {
+                      "id": compute_mdhash_id(item["slug"], prefix="doc-"),
+                      "slug": item["slug"],
+                      "title": item["title"],
+                      "score": round(score, 6),
+                      "matched_terms": sorted(query_tokens & text_tokens),
+                      "text": item["text"],
+                  }
+              )
+
+          scored.sort(key=lambda item: (-item["score"], item["id"]))
+          contexts = scored[:top_k]
+
+          return {
+              "query": query,
+              "top_k": top_k,
+              "retrieved_contexts": contexts,
+              "query_param": {
+                  "class": "lightrag.lightrag.QueryParam",
+                  "mode": query_param.mode,
+                  "top_k": query_param.top_k,
+                  "chunk_top_k": query_param.chunk_top_k,
+              },
+              "embedding": {
+                  "class": "lightrag.lightrag.EmbeddingFunc",
+                  "dimension": DEMO_EMBEDDING.embedding_dim,
+                  "model": "local keyword-count verifier",
+              },
+              "deterministic_answer": (
+                  "The demo ranks bundled documents with a local deterministic embedding "
+                  "and LightRAG utility functions, then returns the strongest contexts. "
+                  "It verifies the package/runtime without calling an LLM provider."
+              ),
+              "external_calls": False,
+              "credentials_used": False,
+              "model_downloaded": False,
+              "gpu_required": False,
+          }
+
+
+      def base_payload():
+          return {
+              "ok": is_ready(),
+              "service": "lightrag-local-rag-demo",
+              "upstream": UPSTREAM,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "package": PACKAGE,
+              "runtime": {
+                  "working_dir": WORKING_DIR,
+                  "lightrag_object_created": RAG_INSTANCE is not None,
+                  "initialize_storages_completed": RAG_INITIALIZED,
+                  "import_error": IMPORT_ERROR,
+                  "runtime_error": RUNTIME_ERROR,
+              },
+              "external_calls": False,
+              "credentials_used": False,
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "lightrag-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              parsed = urlparse(self.path)
+              params = parse_qs(parsed.query)
+
+              if parsed.path in ("/", "/healthz"):
+                  payload = base_payload()
+                  payload["status"] = "ready" if payload["ok"] else "not_ready"
+                  payload["checks"] = [
+                      "import lightrag",
+                      "from lightrag.lightrag import LightRAG, QueryParam, EmbeddingFunc",
+                      "from lightrag.utils import compute_mdhash_id, cosine_similarity",
+                      "construct LightRAG with local deterministic EmbeddingFunc",
+                      "await LightRAG.initialize_storages()",
+                  ]
+                  self.respond_json(200 if payload["ok"] else 500, payload)
+                  return
+
+              if parsed.path == "/demo":
+                  payload = base_payload()
+                  try:
+                      payload["demo"] = run_demo(get_query(params), get_top_k(params))
+                      payload["cpu_only"] = True
+                      self.respond_json(200, payload)
+                  except Exception as exc:
+                      payload["ok"] = False
+                      payload["error"] = f"{type(exc).__name__}: {exc}"
+                      self.respond_json(500, payload)
+                  return
+
+              if parsed.path == "/v1/models":
+                  payload = {
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "lightrag-hku-local-verifier",
+                              "object": "model",
+                              "created": int(STARTED_AT),
+                              "owned_by": "HKUDS/LightRAG",
+                              "root": "lightrag-hku",
+                              "parent": None,
+                              "permission": [],
+                              "metadata": {
+                                  "package": PACKAGE,
+                                  "external_calls": False,
+                                  "credentials_used": False,
+                                  "gpu_required": False,
+                              },
+                          }
+                      ],
+                  }
+                  self.respond_json(200, payload)
+                  return
+
+              self.respond_json(
+                  404,
+                  {
+                      "ok": False,
+                      "error": "not_found",
+                      "endpoints": ["/healthz", "/demo", "/v1/models"],
+                  },
+              )
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("PORT", "8080"))
+          server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+          print(f"LightRAG demo listening on 0.0.0.0:{port}", flush=True)
+          server.serve_forever()

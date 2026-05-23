@@ -2303,5 +2303,37 @@
     "Developer Tools",
     "AI Agents"
   ]
+},
+{
+  "id": "lightrag",
+  "name": "HKUDS/LightRAG",
+  "description": "CPU-safe LightRAG HTTP verifier demo that installs and imports the real lightrag-hku package, initializes local runtime primitives, and serves deterministic local RAG-style JSON endpoints without external credentials.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/lightrag",
+  "author": "HKUDS",
+  "icon": "lightrag.png",
+  "envs": [
+    {
+      "key": "LIGHTRAG_PACKAGE_VERSION",
+      "required": false,
+      "description": "LightRAG Python package version installed by the inline image build.",
+      "default": "1.4.16"
+    },
+    {
+      "key": "LIGHTRAG_DEMO_TOP_K",
+      "required": false,
+      "description": "Number of local demo contexts returned by /demo. Values are clamped to the bundled demo document count.",
+      "default": "2"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": [
+    "RAG",
+    "Developer Tools",
+    "AI"
+  ]
 }
 ]
