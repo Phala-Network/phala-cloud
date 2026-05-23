@@ -1,0 +1,40 @@
+services:
+  activepieces:
+    image: ghcr.io/activepieces/activepieces:0.83.0
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      AP_CONTAINER_TYPE: WORKER_AND_APP
+      AP_ENVIRONMENT: prod
+      AP_DB_TYPE: PGLITE
+      AP_REDIS_TYPE: MEMORY
+      AP_CONFIG_PATH: /root/.activepieces
+      AP_FRONTEND_URL: ${AP_FRONTEND_URL:-https://${DSTACK_APP_DOMAIN:-localhost:8080}}
+      AP_ENCRYPTION_KEY: ${AP_ENCRYPTION_KEY:-}
+      AP_JWT_SECRET: ${AP_JWT_SECRET:-}
+      AP_EXECUTION_MODE: UNSANDBOXED
+      AP_FILE_STORAGE_LOCATION: DB
+      AP_CLOUD_AUTH_ENABLED: ${AP_CLOUD_AUTH_ENABLED:-false}
+      AP_QUEUE_UI_ENABLED: "false"
+      AP_TELEMETRY_ENABLED: ${AP_TELEMETRY_ENABLED:-false}
+      AP_WORKER_CONCURRENCY: ${AP_WORKER_CONCURRENCY:-2}
+      AP_DEFAULT_CONCURRENT_JOBS_LIMIT: ${AP_DEFAULT_CONCURRENT_JOBS_LIMIT:-2}
+      AP_TRIGGER_DEFAULT_POLL_INTERVAL: ${AP_TRIGGER_DEFAULT_POLL_INTERVAL:-5}
+      AP_FLOW_TIMEOUT_SECONDS: ${AP_FLOW_TIMEOUT_SECONDS:-600}
+    volumes:
+      - activepieces_data:/root/.activepieces
+      - activepieces_cache:/usr/src/app/cache
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          node -e "fetch('http://127.0.0.1/api/v1/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+volumes:
+  activepieces_data:
+  activepieces_cache:
