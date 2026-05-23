@@ -1,0 +1,393 @@
+services:
+  app:
+    image: node:22-bookworm-slim
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      BOLT_DIY_REF: ${BOLT_DIY_REF:-2e254ac19a696394030601bc602f54945b12bfc4}
+      NODE_ENV: production
+      PORT: "8080"
+    configs:
+      - source: bolt_diy_demo_server
+        target: /opt/bolt-diy-demo/server.mjs
+    command:
+      - /bin/sh
+      - -lc
+      - exec node /opt/bolt-diy-demo/server.mjs
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - |
+          fetch('http://127.0.0.1:8080/healthz').then(function (response) { process.exit(response.ok ? 0 : 1); }).catch(function () { process.exit(1); });
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+configs:
+  bolt_diy_demo_server:
+    content: |
+      import http from 'node:http';
+      import { createHash } from 'node:crypto';
+
+      const upstreamRepo = 'https://github.com/stackblitz-labs/bolt.diy';
+      const rawBase = 'https://raw.githubusercontent.com/stackblitz-labs/bolt.diy';
+      const apiBase = 'https://api.github.com/repos/stackblitz-labs/bolt.diy';
+      const ref = process.env.BOLT_DIY_REF || '2e254ac19a696394030601bc602f54945b12bfc4';
+      const port = Number.parseInt(process.env.PORT || '8080', 10);
+      const startedAt = Date.now();
+
+      let upstreamStatus = {
+        ok: false,
+        status: 'starting',
+        upstream: upstreamRepo,
+        ref,
+        credentials_required: false,
+        llm_provider_calls: false,
+        remote_model_calls: false,
+        source_fetch_required: true,
+      };
+
+      function encodePath(path) {
+        return path.split('/').map(encodeURIComponent).join('/');
+      }
+
+      function rawUrl(path) {
+        return rawBase + '/' + encodeURIComponent(ref) + '/' + encodePath(path);
+      }
+
+      function contentsUrl(path) {
+        return apiBase + '/contents/' + encodePath(path) + '?ref=' + encodeURIComponent(ref);
+      }
+
+      function commitUrl() {
+        return apiBase + '/commits/' + encodeURIComponent(ref);
+      }
+
+      function errorMessage(error) {
+        return error && error.stack ? error.stack.split('\n')[0] : String(error);
+      }
+
+      async function fetchText(url) {
+        const response = await fetch(url, {
+          headers: {
+            Accept: 'application/vnd.github+json, text/plain',
+            'User-Agent': 'phala-cloud-bolt-diy-template',
+          },
+          signal: AbortSignal.timeout(20000),
+        });
+
+        if (!response.ok) {
+          throw new Error('GET ' + url + ' failed with HTTP ' + response.status);
+        }
+
+        return response.text();
+      }
+
+      async function fetchJson(url) {
+        return JSON.parse(await fetchText(url));
+      }
+
+      function sha256Prefix(value) {
+        return createHash('sha256').update(value).digest('hex').slice(0, 16);
+      }
+
+      function nodeEngineOk(engine) {
+        const match = String(engine || '').match(/>=\s*(\d+)\.(\d+)\.(\d+)/);
+
+        if (!match) {
+          return null;
+        }
+
+        const required = match.slice(1).map(Number);
+        const current = process.versions.node.split('.').map(Number);
+
+        for (let index = 0; index < required.length; index += 1) {
+          if (current[index] > required[index]) {
+            return true;
+          }
+
+          if (current[index] < required[index]) {
+            return false;
+          }
+        }
+
+        return true;
+      }
+
+      function namedItems(items) {
+        return Array.isArray(items) ? items.map(function (item) { return item.name; }).sort() : [];
+      }
+
+      async function loadUpstreamStatus() {
+        const refreshStartedAt = Date.now();
+        const packageText = await fetchText(rawUrl('package.json'));
+        const readmeText = await fetchText(rawUrl('README.md'));
+        const chatRouteText = await fetchText(rawUrl('app/routes/api.chat.ts'));
+        const messageParserText = await fetchText(rawUrl('app/lib/runtime/message-parser.ts'));
+        const webcontainerText = await fetchText(rawUrl('app/lib/webcontainer/index.ts'));
+        const llmItems = await fetchJson(contentsUrl('app/lib/.server/llm'));
+        const publicItems = await fetchJson(contentsUrl('public'));
+        const commitInfo = await fetchJson(commitUrl()).catch(function () { return null; });
+
+        const manifest = JSON.parse(packageText);
+        const dependencies = manifest.dependencies || {};
+        const scripts = manifest.scripts || {};
+        const llmFileNames = namedItems(llmItems);
+        const publicFileNames = namedItems(publicItems);
+
+        const requiredDependencies = [
+          '@remix-run/cloudflare',
+          '@webcontainer/api',
+          'ai',
+          '@ai-sdk/openai',
+          '@ai-sdk/anthropic',
+          '@modelcontextprotocol/sdk',
+        ];
+        const missingDependencies = requiredDependencies.filter(function (name) {
+          return !dependencies[name];
+        });
+        const requiredScripts = ['dev', 'build', 'dockerstart'];
+        const missingScripts = requiredScripts.filter(function (name) {
+          return !scripts[name];
+        });
+        const providerDependencies = Object.keys(dependencies).filter(function (name) {
+          return name === 'ai' || name.includes('ai-sdk') || name.includes('openrouter') || name.includes('ollama');
+        }).sort();
+        const engineOk = nodeEngineOk(manifest.engines && manifest.engines.node);
+
+        const checks = {
+          package_manifest: {
+            ok: manifest.name === 'bolt' && manifest.private === true && manifest.type === 'module',
+            name: manifest.name,
+            version: manifest.version,
+            license: manifest.license,
+            private: manifest.private === true,
+            module_type: manifest.type,
+            package_sha256_prefix: sha256Prefix(packageText),
+          },
+          package_manager: {
+            ok: String(manifest.packageManager || '').startsWith('pnpm@'),
+            package_manager: manifest.packageManager || null,
+          },
+          node_runtime: {
+            ok: engineOk === true,
+            required: manifest.engines && manifest.engines.node ? manifest.engines.node : null,
+            current: process.version,
+          },
+          npm_scripts: {
+            ok: missingScripts.length === 0,
+            required: requiredScripts,
+            missing: missingScripts,
+          },
+          dependencies: {
+            ok: missingDependencies.length === 0,
+            required: requiredDependencies,
+            missing: missingDependencies,
+            provider_dependency_count: providerDependencies.length,
+          },
+          ai_chat_route: {
+            ok: chatRouteText.includes('streamText') && chatRouteText.includes('MCPService') && chatRouteText.includes('createSummary'),
+            path: 'app/routes/api.chat.ts',
+            sha256_prefix: sha256Prefix(chatRouteText),
+          },
+          llm_runtime_directory: {
+            ok: llmFileNames.includes('stream-text.ts') && llmFileNames.includes('select-context.ts') && llmFileNames.includes('switchable-stream.ts'),
+            path: 'app/lib/.server/llm',
+            files_checked: llmFileNames.filter(function (name) {
+              return ['stream-text.ts', 'select-context.ts', 'switchable-stream.ts'].includes(name);
+            }),
+          },
+          webcontainer_runtime: {
+            ok: webcontainerText.includes('WebContainer.boot') && webcontainerText.includes('@webcontainer/api'),
+            path: 'app/lib/webcontainer/index.ts',
+            dependency: dependencies['@webcontainer/api'] || null,
+            sha256_prefix: sha256Prefix(webcontainerText),
+          },
+          action_parser_runtime: {
+            ok: messageParserText.includes('parse') && messageParserText.includes('BoltAction') && messageParserText.includes('BoltArtifact'),
+            path: 'app/lib/runtime/message-parser.ts',
+            sha256_prefix: sha256Prefix(messageParserText),
+          },
+          public_assets: {
+            ok: publicFileNames.includes('favicon.svg') && publicFileNames.includes('logo.svg'),
+            required: ['favicon.svg', 'logo.svg'],
+            available_subset: publicFileNames.filter(function (name) {
+              return ['favicon.svg', 'logo.svg', 'social_preview_index.jpg'].includes(name);
+            }),
+          },
+          upstream_readme: {
+            ok: readmeText.includes('official open source version') && readmeText.includes('LLM'),
+            sha256_prefix: sha256Prefix(readmeText),
+          },
+        };
+
+        const ok = Object.values(checks).every(function (check) { return check.ok; });
+
+        return {
+          ok,
+          status: ok ? 'ready' : 'failed_checks',
+          service: 'bolt-diy-metadata-demo',
+          upstream: upstreamRepo,
+          upstream_tree: upstreamRepo + '/tree/' + ref,
+          ref,
+          resolved_commit: commitInfo && commitInfo.sha ? commitInfo.sha : null,
+          fetched_at: new Date().toISOString(),
+          fetch_duration_ms: Date.now() - refreshStartedAt,
+          credentials_required: false,
+          llm_provider_calls: false,
+          remote_model_calls: false,
+          model_loaded: false,
+          model_downloaded: false,
+          source_fetch_required: true,
+          package: {
+            name: manifest.name,
+            version: manifest.version,
+            description: manifest.description,
+            package_manager: manifest.packageManager,
+            node_engine: manifest.engines && manifest.engines.node ? manifest.engines.node : null,
+          },
+          provider_dependencies: providerDependencies,
+          checks,
+        };
+      }
+
+      async function refreshStatus() {
+        try {
+          upstreamStatus = await loadUpstreamStatus();
+        } catch (error) {
+          upstreamStatus = {
+            ok: false,
+            status: 'source_fetch_failed',
+            service: 'bolt-diy-metadata-demo',
+            upstream: upstreamRepo,
+            upstream_tree: upstreamRepo + '/tree/' + ref,
+            ref,
+            fetched_at: new Date().toISOString(),
+            credentials_required: false,
+            llm_provider_calls: false,
+            remote_model_calls: false,
+            model_loaded: false,
+            model_downloaded: false,
+            source_fetch_required: true,
+            error: errorMessage(error),
+          };
+        }
+      }
+
+      function basePayload() {
+        return {
+          service: 'bolt-diy-metadata-demo',
+          template_id: 'bolt-diy',
+          upstream: upstreamRepo,
+          ref,
+          node: process.version,
+          uptime_seconds: Math.round((Date.now() - startedAt) / 1000),
+        };
+      }
+
+      function jsonResponse(response, statusCode, payload) {
+        const body = JSON.stringify(payload, null, 2) + '\n';
+        response.writeHead(statusCode, {
+          'Cache-Control': 'no-store',
+          'Content-Type': 'application/json; charset=utf-8',
+          'Content-Length': Buffer.byteLength(body),
+          'X-Content-Type-Options': 'nosniff',
+        });
+        response.end(body);
+      }
+
+      function handleRequest(request, response) {
+        const url = new URL(request.url || '/', 'http://localhost');
+
+        if (request.method !== 'GET') {
+          jsonResponse(response, 405, {
+            ok: false,
+            error: 'method_not_allowed',
+            endpoints: ['/', '/healthz', '/demo', '/v1/models'],
+          });
+          return;
+        }
+
+        if (url.pathname === '/' || url.pathname === '/healthz') {
+          const payload = {
+            ...basePayload(),
+            ...upstreamStatus,
+          };
+          jsonResponse(response, upstreamStatus.ok ? 200 : 503, payload);
+          return;
+        }
+
+        if (url.pathname === '/demo') {
+          const payload = {
+            ...basePayload(),
+            ok: upstreamStatus.ok === true,
+            mode: 'metadata-verifier',
+            credentials_required: false,
+            llm_provider_calls: false,
+            remote_model_calls: false,
+            model_loaded: false,
+            model_downloaded: false,
+            source_fetch_required: true,
+            smoke_path: [
+              'fetch upstream package.json and selected source files',
+              'verify Node, pnpm, Remix, AI SDK, WebContainer, LLM route, and public asset surface',
+              'serve deterministic JSON metadata without calling an LLM provider',
+            ],
+            upstream_status: upstreamStatus,
+          };
+          jsonResponse(response, upstreamStatus.ok ? 200 : 503, payload);
+          return;
+        }
+
+        if (url.pathname === '/v1/models') {
+          const payload = {
+            object: 'list',
+            data: [
+              {
+                id: 'bolt-diy/no-llm-metadata-demo',
+                object: 'model',
+                created: 1704067200,
+                owned_by: 'stackblitz-labs',
+                description: 'Metadata-only smoke endpoint. The default template verifies bolt.diy source/runtime shape and does not host or call an LLM.',
+              },
+            ],
+            credentials_required: false,
+            llm_provider_calls: false,
+            upstream_ready: upstreamStatus.ok === true,
+          };
+          jsonResponse(response, 200, payload);
+          return;
+        }
+
+        jsonResponse(response, 404, {
+          ok: false,
+          error: 'not_found',
+          endpoints: ['/', '/healthz', '/demo', '/v1/models'],
+        });
+      }
+
+      const server = http.createServer(handleRequest);
+
+      server.listen(port, '0.0.0.0', function () {
+        console.log(JSON.stringify({
+          event: 'startup',
+          service: 'bolt-diy-metadata-demo',
+          port,
+          upstream: upstreamRepo,
+          ref,
+        }));
+      });
+
+      refreshStatus().then(function () {
+        console.log(JSON.stringify({
+          event: 'upstream_status',
+          ok: upstreamStatus.ok,
+          status: upstreamStatus.status,
+          ref,
+        }));
+      });
