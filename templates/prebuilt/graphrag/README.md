@@ -93,20 +93,20 @@ Expected `/demo` fields include:
 Run locally from the repository root:
 
 ```bash
-docker compose -f sdks/templates/prebuilt/graphrag/docker-compose.yml config >/dev/null
-docker compose -f sdks/templates/prebuilt/graphrag/docker-compose.yml up -d --build
+docker compose -f templates/prebuilt/graphrag/docker-compose.yml config >/dev/null
+docker compose -f templates/prebuilt/graphrag/docker-compose.yml up -d --build
 curl -fsS http://127.0.0.1:8080/healthz
 curl -fsS "http://127.0.0.1:8080/demo?q=graph%20retrieval"
 curl -fsS http://127.0.0.1:8080/v1/models
-docker compose -f sdks/templates/prebuilt/graphrag/docker-compose.yml down --remove-orphans
+docker compose -f templates/prebuilt/graphrag/docker-compose.yml down --remove-orphans
 ```
 
 Template validation commands:
 
 ```bash
-python sdks/templates/validate.py
-git -C sdks diff --check origin/main...HEAD
-docker compose -f sdks/templates/prebuilt/graphrag/docker-compose.yml config >/dev/null
+python3 templates/validate.py
+git diff --check origin/main...HEAD
+docker compose -f templates/prebuilt/graphrag/docker-compose.yml config >/dev/null
 ```
 
 ## Extending For Real GraphRAG
@@ -136,7 +136,7 @@ Do not put real API keys, Azure connection strings, private documents, or genera
 Local cleanup:
 
 ```bash
-docker compose -f sdks/templates/prebuilt/graphrag/docker-compose.yml down --remove-orphans
+docker compose -f templates/prebuilt/graphrag/docker-compose.yml down --remove-orphans
 docker image rm phala-graphrag-demo:3.0.9
 ```
 
