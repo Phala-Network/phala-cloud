@@ -1,0 +1,77 @@
+services:
+  app:
+    image: python:3.11-slim-bookworm
+    restart: unless-stopped
+    working_dir: /app
+    ports:
+      - "8080:3000"
+    environment:
+      BENTOML_VERSION: ${BENTOML_VERSION:-1.4.39}
+      BENTOML_DO_NOT_TRACK: "true"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+      PIP_ROOT_USER_ACTION: ignore
+      PYTHONUNBUFFERED: "1"
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        python -m pip install --no-cache-dir "bentoml==$${BENTOML_VERSION}"
+        exec bentoml serve service.py:PhalaBentoDemo --host 0.0.0.0 --port 3000 --do-not-track
+    configs:
+      - source: service_py
+        target: /app/service.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:3000/readyz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 6
+      start_period: 180s
+
+configs:
+  service_py:
+    content: |
+      import importlib.metadata
+      import platform
+      import time
+      from typing import Any
+
+      import bentoml
+
+      STARTED_AT = time.time()
+
+
+      @bentoml.service(name="phala_bentoml_demo", resources={"cpu": "1"})
+      class PhalaBentoDemo:
+          @bentoml.api(route="/demo")
+          def demo(self, text: str = "hello from Phala Cloud") -> dict[str, Any]:
+              return {
+                  "ok": True,
+                  "framework": "BentoML",
+                  "bentoml_version": importlib.metadata.version("bentoml"),
+                  "python": platform.python_version(),
+                  "input": text,
+                  "length": len(text),
+                  "cpu_only": True,
+                  "model_downloaded": False,
+                  "model_loaded": False,
+                  "inference_backend": "demo",
+                  "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              }
+
+          @bentoml.api(route="/metadata")
+          def metadata(self) -> dict[str, Any]:
+              return {
+                  "ok": True,
+                  "service": "phala_bentoml_demo",
+                  "upstream": "https://github.com/bentoml/BentoML",
+                  "package": "bentoml",
+                  "version": importlib.metadata.version("bentoml"),
+                  "cpu_safe_demo": True,
+                  "credentials_required": False,
+              }

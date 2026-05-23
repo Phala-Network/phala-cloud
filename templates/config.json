@@ -363,6 +363,28 @@
     "tags": ["LLM Inference & Model Serving", "AI", "Developer Tools"]
   },
   {
+    "id": "bentoml",
+    "name": "bentoml/BentoML",
+    "description": "CPU-safe BentoML demo API that starts the real BentoML HTTP server without model downloads, GPU access, or credentials.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/bentoml",
+    "author": "BentoML Team / bentoml",
+    "icon": "bentoml.png",
+    "envs": [
+      {
+        "key": "BENTOML_VERSION",
+        "required": false,
+        "description": "BentoML Python package version installed at container startup.",
+        "default": "1.4.39"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 10
+    },
+    "tags": ["LLM Inference & Model Serving", "AI", "Developer Tools"]
+  },
+  {
     "id": "llm-wiki",
     "name": "LLM Wiki",
     "description": "A personal knowledge-base app that turns unstructured documents into an interlinked wiki with source traceability, graph insights, review queues, and deep research workflows. This template provides a confidential browser-accessible development preview for the upstream Tauri desktop app.",
