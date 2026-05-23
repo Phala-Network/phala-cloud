@@ -52,7 +52,7 @@ No LLM provider key is required for the container to start. Add provider credent
 For local Docker Compose validation from the repository root:
 
 ```bash
-docker compose -f sdks/templates/prebuilt/anything-llm/docker-compose.yml config
+docker compose -f templates/prebuilt/anything-llm/docker-compose.yml config
 ```
 
 ## Usage
