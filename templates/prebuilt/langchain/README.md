@@ -85,20 +85,20 @@ The `/v1/models` endpoint is a compatibility-style endpoint for smoke tests. It 
 Run locally from the repository root:
 
 ```bash
-docker compose -f sdks/templates/prebuilt/langchain/docker-compose.yml config >/dev/null
-docker compose -f sdks/templates/prebuilt/langchain/docker-compose.yml up -d
+docker compose -f templates/prebuilt/langchain/docker-compose.yml config >/dev/null
+docker compose -f templates/prebuilt/langchain/docker-compose.yml up -d
 curl -fsS http://localhost:18080/healthz
 curl -fsS "http://localhost:18080/demo?topic=agents"
 curl -fsS http://localhost:18080/v1/models
-docker compose -f sdks/templates/prebuilt/langchain/docker-compose.yml down
+docker compose -f templates/prebuilt/langchain/docker-compose.yml down
 ```
 
 Template validation commands:
 
 ```bash
-python sdks/templates/validate.py
-git -C sdks diff --check origin/main...HEAD
-docker compose -f sdks/templates/prebuilt/langchain/docker-compose.yml config >/dev/null
+python3 templates/validate.py
+git diff --check origin/main...HEAD
+docker compose -f templates/prebuilt/langchain/docker-compose.yml config >/dev/null
 ```
 
 ## Security Notes
