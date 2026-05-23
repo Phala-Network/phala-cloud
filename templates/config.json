@@ -2520,5 +2520,37 @@
     "Developer Tools",
     "Data & Storage"
   ]
+},
+{
+  "id": "vanna",
+  "name": "vanna-ai/vanna",
+  "description": "CPU-safe Vanna Text-to-SQL/RAG package/runtime demo that imports the real vanna Python package and serves deterministic local SQL planning endpoints without provider credentials, databases, model downloads, or GPU.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/vanna",
+  "author": "vanna-ai/vanna",
+  "icon": "vanna.svg",
+  "envs": [
+    {
+      "key": "VANNA_PACKAGE_VERSION",
+      "required": false,
+      "description": "Vanna Python package version used by the inline image build.",
+      "default": "2.0.2"
+    },
+    {
+      "key": "VANNA_DEMO_TITLE",
+      "required": false,
+      "description": "Optional label returned by the demo health and metadata endpoints.",
+      "default": "Vanna CPU Text-to-SQL demo"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": [
+    "RAG",
+    "Developer Tools",
+    "Data & Storage"
+  ]
 }
 ]
