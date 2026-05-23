@@ -96,9 +96,9 @@ docker compose -f templates/prebuilt/bentoml/docker-compose.yml down
 From this parent monorepo checkout, include the `sdks/` prefix:
 
 ```bash
-python sdks/templates/validate.py
-git -C sdks diff --check origin/main...HEAD
-docker compose -f sdks/templates/prebuilt/bentoml/docker-compose.yml config >/dev/null
+python3 templates/validate.py
+git diff --check origin/main...HEAD
+docker compose -f templates/prebuilt/bentoml/docker-compose.yml config >/dev/null
 ```
 
 A healthy deployment returns HTTP `200` for `/readyz` and JSON from `/demo` showing the BentoML package version and the CPU-only demo status.
