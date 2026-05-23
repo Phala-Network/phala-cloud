@@ -1993,6 +1993,28 @@
     "tags": ["MCP Servers", "Data & Storage", "Infrastructure"]
   },
   {
+    "id": "langgraph",
+    "name": "langchain-ai/langgraph",
+    "description": "Stateful, graph-based agent orchestration; LangGraph Cloud for managed deployment. This template runs a CPU-safe Python StateGraph demo without external LLMs or credentials by default.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/langgraph",
+    "author": "langchain-ai",
+    "icon": "langgraph.svg",
+    "envs": [
+      {
+        "key": "LANGGRAPH_VERSION",
+        "required": false,
+        "description": "LangGraph Python package version installed at container startup.",
+        "default": "1.2.1"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 40
+    },
+    "tags": ["Agent", "Framework"]
+  },
+  {
     "id": "gpt4all",
     "name": "nomic-ai/gpt4all",
     "description": "CPU-safe GPT4All Python bindings demo with health and package-load endpoints, without downloading multi-GB model weights.",
