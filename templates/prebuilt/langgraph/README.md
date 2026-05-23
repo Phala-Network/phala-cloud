@@ -80,19 +80,19 @@ Expected `/demo` fields include:
 Run locally from the repository root:
 
 ```bash
-docker compose -f sdks/templates/prebuilt/langgraph/docker-compose.yml up -d
+docker compose -f templates/prebuilt/langgraph/docker-compose.yml up -d
 curl -fsS http://localhost:8080/healthz
 curl -fsS http://localhost:8080/demo
 curl -fsS http://localhost:8080/graph
-docker compose -f sdks/templates/prebuilt/langgraph/docker-compose.yml down
+docker compose -f templates/prebuilt/langgraph/docker-compose.yml down
 ```
 
 Template validation commands:
 
 ```bash
-python sdks/templates/validate.py
-git -C sdks diff --check origin/main...HEAD
-docker compose -f sdks/templates/prebuilt/langgraph/docker-compose.yml config >/dev/null
+python3 templates/validate.py
+git diff --check origin/main...HEAD
+docker compose -f templates/prebuilt/langgraph/docker-compose.yml config >/dev/null
 ```
 
 ## Security Notes
@@ -108,7 +108,7 @@ docker compose -f sdks/templates/prebuilt/langgraph/docker-compose.yml config >/
 For a local smoke test, stop and remove the demo container with:
 
 ```bash
-docker compose -f sdks/templates/prebuilt/langgraph/docker-compose.yml down
+docker compose -f templates/prebuilt/langgraph/docker-compose.yml down
 ```
 
 For Phala Cloud, delete the deployed app from the Phala Cloud dashboard when you no longer need it. No persistent host volume is created by this template.
