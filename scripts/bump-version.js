@@ -22,14 +22,18 @@ function parseVersion(version) {
 function bumpVersion(version, releaseType, prereleaseTag) {
   const parsed = parseVersion(version);
 
-  // If requesting a prerelease
+  // If requesting a prerelease, always bump the base version
+  // according to releaseType before appending the prerelease tag.
+  //
+  // This prevents silently ignoring releaseType when the current
+  // version already uses the same prerelease tag.
+  //
+  // Example:
+  //   1.2.3-beta.1 + major beta => 2.0.0-beta.1
+  //
+  // Instead of incorrectly producing:
+  //   1.2.3-beta.2
   if (prereleaseTag) {
-    // If already a prerelease with same tag, increment prerelease version
-    if (parsed.prerelease === prereleaseTag) {
-      return `${parsed.major}.${parsed.minor}.${parsed.patch}-${prereleaseTag}.${parsed.prereleaseVersion + 1}`;
-    }
-
-    // Otherwise, bump the version according to releaseType and add prerelease tag
     let major = parsed.major;
     let minor = parsed.minor;
     let patch = parsed.patch;
@@ -51,13 +55,26 @@ function bumpVersion(version, releaseType, prereleaseTag) {
         throw new Error(`Invalid release type: ${releaseType}`);
     }
 
+    // Start at .1 — if this version already exists on npm,
+    // findNextAvailablePrereleaseVersion will auto-increment from here
     return `${major}.${minor}.${patch}-${prereleaseTag}.1`;
   }
 
-  // If it's a stable release
-  // If currently on prerelease, just remove the prerelease tag
+  // If it's a stable release request and currently on a prerelease:
+  // - patch => promote prerelease to stable without bumping (1.2.3-beta.1 => 1.2.3)
+  // - minor => bump minor regardless of prerelease (1.2.3-beta.1 => 1.3.0)
+  // - major => bump major regardless of prerelease (1.2.3-beta.1 => 2.0.0)
   if (parsed.prerelease) {
-    return `${parsed.major}.${parsed.minor}.${parsed.patch}`;
+    switch (releaseType) {
+      case 'patch':
+        return `${parsed.major}.${parsed.minor}.${parsed.patch}`;
+      case 'minor':
+        return `${parsed.major}.${parsed.minor + 1}.0`;
+      case 'major':
+        return `${parsed.major + 1}.0.0`;
+      default:
+        throw new Error(`Invalid release type: ${releaseType}`);
+    }
   }
 
   // Otherwise bump normally
