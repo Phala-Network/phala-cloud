@@ -1,0 +1,297 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8000:8000"
+    environment:
+      APP_PORT: "8000"
+      LANCEDB_VERSION: ${LANCEDB_VERSION:-0.30.2}
+      LANCEDB_DATA_DIR: /data/lancedb
+      PYTHONUNBUFFERED: "1"
+      UV_NO_CACHE: "1"
+      UV_SYSTEM_PYTHON: "1"
+    volumes:
+      - lancedb_data:/data/lancedb
+    configs:
+      - source: lancedb_demo_app
+        target: /opt/lancedb-demo/main.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache "lancedb==$${LANCEDB_VERSION}"
+        exec python /opt/lancedb-demo/main.py
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5).read()"
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 240s
+
+configs:
+  lancedb_demo_app:
+    content: |
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from numbers import Number
+      from urllib.parse import parse_qs, urlparse
+
+
+      STARTED_AT = time.time()
+      SERVICE_NAME = "lancedb-demo"
+      UPSTREAM_REPO = "https://github.com/lancedb/lancedb"
+      DATA_DIR = os.environ.get("LANCEDB_DATA_DIR", "/data/lancedb")
+      TABLE_NAME = "documents"
+      VOLUME_NAME = "lancedb_data"
+      QUERY_VECTOR = [0.94, 0.18, 0.08, 0.02]
+      SAMPLE_ROWS = [
+          {
+              "id": 1,
+              "text": "LanceDB stores embeddings and metadata for local vector search.",
+              "topic": "vector-search",
+              "vector": [0.98, 0.12, 0.05, 0.01],
+          },
+          {
+              "id": 2,
+              "text": "Phala Cloud can run CPU-only demo APIs in confidential VMs.",
+              "topic": "confidential-compute",
+              "vector": [0.14, 0.95, 0.16, 0.03],
+          },
+          {
+              "id": 3,
+              "text": "Multimodal retrieval pairs text, images, and vectors.",
+              "topic": "multimodal-retrieval",
+              "vector": [0.04, 0.18, 0.98, 0.10],
+          },
+          {
+              "id": 4,
+              "text": "Embedded databases are useful for reproducible application tests.",
+              "topic": "embedded-database",
+              "vector": [0.22, 0.07, 0.14, 0.96],
+          },
+      ]
+
+      DB = None
+      TABLE = None
+
+
+      def json_safe(value):
+          if value is None or isinstance(value, (str, bool, int)):
+              return value
+          if isinstance(value, float):
+              return round(value, 6)
+          if isinstance(value, Number):
+              return round(float(value), 6)
+          if isinstance(value, dict):
+              return {str(key): json_safe(item) for key, item in value.items()}
+          if isinstance(value, (list, tuple)):
+              return [json_safe(item) for item in value]
+          return str(value)
+
+
+      def search_rows(top_k):
+          if TABLE is None:
+              raise RuntimeError("LanceDB table is not initialized")
+          limit = max(1, min(int(top_k), len(SAMPLE_ROWS)))
+          return json_safe(TABLE.search(QUERY_VECTOR).limit(limit).to_list())
+
+
+      def list_tables(db):
+          if hasattr(db, "list_tables"):
+              result = db.list_tables()
+              if hasattr(result, "tables"):
+                  return list(result.tables)
+              if isinstance(result, dict) and "tables" in result:
+                  return list(result["tables"])
+              return list(result)
+          return list(db.table_names())
+
+
+      def initialize_lancedb():
+          global DB, TABLE
+          state = {
+              "ready": False,
+              "error": None,
+              "package": {
+                  "name": "lancedb",
+                  "distribution_version": None,
+                  "module_version": None,
+              },
+              "database": {
+                  "uri": DATA_DIR,
+                  "table": TABLE_NAME,
+                  "volume": VOLUME_NAME,
+                  "sample_rows": len(SAMPLE_ROWS),
+                  "tables": [],
+              },
+              "startup_search": [],
+          }
+          try:
+              import lancedb
+
+              state["package"]["distribution_version"] = importlib.metadata.version("lancedb")
+              state["package"]["module_version"] = getattr(lancedb, "__version__", None)
+              os.makedirs(DATA_DIR, exist_ok=True)
+              DB = lancedb.connect(DATA_DIR)
+              TABLE = DB.create_table(TABLE_NAME, data=SAMPLE_ROWS, mode="overwrite")
+              state["database"]["tables"] = list_tables(DB)
+              state["startup_search"] = search_rows(2)
+              state["ready"] = bool(state["startup_search"] and state["startup_search"][0]["id"] == 1)
+          except Exception as exc:
+              state["error"] = f"{type(exc).__name__}: {exc}"
+          return state
+
+
+      STATE = initialize_lancedb()
+
+
+      def base_payload():
+          return {
+              "service": SERVICE_NAME,
+              "upstream": UPSTREAM_REPO,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "cpu_only": True,
+              "credentials_required": False,
+              "external_provider_calls": False,
+              "model_downloaded": False,
+              "package": STATE["package"],
+              "database": STATE["database"],
+          }
+
+
+      def parse_top_k(query):
+          raw = parse_qs(query).get("top_k", ["3"])[0]
+          try:
+              return max(1, min(int(raw), len(SAMPLE_ROWS)))
+          except ValueError:
+              return 3
+
+
+      def response_for(path, query):
+          if path == "/healthz":
+              payload = base_payload()
+              payload["status"] = "ready" if STATE["ready"] else "unhealthy"
+              payload["ok"] = STATE["ready"]
+              payload["startup_search"] = STATE["startup_search"]
+              if STATE["error"]:
+                  payload["error"] = STATE["error"]
+              status = HTTPStatus.OK if STATE["ready"] else HTTPStatus.SERVICE_UNAVAILABLE
+              return status, payload
+
+          if path == "/demo":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "description": "Deterministic local vector search using the real LanceDB Python package.",
+                      "query": {
+                          "vector": QUERY_VECTOR,
+                          "top_k": parse_top_k(query),
+                          "note": "Embeddings are fixed sample vectors; no model is downloaded or called.",
+                      },
+                  }
+              )
+              if not STATE["ready"]:
+                  payload["ok"] = False
+                  payload["error"] = STATE["error"]
+                  return HTTPStatus.SERVICE_UNAVAILABLE, payload
+              payload["ok"] = True
+              payload["results"] = search_rows(payload["query"]["top_k"])
+              return HTTPStatus.OK, payload
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "lancedb/deterministic-vector-search-demo",
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "lancedb",
+                          "description": (
+                              "OpenAI-shaped metadata endpoint for compatibility checks. "
+                              "This template demonstrates LanceDB vector search, not an LLM."
+                          ),
+                      }
+                  ],
+              }
+
+          if path == "/":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": STATE["ready"],
+                      "endpoints": ["/healthz", "/demo", "/v1/models"],
+                  }
+              )
+              return HTTPStatus.OK, payload
+
+          return HTTPStatus.NOT_FOUND, {
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "lancedb-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              parsed = urlparse(self.path)
+              path = parsed.path.rstrip("/") or "/"
+              status, payload = response_for(path, parsed.query)
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(int(status))
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8000"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "ready": STATE["ready"],
+                      "package": STATE["package"],
+                      "database": STATE["database"],
+                      "external_provider_calls": False,
+                      "model_downloaded": False,
+                      "error": STATE["error"],
+                  },
+                  sort_keys=True,
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+
+volumes:
+  lancedb_data:
