@@ -3214,5 +3214,37 @@
       "diskSize": 20
     },
     "tags": ["AI Agents", "Developer Tools", "Automation"]
+  },
+{
+    "id": "gemini-cli",
+    "name": "google-gemini/gemini-cli",
+    "description": "Google's terminal AI coding agent. This template runs a CPU-safe HTTP verifier that installs the real @google/gemini-cli npm package and checks local CLI execution without Gemini credentials, browser auth, model downloads, or hosted model calls.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/gemini-cli",
+    "author": "google-gemini",
+    "icon": "gemini-cli.png",
+    "envs": [
+      {
+        "key": "GEMINI_CLI_VERSION",
+        "required": false,
+        "default": "0.43.0",
+        "description": "Published @google/gemini-cli npm package version installed by the verifier at container startup."
+      },
+      {
+        "key": "GEMINI_API_KEY",
+        "required": false,
+        "description": "Optional Gemini API key for later manual interactive CLI use. Not required or used by the default verifier endpoints."
+      },
+      {
+        "key": "GOOGLE_API_KEY",
+        "required": false,
+        "description": "Optional Google API key alias for later manual interactive CLI use. Not required or used by the default verifier endpoints."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["Developer Tools", "AI Agents", "Automation"]
   }
 ]
