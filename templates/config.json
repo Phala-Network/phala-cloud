@@ -2920,5 +2920,19 @@
     "AI Agents",
     "Starter Kits"
   ]
-}
+},
+{
+    "id": "milvus",
+    "name": "Milvus",
+    "description": "CPU-safe Milvus standalone vector database deployment with internal etcd and MinIO dependencies, persistent named volumes, and exposed gRPC and HTTP health/API ports.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/milvus",
+    "author": "milvus-io / LF AI & Data Foundation",
+    "icon": "milvus.svg",
+    "defaultResource": {
+      "vCPU": 2,
+      "memory": 4096,
+      "diskSize": 40
+    },
+    "tags": ["Data & Storage", "AI Agents", "Infrastructure"]
+  }
 ]
