@@ -67,7 +67,7 @@ func (c *Client) GetCVMList(ctx context.Context, opts *GetCVMListOptions) (*Pagi
 	return &result, nil
 }
 
-// GetCVMListV20260121 returns a paginated list of CVMs using the pre-hashid response schema.
+// GetCVMListV20260121 returns a paginated list of CVMs using the v20260121 response schema.
 func (c *Client) GetCVMListV20260121(ctx context.Context, opts *GetCVMListOptions) (*PaginatedCVMInfosV20260121, error) {
 	path := "/cvms/paginated"
 	if opts != nil {
@@ -98,7 +98,7 @@ func (c *Client) GetCVMInfo(ctx context.Context, cvmID string) (*CVMInfo, error)
 	return &result, nil
 }
 
-// GetCVMInfoV20260121 returns CVM information using the pre-hashid response schema.
+// GetCVMInfoV20260121 returns CVM information using the v20260121 response schema.
 func (c *Client) GetCVMInfoV20260121(ctx context.Context, cvmID string) (*CVMInfoV20260121, error) {
 	var result CVMInfoV20260121
 	if err := c.doJSON(ctx, "GET", cvmPath(cvmID), nil, &result); err != nil {

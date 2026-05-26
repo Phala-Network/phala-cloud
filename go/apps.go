@@ -15,7 +15,7 @@ func (c *Client) GetAppList(ctx context.Context) (*GetAppListResponse, error) {
 	return &result, nil
 }
 
-// GetAppListV20260121 returns the app list using the pre-hashid CVM response schema.
+// GetAppListV20260121 returns the app list using the v20260121 response schema.
 func (c *Client) GetAppListV20260121(ctx context.Context) (*GetAppListResponseV20260121, error) {
 	var result GetAppListResponseV20260121
 	if err := c.doJSON(ctx, "GET", "/apps", nil, &result); err != nil {
@@ -33,7 +33,7 @@ func (c *Client) GetAppInfo(ctx context.Context, appID string) (*AppInfo, error)
 	return &result, nil
 }
 
-// GetAppInfoV20260121 returns app information using the pre-hashid CVM response schema.
+// GetAppInfoV20260121 returns app information using the v20260121 response schema.
 func (c *Client) GetAppInfoV20260121(ctx context.Context, appID string) (*AppInfoV20260121, error) {
 	var result AppInfoV20260121
 	if err := c.doJSON(ctx, "GET", "/apps/"+appID, nil, &result); err != nil {
@@ -51,7 +51,7 @@ func (c *Client) GetAppCVMs(ctx context.Context, appID string) ([]CVMInfoV202605
 	return result, nil
 }
 
-// GetAppCVMsV20260121 returns app CVMs using the pre-hashid response schema.
+// GetAppCVMsV20260121 returns app CVMs using the v20260121 response schema.
 func (c *Client) GetAppCVMsV20260121(ctx context.Context, appID string) ([]CVMInfoV20260121, error) {
 	var result []CVMInfoV20260121
 	if err := c.doJSON(ctx, "GET", "/apps/"+appID+"/cvms", nil, &result); err != nil {
@@ -69,7 +69,7 @@ func (c *Client) CreateAppInstance(ctx context.Context, appID string, req *Creat
 	return &result, nil
 }
 
-// CreateAppInstanceV20260121 creates an app instance using the pre-hashid response schema.
+// CreateAppInstanceV20260121 creates an app instance using the v20260121 response schema.
 func (c *Client) CreateAppInstanceV20260121(ctx context.Context, appID string, req *CreateAppInstanceRequest) (*CVMInfoV20260121, error) {
 	var result CVMInfoV20260121
 	if err := c.doJSON(ctx, "POST", "/apps/"+appID+"/instances", req, &result); err != nil {

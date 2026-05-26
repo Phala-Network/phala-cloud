@@ -25,7 +25,7 @@ type AppInfoFields struct {
 	CVMCount         int         `json:"cvm_count"`
 }
 
-// AppInfoV20260121 represents app information before hashed CVM IDs.
+// AppInfoV20260121 represents app information.
 type AppInfoV20260121 struct {
 	AppInfoFields
 	CurrentCVM *CVMInfoV20260121  `json:"current_cvm,omitempty"`
@@ -58,7 +58,7 @@ type GetAppListResponseFields struct {
 	TotalPages int `json:"total_pages"`
 }
 
-// GetAppListResponseV20260121 is the app list response before hashed CVM IDs.
+// GetAppListResponseV20260121 is the app list response.
 type GetAppListResponseV20260121 struct {
 	DstackApps []AppInfoV20260121 `json:"dstack_apps"`
 	GetAppListResponseFields

@@ -39,11 +39,14 @@ func intPtr(v int) *int {
 func TestCVMHashIDVersionContracts(t *testing.T) {
 	t.Run("CVM info", func(t *testing.T) {
 		var oldInfo CVMInfoV20260121
-		if err := json.Unmarshal([]byte(`{"id":123,"name":"cvm-1","resource":{},"status":"running"}`), &oldInfo); err != nil {
+		if err := json.Unmarshal([]byte(`{"id":"cvm_ykL5lbAn","name":"cvm-1","resource":{},"status":"running"}`), &oldInfo); err != nil {
 			t.Fatalf("unmarshal old CVM info: %v", err)
 		}
-		if oldInfo.ID != 123 {
-			t.Fatalf("old CVM ID = %d, want 123", oldInfo.ID)
+		if oldInfo.ID != "cvm_ykL5lbAn" {
+			t.Fatalf("old CVM ID = %q, want cvm_ykL5lbAn", oldInfo.ID)
+		}
+		if err := json.Unmarshal([]byte(`{"id":123,"name":"cvm-1","resource":{},"status":"running"}`), &oldInfo); err == nil {
+			t.Fatal("old CVM info accepted numeric ID")
 		}
 
 		var latestInfo CVMInfo
@@ -55,6 +58,25 @@ func TestCVMHashIDVersionContracts(t *testing.T) {
 		}
 		if err := json.Unmarshal([]byte(`{"id":123,"name":"cvm-1","resource":{},"status":"running"}`), &latestInfo); err == nil {
 			t.Fatal("latest CVM info accepted numeric ID")
+		}
+	})
+
+	t.Run("app info", func(t *testing.T) {
+		var oldApp AppInfoV20260121
+		if err := json.Unmarshal([]byte(`{
+			"id":"04b927aa4ea8c9554ee9858538f181517714dbd2",
+			"name":"app-1",
+			"app_id":"app-1",
+			"created_at":"2026-05-22T00:00:00Z",
+			"kms_type":"phala",
+			"current_cvm":{"id":"cvm_ykL5lbAn","name":"cvm-1","resource":{},"status":"running"},
+			"cvms":[{"id":"cvm_ykL5lbAn","name":"cvm-1","resource":{},"status":"running"}],
+			"cvm_count":1
+		}`), &oldApp); err != nil {
+			t.Fatalf("unmarshal old app info: %v", err)
+		}
+		if oldApp.CurrentCVM == nil || oldApp.CurrentCVM.ID != "cvm_ykL5lbAn" {
+			t.Fatalf("old app current CVM ID = %#v, want cvm_ykL5lbAn", oldApp.CurrentCVM)
 		}
 	})
 

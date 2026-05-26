@@ -155,6 +155,7 @@ describe("versioned client type inference", () => {
 
       // v20260121 should have node_info
       expectTypeOf<Item>().toHaveProperty("node_info");
+      expectTypeOf<Item["id"]>().toEqualTypeOf<string>();
 
       // v20260121 should NOT have region_identifier at top level
       // (node info is nested in node_info object)

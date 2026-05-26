@@ -4,49 +4,54 @@ import "fmt"
 
 // CVMInfoFields contains fields shared by versioned CVM response schemas.
 type CVMInfoFields struct {
-	Name           string           `json:"name"`
-	AppID          *string          `json:"app_id,omitempty"`
-	VMUUID         *string          `json:"vm_uuid,omitempty"`
-	InstanceID     *string          `json:"instance_id,omitempty"`
-	Resource       CvmResource      `json:"resource"`
-	NodeInfo       *NodeRef         `json:"node_info,omitempty"`
-	OS             *CvmOsInfo       `json:"os,omitempty"`
-	KMSType        *string          `json:"kms_type,omitempty"`
-	KMSInfo        *CvmKmsInfo      `json:"kms_info,omitempty"`
-	Status         string           `json:"status"`
-	Progress       *CvmProgressInfo `json:"progress,omitempty"`
-	ComposeHash    *string          `json:"compose_hash,omitempty"`
-	Gateway        *CvmGatewayInfo  `json:"gateway,omitempty"`
-	Services       []any            `json:"services,omitempty"`
-	PublicLogs     *bool            `json:"public_logs,omitempty"`
-	PublicSysinfo  *bool            `json:"public_sysinfo,omitempty"`
-	PublicTcbinfo  *bool            `json:"public_tcbinfo,omitempty"`
-	GatewayEnabled *bool            `json:"gateway_enabled,omitempty"`
-	SecureTime     *bool            `json:"secure_time,omitempty"`
-	Listed         bool             `json:"listed"`
-	StorageFS      *string          `json:"storage_fs,omitempty"`
-	Workspace      *WorkspaceRef    `json:"workspace,omitempty"`
-	Creator        *UserRef         `json:"creator,omitempty"`
-	CreatedAt      *string          `json:"created_at,omitempty"`
-	UpdatedAt      *string          `json:"updated_at,omitempty"`
-	AppURL         *string          `json:"app_url,omitempty"`
-	BaseImage      *string          `json:"base_image,omitempty"`
-	Features       []string         `json:"features,omitempty"`
-	Runner         *string          `json:"runner,omitempty"`
-	ManifestVer    *string          `json:"manifest_version,omitempty"`
-	ComposeFile    any              `json:"compose_file,omitempty"`
+	Name                string           `json:"name"`
+	AppID               *string          `json:"app_id,omitempty"`
+	VMUUID              *string          `json:"vm_uuid,omitempty"`
+	InstanceID          *string          `json:"instance_id,omitempty"`
+	Resource            CvmResource      `json:"resource"`
+	NodeInfo            *NodeRef         `json:"node_info,omitempty"`
+	OS                  *CvmOsInfo       `json:"os,omitempty"`
+	KMSType             *string          `json:"kms_type,omitempty"`
+	KMSInfo             *CvmKmsInfo      `json:"kms_info,omitempty"`
+	Status              string           `json:"status"`
+	Progress            *CvmProgressInfo `json:"progress,omitempty"`
+	ComposeHash         *string          `json:"compose_hash,omitempty"`
+	DockerComposeHash   *string          `json:"docker_compose_hash,omitempty"`
+	PreLaunchScriptHash *string          `json:"pre_launch_script_hash,omitempty"`
+	Gateway             *CvmGatewayInfo  `json:"gateway,omitempty"`
+	Logs                *CVMLogURLs      `json:"logs,omitempty"`
+	Services            []any            `json:"services,omitempty"`
+	Endpoints           []CVMEndpoint    `json:"endpoints,omitempty"`
+	PublicLogs          *bool            `json:"public_logs,omitempty"`
+	PublicSysinfo       *bool            `json:"public_sysinfo,omitempty"`
+	PublicTcbinfo       *bool            `json:"public_tcbinfo,omitempty"`
+	GatewayEnabled      *bool            `json:"gateway_enabled,omitempty"`
+	SecureTime          *bool            `json:"secure_time,omitempty"`
+	Listed              bool             `json:"listed"`
+	StorageFS           *string          `json:"storage_fs,omitempty"`
+	Workspace           *WorkspaceRef    `json:"workspace,omitempty"`
+	Creator             *UserRef         `json:"creator,omitempty"`
+	CreatedAt           *string          `json:"created_at,omitempty"`
+	DeletedAt           *string          `json:"deleted_at,omitempty"`
+	ProjectType         *string          `json:"project_type,omitempty"`
+	UpdatedAt           *string          `json:"updated_at,omitempty"`
+	AppURL              *string          `json:"app_url,omitempty"`
+	BaseImage           *string          `json:"base_image,omitempty"`
+	Features            []string         `json:"features,omitempty"`
+	Runner              *string          `json:"runner,omitempty"`
+	ManifestVer         *string          `json:"manifest_version,omitempty"`
+	ComposeFile         any              `json:"compose_file,omitempty"`
 
 	// Additional fields used by the Terraform provider.
 	InProgress         bool          `json:"in_progress,omitempty"`
 	EncryptedEnvPubkey *string       `json:"encrypted_env_pubkey,omitempty"`
 	DiskSize           *int64        `json:"disk_size,omitempty"`
-	Endpoints          []CVMEndpoint `json:"endpoints,omitempty"`
 	PublicURLs         []CVMEndpoint `json:"public_urls,omitempty"`
 }
 
-// CVMInfoV20260121 represents CVM information before hashed CVM IDs.
+// CVMInfoV20260121 represents CVM information.
 type CVMInfoV20260121 struct {
-	ID int `json:"id"`
+	ID string `json:"id"`
 	CVMInfoFields
 }
 
@@ -63,6 +68,14 @@ type CVMInfo = CVMInfoV20260522
 type CVMEndpoint struct {
 	App      string `json:"app"`
 	Instance string `json:"instance"`
+}
+
+// CVMLogURLs contains links to CVM log streams.
+type CVMLogURLs struct {
+	Serial           *string `json:"serial,omitempty"`
+	Stdout           *string `json:"stdout,omitempty"`
+	Stderr           *string `json:"stderr,omitempty"`
+	ContainerLogBase *string `json:"container_log_base,omitempty"`
 }
 
 // CvmResource holds CVM resource allocation.
@@ -162,7 +175,7 @@ type CvmRef struct {
 	VMUUID     *string `json:"vm_uuid,omitempty"`
 }
 
-// PaginatedCVMInfosV20260121 is a paginated list of CVM infos before hashed CVM IDs.
+// PaginatedCVMInfosV20260121 is a paginated list of CVM infos.
 type PaginatedCVMInfosV20260121 = Paginated[CVMInfoV20260121]
 
 // PaginatedCVMInfosV20260522 is a paginated list of CVM infos with hashed CVM IDs.

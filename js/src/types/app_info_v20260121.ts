@@ -38,6 +38,7 @@ export const DstackAppMinimalResponseV20260121Schema = z.object({
   app_icon_url: z.null().optional(),
   created_at: z.null().optional(),
   kms_type: z.null().optional(),
+  profile: z.null().optional(),
   current_cvm: z.null().optional(),
   cvms: z.null().optional(),
   cvm_count: z.null().optional(),

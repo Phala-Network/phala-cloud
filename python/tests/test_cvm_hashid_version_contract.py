@@ -21,6 +21,7 @@ from phala_cloud.models.apps import (
     DeviceAllowlistResponse,
     DeviceAllowlistResponseV20260121,
     DeviceAllowlistResponseV20260522,
+    DstackAppFullResponseV20260121,
 )
 from phala_cloud.models.cvms import (
     AppCvmsBatchIsAllowedResponse,
@@ -73,9 +74,11 @@ def _refresh_result(cvm_id: int | str | None) -> dict:
 
 
 def test_cvm_info_models_keep_old_and_latest_id_shapes():
-    assert CvmInfoV20260121.model_validate(_cvm_info(123)).id == 123
+    assert CvmInfoV20260121.model_validate(_cvm_info("cvm_ykL5lbAn")).id == "cvm_ykL5lbAn"
     assert CvmInfoV20260522.model_validate(_cvm_info("cvm_ykL5lbAn")).id == "cvm_ykL5lbAn"
 
+    with pytest.raises(ValidationError):
+        CvmInfoV20260121.model_validate(_cvm_info(123))
     with pytest.raises(ValidationError):
         CvmInfoV20260522.model_validate(_cvm_info(123))
 
@@ -90,12 +93,32 @@ def test_paginated_cvm_info_models_keep_old_and_latest_id_shapes():
         "pages": 1,
     }
 
-    assert PaginatedCvmInfosV20260121.model_validate(old_payload).items[0].id == 123
+    assert PaginatedCvmInfosV20260121.model_validate(new_payload).items[0].id == "cvm_ykL5lbAn"
     assert PaginatedCvmInfosV20260522.model_validate(new_payload).items[0].id == "cvm_ykL5lbAn"
     assert PaginatedCvmInfos.model_validate(new_payload).items[0].id == "cvm_ykL5lbAn"
 
     with pytest.raises(ValidationError):
+        PaginatedCvmInfosV20260121.model_validate(old_payload)
+    with pytest.raises(ValidationError):
         PaginatedCvmInfos.model_validate(old_payload)
+
+
+def test_app_detail_v20260121_accepts_hashid_cvm_info():
+    payload = {
+        "id": "04b927aa4ea8c9554ee9858538f181517714dbd2",
+        "name": "app-1",
+        "app_id": "app-1",
+        "created_at": "2026-05-22T00:00:00Z",
+        "kms_type": "phala",
+        "profile": None,
+        "current_cvm": _cvm_info("cvm_ykL5lbAn"),
+        "cvms": [_cvm_info("cvm_ykL5lbAn")],
+        "cvm_count": 1,
+    }
+
+    app = DstackAppFullResponseV20260121.model_validate(payload)
+    assert app.current_cvm is not None
+    assert app.current_cvm.id == "cvm_ykL5lbAn"
 
 
 def test_cvm_action_response_models_keep_old_and_latest_id_shapes():

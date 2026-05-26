@@ -36,6 +36,7 @@ import {
   RefreshCvmInstanceIdsResponseV20260121Schema,
   RefreshCvmInstanceIdsResponseV20260522Schema,
 } from "./actions/cvms/refresh_cvm_instance_ids";
+import { DstackAppFullResponseV20260121Schema } from "./types/app_info_v20260121";
 import { PaginatedCvmInfosV20251028Schema } from "./types/cvm_info_v20251028";
 import {
   CvmInfoV20260121Schema,
@@ -45,7 +46,11 @@ import {
 } from "./types/cvm_info_v20260121";
 import { CvmDetailV20251028Schema } from "./types/cvm_info_v20251028";
 import { CvmInfoDetailV20260121Schema } from "./types/cvm_info_v20260121";
-import { VMSchema, VMV20260121Schema, VMV20260522Schema } from "./types/cvm_info";
+import {
+  VMSchema,
+  VMV20260121Schema,
+  VMV20260522Schema,
+} from "./types/cvm_info";
 
 // Sample v20251028 CVM list response
 const mockCvmListV20251028 = {
@@ -99,7 +104,7 @@ const mockCvmListV20251028 = {
 const mockCvmListV20260121 = {
   items: [
     {
-      id: 123,
+      id: "cvm_ykL5lbAn",
       name: "test-cvm",
       app_id: "app-123",
       vm_uuid: null,
@@ -124,14 +129,26 @@ const mockCvmListV20260121 = {
       kms_type: null,
       kms_info: null,
       status: "running",
+      in_progress: false,
       progress: null,
       compose_hash: null,
+      docker_compose_hash: null,
+      pre_launch_script_hash: null,
       gateway: {
         base_domain: null,
         cname: null,
       },
+      logs: {
+        serial: null,
+        stdout: null,
+        stderr: null,
+        container_log_base: null,
+      },
       services: [],
       endpoints: [],
+      project_type: null,
+      created_at: null,
+      deleted_at: null,
     },
   ],
   total: 1,
@@ -186,12 +203,26 @@ const mockCvmDetailV20260121 = {
 
 const mockCvmListV20260522 = {
   ...mockCvmListV20260121,
-  items: [{ ...mockCvmListV20260121.items[0], id: "cvm_ykL5lbAn" }],
+  items: [{ ...mockCvmListV20260121.items[0] }],
 };
 
 const mockCvmDetailV20260522 = {
   ...mockCvmListV20260522.items[0],
   compose_file: null,
+};
+
+const mockAppFullV20260121 = {
+  id: "04b927aa4ea8c9554ee9858538f181517714dbd2",
+  name: "test-app",
+  app_id: "app-123",
+  app_provision_type: null,
+  app_icon_url: null,
+  created_at: "2026-05-22T00:00:00Z",
+  kms_type: "phala",
+  profile: null,
+  current_cvm: mockCvmListV20260121.items[0],
+  cvms: [mockCvmListV20260121.items[0]],
+  cvm_count: 1,
 };
 
 const mockIsAllowedResult = {
@@ -231,7 +262,8 @@ const mockBatchRefreshResult = {
 describe("version-based schema validation", () => {
   describe("schema validation for v20251028", () => {
     it("should validate v20251028 CVM list response", () => {
-      const result = PaginatedCvmInfosV20251028Schema.safeParse(mockCvmListV20251028);
+      const result =
+        PaginatedCvmInfosV20251028Schema.safeParse(mockCvmListV20251028);
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.items[0].node?.region_identifier).toBe("us-east-1");
@@ -247,14 +279,16 @@ describe("version-based schema validation", () => {
     });
 
     it("should reject v20260121 format with v20251028 schema", () => {
-      const result = PaginatedCvmInfosV20251028Schema.safeParse(mockCvmListV20260121);
+      const result =
+        PaginatedCvmInfosV20251028Schema.safeParse(mockCvmListV20260121);
       expect(result.success).toBe(false);
     });
   });
 
   describe("schema validation for v20260121", () => {
     it("should validate v20260121 CVM list response", () => {
-      const result = PaginatedCvmInfosV20260121Schema.safeParse(mockCvmListV20260121);
+      const result =
+        PaginatedCvmInfosV20260121Schema.safeParse(mockCvmListV20260121);
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.items[0].node_info?.region).toBe("us-east-1");
@@ -262,40 +296,107 @@ describe("version-based schema validation", () => {
     });
 
     it("should validate v20260121 CVM detail response", () => {
-      const result = CvmInfoDetailV20260121Schema.safeParse(mockCvmDetailV20260121);
+      const result = CvmInfoDetailV20260121Schema.safeParse(
+        mockCvmDetailV20260121,
+      );
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.node_info?.region).toBe("us-east-1");
       }
     });
 
+    it("should validate v20260121 app detail response with hashid CVM IDs", () => {
+      const result =
+        DstackAppFullResponseV20260121Schema.safeParse(mockAppFullV20260121);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.current_cvm?.id).toBe("cvm_ykL5lbAn");
+      }
+    });
+
     it("should reject v20251028 format with v20260121 schema", () => {
-      const result = PaginatedCvmInfosV20260121Schema.safeParse(mockCvmListV20251028);
+      const result =
+        PaginatedCvmInfosV20260121Schema.safeParse(mockCvmListV20251028);
       expect(result.success).toBe(false);
     });
   });
 
   describe("CVM hashid schema compatibility", () => {
-    it("keeps numeric CVM IDs in 2026-01-21 schemas", () => {
-      expect(CvmInfoV20260121Schema.safeParse(mockCvmListV20260121.items[0]).success).toBe(true);
-      expect(PaginatedCvmInfosV20260121Schema.safeParse(mockCvmListV20260121).success).toBe(true);
-      expect(CvmInfoDetailV20260121Schema.safeParse(mockCvmDetailV20260121).success).toBe(true);
-      expect(VMV20260121Schema.safeParse({ ...mockCvmDetailV20251028, created_at: "2026-05-22T00:00:00Z" }).success).toBe(true);
+    it("uses hashed CVM IDs in 2026-01-21 CVMInfo schemas", () => {
+      expect(
+        CvmInfoV20260121Schema.safeParse(mockCvmListV20260121.items[0]).success,
+      ).toBe(true);
+      expect(
+        PaginatedCvmInfosV20260121Schema.safeParse(mockCvmListV20260121)
+          .success,
+      ).toBe(true);
+      expect(
+        CvmInfoDetailV20260121Schema.safeParse(mockCvmDetailV20260121).success,
+      ).toBe(true);
+      expect(
+        VMV20260121Schema.safeParse({
+          ...mockCvmDetailV20251028,
+          created_at: "2026-05-22T00:00:00Z",
+        }).success,
+      ).toBe(true);
     });
 
     it("uses hashed CVM IDs in 2026-05-22 and default schemas", () => {
-      expect(CvmInfoV20260522Schema.safeParse(mockCvmListV20260522.items[0]).success).toBe(true);
-      expect(PaginatedCvmInfosV20260522Schema.safeParse(mockCvmListV20260522).success).toBe(true);
-      expect(VMV20260522Schema.safeParse({ ...mockCvmDetailV20251028, id: "cvm_ykL5lbAn", created_at: "2026-05-22T00:00:00Z" }).success).toBe(true);
-      expect(VMSchema.safeParse({ ...mockCvmDetailV20251028, id: "cvm_ykL5lbAn", created_at: "2026-05-22T00:00:00Z" }).success).toBe(true);
+      expect(
+        CvmInfoV20260522Schema.safeParse(mockCvmListV20260522.items[0]).success,
+      ).toBe(true);
+      expect(
+        PaginatedCvmInfosV20260522Schema.safeParse(mockCvmListV20260522)
+          .success,
+      ).toBe(true);
+      expect(
+        VMV20260522Schema.safeParse({
+          ...mockCvmDetailV20251028,
+          id: "cvm_ykL5lbAn",
+          created_at: "2026-05-22T00:00:00Z",
+        }).success,
+      ).toBe(true);
+      expect(
+        VMSchema.safeParse({
+          ...mockCvmDetailV20251028,
+          id: "cvm_ykL5lbAn",
+          created_at: "2026-05-22T00:00:00Z",
+        }).success,
+      ).toBe(true);
     });
 
-    it("rejects numeric CVM IDs in latest schemas", () => {
-      expect(CvmInfoV20260522Schema.safeParse(mockCvmListV20260121.items[0]).success).toBe(false);
-      expect(PaginatedCvmInfosV20260522Schema.safeParse(mockCvmListV20260121).success).toBe(false);
-      expect(CommitCvmProvisionSchema.safeParse({ id: 123 }).success).toBe(false);
-      expect(IsAllowedResultSchema.safeParse({ ...mockIsAllowedResult, cvm_id: 123 }).success).toBe(false);
-      expect(InstanceIdRefreshResultSchema.safeParse({ ...mockInstanceRefreshResult, cvm_id: 123 }).success).toBe(false);
+    it("rejects numeric CVM IDs in CVMInfo hashid schemas", () => {
+      const numericCvmInfo = { ...mockCvmListV20260121.items[0], id: 123 };
+      const numericCvmList = {
+        ...mockCvmListV20260121,
+        items: [numericCvmInfo],
+      };
+
+      expect(CvmInfoV20260121Schema.safeParse(numericCvmInfo).success).toBe(
+        false,
+      );
+      expect(
+        PaginatedCvmInfosV20260121Schema.safeParse(numericCvmList).success,
+      ).toBe(false);
+      expect(CvmInfoV20260522Schema.safeParse(numericCvmInfo).success).toBe(
+        false,
+      );
+      expect(
+        PaginatedCvmInfosV20260522Schema.safeParse(numericCvmList).success,
+      ).toBe(false);
+      expect(CommitCvmProvisionSchema.safeParse({ id: 123 }).success).toBe(
+        false,
+      );
+      expect(
+        IsAllowedResultSchema.safeParse({ ...mockIsAllowedResult, cvm_id: 123 })
+          .success,
+      ).toBe(false);
+      expect(
+        InstanceIdRefreshResultSchema.safeParse({
+          ...mockInstanceRefreshResult,
+          cvm_id: 123,
+        }).success,
+      ).toBe(false);
     });
   });
 
@@ -320,55 +421,115 @@ describe("version-based schema validation", () => {
     };
 
     it("validates commit and lifecycle response versions", () => {
-      expect(CommitCvmProvisionV20260121Schema.safeParse({ ...commitBase, id: 123 }).success).toBe(true);
-      expect(CommitCvmProvisionV20260522Schema.safeParse(commitBase).success).toBe(true);
+      expect(
+        CommitCvmProvisionV20260121Schema.safeParse({ ...commitBase, id: 123 })
+          .success,
+      ).toBe(true);
+      expect(
+        CommitCvmProvisionV20260522Schema.safeParse(commitBase).success,
+      ).toBe(true);
       expect(CommitCvmProvisionSchema.safeParse(commitBase).success).toBe(true);
     });
 
     it("validates allowance response versions", () => {
-      expect(IsAllowedResultV20260121Schema.safeParse({ ...mockIsAllowedResult, cvm_id: 123 }).success).toBe(true);
-      expect(IsAllowedResultV20260522Schema.safeParse(mockIsAllowedResult).success).toBe(true);
-      expect(AppCvmsBatchIsAllowedResponseV20260121Schema.safeParse({
-        is_onchain: true,
-        results: [{ ...mockIsAllowedResult, cvm_id: 123 }],
-        skipped_cvm_ids: [456],
-      }).success).toBe(true);
-      expect(AppCvmsBatchIsAllowedResponseV20260522Schema.safeParse({
-        is_onchain: true,
-        results: [mockIsAllowedResult],
-        skipped_cvm_ids: ["cvm_ykL5lbAn"],
-      }).success).toBe(true);
-      expect(AppCvmsBatchIsAllowedResponseSchema.safeParse({
-        is_onchain: true,
-        results: [mockIsAllowedResult],
-        skipped_cvm_ids: ["cvm_ykL5lbAn"],
-      }).success).toBe(true);
+      expect(
+        IsAllowedResultV20260121Schema.safeParse({
+          ...mockIsAllowedResult,
+          cvm_id: 123,
+        }).success,
+      ).toBe(true);
+      expect(
+        IsAllowedResultV20260522Schema.safeParse(mockIsAllowedResult).success,
+      ).toBe(true);
+      expect(
+        AppCvmsBatchIsAllowedResponseV20260121Schema.safeParse({
+          is_onchain: true,
+          results: [{ ...mockIsAllowedResult, cvm_id: 123 }],
+          skipped_cvm_ids: [456],
+        }).success,
+      ).toBe(true);
+      expect(
+        AppCvmsBatchIsAllowedResponseV20260522Schema.safeParse({
+          is_onchain: true,
+          results: [mockIsAllowedResult],
+          skipped_cvm_ids: ["cvm_ykL5lbAn"],
+        }).success,
+      ).toBe(true);
+      expect(
+        AppCvmsBatchIsAllowedResponseSchema.safeParse({
+          is_onchain: true,
+          results: [mockIsAllowedResult],
+          skipped_cvm_ids: ["cvm_ykL5lbAn"],
+        }).success,
+      ).toBe(true);
     });
 
     it("validates device allowlist response versions", () => {
       const oldResponse = {
         is_onchain_kms: true,
-        devices: [{ device_id: "dev-1", node_name: "node-1", allowed_onchain: true, status: "allowed", cvm_ids: [123] }],
+        devices: [
+          {
+            device_id: "dev-1",
+            node_name: "node-1",
+            allowed_onchain: true,
+            status: "allowed",
+            cvm_ids: [123],
+          },
+        ],
       };
       const newResponse = {
         is_onchain_kms: true,
-        devices: [{ device_id: "dev-1", node_name: "node-1", allowed_onchain: true, status: "allowed", cvm_ids: ["cvm_ykL5lbAn"] }],
+        devices: [
+          {
+            device_id: "dev-1",
+            node_name: "node-1",
+            allowed_onchain: true,
+            status: "allowed",
+            cvm_ids: ["cvm_ykL5lbAn"],
+          },
+        ],
       };
-      expect(DeviceAllowlistResponseV20260121Schema.safeParse(oldResponse).success).toBe(true);
-      expect(DeviceAllowlistResponseV20260522Schema.safeParse(newResponse).success).toBe(true);
-      expect(DeviceAllowlistResponseAnySchema.safeParse(oldResponse).success).toBe(true);
-      expect(DeviceAllowlistResponseAnySchema.safeParse(newResponse).success).toBe(true);
+      expect(
+        DeviceAllowlistResponseV20260121Schema.safeParse(oldResponse).success,
+      ).toBe(true);
+      expect(
+        DeviceAllowlistResponseV20260522Schema.safeParse(newResponse).success,
+      ).toBe(true);
+      expect(
+        DeviceAllowlistResponseAnySchema.safeParse(oldResponse).success,
+      ).toBe(true);
+      expect(
+        DeviceAllowlistResponseAnySchema.safeParse(newResponse).success,
+      ).toBe(true);
     });
 
     it("validates refresh instance ID response versions", () => {
-      expect(InstanceIdRefreshResultV20260121Schema.safeParse({ ...mockInstanceRefreshResult, cvm_id: 123 }).success).toBe(true);
-      expect(InstanceIdRefreshResultV20260522Schema.safeParse(mockInstanceRefreshResult).success).toBe(true);
-      expect(RefreshCvmInstanceIdsResponseV20260121Schema.safeParse({
-        ...mockBatchRefreshResult,
-        items: [{ ...mockInstanceRefreshResult, cvm_id: 123 }],
-      }).success).toBe(true);
-      expect(RefreshCvmInstanceIdsResponseV20260522Schema.safeParse(mockBatchRefreshResult).success).toBe(true);
-      expect(RefreshCvmInstanceIdsResponseSchema.safeParse(mockBatchRefreshResult).success).toBe(true);
+      expect(
+        InstanceIdRefreshResultV20260121Schema.safeParse({
+          ...mockInstanceRefreshResult,
+          cvm_id: 123,
+        }).success,
+      ).toBe(true);
+      expect(
+        InstanceIdRefreshResultV20260522Schema.safeParse(
+          mockInstanceRefreshResult,
+        ).success,
+      ).toBe(true);
+      expect(
+        RefreshCvmInstanceIdsResponseV20260121Schema.safeParse({
+          ...mockBatchRefreshResult,
+          items: [{ ...mockInstanceRefreshResult, cvm_id: 123 }],
+        }).success,
+      ).toBe(true);
+      expect(
+        RefreshCvmInstanceIdsResponseV20260522Schema.safeParse(
+          mockBatchRefreshResult,
+        ).success,
+      ).toBe(true);
+      expect(
+        RefreshCvmInstanceIdsResponseSchema.safeParse(mockBatchRefreshResult)
+          .success,
+      ).toBe(true);
     });
   });
 

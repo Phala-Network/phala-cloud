@@ -70,6 +70,13 @@ class CvmGatewayInfoV20260121(CloudModel):
     cname: str | None = None
 
 
+class CvmLogUrlsV20260121(CloudModel):
+    serial: str | None = None
+    stdout: str | None = None
+    stderr: str | None = None
+    container_log_base: str | None = None
+
+
 class NodeRef(CloudModel):
     object_type: Literal["node"] = "node"
     id: int | None = None
@@ -105,7 +112,7 @@ class CvmRef(CloudModel):
 
 
 class CvmInfoV20260121(CloudModel):
-    id: int
+    id: str
     name: str
     app_id: str | None = None
     vm_uuid: str | None = None
@@ -116,10 +123,15 @@ class CvmInfoV20260121(CloudModel):
     kms_type: KmsType | None = None
     kms_info: CvmKmsInfoV20260121 | None = None
     status: str
+    in_progress: bool = False
     progress: CvmProgressInfoV20260121 | None = None
     compose_hash: str | None = None
+    docker_compose_hash: str | None = None
+    pre_launch_script_hash: str | None = None
     gateway: CvmGatewayInfoV20260121 | None = None
+    logs: CvmLogUrlsV20260121 = Field(default_factory=CvmLogUrlsV20260121)
     services: list | None = Field(default_factory=list)
+    endpoints: list | None = None
     public_logs: bool | None = None
     public_sysinfo: bool | None = None
     public_tcbinfo: bool | None = None
@@ -130,6 +142,8 @@ class CvmInfoV20260121(CloudModel):
     workspace: WorkspaceRef | None = None
     creator: UserRef | None = None
     created_at: str | None = None
+    deleted_at: str | None = None
+    project_type: str | None = None
     updated_at: str | None = None
     app_url: str | None = None
     base_image: str | None = None
@@ -162,10 +176,15 @@ class CvmInfoV20260522(CloudModel):
     kms_type: KmsType | None = None
     kms_info: CvmKmsInfoV20260121 | None = None
     status: str
+    in_progress: bool = False
     progress: CvmProgressInfoV20260121 | None = None
     compose_hash: str | None = None
+    docker_compose_hash: str | None = None
+    pre_launch_script_hash: str | None = None
     gateway: CvmGatewayInfoV20260121 | None = None
+    logs: CvmLogUrlsV20260121 = Field(default_factory=CvmLogUrlsV20260121)
     services: list | None = Field(default_factory=list)
+    endpoints: list | None = None
     public_logs: bool | None = None
     public_sysinfo: bool | None = None
     public_tcbinfo: bool | None = None
@@ -176,6 +195,8 @@ class CvmInfoV20260522(CloudModel):
     workspace: WorkspaceRef | None = None
     creator: UserRef | None = None
     created_at: str | None = None
+    deleted_at: str | None = None
+    project_type: str | None = None
     updated_at: str | None = None
     app_url: str | None = None
     base_image: str | None = None
