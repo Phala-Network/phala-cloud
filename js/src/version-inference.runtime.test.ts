@@ -37,15 +37,18 @@ import {
   RefreshCvmInstanceIdsResponseV20260522Schema,
 } from "./actions/cvms/refresh_cvm_instance_ids";
 import { DstackAppFullResponseV20260121Schema } from "./types/app_info_v20260121";
-import { PaginatedCvmInfosV20251028Schema } from "./types/cvm_info_v20251028";
 import {
+  CvmDetailV20251028Schema,
+  CvmInfoV20251028Schema,
+  PaginatedCvmInfosV20251028Schema,
+} from "./types/cvm_info_v20251028";
+import {
+  CvmInfoDetailV20260121Schema,
   CvmInfoV20260121Schema,
   CvmInfoV20260522Schema,
   PaginatedCvmInfosV20260121Schema,
   PaginatedCvmInfosV20260522Schema,
 } from "./types/cvm_info_v20260121";
-import { CvmDetailV20251028Schema } from "./types/cvm_info_v20251028";
-import { CvmInfoDetailV20260121Schema } from "./types/cvm_info_v20260121";
 import {
   VMSchema,
   VMV20260121Schema,
@@ -278,6 +281,17 @@ describe("version-based schema validation", () => {
       }
     });
 
+    it("should validate versioned table IDs in v20251028 CVM mutation responses", () => {
+      const result = CvmDetailV20251028Schema.safeParse({
+        ...mockCvmDetailV20251028,
+        id: "cvm_ykL5lbAn",
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.id).toBe("cvm_ykL5lbAn");
+      }
+    });
+
     it("should reject v20260121 format with v20251028 schema", () => {
       const result =
         PaginatedCvmInfosV20251028Schema.safeParse(mockCvmListV20260121);
@@ -337,6 +351,18 @@ describe("version-based schema validation", () => {
         VMV20260121Schema.safeParse({
           ...mockCvmDetailV20251028,
           created_at: "2026-05-22T00:00:00Z",
+        }).success,
+      ).toBe(true);
+    });
+
+    it("uses versioned managed user IDs in v20251028 hosted CVM schemas", () => {
+      expect(
+        CvmInfoV20251028Schema.safeParse({
+          ...mockCvmListV20251028.items[0],
+          managed_user: {
+            id: "usr_ykL5lbAn",
+            username: "test-user",
+          },
         }).success,
       ).toBe(true);
     });
