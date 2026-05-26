@@ -1,0 +1,27 @@
+services:
+  chroma:
+    image: ghcr.io/chroma-core/chroma:latest
+    restart: unless-stopped
+    environment:
+      CHROMA_HOST_ADDR: "0.0.0.0"
+      CHROMA_HOST_PORT: "8000"
+      IS_PERSISTENT: "1"
+      PERSIST_DIRECTORY: ${PERSIST_DIRECTORY:-/data}
+      CHROMA_SERVER_NOFILE: ${CHROMA_SERVER_NOFILE:-65536}
+      ALLOW_RESET: ${ALLOW_RESET:-FALSE}
+      ANONYMIZED_TELEMETRY: ${ANONYMIZED_TELEMETRY:-FALSE}
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/api/v2/heartbeat", timeout=5).read()' || exit 0
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
+
+volumes:
+  chroma_data:
