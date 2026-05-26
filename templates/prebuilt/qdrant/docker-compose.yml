@@ -1,0 +1,17 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+    environment:
+      QDRANT__LOG_LEVEL: "${QDRANT_LOG_LEVEL:-INFO}"
+      QDRANT__STORAGE__STORAGE_PATH: "/qdrant/storage"
+      QDRANT__SERVICE__HTTP_PORT: "6333"
+      QDRANT__SERVICE__ENABLE_CORS: "${QDRANT_ENABLE_CORS:-true}"
+      QDRANT__TELEMETRY_DISABLED: "${QDRANT_TELEMETRY_DISABLED:-true}"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+
+volumes:
+  qdrant_storage:

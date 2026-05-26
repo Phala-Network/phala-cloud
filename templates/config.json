@@ -19,7 +19,7 @@
       "memory": 1024,
       "diskSize": 10
     },
-    "tags": ["AI Agents", "Agent Frameworks", "Orchestration"]
+    "tags": ["AI Agents", "Developer Tools", "Automation"]
   },
   {
     "id": "VibeVM",
@@ -338,7 +338,7 @@
       "memory": 4096,
       "diskSize": 40
     },
-    "tags": ["LLM Inference", "API"]
+    "tags": ["LLM Inference & Model Serving", "Developer Tools", "AI Agents"]
   },
   {
     "id": "openllm",
@@ -360,7 +360,7 @@
       "memory": 2048,
       "diskSize": 10
     },
-    "tags": ["LLM Inference & Model Serving", "AI", "Developer Tools"]
+    "tags": ["LLM Inference & Model Serving", "Developer Tools", "AI Agents"]
   },
   {
     "id": "bentoml",
@@ -382,7 +382,7 @@
       "memory": 2048,
       "diskSize": 10
     },
-    "tags": ["LLM Inference & Model Serving", "AI", "Developer Tools"]
+    "tags": ["LLM Inference & Model Serving", "Developer Tools", "AI Agents"]
   },
   {
     "id": "llm-wiki",
@@ -488,7 +488,7 @@
       }
     ],
     "defaultResource": { "vCPU": 1, "memory": 1024, "diskSize": 10 },
-    "tags": ["LLM Inference", "Developer Tools", "TEE & Privacy"]
+    "tags": ["LLM Inference & Model Serving", "Developer Tools", "TEE & Privacy"]
   },
   {
     "id": "llamafile",
@@ -1288,7 +1288,7 @@
       "memory": 4096,
       "diskSize": 40
     },
-    "tags": ["AI", "Agents", "Framework"]
+    "tags": ["AI Agents", "Developer Tools"]
   },
   {
     "id": "netdata-mcp-server",
@@ -2040,7 +2040,7 @@
       "memory": 4096,
       "diskSize": 40
     },
-    "tags": ["Agent", "Framework"]
+    "tags": ["AI Agents", "Developer Tools"]
   },
   {
     "id": "gpt4all",
@@ -2062,7 +2062,7 @@
       "memory": 2048,
       "diskSize": 10
     },
-    "tags": ["LLM Inference & Model Serving", "AI", "Developer Tools"]
+    "tags": ["LLM Inference & Model Serving", "Developer Tools", "AI Agents"]
   },
   {
     "id": "graphrag",
@@ -2090,11 +2090,7 @@
       "memory": 2048,
       "diskSize": 10
     },
-    "tags": [
-      "AI",
-      "Developer Tools",
-      "Data & Storage"
-    ]
+    "tags": ["RAG", "AI Agents", "Data & Storage"]
   },
   {
     "id": "langchain",
@@ -2116,7 +2112,7 @@
       "memory": 2048,
       "diskSize": 10
     },
-    "tags": ["Agent Frameworks & Orchestration", "Developer Tools"]
+    "tags": ["AI Agents", "Developer Tools"]
   },
 {
   "id": "text-generation-webui",
@@ -2138,11 +2134,7 @@
     "memory": 2048,
     "diskSize": 10
   },
-  "tags": [
-    "LLM Inference & Model Serving",
-    "AI",
-    "Developer Tools"
-  ]
+  "tags": ["LLM Inference & Model Serving", "Developer Tools", "AI Agents"]
 },
 {
   "id": "lmdeploy",
@@ -2182,11 +2174,7 @@
     "memory": 2048,
     "diskSize": 10
   },
-  "tags": [
-    "AI Agents",
-    "Developer Tools",
-    "API"
-  ]
+  "tags": ["AI Agents", "Developer Tools", "Automation"]
 },
 {
   "id": "copilotkit",
@@ -2330,11 +2318,7 @@
     "memory": 2048,
     "diskSize": 10
   },
-  "tags": [
-    "RAG",
-    "Developer Tools",
-    "AI"
-  ]
+  "tags": ["RAG", "AI Agents", "Developer Tools"]
 },
 {
   "id": "fastgpt",
@@ -2585,11 +2569,7 @@
     "memory": 2048,
     "diskSize": 20
   },
-  "tags": [
-    "RAG",
-    "Web Scraping",
-    "AI Pipelines"
-  ]
+  "tags": ["Web Data & Search", "RAG", "Developer Tools"]
 },
 {
   "id": "dify",
@@ -2659,11 +2639,7 @@
     "memory": 4096,
     "diskSize": 40
   },
-  "tags": [
-    "Web Apps",
-    "AI Agents",
-    "Agent Frameworks & Orchestration"
-  ]
+  "tags": ["Web Apps", "AI Agents", "Developer Tools"]
 },
 {
   "id": "langflow",
@@ -2781,11 +2757,7 @@
     "memory": 2048,
     "diskSize": 20
   },
-  "tags": [
-    "Automation",
-    "Web Apps",
-    "AI"
-  ]
+  "tags": ["Automation", "Web Apps", "AI Agents"]
 },
 {
   "id": "trigger-dev",
@@ -2839,11 +2811,7 @@
     "diskSize": 10
   },
   "icon": "supabase.png",
-  "tags": [
-    "Data & Storage",
-    "Vector Database",
-    "AI Apps"
-  ]
+  "tags": ["Data & Storage", "Developer Tools", "Web Apps"]
 },
 {
   "id": "bolt-diy",
@@ -2865,11 +2833,7 @@
     "memory": 1024,
     "diskSize": 10
   },
-  "tags": [
-    "AI Agents",
-    "Developer Tools",
-    "App Builder"
-  ]
+  "tags": ["AI Agents", "Developer Tools", "Web Apps"]
 },
 {
   "id": "promptflow",
@@ -2897,11 +2861,7 @@
     "memory": 2048,
     "diskSize": 10
   },
-  "tags": [
-    "Agent Frameworks & Orchestration",
-    "Developer Tools",
-    "AI"
-  ]
+  "tags": ["AI Agents", "Developer Tools", "Automation"]
 },
 {
   "id": "genkit",
@@ -2979,11 +2939,7 @@
     "memory": 1024,
     "diskSize": 10
   },
-  "tags": [
-    "Vector Databases & Search Infrastructure",
-    "Data & Storage",
-    "Search"
-  ]
+  "tags": ["Data & Storage", "RAG", "Infrastructure"]
 },
 {
   "id": "chroma",
@@ -3023,11 +2979,7 @@
     "memory": 2048,
     "diskSize": 20
   },
-  "tags": [
-    "Vector Databases",
-    "RAG",
-    "AI Infrastructure"
-  ]
+  "tags": ["Data & Storage", "RAG", "Developer Tools"]
 },
 {
     "id": "faiss",
@@ -3063,11 +3015,7 @@
       "memory": 2048,
       "diskSize": 10
     },
-    "tags": [
-      "Vector Database",
-      "Data & Storage",
-      "Web Data & Search"
-    ]
+    "tags": ["Data & Storage", "RAG", "Web Data & Search"]
   },
 {
     "id": "deeplake",
@@ -3101,7 +3049,7 @@
       "memory": 1024,
       "diskSize": 10
     },
-    "tags": ["Data & Storage", "Vector Database", "AI Apps"]
+    "tags": ["Data & Storage", "RAG", "AI Agents"]
   },
 {
     "id": "mem0",
@@ -3123,7 +3071,7 @@
       "memory": 2048,
       "diskSize": 10
     },
-    "tags": ["AI Memory Systems", "AI Agents", "Developer Tools"]
+    "tags": ["Data & Storage", "AI Agents", "Developer Tools"]
   },
 {
     "id": "letta",
@@ -3246,5 +3194,39 @@
       "diskSize": 10
     },
     "tags": ["Developer Tools", "AI Agents", "Automation"]
-  }
+  },
+{
+  "id": "qdrant",
+  "name": "qdrant/qdrant",
+  "description": "Official Qdrant vector search engine and vector database server with persistent named storage, public REST API on port 6333, and credential-free direct-vector smoke commands for CPU-safe Phala Cloud deployments.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/qdrant",
+  "author": "qdrant",
+  "icon": "qdrant.svg",
+  "envs": [
+    {
+      "key": "QDRANT_LOG_LEVEL",
+      "required": false,
+      "default": "INFO",
+      "description": "Qdrant server log level passed to QDRANT__LOG_LEVEL."
+    },
+    {
+      "key": "QDRANT_ENABLE_CORS",
+      "required": false,
+      "default": "true",
+      "description": "Enables CORS headers on the REST API for browser-based smoke clients."
+    },
+    {
+      "key": "QDRANT_TELEMETRY_DISABLED",
+      "required": false,
+      "default": "true",
+      "description": "Disables upstream usage telemetry for the default Phala Cloud template."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 20
+  },
+  "tags": ["Data & Storage", "RAG", "Infrastructure"]
+}
 ]
