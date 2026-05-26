@@ -2934,5 +2934,55 @@
       "diskSize": 40
     },
     "tags": ["Data & Storage", "AI Agents", "Infrastructure"]
-  }
+  },
+{
+  "id": "weaviate",
+  "name": "weaviate/weaviate",
+  "description": "Open-source cloud-native vector database for object and vector search. This Phala Cloud template runs a CPU-safe single-node Weaviate server with persistent named storage, no model downloads, no GPU requirement, and no external inference provider credentials by default.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/weaviate",
+  "author": "weaviate",
+  "icon": "weaviate.png",
+  "envs": [
+    {
+      "key": "WEAVIATE_QUERY_DEFAULTS_LIMIT",
+      "required": false,
+      "default": "25",
+      "description": "Default maximum result count for queries that do not set an explicit limit."
+    },
+    {
+      "key": "WEAVIATE_ANONYMOUS_ACCESS_ENABLED",
+      "required": false,
+      "default": "true",
+      "description": "Whether Weaviate allows anonymous API access. Keep true for smoke testing; disable and configure authentication before storing private data."
+    },
+    {
+      "key": "WEAVIATE_AUTOSCHEMA_ENABLED",
+      "required": false,
+      "default": "true",
+      "description": "Whether Weaviate infers schema during evaluation imports."
+    },
+    {
+      "key": "WEAVIATE_LOG_LEVEL",
+      "required": false,
+      "default": "info",
+      "description": "Weaviate log level."
+    },
+    {
+      "key": "WEAVIATE_DISABLE_TELEMETRY",
+      "required": false,
+      "default": "true",
+      "description": "Disables upstream telemetry for the default Phala Cloud template."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": [
+    "Vector Databases & Search Infrastructure",
+    "Data & Storage",
+    "Search"
+  ]
+}
 ]

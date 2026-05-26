@@ -1,0 +1,38 @@
+services:
+  weaviate:
+    image: cr.weaviate.io/semitechnologies/weaviate:1.37.4
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --scheme
+      - http
+    ports:
+      - "8080:8080"
+    environment:
+      QUERY_DEFAULTS_LIMIT: "${WEAVIATE_QUERY_DEFAULTS_LIMIT:-25}"
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "${WEAVIATE_ANONYMOUS_ACCESS_ENABLED:-true}"
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      DEFAULT_VECTORIZER_MODULE: "none"
+      ENABLE_MODULES: ""
+      CLUSTER_HOSTNAME: "node1"
+      AUTOSCHEMA_ENABLED: "${WEAVIATE_AUTOSCHEMA_ENABLED:-true}"
+      LOG_LEVEL: "${WEAVIATE_LOG_LEVEL:-info}"
+      DISABLE_TELEMETRY: "${WEAVIATE_DISABLE_TELEMETRY:-true}"
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -T 3 -O - http://127.0.0.1:8080/v1/.well-known/ready >/dev/null 2>&1",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  weaviate_data:
