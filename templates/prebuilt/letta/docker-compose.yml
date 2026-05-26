@@ -1,0 +1,280 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    ports:
+      - "8080:8080"
+    environment:
+      LETTA_API_BASE_URL: ${LETTA_API_BASE_URL:-http://127.0.0.1:8283}
+      LETTA_CLIENT_VERSION: ${LETTA_CLIENT_VERSION:-1.12.0}
+      PIP_DEFAULT_TIMEOUT: "120"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+      PIP_ROOT_USER_ACTION: ignore
+      PORT: "8080"
+      PYTHONUNBUFFERED: "1"
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        python -m pip install --no-cache-dir "letta-client==$${LETTA_CLIENT_VERSION}"
+        exec python /server.py
+    configs:
+      - source: server_py
+        target: /server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    restart: unless-stopped
+
+configs:
+  server_py:
+    content: |
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import re
+      import sys
+      import time
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import parse_qs, urlparse
+
+      STARTED_AT = time.time()
+      IMPORT_ERROR = None
+      PACKAGE = {}
+
+      try:
+          import letta_client
+          from letta_client import Letta
+          from letta_client.types import BlockResponse, CreateBlockParam, HealthResponse
+
+          PACKAGE = {
+              "distribution": "letta-client",
+              "version": importlib.metadata.version("letta-client"),
+              "module": letta_client.__name__,
+              "components": [
+                  Letta.__name__,
+                  BlockResponse.__name__,
+                  CreateBlockParam.__name__,
+                  HealthResponse.__name__,
+              ],
+          }
+      except Exception as exc:
+          IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+          Letta = None
+          BlockResponse = None
+          CreateBlockParam = None
+          HealthResponse = None
+
+      DEFAULT_QUERY = "How does Letta keep useful agent context available?"
+
+      MEMORY_BLOCK_INPUTS = [
+          {
+              "label": "human",
+              "value": (
+                  "The operator is validating a Phala Cloud prebuilt template "
+                  "for a CPU-only confidential VM."
+              ),
+          },
+          {
+              "label": "persona",
+              "value": (
+                  "The assistant should keep long-running project memory separate "
+                  "from model inference and provider credentials."
+              ),
+          },
+          {
+              "label": "project",
+              "value": (
+                  "This local demo imports the Letta Python SDK, materializes "
+                  "SDK-shaped memory blocks, and performs deterministic retrieval "
+                  "without calling a hosted model."
+              ),
+          },
+      ]
+
+
+      def dump_model(model):
+          return model.model_dump(mode="json", exclude_none=True)
+
+
+      def build_client():
+          if IMPORT_ERROR is not None:
+              raise RuntimeError(IMPORT_ERROR)
+          return Letta(
+              environment="local",
+              base_url=os.environ.get("LETTA_API_BASE_URL", "http://127.0.0.1:8283"),
+          )
+
+
+      def build_blocks():
+          if IMPORT_ERROR is not None:
+              raise RuntimeError(IMPORT_ERROR)
+
+          blocks = []
+          for index, item in enumerate(MEMORY_BLOCK_INPUTS, start=1):
+              request = CreateBlockParam(label=item["label"], value=item["value"])
+              blocks.append(
+                  BlockResponse(
+                      id=f"block-{index}-{request['label']}",
+                      label=request["label"],
+                      value=request["value"],
+                      limit=2048,
+                      read_only=True,
+                      tags=["phala-template", "local-demo"],
+                  )
+              )
+          return blocks
+
+
+      def tokenize(text):
+          return set(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+      def score_block(query_tokens, block):
+          value_tokens = tokenize(block.value)
+          label_tokens = tokenize(block.label or "")
+          return len(query_tokens & value_tokens) + (2 * len(query_tokens & label_tokens))
+
+
+      def run_demo(query):
+          client = build_client()
+          blocks = build_blocks()
+          query_tokens = tokenize(query)
+          ranked = sorted(
+              blocks,
+              key=lambda block: (-score_block(query_tokens, block), block.label or ""),
+          )
+          selected = ranked[0]
+
+          health = HealthResponse(status="ready", version=PACKAGE.get("version", "unknown"))
+
+          return {
+              "query": query,
+              "client": {
+                  "class": client.__class__.__name__,
+                  "base_url": str(client.base_url),
+                  "resources": ["agents", "blocks", "models", "tools"],
+                  "network_calls": False,
+              },
+              "health_shape": dump_model(health),
+              "memory_blocks": [dump_model(block) for block in blocks],
+              "selected_context": dump_model(selected),
+              "answer": (
+                  "Selected memory block "
+                  f"{selected.label!r} from local Letta SDK-shaped memory. "
+                  "No LLM provider, hosted Letta API, model download, database, "
+                  "or GPU was used."
+              ),
+              "hosted_llm_called": False,
+              "hosted_letta_called": False,
+              "model_downloaded": False,
+              "database_required": False,
+              "gpu_required": False,
+          }
+
+
+      def base_payload():
+          return {
+              "service": "letta-client-memory-demo",
+              "upstream": "https://github.com/letta-ai/letta",
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "package": PACKAGE,
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "letta-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              request = urlparse(self.path)
+              path = request.path.rstrip("/") or "/"
+              params = parse_qs(request.query)
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  payload.update(
+                      {
+                          "ok": IMPORT_ERROR is None,
+                          "status": "ready" if IMPORT_ERROR is None else "import_failed",
+                          "credentials_required": False,
+                          "remote_calls": False,
+                          "endpoints": ["/healthz", "/demo", "/v1/models"],
+                          "checks": [
+                              "import letta_client",
+                              "from letta_client import Letta",
+                              "from letta_client.types import BlockResponse, CreateBlockParam, HealthResponse",
+                          ],
+                      }
+                  )
+                  if IMPORT_ERROR:
+                      payload["error"] = IMPORT_ERROR
+                  self.respond_json(200 if IMPORT_ERROR is None else 500, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  if IMPORT_ERROR:
+                      payload.update({"ok": False, "error": IMPORT_ERROR})
+                      self.respond_json(500, payload)
+                      return
+
+                  query = params.get("query", [DEFAULT_QUERY])[0][:300] or DEFAULT_QUERY
+                  payload.update({"ok": True, "cpu_only": True, "demo": run_demo(query)})
+                  self.respond_json(200, payload)
+                  return
+
+              if path == "/v1/models":
+                  payload = {
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "letta-client-local-memory-demo",
+                              "object": "model",
+                              "created": 0,
+                              "owned_by": "letta-ai",
+                              "description": (
+                                  "Local Letta SDK memory-block verifier. "
+                                  "It is not an inference model and does not call a provider."
+                              ),
+                          }
+                      ],
+                      "package": PACKAGE,
+                  }
+                  if IMPORT_ERROR:
+                      payload["error"] = IMPORT_ERROR
+                  self.respond_json(200 if IMPORT_ERROR is None else 500, payload)
+                  return
+
+              self.respond_json(404, {"ok": False, "error": "not found"})
+
+
+      def main():
+          port = int(os.environ.get("PORT", "8080"))
+          server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+          print(f"letta demo server listening on 0.0.0.0:{port}", flush=True)
+          server.serve_forever()
+
+
+      if __name__ == "__main__":
+          main()

@@ -3124,5 +3124,33 @@
       "diskSize": 10
     },
     "tags": ["AI Memory Systems", "AI Agents", "Developer Tools"]
+  },
+{
+    "id": "letta",
+    "name": "letta-ai/letta",
+    "description": "Open source platform for stateful agents with long-term memory. This CPU-safe demo installs the real letta-client SDK, creates local SDK-shaped memory blocks, and exposes health, demo, and model-list endpoints without provider credentials or model downloads.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/letta",
+    "author": "letta-ai",
+    "icon": "letta.png",
+    "envs": [
+      {
+        "key": "LETTA_CLIENT_VERSION",
+        "required": false,
+        "default": "1.12.0",
+        "description": "Pinned letta-client package version installed at container startup."
+      },
+      {
+        "key": "LETTA_API_BASE_URL",
+        "required": false,
+        "default": "http://127.0.0.1:8283",
+        "description": "Optional local Letta API base URL used only to instantiate the SDK client; the default demo does not call it."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Data & Storage", "Developer Tools"]
   }
 ]
