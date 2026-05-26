@@ -2984,5 +2984,49 @@
     "Data & Storage",
     "Search"
   ]
+},
+{
+  "id": "chroma",
+  "name": "chroma-core/chroma",
+  "description": "Official Chroma vector database server with persistent local storage, public HTTP on port 8000, and credential-free heartbeat verification for CPU-safe Phala Cloud smoke deployments.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/chroma",
+  "author": "chroma-core",
+  "icon": "chroma.png",
+  "envs": [
+    {
+      "key": "PERSIST_DIRECTORY",
+      "required": false,
+      "description": "Container path where Chroma stores SQLite metadata and index data. The template mounts its named volume at /data.",
+      "default": "/data"
+    },
+    {
+      "key": "ALLOW_RESET",
+      "required": false,
+      "description": "Enables Chroma reset behavior when set to TRUE. Keep disabled for persistent deployments.",
+      "default": "FALSE"
+    },
+    {
+      "key": "CHROMA_SERVER_NOFILE",
+      "required": false,
+      "description": "File descriptor limit requested by the official Chroma entrypoint.",
+      "default": "65536"
+    },
+    {
+      "key": "ANONYMIZED_TELEMETRY",
+      "required": false,
+      "description": "Legacy Chroma telemetry flag retained for older compatible image tags.",
+      "default": "FALSE"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 20
+  },
+  "tags": [
+    "Vector Databases",
+    "RAG",
+    "AI Infrastructure"
+  ]
 }
 ]
