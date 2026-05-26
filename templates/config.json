@@ -3068,5 +3068,39 @@
       "Data & Storage",
       "Web Data & Search"
     ]
+  },
+{
+    "id": "deeplake",
+    "name": "activeloopai/deeplake",
+    "description": "Deep Lake AI data lake and vector database library. This template runs a CPU-safe HTTP demo that installs the real deeplake Python package, creates a tiny local named-volume dataset, and exercises deterministic TQL vector search without GPUs, model downloads, provider credentials, or external databases.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/deeplake",
+    "author": "activeloopai",
+    "icon": "deeplake.png",
+    "envs": [
+      {
+        "key": "DEEPLAKE_VERSION",
+        "required": false,
+        "default": "4.6.2",
+        "description": "Pinned Deep Lake Python package version installed by the demo service at container startup."
+      },
+      {
+        "key": "DEEPLAKE_DATA_ROOT",
+        "required": false,
+        "default": "/data/deeplake",
+        "description": "Internal named-volume backed path where the demo writes the tiny local Deep Lake dataset."
+      },
+      {
+        "key": "DEEPLAKE_DEMO_TOP_K",
+        "required": false,
+        "default": "2",
+        "description": "Default number of vector-search hits returned by the demo endpoint."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["Data & Storage", "Vector Database", "AI Apps"]
   }
 ]
