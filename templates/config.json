@@ -3152,5 +3152,35 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Data & Storage", "Developer Tools"]
+  },
+{
+    "id": "context7",
+    "name": "Context7",
+    "description": "Upstash Context7 MCP server for up-to-date library documentation and code examples. This template runs the official @upstash/context7-mcp 2.3.0 package in stateless HTTP mode with a public /ping smoke endpoint and no required secrets.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/context7",
+    "author": "upstash",
+    "icon": "context7.svg",
+    "envs": [
+      {
+        "key": "CONTEXT7_API_URL",
+        "required": false,
+        "default": "https://context7.com/api",
+        "description": "Optional Context7 API base URL override. Leave the default for the hosted Context7 API."
+      },
+      {
+        "key": "RESOURCE_URL",
+        "required": false,
+        "default": "https://mcp.context7.com",
+        "description": "Optional OAuth protected-resource URL advertised by the HTTP server."
+      },
+      {
+        "key": "AUTH_SERVER_URL",
+        "required": false,
+        "default": "https://context7.com",
+        "description": "Optional OAuth authorization-server URL advertised by the HTTP server."
+      }
+    ],
+    "defaultResource": { "vCPU": 1, "memory": 1024, "diskSize": 10 },
+    "tags": ["MCP Servers", "Developer Tools", "AI Agents"]
   }
 ]
