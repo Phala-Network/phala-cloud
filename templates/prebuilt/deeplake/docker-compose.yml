@@ -1,0 +1,425 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8000"
+    environment:
+      DEEPLAKE_VERSION: ${DEEPLAKE_VERSION:-4.6.2}
+      DEEPLAKE_DATA_ROOT: ${DEEPLAKE_DATA_ROOT:-/data/deeplake}
+      DEEPLAKE_DEMO_TOP_K: ${DEEPLAKE_DEMO_TOP_K:-2}
+      PYTHONUNBUFFERED: "1"
+      UV_SYSTEM_PYTHON: "1"
+    volumes:
+      - deeplake-data:/data/deeplake
+    configs:
+      - source: deeplake_demo_app
+        target: /opt/deeplake-demo/main.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache "deeplake==$${DEEPLAKE_VERSION}"
+        exec python /opt/deeplake-demo/main.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5); raise SystemExit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+          reverse_proxy app:8000
+      }
+
+  deeplake_demo_app:
+    content: |
+      import importlib
+      import importlib.metadata
+      import json
+      import math
+      import os
+      import platform
+      import shutil
+      import sys
+      import threading
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path
+      from urllib.parse import parse_qs, urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "deeplake"
+      VECTOR_SIZE = 8
+      DEFAULT_QUERY = "local Deep Lake vector search on Phala Cloud"
+      VOCAB = (
+          "deeplake",
+          "vector",
+          "search",
+          "docker",
+          "confidential",
+          "cpu",
+          "credential",
+          "volume",
+      )
+      DOCUMENTS = [
+          {
+              "id": "deeplake-local",
+              "text": (
+                  "Deep Lake stores local AI datasets with tensors, embeddings, "
+                  "and vector search."
+              ),
+          },
+          {
+              "id": "phala-compose",
+              "text": (
+                  "Phala Cloud deploys Docker Compose HTTP services in "
+                  "confidential virtual machines."
+              ),
+          },
+          {
+              "id": "cpu-safe",
+              "text": (
+                  "This demo runs on CPU without GPUs, model downloads, hosted "
+                  "provider calls, or API credentials."
+              ),
+          },
+          {
+              "id": "named-volume",
+              "text": (
+                  "The tiny deterministic Deep Lake dataset is written under a "
+                  "named Docker volume mounted at /data/deeplake."
+              ),
+          },
+      ]
+      DEMO_LOCK = threading.Lock()
+
+
+      def import_checks():
+          result = {
+              "package": PACKAGE_NAME,
+              "distribution_version": None,
+              "module_version": None,
+              "import_ok": False,
+              "checks": {},
+              "error": None,
+          }
+          try:
+              result["distribution_version"] = importlib.metadata.version(PACKAGE_NAME)
+              deeplake = importlib.import_module(PACKAGE_NAME)
+              result["module_version"] = getattr(deeplake, "__version__", None)
+              result["checks"] = {
+                  "create": hasattr(deeplake, "create"),
+                  "open": hasattr(deeplake, "open"),
+                  "types.Text": hasattr(deeplake.types, "Text"),
+                  "types.Embedding": hasattr(deeplake.types, "Embedding"),
+              }
+              result["import_ok"] = all(result["checks"].values())
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      IMPORT_STATUS = import_checks()
+
+
+      def tokenize(text):
+          return "".join(ch.lower() if ch.isalnum() else " " for ch in text).split()
+
+
+      def embed_text(text):
+          tokens = tokenize(text.lower().replace("deep lake", "deeplake"))
+          values = []
+          for term in VOCAB:
+              values.append(float(sum(1 for token in tokens if token == term or token.startswith(term))))
+          norm = math.sqrt(sum(value * value for value in values)) or 1.0
+          return [round(value / norm, 6) for value in values]
+
+
+      def cosine(left, right):
+          dot = sum(float(a) * float(b) for a, b in zip(left, right))
+          left_norm = math.sqrt(sum(float(a) * float(a) for a in left)) or 1.0
+          right_norm = math.sqrt(sum(float(b) * float(b) for b in right)) or 1.0
+          return dot / (left_norm * right_norm)
+
+
+      def dataset_root():
+          root = Path(os.environ.get("DEEPLAKE_DATA_ROOT", "/data/deeplake")).resolve()
+          root.mkdir(parents=True, exist_ok=True)
+          return root
+
+
+      def demo_dataset_path():
+          return dataset_root() / "phala-vector-demo"
+
+
+      def get_top_k(params):
+          raw = params.get("top_k", [os.environ.get("DEEPLAKE_DEMO_TOP_K", "2")])[0]
+          try:
+              value = int(raw)
+          except (TypeError, ValueError):
+              value = 2
+          return max(1, min(value, len(DOCUMENTS)))
+
+
+      def package_payload():
+          return {
+              "distribution": PACKAGE_NAME,
+              "distribution_version": IMPORT_STATUS["distribution_version"],
+              "module_version": IMPORT_STATUS["module_version"],
+          }
+
+
+      def base_payload():
+          return {
+              "service": "deeplake-local-vector-demo",
+              "upstream": "https://github.com/activeloopai/deeplake",
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "package": package_payload(),
+              "credentials_required": False,
+              "remote_model_calls": False,
+              "model_downloaded": False,
+              "gpu_required": False,
+          }
+
+
+      def run_demo(query, top_k):
+          if not IMPORT_STATUS["import_ok"]:
+              raise RuntimeError(IMPORT_STATUS["error"] or "Deep Lake import checks failed")
+
+          import deeplake
+
+          with DEMO_LOCK:
+              dataset_path = demo_dataset_path()
+              if dataset_path.exists():
+                  shutil.rmtree(dataset_path)
+
+              ds = deeplake.create(str(dataset_path))
+              ds.add_column("id", deeplake.types.Text())
+              ds.add_column("text", deeplake.types.Text())
+              ds.add_column("embedding", deeplake.types.Embedding(VECTOR_SIZE))
+              ds.append(
+                  [
+                      {
+                          "id": item["id"],
+                          "text": item["text"],
+                          "embedding": embed_text(item["text"]),
+                      }
+                      for item in DOCUMENTS
+                  ]
+              )
+              ds.commit("seed deterministic Phala Cloud Deep Lake demo")
+              ds.build_indexes()
+
+              query_embedding = embed_text(query)
+              array_literal = "[" + ",".join(f"{value:.6f}" for value in query_embedding) + "]"
+              tql = (
+                  "SELECT id, text, embedding "
+                  f"ORDER BY cosine_similarity(embedding, ARRAY{array_literal}) DESC "
+                  f"LIMIT {top_k}"
+              )
+              results = ds.query(tql)
+              hits = []
+              for row in results:
+                  embedding = [float(value) for value in row["embedding"]]
+                  hits.append(
+                      {
+                          "id": row["id"],
+                          "text": row["text"],
+                          "score": round(cosine(query_embedding, embedding), 6),
+                      }
+                  )
+
+          return {
+              "query": query,
+              "top_k": top_k,
+              "dataset_path": str(dataset_path),
+              "dataset_length": len(DOCUMENTS),
+              "columns": ["id", "text", "embedding"],
+              "vector_size": VECTOR_SIZE,
+              "vocab": list(VOCAB),
+              "query_embedding": query_embedding,
+              "tql": tql,
+              "hits": hits,
+              "deeplake_operations": [
+                  "deeplake.create(local_path)",
+                  "Dataset.add_column(Text, Embedding)",
+                  "Dataset.append(seed_rows)",
+                  "Dataset.commit()",
+                  "Dataset.build_indexes()",
+                  "Dataset.query(TQL cosine_similarity)",
+              ],
+              "storage": "named Docker volume mounted at /data/deeplake",
+          }
+
+
+      def response_body(path, params):
+          if path == "/healthz":
+              status = "ok" if IMPORT_STATUS["import_ok"] else "unhealthy"
+              payload = base_payload()
+              payload.update(
+                  {
+                      "status": status,
+                      "deeplake": IMPORT_STATUS,
+                      "data_root": str(dataset_root()),
+                      "endpoints": ["/healthz", "/demo", "/v1/models"],
+                  }
+              )
+              return (
+                  HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE,
+                  payload,
+              )
+
+          if path == "/demo":
+              payload = base_payload()
+              if not IMPORT_STATUS["import_ok"]:
+                  payload.update({"ok": False, "error": IMPORT_STATUS["error"]})
+                  return HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+              query = params.get("query", [DEFAULT_QUERY])[0][:300] or DEFAULT_QUERY
+              try:
+                  demo = run_demo(query, get_top_k(params))
+              except Exception as exc:
+                  payload.update({"ok": False, "error": f"{type(exc).__name__}: {exc}"})
+                  return HTTPStatus.INTERNAL_SERVER_ERROR, payload
+
+              payload.update(
+                  {
+                      "ok": True,
+                      "cpu_only": True,
+                      "hosted_saas_wrapper": False,
+                      "demo": demo,
+                  }
+              )
+              return HTTPStatus.OK, payload
+
+          if path == "/v1/models":
+              payload = {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "deeplake-local-vector-demo",
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "activeloopai-deeplake-template",
+                          "description": (
+                              "CPU-safe local Deep Lake dataset and vector-search smoke "
+                              "endpoint. No LLM model is hosted or called."
+                          ),
+                      }
+                  ],
+                  "package": package_payload(),
+              }
+              if not IMPORT_STATUS["import_ok"]:
+                  payload["error"] = IMPORT_STATUS["error"]
+              return (
+                  HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE,
+                  payload,
+              )
+
+          if path == "/":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": IMPORT_STATUS["import_ok"],
+                      "endpoints": ["/healthz", "/demo", "/v1/models"],
+                      "description": (
+                          "CPU-safe Deep Lake package smoke API using a tiny local "
+                          "dataset, deterministic embeddings, and TQL vector search."
+                      ),
+                  }
+              )
+              return HTTPStatus.OK, payload
+
+          return HTTPStatus.NOT_FOUND, {
+              "ok": False,
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "deeplake-demo"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              parsed = urlparse(self.path)
+              path = parsed.path.rstrip("/") or "/"
+              status, payload = response_body(path, parse_qs(parsed.query))
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": 8000,
+                      "deeplake": IMPORT_STATUS,
+                      "credentials_required": False,
+                      "remote_model_calls": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", 8000), Handler).serve_forever()
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  deeplake-data:
