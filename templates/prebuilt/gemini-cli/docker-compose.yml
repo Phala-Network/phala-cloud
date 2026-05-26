@@ -1,0 +1,230 @@
+services:
+  app:
+    image: node:22-bookworm-slim
+    ports:
+      - "8080:8080"
+    environment:
+      - GEMINI_CLI_VERSION=${GEMINI_CLI_VERSION:-0.43.0}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GEMINI_SANDBOX=false
+      - CI=true
+      - HOME=/tmp/gemini-home
+      - XDG_CONFIG_HOME=/tmp/gemini-config
+      - NO_COLOR=1
+      - NPM_CONFIG_AUDIT=false
+      - NPM_CONFIG_FUND=false
+      - NPM_CONFIG_UPDATE_NOTIFIER=false
+      - NPM_CONFIG_CACHE=/npm-cache
+      - PORT=8080
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        mkdir -p "$$HOME" "$$XDG_CONFIG_HOME" /tmp/gemini-workspace
+        npm install -g --omit=dev --no-audit --no-fund "@google/gemini-cli@$${GEMINI_CLI_VERSION}"
+        exec node /server.mjs
+    configs:
+      - source: server_mjs
+        target: /server.mjs
+    volumes:
+      - npm_cache:/npm-cache
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - 'fetch("http://127.0.0.1:8080/healthz").then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))'
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    restart: unless-stopped
+
+configs:
+  server_mjs:
+    content: |
+      import { spawnSync, execFileSync } from "node:child_process";
+      import fs from "node:fs";
+      import http from "node:http";
+      import os from "node:os";
+      import path from "node:path";
+      import { URL } from "node:url";
+
+      const STARTED_AT = Date.now();
+      const PACKAGE_NAME = "@google/gemini-cli";
+      const UPSTREAM = "https://github.com/google-gemini/gemini-cli";
+
+      function cleanText(value) {
+        return String(value || "")
+          .replace(/\u001b\[[0-9;]*m/g, "")
+          .trim()
+          .slice(0, 2000);
+      }
+
+      function safeCommandEnv() {
+        return {
+          PATH: process.env.PATH || "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          HOME: process.env.HOME || "/tmp/gemini-home",
+          XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME || "/tmp/gemini-config",
+          NO_COLOR: "1",
+          CI: "true",
+          GEMINI_SANDBOX: "false",
+        };
+      }
+
+      function runCommand(command, args, timeoutMs) {
+        const result = spawnSync(command, args, {
+          encoding: "utf8",
+          env: safeCommandEnv(),
+          timeout: timeoutMs,
+        });
+
+        const timedOut = Boolean(result.error && result.error.code === "ETIMEDOUT");
+        return {
+          command: [command].concat(args).join(" "),
+          exit_code: timedOut ? 124 : result.status,
+          stdout: cleanText(result.stdout),
+          stderr: cleanText(result.stderr),
+          timed_out: timedOut,
+          error: result.error ? result.error.message : undefined,
+        };
+      }
+
+      function globalPackageRoot() {
+        return cleanText(execFileSync("npm", ["root", "-g"], {
+          encoding: "utf8",
+          timeout: 10000,
+        }));
+      }
+
+      function readPackageMetadata() {
+        try {
+          const packageJsonPath = path.join(globalPackageRoot(), "@google", "gemini-cli", "package.json");
+          const data = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+          return {
+            ok: data.name === PACKAGE_NAME,
+            package_json_path: packageJsonPath,
+            name: data.name,
+            version: data.version,
+            description: data.description,
+            bin: data.bin,
+            engines: data.engines,
+            repository: data.repository,
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            error: error.name + ": " + error.message,
+          };
+        }
+      }
+
+      function inspectGemini() {
+        const packageMetadata = readPackageMetadata();
+        const cliVersion = runCommand("gemini", ["--version"], 10000);
+        const cliOk = cliVersion.exit_code === 0 && cliVersion.stdout.length > 0;
+
+        return {
+          ok: packageMetadata.ok && cliOk,
+          package: packageMetadata,
+          cli: {
+            ok: cliOk,
+            version: cliVersion.stdout,
+            check: cliVersion,
+          },
+        };
+      }
+
+      function basePayload() {
+        const inspection = inspectGemini();
+        return {
+          ok: inspection.ok,
+          service: "gemini-cli-smoke",
+          upstream: UPSTREAM,
+          node: process.version,
+          platform: os.platform() + " " + os.release(),
+          uptime_seconds: Math.round((Date.now() - STARTED_AT) / 100) / 10,
+          credentials_required: false,
+          cpu_only: true,
+          remote_model_calls: false,
+          model_downloaded: false,
+          package: inspection.package,
+          cli: inspection.cli,
+        };
+      }
+
+      function writeJson(response, status, payload) {
+        const body = Buffer.from(JSON.stringify(payload, null, 2) + "\n", "utf8");
+        response.writeHead(status, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Content-Length": String(body.length),
+          "Cache-Control": "no-store",
+        });
+        response.end(body);
+      }
+
+      const server = http.createServer((request, response) => {
+        const requestUrl = new URL(request.url, "http://127.0.0.1");
+        const pathName = requestUrl.pathname;
+
+        if (request.method !== "GET") {
+          writeJson(response, 405, { ok: false, error: "method not allowed" });
+          return;
+        }
+
+        if (pathName === "/" || pathName === "/healthz") {
+          const payload = basePayload();
+          payload.status = payload.ok ? "ready" : "unhealthy";
+          writeJson(response, payload.ok ? 200 : 500, payload);
+          return;
+        }
+
+        if (pathName === "/demo") {
+          const payload = basePayload();
+          payload.demo = {
+            name: "local Gemini CLI verifier",
+            what_ran: "gemini --version",
+            verifies: [
+              "The real @google/gemini-cli npm package is installed.",
+              "The gemini binary can execute locally.",
+              "No prompt is sent to Gemini and no provider API is called.",
+            ],
+          };
+          writeJson(response, payload.ok ? 200 : 500, payload);
+          return;
+        }
+
+        if (pathName === "/v1/models") {
+          const payload = basePayload();
+          writeJson(response, payload.ok ? 200 : 500, {
+            object: "list",
+            data: [
+              {
+                id: "gemini-cli-local-smoke",
+                object: "model",
+                created: 1719878400,
+                owned_by: "google-gemini-template",
+                description: "Local Gemini CLI package and binary verifier; no model is loaded.",
+              },
+            ],
+            package_version: payload.package.version,
+            cli_version: payload.cli.version,
+            remote_model_calls: false,
+          });
+          return;
+        }
+
+        writeJson(response, 404, { ok: false, error: "not found" });
+      });
+
+      const port = Number(process.env.PORT || "8080");
+      server.listen(port, "0.0.0.0", () => {
+        console.log("gemini-cli smoke server listening on 0.0.0.0:" + port);
+      });
+
+volumes:
+  npm_cache:
