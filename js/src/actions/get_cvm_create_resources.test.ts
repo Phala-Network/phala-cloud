@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { Client } from "../client";
 import {
+	CvmCreateResourceGraphV20260121Schema,
 	getCvmCreateResources,
 	safeGetCvmCreateResources,
 	type CvmCreateResourceGraph,
@@ -36,13 +37,13 @@ const mockResourceGraph: CvmCreateResourceGraph = {
 	],
 	kms_nodes: [
 		{
-			id: 201,
+			id: "kms_201",
 			slug: "kms-base",
 			url: "https://kms-base.example.com",
 			version: "0.5.0",
 			kms_type: "BASE",
 			chain_id: 8453,
-			kms_contract_id: 301,
+			kms_contract_id: "kc_301",
 			kms_contract_address: "0xbase",
 			gateway_app_id: "0xgateway",
 			supported_os_images: ["dstack-0.5.0"],
@@ -54,7 +55,7 @@ const mockResourceGraph: CvmCreateResourceGraph = {
 			version: "0.5.0",
 			kms_type: "ETHEREUM",
 			chain_id: 1,
-			kms_contract_id: "302",
+			kms_contract_id: "kc_302",
 			kms_contract_address: "0xeth",
 			gateway_app_id: null,
 			supported_os_images: [],
@@ -63,18 +64,18 @@ const mockResourceGraph: CvmCreateResourceGraph = {
 	node_kms_relations: [
 		{
 			teepod_id: 11,
-			kms_id: 201,
+			kms_id: "kms_201",
 			kms_type: "BASE",
-			kms_contract_id: 301,
+			kms_contract_id: "kc_301",
 			kms_contract_address: "0xbase",
 			supported_os_images: ["dstack-0.5.0"],
 		},
 	],
 	gateway_nodes: [
 		{
-			id: 401,
+			id: "gn_401",
 			teepod_id: 11,
-			kms_contract_id: 301,
+			kms_contract_id: "kc_301",
 			rpc_url: "https://gateway.example.com/rpc",
 			domain_suffix: "example.app",
 			enabled: true,
@@ -107,6 +108,7 @@ describe("getCvmCreateResources", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		mockClient = {
+			config: { version: "2026-05-22" },
 			get: vi.fn(),
 			safeGet: vi.fn(),
 		} as unknown as Client;
@@ -120,20 +122,35 @@ describe("getCvmCreateResources", () => {
 		expect(mockClient.get).toHaveBeenCalledWith(
 			"/teepods/cvm-create-resources",
 		);
-		expect(result.kms_nodes[0].kms_contract_id).toBe(301);
+		expect(result.kms_nodes[0].kms_contract_id).toBe("kc_301");
 		expect(result.gateway_nodes[0].domain_suffix).toBe("example.app");
 	});
 
-	it("parses string and numeric resource IDs", async () => {
+	it("parses latest hashid resource IDs", async () => {
 		(mockClient.get as jest.Mock).mockResolvedValueOnce(mockResourceGraph);
 
 		const result = await getCvmCreateResources(mockClient);
 
-		expect(result.kms_nodes.map((kms) => kms.id)).toEqual([201, "kms-eth"]);
+		expect(result.kms_nodes.map((kms) => kms.id)).toEqual(["kms_201", "kms-eth"]);
 		expect(result.kms_nodes.map((kms) => kms.kms_contract_id)).toEqual([
-			301,
-			"302",
+			"kc_301",
+			"kc_302",
 		]);
+	});
+
+	it("keeps 2026-01-21 schema compatible with numeric resource IDs", () => {
+		const oldPayload = {
+			...mockResourceGraph,
+			kms_nodes: [{ ...mockResourceGraph.kms_nodes[0], id: 201, kms_contract_id: 301 }],
+			node_kms_relations: [
+				{ ...mockResourceGraph.node_kms_relations[0], kms_id: 201, kms_contract_id: 301 },
+			],
+			gateway_nodes: [
+				{ ...mockResourceGraph.gateway_nodes[0], id: 401, kms_contract_id: 301 },
+			],
+		};
+
+		expect(CvmCreateResourceGraphV20260121Schema.safeParse(oldPayload).success).toBe(true);
 	});
 
 	it("returns SafeResult on success", async () => {

@@ -2,53 +2,80 @@ package phala
 
 import "fmt"
 
-// CVMInfo represents CVM information (API version 2026-01-21).
-type CVMInfo struct {
-	ID             string           `json:"id"`
-	Name           string           `json:"name"`
-	AppID          *string          `json:"app_id,omitempty"`
-	VMUUID         *string          `json:"vm_uuid,omitempty"`
-	InstanceID     *string          `json:"instance_id,omitempty"`
-	Resource       CvmResource      `json:"resource"`
-	NodeInfo       *NodeRef         `json:"node_info,omitempty"`
-	OS             *CvmOsInfo       `json:"os,omitempty"`
-	KMSType        *string          `json:"kms_type,omitempty"`
-	KMSInfo        *CvmKmsInfo      `json:"kms_info,omitempty"`
-	Status         string           `json:"status"`
-	Progress       *CvmProgressInfo `json:"progress,omitempty"`
-	ComposeHash    *string          `json:"compose_hash,omitempty"`
-	Gateway        *CvmGatewayInfo  `json:"gateway,omitempty"`
-	Services       []any            `json:"services,omitempty"`
-	PublicLogs     *bool            `json:"public_logs,omitempty"`
-	PublicSysinfo  *bool            `json:"public_sysinfo,omitempty"`
-	PublicTcbinfo  *bool            `json:"public_tcbinfo,omitempty"`
-	GatewayEnabled *bool            `json:"gateway_enabled,omitempty"`
-	SecureTime     *bool            `json:"secure_time,omitempty"`
-	Listed         bool             `json:"listed"`
-	StorageFS      *string          `json:"storage_fs,omitempty"`
-	Workspace      *WorkspaceRef    `json:"workspace,omitempty"`
-	Creator        *UserRef         `json:"creator,omitempty"`
-	CreatedAt      *string          `json:"created_at,omitempty"`
-	UpdatedAt      *string          `json:"updated_at,omitempty"`
-	AppURL         *string          `json:"app_url,omitempty"`
-	BaseImage      *string          `json:"base_image,omitempty"`
-	Features       []string         `json:"features,omitempty"`
-	Runner         *string          `json:"runner,omitempty"`
-	ManifestVer    *string          `json:"manifest_version,omitempty"`
-	ComposeFile    any              `json:"compose_file,omitempty"`
+// CVMInfoFields contains fields shared by versioned CVM response schemas.
+type CVMInfoFields struct {
+	Name                string           `json:"name"`
+	AppID               *string          `json:"app_id,omitempty"`
+	VMUUID              *string          `json:"vm_uuid,omitempty"`
+	InstanceID          *string          `json:"instance_id,omitempty"`
+	Resource            CvmResource      `json:"resource"`
+	NodeInfo            *NodeRef         `json:"node_info,omitempty"`
+	OS                  *CvmOsInfo       `json:"os,omitempty"`
+	KMSType             *string          `json:"kms_type,omitempty"`
+	KMSInfo             *CvmKmsInfo      `json:"kms_info,omitempty"`
+	Status              string           `json:"status"`
+	Progress            *CvmProgressInfo `json:"progress,omitempty"`
+	ComposeHash         *string          `json:"compose_hash,omitempty"`
+	DockerComposeHash   *string          `json:"docker_compose_hash,omitempty"`
+	PreLaunchScriptHash *string          `json:"pre_launch_script_hash,omitempty"`
+	Gateway             *CvmGatewayInfo  `json:"gateway,omitempty"`
+	Logs                *CVMLogURLs      `json:"logs,omitempty"`
+	Services            []any            `json:"services,omitempty"`
+	Endpoints           []CVMEndpoint    `json:"endpoints,omitempty"`
+	PublicLogs          *bool            `json:"public_logs,omitempty"`
+	PublicSysinfo       *bool            `json:"public_sysinfo,omitempty"`
+	PublicTcbinfo       *bool            `json:"public_tcbinfo,omitempty"`
+	GatewayEnabled      *bool            `json:"gateway_enabled,omitempty"`
+	SecureTime          *bool            `json:"secure_time,omitempty"`
+	Listed              bool             `json:"listed"`
+	StorageFS           *string          `json:"storage_fs,omitempty"`
+	Workspace           *WorkspaceRef    `json:"workspace,omitempty"`
+	Creator             *UserRef         `json:"creator,omitempty"`
+	CreatedAt           *string          `json:"created_at,omitempty"`
+	DeletedAt           *string          `json:"deleted_at,omitempty"`
+	ProjectType         *string          `json:"project_type,omitempty"`
+	UpdatedAt           *string          `json:"updated_at,omitempty"`
+	AppURL              *string          `json:"app_url,omitempty"`
+	BaseImage           *string          `json:"base_image,omitempty"`
+	Features            []string         `json:"features,omitempty"`
+	Runner              *string          `json:"runner,omitempty"`
+	ManifestVer         *string          `json:"manifest_version,omitempty"`
+	ComposeFile         any              `json:"compose_file,omitempty"`
 
 	// Additional fields used by the Terraform provider.
 	InProgress         bool          `json:"in_progress,omitempty"`
 	EncryptedEnvPubkey *string       `json:"encrypted_env_pubkey,omitempty"`
 	DiskSize           *int64        `json:"disk_size,omitempty"`
-	Endpoints          []CVMEndpoint `json:"endpoints,omitempty"`
 	PublicURLs         []CVMEndpoint `json:"public_urls,omitempty"`
 }
+
+// CVMInfoV20260121 represents CVM information.
+type CVMInfoV20260121 struct {
+	ID string `json:"id"`
+	CVMInfoFields
+}
+
+// CVMInfoV20260522 represents CVM information with hashed CVM IDs.
+type CVMInfoV20260522 struct {
+	ID string `json:"id"`
+	CVMInfoFields
+}
+
+// CVMInfo is the latest CVM information schema.
+type CVMInfo = CVMInfoV20260522
 
 // CVMEndpoint represents a CVM endpoint URL.
 type CVMEndpoint struct {
 	App      string `json:"app"`
 	Instance string `json:"instance"`
+}
+
+// CVMLogURLs contains links to CVM log streams.
+type CVMLogURLs struct {
+	Serial           *string `json:"serial,omitempty"`
+	Stdout           *string `json:"stdout,omitempty"`
+	Stderr           *string `json:"stderr,omitempty"`
+	ContainerLogBase *string `json:"container_log_base,omitempty"`
 }
 
 // CvmResource holds CVM resource allocation.
@@ -148,8 +175,14 @@ type CvmRef struct {
 	VMUUID     *string `json:"vm_uuid,omitempty"`
 }
 
-// PaginatedCVMInfos is a paginated list of CVM infos.
-type PaginatedCVMInfos = Paginated[CVMInfo]
+// PaginatedCVMInfosV20260121 is a paginated list of CVM infos.
+type PaginatedCVMInfosV20260121 = Paginated[CVMInfoV20260121]
+
+// PaginatedCVMInfosV20260522 is a paginated list of CVM infos with hashed CVM IDs.
+type PaginatedCVMInfosV20260522 = Paginated[CVMInfoV20260522]
+
+// PaginatedCVMInfos is the latest paginated CVM info schema.
+type PaginatedCVMInfos = PaginatedCVMInfosV20260522
 
 // GetCVMListOptions holds query parameters for listing CVMs.
 type GetCVMListOptions struct {
@@ -225,19 +258,35 @@ type CommitCVMProvisionRequest struct {
 	EnvKeys         []string `json:"env_keys,omitempty"`
 }
 
-// CommitCVMProvisionResponse is the response from committing a CVM provision.
-type CommitCVMProvisionResponse struct {
-	ID     any    `json:"id"`
+// CommitCVMProvisionResponseFields contains shared commit response fields.
+type CommitCVMProvisionResponseFields struct {
 	Name   string `json:"name"`
 	Status string `json:"status"`
 }
 
+// CommitCVMProvisionResponseV20260121 is the commit response before hashed CVM IDs.
+type CommitCVMProvisionResponseV20260121 struct {
+	ID int `json:"id"`
+	CommitCVMProvisionResponseFields
+}
+
+// CommitCVMProvisionResponseV20260522 is the commit response with hashed CVM IDs.
+type CommitCVMProvisionResponseV20260522 struct {
+	ID string `json:"id"`
+	CommitCVMProvisionResponseFields
+}
+
+// CommitCVMProvisionResponse is the latest commit response schema.
+type CommitCVMProvisionResponse = CommitCVMProvisionResponseV20260522
+
 // CvmID returns the CVM ID as a string.
-func (r *CommitCVMProvisionResponse) CvmID() string {
-	if r.ID == nil {
-		return ""
-	}
-	return fmt.Sprintf("%v", r.ID)
+func (r *CommitCVMProvisionResponseV20260522) CvmID() string {
+	return r.ID
+}
+
+// CvmID returns the CVM ID as a string.
+func (r *CommitCVMProvisionResponseV20260121) CvmID() string {
+	return fmt.Sprintf("%d", r.ID)
 }
 
 // CVMState represents the state of a CVM.
@@ -255,12 +304,26 @@ type CVMContainersStats = GenericObject
 // CVMUserConfig represents CVM user configuration.
 type CVMUserConfig = GenericObject
 
-// CVMActionResponse is the generic response for CVM lifecycle actions.
-type CVMActionResponse struct {
-	ID     any    `json:"id,omitempty"`
+// CVMActionResponseFields contains shared lifecycle action response fields.
+type CVMActionResponseFields struct {
 	Name   string `json:"name,omitempty"`
 	Status string `json:"status,omitempty"`
 }
+
+// CVMActionResponseV20260121 is a lifecycle action response before hashed CVM IDs.
+type CVMActionResponseV20260121 struct {
+	ID int `json:"id,omitempty"`
+	CVMActionResponseFields
+}
+
+// CVMActionResponseV20260522 is a lifecycle action response with hashed CVM IDs.
+type CVMActionResponseV20260522 struct {
+	ID string `json:"id,omitempty"`
+	CVMActionResponseFields
+}
+
+// CVMActionResponse is the latest lifecycle action response schema.
+type CVMActionResponse = CVMActionResponseV20260522
 
 // ReplicateCVMOptions holds options for replicating a CVM.
 type ReplicateCVMOptions struct {
@@ -376,9 +439,8 @@ type CVMVisibility struct {
 	PublicTcbinfo *bool `json:"public_tcbinfo,omitempty"`
 }
 
-// IsAllowedResult represents the result of an on-chain allowance check.
-type IsAllowedResult struct {
-	CvmID              string  `json:"cvm_id,omitempty"`
+// IsAllowedResultFields contains shared allowance check fields.
+type IsAllowedResultFields struct {
 	AppContractAddress string  `json:"app_contract_address"`
 	ComposeHash        string  `json:"compose_hash"`
 	DeviceID           string  `json:"device_id"`
@@ -388,6 +450,21 @@ type IsAllowedResult struct {
 	IsAllowed          bool    `json:"is_allowed"`
 	Error              *string `json:"error,omitempty"`
 }
+
+// IsAllowedResultV20260121 is an allowance check result before hashed CVM IDs.
+type IsAllowedResultV20260121 struct {
+	CvmID int `json:"cvm_id,omitempty"`
+	IsAllowedResultFields
+}
+
+// IsAllowedResultV20260522 is an allowance check result with hashed CVM IDs.
+type IsAllowedResultV20260522 struct {
+	CvmID string `json:"cvm_id,omitempty"`
+	IsAllowedResultFields
+}
+
+// IsAllowedResult is the latest allowance check result schema.
+type IsAllowedResult = IsAllowedResultV20260522
 
 // CheckCvmIsAllowedRequest is the request for checking CVM on-chain allowance.
 type CheckCvmIsAllowedRequest struct {
@@ -404,16 +481,31 @@ type CheckAppIsAllowedRequest struct {
 	ChainID     *int    `json:"chain_id,omitempty"`
 }
 
-// AppCvmsBatchIsAllowedResponse is the batch response for app CVMs allowance check.
-type AppCvmsBatchIsAllowedResponse struct {
-	IsOnchain     bool              `json:"is_onchain"`
-	Results       []IsAllowedResult `json:"results"`
-	Total         int               `json:"total"`
-	AllowedCount  int               `json:"allowed_count"`
-	DeniedCount   int               `json:"denied_count"`
-	ErrorCount    int               `json:"error_count"`
-	SkippedCvmIDs []string          `json:"skipped_cvm_ids"`
+// AppCvmsBatchIsAllowedResponseFields contains shared batch allowance fields.
+type AppCvmsBatchIsAllowedResponseFields struct {
+	IsOnchain    bool `json:"is_onchain"`
+	Total        int  `json:"total"`
+	AllowedCount int  `json:"allowed_count"`
+	DeniedCount  int  `json:"denied_count"`
+	ErrorCount   int  `json:"error_count"`
 }
+
+// AppCvmsBatchIsAllowedResponseV20260121 is the batch response before hashed CVM IDs.
+type AppCvmsBatchIsAllowedResponseV20260121 struct {
+	AppCvmsBatchIsAllowedResponseFields
+	Results       []IsAllowedResultV20260121 `json:"results"`
+	SkippedCvmIDs []int                      `json:"skipped_cvm_ids"`
+}
+
+// AppCvmsBatchIsAllowedResponseV20260522 is the batch response with hashed CVM IDs.
+type AppCvmsBatchIsAllowedResponseV20260522 struct {
+	AppCvmsBatchIsAllowedResponseFields
+	Results       []IsAllowedResultV20260522 `json:"results"`
+	SkippedCvmIDs []string                   `json:"skipped_cvm_ids"`
+}
+
+// AppCvmsBatchIsAllowedResponse is the latest batch allowance schema.
+type AppCvmsBatchIsAllowedResponse = AppCvmsBatchIsAllowedResponseV20260522
 
 // OSImage represents an available OS image.
 type OSImage struct {

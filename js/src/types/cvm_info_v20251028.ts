@@ -7,6 +7,8 @@
 import { z } from "zod";
 import { KmsInfoSchema } from "./kms_info";
 
+const TableIdSchema = z.union([z.number(), z.string()]);
+
 export const VmInfoV20251028Schema = z.object({
   id: z.string(),
   name: z.string(),
@@ -25,7 +27,7 @@ export const VmInfoV20251028Schema = z.object({
 export type VmInfoV20251028 = z.infer<typeof VmInfoV20251028Schema>;
 
 export const ManagedUserV20251028Schema = z.object({
-  id: z.number(),
+  id: TableIdSchema,
   username: z.string(),
 });
 export type ManagedUserV20251028 = z.infer<typeof ManagedUserV20251028Schema>;
@@ -77,7 +79,7 @@ export const CvmInfoV20251028Schema = z.object({
 export type CvmInfoV20251028 = z.infer<typeof CvmInfoV20251028Schema>;
 
 export const CvmDetailV20251028Schema = z.object({
-  id: z.number(),
+  id: TableIdSchema,
   name: z.string(),
   status: z.string(),
   in_progress: z.boolean().optional().default(false),

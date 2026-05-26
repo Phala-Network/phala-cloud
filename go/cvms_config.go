@@ -49,8 +49,31 @@ func (c *Client) UpdateOSImage(ctx context.Context, cvmID string, req *UpdateOSI
 	})
 }
 
-// RefreshInstanceIDResponse is the response for refreshing a CVM instance ID.
-type RefreshInstanceIDResponse = GenericObject
+// RefreshInstanceIDResponseFields contains shared instance ID refresh fields.
+type RefreshInstanceIDResponseFields struct {
+	Identifier          string  `json:"identifier"`
+	Status              string  `json:"status"`
+	OldInstanceID       *string `json:"old_instance_id,omitempty"`
+	NewInstanceID       *string `json:"new_instance_id,omitempty"`
+	Source              string  `json:"source"`
+	VerifiedWithGateway bool    `json:"verified_with_gateway"`
+	Reason              *string `json:"reason,omitempty"`
+}
+
+// RefreshInstanceIDResponseV20260121 is an instance ID refresh response before hashed CVM IDs.
+type RefreshInstanceIDResponseV20260121 struct {
+	CVMID *int `json:"cvm_id,omitempty"`
+	RefreshInstanceIDResponseFields
+}
+
+// RefreshInstanceIDResponseV20260522 is an instance ID refresh response with hashed CVM IDs.
+type RefreshInstanceIDResponseV20260522 struct {
+	CVMID *string `json:"cvm_id,omitempty"`
+	RefreshInstanceIDResponseFields
+}
+
+// RefreshInstanceIDResponse is the latest instance ID refresh response schema.
+type RefreshInstanceIDResponse = RefreshInstanceIDResponseV20260522
 
 // RefreshInstanceIDOptions configures optional parameters for RefreshCVMInstanceID.
 type RefreshInstanceIDOptions struct {
@@ -74,8 +97,47 @@ func (c *Client) RefreshCVMInstanceID(ctx context.Context, cvmID string, opts *R
 	return &result, nil
 }
 
-// RefreshInstanceIDsResponse is the response for refreshing all CVM instance IDs.
-type RefreshInstanceIDsResponse = GenericObject
+// RefreshCVMInstanceIDV20260121 refreshes the instance ID using the pre-hashid response schema.
+func (c *Client) RefreshCVMInstanceIDV20260121(ctx context.Context, cvmID string, opts *RefreshInstanceIDOptions) (*RefreshInstanceIDResponseV20260121, error) {
+	var body any
+	if opts != nil {
+		body = opts
+	}
+	var result RefreshInstanceIDResponseV20260121
+	err := c.doWithRetry(ctx, func() error {
+		return c.doJSON(ctx, "PATCH", cvmPath(cvmID, "instance-id"), body, &result)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// RefreshInstanceIDsResponseFields contains shared batch instance ID refresh fields.
+type RefreshInstanceIDsResponseFields struct {
+	Total     int `json:"total"`
+	Scanned   int `json:"scanned"`
+	Updated   int `json:"updated"`
+	Unchanged int `json:"unchanged"`
+	Skipped   int `json:"skipped"`
+	Conflicts int `json:"conflicts"`
+	Errors    int `json:"errors"`
+}
+
+// RefreshInstanceIDsResponseV20260121 is a batch instance ID refresh response before hashed CVM IDs.
+type RefreshInstanceIDsResponseV20260121 struct {
+	RefreshInstanceIDsResponseFields
+	Items []RefreshInstanceIDResponseV20260121 `json:"items"`
+}
+
+// RefreshInstanceIDsResponseV20260522 is a batch instance ID refresh response with hashed CVM IDs.
+type RefreshInstanceIDsResponseV20260522 struct {
+	RefreshInstanceIDsResponseFields
+	Items []RefreshInstanceIDResponseV20260522 `json:"items"`
+}
+
+// RefreshInstanceIDsResponse is the latest batch instance ID refresh response schema.
+type RefreshInstanceIDsResponse = RefreshInstanceIDsResponseV20260522
 
 // RefreshInstanceIDsRequest configures optional parameters for RefreshCVMInstanceIDs.
 type RefreshInstanceIDsRequest struct {
@@ -96,6 +158,24 @@ func (c *Client) RefreshCVMInstanceIDs(ctx context.Context, req *RefreshInstance
 		body = map[string]any{}
 	}
 	var result RefreshInstanceIDsResponse
+	err := c.doWithRetry(ctx, func() error {
+		return c.doJSON(ctx, "PATCH", "/cvms/instance-ids", body, &result)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// RefreshCVMInstanceIDsV20260121 refreshes instance IDs using the pre-hashid response schema.
+func (c *Client) RefreshCVMInstanceIDsV20260121(ctx context.Context, req *RefreshInstanceIDsRequest) (*RefreshInstanceIDsResponseV20260121, error) {
+	var body any
+	if req != nil {
+		body = req
+	} else {
+		body = map[string]any{}
+	}
+	var result RefreshInstanceIDsResponseV20260121
 	err := c.doWithRetry(ctx, func() error {
 		return c.doJSON(ctx, "PATCH", "/cvms/instance-ids", body, &result)
 	})

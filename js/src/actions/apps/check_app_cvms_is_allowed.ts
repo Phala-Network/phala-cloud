@@ -1,17 +1,42 @@
 import { z } from "zod";
 import { defineAction } from "../../utils/define-action";
-import { IsAllowedResultSchema } from "../cvms/check_cvm_is_allowed";
+import {
+  IsAllowedResultSchema,
+  IsAllowedResultV20260121Schema,
+  IsAllowedResultV20260522Schema,
+} from "../cvms/check_cvm_is_allowed";
 
-export const AppCvmsBatchIsAllowedResponseSchema = z.object({
+const AppCvmsBatchIsAllowedResponseBaseSchema = z.object({
   is_onchain: z.boolean(),
-  results: z.array(IsAllowedResultSchema.extend({ cvm_id: z.string() })).default([]),
   total: z.number().default(0),
   allowed_count: z.number().default(0),
   denied_count: z.number().default(0),
   error_count: z.number().default(0),
-  skipped_cvm_ids: z.array(z.string()).default([]),
 });
 
+export const AppCvmsBatchIsAllowedResponseV20260121Schema =
+  AppCvmsBatchIsAllowedResponseBaseSchema.extend({
+    results: z.array(IsAllowedResultV20260121Schema.extend({ cvm_id: z.number() })).default([]),
+    skipped_cvm_ids: z.array(z.number()).default([]),
+  });
+export type AppCvmsBatchIsAllowedResponseV20260121 = z.infer<
+  typeof AppCvmsBatchIsAllowedResponseV20260121Schema
+>;
+
+export const AppCvmsBatchIsAllowedResponseV20260522Schema =
+  AppCvmsBatchIsAllowedResponseBaseSchema.extend({
+    results: z.array(IsAllowedResultV20260522Schema.extend({ cvm_id: z.string() })).default([]),
+    skipped_cvm_ids: z.array(z.string()).default([]),
+  });
+export type AppCvmsBatchIsAllowedResponseV20260522 = z.infer<
+  typeof AppCvmsBatchIsAllowedResponseV20260522Schema
+>;
+
+export const AppCvmsBatchIsAllowedResponseAnySchema = z.union([
+  AppCvmsBatchIsAllowedResponseV20260121Schema,
+  AppCvmsBatchIsAllowedResponseV20260522Schema,
+]);
+export const AppCvmsBatchIsAllowedResponseSchema = AppCvmsBatchIsAllowedResponseV20260522Schema;
 export type AppCvmsBatchIsAllowedResponse = z.infer<typeof AppCvmsBatchIsAllowedResponseSchema>;
 
 export const CheckAppCvmsIsAllowedRequestSchema = z.object({

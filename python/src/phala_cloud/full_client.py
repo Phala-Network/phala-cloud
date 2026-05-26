@@ -15,13 +15,16 @@ from .action_responses import (
     AppListResponse,
     AppRevisionDetailResponse,
     AppRevisionsResponse,
-    CommitCvmProvisionResponse,
+    CommitCvmProvisionResponseV20260121,
+    CommitCvmProvisionResponseV20260522,
     ComposeFileResponse,
     ComposeHashPreconditionResponse,
-    CvmActionResponse,
+    CvmActionResponseV20260121,
+    CvmActionResponseV20260522,
     CvmAttestationResponse,
     CvmContainersResponse,
-    CvmInfoResponse,
+    CvmInfoResponseV20260121,
+    CvmInfoResponseV20260522,
     CvmNetworkResponse,
     CvmStatsResponse,
     CvmUserConfigResponse,
@@ -35,8 +38,10 @@ from .action_responses import (
     NextAppIdsResponse,
     ProvisionCvmComposeFileUpdateResult,
     ProvisionCvmResponse,
-    RefreshInstanceIdResponse,
-    RefreshInstanceIdsResponse,
+    RefreshInstanceIdResponseV20260121,
+    RefreshInstanceIdResponseV20260522,
+    RefreshInstanceIdsResponseV20260121,
+    RefreshInstanceIdsResponseV20260522,
     SshKeyResponse,
     SyncGithubSshKeysResponse,
     WorkspaceNodesResponse,
@@ -48,19 +53,29 @@ from .blockchains import deploy_app_auth as _deploy_app_auth
 from .client import AsyncPhalaCloud as _AsyncBase
 from .client import PhalaCloud as _SyncBase
 from .errors import ApiError
-from .models.apps import DeviceAllowlistResponse as _DeviceAllowlistResponse
+from .models.apps import DeviceAllowlistResponseV20260121, DeviceAllowlistResponseV20260522
 from .models.auth import CurrentUserV20251028, CurrentUserV20260121
 from .models.base import CloudModel
 from .models.cvms import (
+    AppCvmsBatchIsAllowedResponseV20260121,
+    AppCvmsBatchIsAllowedResponseV20260522,
     CheckAppCvmsIsAllowedRequest,
     CheckAppIsAllowedRequest,
     CheckCvmIsAllowedRequest,
     CvmInfoV20260121,
+    CvmInfoV20260522,
+    IsAllowedResultV20260121,
+    IsAllowedResultV20260522,
     PaginatedCvmInfosV20251028,
     PaginatedCvmInfosV20260121,
+    PaginatedCvmInfosV20260522,
 )
 from .models.kms import GetKmsListResponse, GetKmsOnChainDetailResponse, KmsInfo
-from .models.nodes import AvailableNodes, CvmCreateResourceGraph
+from .models.nodes import (
+    AvailableNodes,
+    CvmCreateResourceGraphV20260121,
+    CvmCreateResourceGraphV20260522,
+)
 from .models.os_images import GetOsImagesRequest, GetOsImagesResponse
 from .result import SafeResult
 
@@ -250,6 +265,11 @@ class ConfirmCvmPatchRequest(CvmIdRequest):
 
 
 class _ExtMixin:
+    config: Any
+
+    def _v20260121_model(self, old_model: Any, new_model: Any) -> Any:
+        return old_model if self.config.version == "2026-01-21" else new_model
+
     @staticmethod
     def _loose_validate(data: Any) -> Any:
         if data is None:
@@ -314,13 +334,17 @@ class _ExtMixin:
         if m == "GET" and path == "/teepods/available":
             return AvailableNodes
         if m == "GET" and path == "/teepods/cvm-create-resources":
-            return CvmCreateResourceGraph
-        if m == "GET" and path == "/cvms/paginated":
             return (
-                PaginatedCvmInfosV20251028
-                if self.config.version == "2025-10-28"
-                else PaginatedCvmInfosV20260121
+                CvmCreateResourceGraphV20260121
+                if self.config.version == "2026-01-21"
+                else CvmCreateResourceGraphV20260522
             )
+        if m == "GET" and path == "/cvms/paginated":
+            if self.config.version == "2025-10-28":
+                return PaginatedCvmInfosV20251028
+            if self.config.version == "2026-01-21":
+                return PaginatedCvmInfosV20260121
+            return PaginatedCvmInfosV20260522
         if m == "GET" and path == "/kms":
             return GetKmsListResponse
         if m == "GET" and path == "/instance-types":
@@ -339,11 +363,14 @@ class _ExtMixin:
         if m == "POST" and path == "/cvms/provision":
             return ProvisionCvmResponse
         if m == "POST" and path == "/cvms":
-            return CommitCvmProvisionResponse
+            return self._v20260121_model(
+                CommitCvmProvisionResponseV20260121,
+                CommitCvmProvisionResponseV20260522,
+            )
         if m == "POST" and re.fullmatch(r"/cvms/[^/]+/compose_file/provision", path):
             return ProvisionCvmComposeFileUpdateResult
         if m == "POST" and re.fullmatch(r"/apps/[^/]+/instances", path):
-            return CvmInfoV20260121
+            return CvmInfoV20260121 if self.config.version == "2026-01-21" else CvmInfoV20260522
 
         if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/envs", path):
             return InProgressResponse | ComposeHashPreconditionResponse
@@ -357,7 +384,7 @@ class _ExtMixin:
             return type(None)
 
         if m == "GET" and re.fullmatch(r"/cvms/[^/]+/state", path):
-            return CvmInfoResponse
+            return self._v20260121_model(CvmInfoResponseV20260121, CvmInfoResponseV20260522)
         if m == "GET" and re.fullmatch(r"/cvms/[^/]+/available-os-images", path):
             return list[GenericObject]
         if m == "GET" and re.fullmatch(r"/cvms/[^/]+/pre-launch-script", path):
@@ -377,7 +404,7 @@ class _ExtMixin:
         if m == "GET" and re.fullmatch(r"/cvms/[^/]+/user_config", path):
             return CvmUserConfigResponse
         if m == "GET" and re.fullmatch(r"/cvms/[^/]+", path):
-            return CvmInfoResponse
+            return self._v20260121_model(CvmInfoResponseV20260121, CvmInfoResponseV20260522)
         if m == "GET" and re.fullmatch(r"/kms/on-chain/[^/]+", path):
             return GetKmsOnChainDetailResponse
         if m == "GET" and re.fullmatch(r"/kms/[^/]+", path):
@@ -399,22 +426,40 @@ class _ExtMixin:
         if m == "POST" and re.fullmatch(
             r"/cvms/[^/]+/(start|stop|shutdown|restart|replicas)", path
         ):
-            return CvmActionResponse
+            return self._v20260121_model(CvmActionResponseV20260121, CvmActionResponseV20260522)
         if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/visibility", path):
             return CvmVisibilityResponse
         if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/instance-id", path):
-            return RefreshInstanceIdResponse
+            return self._v20260121_model(
+                RefreshInstanceIdResponseV20260121,
+                RefreshInstanceIdResponseV20260522,
+            )
         if m == "PATCH" and path == "/cvms/instance-ids":
-            return RefreshInstanceIdsResponse
+            return self._v20260121_model(
+                RefreshInstanceIdsResponseV20260121,
+                RefreshInstanceIdsResponseV20260522,
+            )
+        if m == "POST" and re.fullmatch(r"/cvms/[^/]+/is-allowed", path):
+            return self._v20260121_model(IsAllowedResultV20260121, IsAllowedResultV20260522)
 
         if m == "GET" and path == "/apps":
             return AppListResponse
         if m == "GET" and path == "/apps/filter-options":
             return AppFilterOptionsResponse
         if m == "GET" and re.fullmatch(r"/apps/[^/]+/device-allowlist", path):
-            return _DeviceAllowlistResponse
+            return self._v20260121_model(
+                DeviceAllowlistResponseV20260121,
+                DeviceAllowlistResponseV20260522,
+            )
         if m == "GET" and re.fullmatch(r"/apps/[^/]+/cvms", path):
-            return list[GenericObject]
+            return self._v20260121_model(list[CvmInfoV20260121], list[CvmInfoV20260522])
+        if m == "POST" and re.fullmatch(r"/apps/[^/]+/is-allowed", path):
+            return self._v20260121_model(IsAllowedResultV20260121, IsAllowedResultV20260522)
+        if m == "POST" and re.fullmatch(r"/apps/[^/]+/cvms/is-allowed", path):
+            return self._v20260121_model(
+                AppCvmsBatchIsAllowedResponseV20260121,
+                AppCvmsBatchIsAllowedResponseV20260522,
+            )
         if m == "GET" and re.fullmatch(r"/apps/[^/]+/revisions", path):
             return AppRevisionsResponse
         if m == "GET" and re.fullmatch(r"/apps/[^/]+/revisions/[^/]+", path):
@@ -1127,9 +1172,8 @@ class PhalaCloud(_SyncBase, _ExtMixin):
             "token": req.token,
             "transaction_hash": req.transaction_hash,
         }
-        return self._validate(
-            CvmInfoV20260121, self.post(f"/apps/{req.app_id}/instances", json=body)
-        )
+        model = CvmInfoV20260121 if self.config.version == "2026-01-21" else CvmInfoV20260522
+        return self._validate(model, self.post(f"/apps/{req.app_id}/instances", json=body))
 
     def safe_create_app_instance(
         self, request: CreateAppInstanceRequest | Mapping[str, Any]
@@ -1951,10 +1995,8 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
             "token": req.token,
             "transaction_hash": req.transaction_hash,
         }
-        return self._validate(
-            CvmInfoV20260121,
-            await self.post(f"/apps/{req.app_id}/instances", json=body),
-        )
+        model = CvmInfoV20260121 if self.config.version == "2026-01-21" else CvmInfoV20260522
+        return self._validate(model, await self.post(f"/apps/{req.app_id}/instances", json=body))
 
     async def safe_create_app_instance(
         self, request: CreateAppInstanceRequest | Mapping[str, Any]

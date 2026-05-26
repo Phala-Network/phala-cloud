@@ -2,7 +2,7 @@ import {
 	safeGetCvmList,
 	safeGetCvmInfo,
 	type Client,
-	type CvmInfoDetailV20260121,
+	type CvmInfoDetailV20260522,
 } from "@phala/cloud";
 import { getClient } from "@/src/lib/client";
 import { logger } from "@/src/utils/logger";
@@ -31,7 +31,7 @@ import inquirer from "inquirer";
  */
 export async function getCvmByAppId(
 	appId: string,
-): Promise<CvmInfoDetailV20260121> {
+): Promise<CvmInfoDetailV20260522> {
 	const client = await getClient();
 	// Remove app_ prefix if present, SDK will add it back
 	const cleanAppId = appId.replace(/^app_/, "");

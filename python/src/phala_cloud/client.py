@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from typing import Any, Literal, TypeVar
 
 import httpx
+from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
 
 from .errors import (
@@ -23,22 +24,29 @@ from .models import (
     CurrentUser,
     CurrentUserV20251028,
     CurrentUserV20260121,
-    CvmCreateResourceGraph,
+    CvmCreateResourceGraphAny,
+    CvmCreateResourceGraphV20260121,
+    CvmCreateResourceGraphV20260522,
     GetCvmListRequest,
     GetKmsListRequest,
     GetKmsListResponse,
-    PaginatedCvmInfos,
+    PaginatedCvmInfosAny,
     PaginatedCvmInfosV20251028,
     PaginatedCvmInfosV20260121,
+    PaginatedCvmInfosV20260522,
 )
 from .result import SafeResult
 
-ApiVersion = Literal["2025-10-28", "2026-01-21"]
-SUPPORTED_API_VERSIONS: tuple[ApiVersion, ...] = ("2025-10-28", "2026-01-21")
-DEFAULT_API_VERSION: ApiVersion = "2026-01-21"
+ApiVersion = Literal["2025-10-28", "2026-01-21", "2026-05-22"]
+SUPPORTED_API_VERSIONS: tuple[ApiVersion, ...] = (
+    "2025-10-28",
+    "2026-01-21",
+    "2026-05-22",
+)
+DEFAULT_API_VERSION: ApiVersion = "2026-05-22"
 DEFAULT_BASE_URL = "https://cloud-api.phala.com/api/v1"
 
-T = TypeVar("T")
+T = TypeVar("T", bound=BaseModel)
 
 
 class _BaseConfig:
@@ -189,27 +197,31 @@ class AsyncPhalaCloud:
     async def safe_get_available_nodes(self) -> SafeResult[AvailableNodes]:
         return await self.safe(self.get_available_nodes)
 
-    async def get_cvm_create_resources(self) -> CvmCreateResourceGraph:
+    async def get_cvm_create_resources(self) -> CvmCreateResourceGraphAny:
         data = await self.get("/teepods/cvm-create-resources")
-        return self._validate(CvmCreateResourceGraph, data)
+        if self.config.version == "2026-01-21":
+            return self._validate(CvmCreateResourceGraphV20260121, data)
+        return self._validate(CvmCreateResourceGraphV20260522, data)
 
-    async def safe_get_cvm_create_resources(self) -> SafeResult[CvmCreateResourceGraph]:
+    async def safe_get_cvm_create_resources(self) -> SafeResult[CvmCreateResourceGraphAny]:
         return await self.safe(self.get_cvm_create_resources)
 
     async def get_cvm_list(
         self,
         request: GetCvmListRequest | Mapping[str, Any] | None = None,
-    ) -> PaginatedCvmInfos:
+    ) -> PaginatedCvmInfosAny:
         req = self._coerce(GetCvmListRequest, request)
         data = await self.get("/cvms/paginated", params=req.model_dump(exclude_none=True))
         if self.config.version == "2025-10-28":
             return self._validate(PaginatedCvmInfosV20251028, data)
-        return self._validate(PaginatedCvmInfosV20260121, data)
+        if self.config.version == "2026-01-21":
+            return self._validate(PaginatedCvmInfosV20260121, data)
+        return self._validate(PaginatedCvmInfosV20260522, data)
 
     async def safe_get_cvm_list(
         self,
         request: GetCvmListRequest | Mapping[str, Any] | None = None,
-    ) -> SafeResult[PaginatedCvmInfos]:
+    ) -> SafeResult[PaginatedCvmInfosAny]:
         return await self.safe(self.get_cvm_list, request)
 
     async def get_kms_list(
@@ -422,27 +434,31 @@ class PhalaCloud:
     def safe_get_available_nodes(self) -> SafeResult[AvailableNodes]:
         return self.safe(self.get_available_nodes)
 
-    def get_cvm_create_resources(self) -> CvmCreateResourceGraph:
+    def get_cvm_create_resources(self) -> CvmCreateResourceGraphAny:
         data = self.get("/teepods/cvm-create-resources")
-        return self._validate(CvmCreateResourceGraph, data)
+        if self.config.version == "2026-01-21":
+            return self._validate(CvmCreateResourceGraphV20260121, data)
+        return self._validate(CvmCreateResourceGraphV20260522, data)
 
-    def safe_get_cvm_create_resources(self) -> SafeResult[CvmCreateResourceGraph]:
+    def safe_get_cvm_create_resources(self) -> SafeResult[CvmCreateResourceGraphAny]:
         return self.safe(self.get_cvm_create_resources)
 
     def get_cvm_list(
         self,
         request: GetCvmListRequest | Mapping[str, Any] | None = None,
-    ) -> PaginatedCvmInfos:
+    ) -> PaginatedCvmInfosAny:
         req = self._coerce(GetCvmListRequest, request)
         data = self.get("/cvms/paginated", params=req.model_dump(exclude_none=True))
         if self.config.version == "2025-10-28":
             return self._validate(PaginatedCvmInfosV20251028, data)
-        return self._validate(PaginatedCvmInfosV20260121, data)
+        if self.config.version == "2026-01-21":
+            return self._validate(PaginatedCvmInfosV20260121, data)
+        return self._validate(PaginatedCvmInfosV20260522, data)
 
     def safe_get_cvm_list(
         self,
         request: GetCvmListRequest | Mapping[str, Any] | None = None,
-    ) -> SafeResult[PaginatedCvmInfos]:
+    ) -> SafeResult[PaginatedCvmInfosAny]:
         return self.safe(self.get_cvm_list, request)
 
     def get_kms_list(

@@ -63,8 +63,20 @@ type CVMCreateResources struct {
 	GPUAvailability  GPUAvailability            `json:"gpu_availability"`
 }
 
-// CVMCreateKMSResource is a KMS candidate in the CVM creation graph.
-type CVMCreateKMSResource struct {
+// CVMCreateResourcesV20260121 is the resource graph before hashid-only resource IDs.
+type CVMCreateResourcesV20260121 struct {
+	Tier             string                              `json:"tier"`
+	Capacity         ResourceThreshold                   `json:"capacity"`
+	Nodes            []TeepodCapacity                    `json:"nodes"`
+	KMSNodes         []CVMCreateKMSResourceV20260121     `json:"kms_nodes"`
+	NodeKMSRelations []CVMCreateNodeKMSRelationV20260121 `json:"node_kms_relations"`
+	GatewayNodes     []CVMCreateGatewayResourceV20260121 `json:"gateway_nodes"`
+	InstanceTypes    []CVMCreateInstanceType             `json:"instance_types"`
+	GPUAvailability  GPUAvailability                     `json:"gpu_availability"`
+}
+
+// CVMCreateKMSResourceV20260121 is a KMS candidate before hashid-only resource IDs.
+type CVMCreateKMSResourceV20260121 struct {
 	ID                 StringOrNumber `json:"id"`
 	Slug               *string        `json:"slug,omitempty"`
 	URL                string         `json:"url"`
@@ -77,8 +89,8 @@ type CVMCreateKMSResource struct {
 	SupportedOSImages  []string       `json:"supported_os_images,omitempty"`
 }
 
-// CVMCreateNodeKMSRelation maps a teepod to one supported KMS resource.
-type CVMCreateNodeKMSRelation struct {
+// CVMCreateNodeKMSRelationV20260121 maps a teepod to one supported KMS resource.
+type CVMCreateNodeKMSRelationV20260121 struct {
 	TeepodID           int            `json:"teepod_id"`
 	KMSID              StringOrNumber `json:"kms_id"`
 	KMSType            string         `json:"kms_type"`
@@ -87,14 +99,48 @@ type CVMCreateNodeKMSRelation struct {
 	SupportedOSImages  []string       `json:"supported_os_images,omitempty"`
 }
 
-// CVMCreateGatewayResource is a gateway candidate for a KMS contract.
-type CVMCreateGatewayResource struct {
+// CVMCreateGatewayResourceV20260121 is a gateway candidate for a KMS contract.
+type CVMCreateGatewayResourceV20260121 struct {
 	ID            StringOrNumber `json:"id"`
 	TeepodID      *int           `json:"teepod_id,omitempty"`
 	KMSContractID KMSContractID  `json:"kms_contract_id"`
 	RPCURL        *string        `json:"rpc_url,omitempty"`
 	DomainSuffix  *string        `json:"domain_suffix,omitempty"`
 	Enabled       bool           `json:"enabled"`
+}
+
+// CVMCreateKMSResource is a KMS candidate in the latest CVM creation graph.
+type CVMCreateKMSResource struct {
+	ID                 string   `json:"id"`
+	Slug               *string  `json:"slug,omitempty"`
+	URL                string   `json:"url"`
+	Version            *string  `json:"version,omitempty"`
+	KMSType            string   `json:"kms_type"`
+	ChainID            *int     `json:"chain_id,omitempty"`
+	KMSContractID      *string  `json:"kms_contract_id,omitempty"`
+	KMSContractAddress *string  `json:"kms_contract_address,omitempty"`
+	GatewayAppID       *string  `json:"gateway_app_id,omitempty"`
+	SupportedOSImages  []string `json:"supported_os_images,omitempty"`
+}
+
+// CVMCreateNodeKMSRelation maps a teepod to one supported KMS resource.
+type CVMCreateNodeKMSRelation struct {
+	TeepodID           int      `json:"teepod_id"`
+	KMSID              string   `json:"kms_id"`
+	KMSType            string   `json:"kms_type"`
+	KMSContractID      *string  `json:"kms_contract_id,omitempty"`
+	KMSContractAddress *string  `json:"kms_contract_address,omitempty"`
+	SupportedOSImages  []string `json:"supported_os_images,omitempty"`
+}
+
+// CVMCreateGatewayResource is a gateway candidate for a KMS contract.
+type CVMCreateGatewayResource struct {
+	ID            string  `json:"id"`
+	TeepodID      *int    `json:"teepod_id,omitempty"`
+	KMSContractID string  `json:"kms_contract_id"`
+	RPCURL        *string `json:"rpc_url,omitempty"`
+	DomainSuffix  *string `json:"domain_suffix,omitempty"`
+	Enabled       bool    `json:"enabled"`
 }
 
 // CVMCreateInstanceType is an instance type candidate for CVM creation.

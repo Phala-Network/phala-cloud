@@ -2,8 +2,7 @@ import { z } from "zod";
 import { defineAction } from "../../utils/define-action";
 import { CvmIdSchema, type CvmIdInput } from "../../types/cvm_id";
 
-export const IsAllowedResultSchema = z.object({
-  cvm_id: z.string().optional(),
+const IsAllowedResultBaseSchema = z.object({
   app_contract_address: z.string(),
   compose_hash: z.string(),
   device_id: z.string(),
@@ -14,6 +13,21 @@ export const IsAllowedResultSchema = z.object({
   error: z.string().nullable().optional(),
 });
 
+export const IsAllowedResultV20260121Schema = IsAllowedResultBaseSchema.extend({
+  cvm_id: z.number().optional(),
+});
+export type IsAllowedResultV20260121 = z.infer<typeof IsAllowedResultV20260121Schema>;
+
+export const IsAllowedResultV20260522Schema = IsAllowedResultBaseSchema.extend({
+  cvm_id: z.string().optional(),
+});
+export type IsAllowedResultV20260522 = z.infer<typeof IsAllowedResultV20260522Schema>;
+
+export const IsAllowedResultAnySchema = z.union([
+  IsAllowedResultV20260121Schema,
+  IsAllowedResultV20260522Schema,
+]);
+export const IsAllowedResultSchema = IsAllowedResultV20260522Schema;
 export type IsAllowedResult = z.infer<typeof IsAllowedResultSchema>;
 
 const CheckCvmIsAllowedInputSchema = z.object({

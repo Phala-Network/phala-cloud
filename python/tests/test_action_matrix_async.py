@@ -44,13 +44,13 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
                 "nodes": [],
                 "kms_nodes": [
                     {
-                        "id": 201,
+                        "id": "kms_201",
                         "slug": "kms-base",
                         "url": "https://kms-base.example.com",
                         "version": "0.5.0",
                         "kms_type": "BASE",
                         "chain_id": 8453,
-                        "kms_contract_id": 301,
+                        "kms_contract_id": "kc_301",
                         "kms_contract_address": "0xbase",
                         "gateway_app_id": "0xgateway",
                         "supported_os_images": ["dstack-0.5.0"],
@@ -59,18 +59,18 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
                 "node_kms_relations": [
                     {
                         "teepod_id": 11,
-                        "kms_id": 201,
+                        "kms_id": "kms_201",
                         "kms_type": "BASE",
-                        "kms_contract_id": 301,
+                        "kms_contract_id": "kc_301",
                         "kms_contract_address": "0xbase",
                         "supported_os_images": ["dstack-0.5.0"],
                     }
                 ],
                 "gateway_nodes": [
                     {
-                        "id": 401,
+                        "id": "gn_401",
                         "teepod_id": 11,
-                        "kms_contract_id": 301,
+                        "kms_contract_id": "kc_301",
                         "rpc_url": "https://gateway.example.com/rpc",
                         "domain_suffix": "example.app",
                         "enabled": True,
@@ -132,7 +132,7 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
     if method == "POST" and path == "/api/v1/cvms/provision":
         return httpx.Response(200, json={"compose_hash": "h"})
     if method == "POST" and path == "/api/v1/cvms":
-        return httpx.Response(200, json={"id": 1, "name": "n", "status": "running"})
+        return httpx.Response(200, json={"id": "cvm_1", "name": "n", "status": "running"})
     if method == "GET" and path.startswith("/api/v1/cvms/"):
         if path.endswith("/state"):
             return httpx.Response(200, json={"status": "running"})
@@ -140,7 +140,7 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
             200, json={"id": "1", "name": "n", "status": "running", "resource": {}}
         )
     if method == "POST" and path.endswith("/start"):
-        return httpx.Response(200, json={"id": 1, "name": "n", "status": "running"})
+        return httpx.Response(200, json={"id": "cvm_1", "name": "n", "status": "running"})
     if method == "DELETE" and path.startswith("/api/v1/cvms/"):
         return httpx.Response(204)
     if method == "PATCH" and path.endswith("/envs"):

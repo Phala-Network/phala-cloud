@@ -78,6 +78,14 @@ export const CvmGatewayInfoV20260121Schema = z.object({
 });
 export type CvmGatewayInfoV20260121 = z.infer<typeof CvmGatewayInfoV20260121Schema>;
 
+export const CvmLogUrlsV20260121Schema = z.object({
+  serial: z.string().nullable().optional(),
+  stdout: z.string().nullable().optional(),
+  stderr: z.string().nullable().optional(),
+  container_log_base: z.string().nullable().optional(),
+});
+export type CvmLogUrlsV20260121 = z.infer<typeof CvmLogUrlsV20260121Schema>;
+
 export const NodeRefSchema = z.object({
   object_type: z.literal("node"),
   id: z.number().int().nullable().optional(),
@@ -95,7 +103,7 @@ export const CvmNodeInfoV20260121Schema = NodeRefSchema;
 export type CvmNodeInfoV20260121 = NodeRef;
 
 export const CvmInfoV20260121Schema = z.object({
-  id: z.string(), // hashed CvmId
+  id: z.string(),
   name: z.string(),
   app_id: z.string().nullable().optional(),
   vm_uuid: z.string().nullable().optional(),
@@ -106,9 +114,13 @@ export const CvmInfoV20260121Schema = z.object({
   kms_type: KmsTypeSchema.nullable().optional(),
   kms_info: CvmKmsInfoV20260121Schema.nullable().optional(),
   status: z.string(),
+  in_progress: z.boolean().optional().default(false),
   progress: CvmProgressInfoV20260121Schema.nullable().optional(),
   compose_hash: z.string().nullable().optional(),
+  docker_compose_hash: z.string().nullable().optional(),
+  pre_launch_script_hash: z.string().nullable().optional(),
   gateway: CvmGatewayInfoV20260121Schema,
+  logs: CvmLogUrlsV20260121Schema.optional().default({}),
   services: z.array(z.record(z.any())).optional().default([]),
   endpoints: z.array(CvmNetworkUrlsV20251028Schema).nullable().optional(),
   public_logs: z.boolean().optional(),
@@ -120,8 +132,16 @@ export const CvmInfoV20260121Schema = z.object({
   storage_fs: z.string().optional(),
   workspace: WorkspaceRefSchema.nullable().optional(),
   creator: UserRefSchema.nullable().optional(),
+  created_at: z.string().nullable().optional(),
+  deleted_at: z.string().nullable().optional(),
+  project_type: z.string().nullable().optional(),
 });
 export type CvmInfoV20260121 = z.infer<typeof CvmInfoV20260121Schema>;
+
+export const CvmInfoV20260522Schema = CvmInfoV20260121Schema.extend({
+  id: z.string(),
+});
+export type CvmInfoV20260522 = z.infer<typeof CvmInfoV20260522Schema>;
 
 export const CvmInfoDetailV20260121Schema = CvmInfoV20260121Schema.extend({
   compose_file: z
@@ -131,6 +151,14 @@ export const CvmInfoDetailV20260121Schema = CvmInfoV20260121Schema.extend({
 });
 export type CvmInfoDetailV20260121 = z.infer<typeof CvmInfoDetailV20260121Schema>;
 
+export const CvmInfoDetailV20260522Schema = CvmInfoV20260522Schema.extend({
+  compose_file: z
+    .union([z.record(z.any()), z.string()])
+    .nullable()
+    .optional(),
+});
+export type CvmInfoDetailV20260522 = z.infer<typeof CvmInfoDetailV20260522Schema>;
+
 export const PaginatedCvmInfosV20260121Schema = z.object({
   items: z.array(CvmInfoV20260121Schema),
   total: z.number(),
@@ -139,3 +167,8 @@ export const PaginatedCvmInfosV20260121Schema = z.object({
   pages: z.number(),
 });
 export type PaginatedCvmInfosV20260121 = z.infer<typeof PaginatedCvmInfosV20260121Schema>;
+
+export const PaginatedCvmInfosV20260522Schema = PaginatedCvmInfosV20260121Schema.extend({
+  items: z.array(CvmInfoV20260522Schema),
+});
+export type PaginatedCvmInfosV20260522 = z.infer<typeof PaginatedCvmInfosV20260522Schema>;

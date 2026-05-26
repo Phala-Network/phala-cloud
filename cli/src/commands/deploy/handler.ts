@@ -198,8 +198,7 @@ function handleProvisionError(
 		: `\nError: ${message}\n`;
 }
 
-// Use legacy API version until CLI types are updated for the new format
-const API_VERSION = "2025-10-28" as const;
+const API_VERSION = "2026-05-22" as const;
 
 async function getApiClient({
 	context,

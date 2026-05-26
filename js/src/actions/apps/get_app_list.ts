@@ -2,8 +2,14 @@ import { z } from "zod";
 import { type Client, type SafeResult } from "../../client";
 import { DstackAppListResponseV20251028Schema } from "../../types/app_info_v20251028";
 import type { DstackAppListResponseV20251028 } from "../../types/app_info_v20251028";
-import { DstackAppListResponseV20260121Schema } from "../../types/app_info_v20260121";
-import type { DstackAppListResponseV20260121 } from "../../types/app_info_v20260121";
+import {
+  DstackAppListResponseV20260121Schema,
+  DstackAppListResponseV20260522Schema,
+} from "../../types/app_info_v20260121";
+import type {
+  DstackAppListResponseV20260121,
+  DstackAppListResponseV20260522,
+} from "../../types/app_info_v20260121";
 import type { ApiVersion } from "../../types/client";
 import type { GetAppListResponse } from "../../types/version-mappings";
 
@@ -26,9 +32,9 @@ export const GetAppListRequestSchema = z
 export type GetAppListRequest = z.infer<typeof GetAppListRequestSchema>;
 
 function getSchemaForVersion(version: ApiVersion) {
-  return version === "2025-10-28"
-    ? DstackAppListResponseV20251028Schema
-    : DstackAppListResponseV20260121Schema;
+  if (version === "2025-10-28") return DstackAppListResponseV20251028Schema;
+  if (version === "2026-01-21") return DstackAppListResponseV20260121Schema;
+  return DstackAppListResponseV20260522Schema;
 }
 
 /**

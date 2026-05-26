@@ -1,6 +1,9 @@
 package phala
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // StringOrNumber is a JSON value that can be either a string or an integer.
 type StringOrNumber struct {
@@ -32,6 +35,17 @@ func (value StringOrNumber) IntValue() (int, bool) {
 		return 0, false
 	}
 	return *value.intValue, true
+}
+
+// String returns the value formatted as a string.
+func (value StringOrNumber) String() string {
+	if value.stringValue != nil {
+		return *value.stringValue
+	}
+	if value.intValue != nil {
+		return fmt.Sprintf("%d", *value.intValue)
+	}
+	return ""
 }
 
 // MarshalJSON encodes the original string or integer value.

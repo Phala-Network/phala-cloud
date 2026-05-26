@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from phala_cloud import AsyncPhalaCloud, PhalaCloud
-from phala_cloud.models.cvms import CvmInfoV20260121
+from phala_cloud.models.cvms import CvmInfoV20260522
 
 
 def test_create_app_instance_sync() -> None:
@@ -35,7 +35,7 @@ def test_create_app_instance_sync() -> None:
                 "docker_compose_file": "services:\n  app:\n    image: nginx",
             }
         )
-        assert isinstance(result, CvmInfoV20260121)
+        assert isinstance(result, CvmInfoV20260522)
         assert result.id == "cvm-456"
         assert result.status == "running"
 
@@ -69,7 +69,7 @@ async def test_create_app_instance_async() -> None:
                 "pre_launch_script": "#!/bin/sh\necho hello",
             }
         )
-        assert isinstance(result, CvmInfoV20260121)
+        assert isinstance(result, CvmInfoV20260522)
         assert result.id == "cvm-789"
         assert result.status == "provisioning"
 

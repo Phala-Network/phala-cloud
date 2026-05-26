@@ -103,7 +103,7 @@ function readPrivateKey(input: CvmsReplicateCommandInput): `0x${string}` {
 }
 
 async function loadEncryptedEnv(
-	client: Client<"2026-01-21">,
+	client: Client<"2026-05-22">,
 	sourceCvm: Parameters<typeof getEncryptPubkey>[1],
 	envFile?: string,
 ): Promise<string | undefined> {
@@ -120,7 +120,7 @@ async function loadEncryptedEnv(
 }
 
 async function resolveNodeId(
-	client: Client<"2026-01-21">,
+	client: Client<"2026-05-22">,
 	nodeInput?: string,
 ): Promise<number | undefined> {
 	if (!nodeInput) {
@@ -266,7 +266,7 @@ function formatPrepareOutput(
 }
 
 async function commitReplica(
-	client: Client<"2026-01-21">,
+	client: Client<"2026-05-22">,
 	sourceVmUuid: string,
 	payload: {
 		token: string;
@@ -301,7 +301,7 @@ async function runCvmsReplicateCommand(
 
 		const client = await getClient(context);
 		let sourceCvm: Awaited<
-			ReturnType<typeof safeGetCvmInfo<"2026-01-21">>
+			ReturnType<typeof safeGetCvmInfo<"2026-05-22">>
 		>["data"] extends infer T
 			? NonNullable<T>
 			: never;

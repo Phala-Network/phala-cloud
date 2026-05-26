@@ -93,7 +93,7 @@ function getPreparePayload(error: ResourceError): PreparePayload | null {
 }
 
 async function loadEncryptedEnv(
-	client: Client<"2026-01-21">,
+	client: Client<"2026-05-22">,
 	sourceCvm: Parameters<typeof getEncryptPubkey>[1],
 	envFile?: string,
 ): Promise<string | undefined> {
@@ -110,7 +110,7 @@ async function loadEncryptedEnv(
 }
 
 async function resolveNodeId(
-	client: Client<"2026-01-21">,
+	client: Client<"2026-05-22">,
 	nodeInput?: string,
 ): Promise<number | undefined> {
 	if (!nodeInput) {

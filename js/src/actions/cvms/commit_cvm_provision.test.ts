@@ -17,7 +17,7 @@ const mockPayload: CommitCvmProvisionRequest = {
 };
 
 const mockCvmData: CommitCvmProvision = {
-  id: 123,
+  id: "cvm_123",
   name: "test-vm",
   status: "running",
   teepod_id: 1,
@@ -25,7 +25,7 @@ const mockCvmData: CommitCvmProvision = {
     id: 1,
     name: "test-teepod",
   },
-  user_id: 456,
+  user_id: "usr_456",
   app_id: "test-app-id",
   vm_uuid: "vm-uuid-123",
   instance_id: "instance-123",

@@ -31,7 +31,7 @@ describe("stopCvm", () => {
   describe("stopCvm", () => {
     it("should call POST /cvms/{id}/stop", async () => {
       const mockResponse = {
-        id: 1,
+        id: "cvm_1",
         name: "test-cvm",
         status: "stopped",
         teepod_id: 1,
@@ -63,7 +63,7 @@ describe("stopCvm", () => {
   describe("safeStopCvm", () => {
     it("should return success result", async () => {
       const mockResponse = {
-        id: 1,
+        id: "cvm_1",
         name: "test-cvm",
         status: "stopped",
         teepod_id: 1,

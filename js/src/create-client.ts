@@ -21,7 +21,7 @@ import {
 import {
   getCvmCreateResources,
   safeGetCvmCreateResources,
-  type CvmCreateResourceGraph,
+  type GetCvmCreateResourcesResponse,
 } from "./actions/get_cvm_create_resources";
 import {
   listAllInstanceTypeFamilies,
@@ -268,6 +268,9 @@ import type { SafeResult } from "./types/client";
  * @param config - Client configuration
  * @returns Client extended with all available actions
  */
+export function createClient(
+  config: ClientConfig<"2026-05-22"> & { version: "2026-05-22" },
+): Client<"2026-05-22">;
 export function createClient(
   config: ClientConfig<"2026-01-21"> & { version: "2026-01-21" },
 ): Client<"2026-01-21">;
@@ -523,11 +526,11 @@ export interface Client<V extends ApiVersion = DefaultApiVersion> extends BaseCl
   >;
   safeGetAvailableNodes(parameters: { schema: false }): Promise<SafeResult<unknown>>;
 
-  getCvmCreateResources(): Promise<CvmCreateResourceGraph>;
+  getCvmCreateResources(): Promise<GetCvmCreateResourcesResponse<V>>;
   getCvmCreateResources<T extends z.ZodTypeAny>(parameters: { schema: T }): Promise<z.infer<T>>;
   getCvmCreateResources(parameters: { schema: false }): Promise<unknown>;
 
-  safeGetCvmCreateResources(): Promise<SafeResult<CvmCreateResourceGraph>>;
+  safeGetCvmCreateResources(): Promise<SafeResult<GetCvmCreateResourcesResponse<V>>>;
   safeGetCvmCreateResources<T extends z.ZodTypeAny>(parameters: { schema: T }): Promise<
     SafeResult<z.infer<T>>
   >;

@@ -51,7 +51,7 @@ class CvmKmsInfoV20260121(CloudModel):
     rpc_endpoint: str | None = None
     encrypted_env_pubkey: str | None = None
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def chain(self) -> dict[str, Any] | None:
         if self.chain_id is not None:
@@ -68,6 +68,13 @@ class CvmProgressInfoV20260121(CloudModel):
 class CvmGatewayInfoV20260121(CloudModel):
     base_domain: str | None = None
     cname: str | None = None
+
+
+class CvmLogUrlsV20260121(CloudModel):
+    serial: str | None = None
+    stdout: str | None = None
+    stderr: str | None = None
+    container_log_base: str | None = None
 
 
 class NodeRef(CloudModel):
@@ -116,10 +123,15 @@ class CvmInfoV20260121(CloudModel):
     kms_type: KmsType | None = None
     kms_info: CvmKmsInfoV20260121 | None = None
     status: str
+    in_progress: bool = False
     progress: CvmProgressInfoV20260121 | None = None
     compose_hash: str | None = None
+    docker_compose_hash: str | None = None
+    pre_launch_script_hash: str | None = None
     gateway: CvmGatewayInfoV20260121 | None = None
+    logs: CvmLogUrlsV20260121 = Field(default_factory=CvmLogUrlsV20260121)
     services: list | None = Field(default_factory=list)
+    endpoints: list | None = None
     public_logs: bool | None = None
     public_sysinfo: bool | None = None
     public_tcbinfo: bool | None = None
@@ -130,6 +142,8 @@ class CvmInfoV20260121(CloudModel):
     workspace: WorkspaceRef | None = None
     creator: UserRef | None = None
     created_at: str | None = None
+    deleted_at: str | None = None
+    project_type: str | None = None
     updated_at: str | None = None
     app_url: str | None = None
     base_image: str | None = None
@@ -144,6 +158,59 @@ class CvmInfoDetailV20260121(CvmInfoV20260121):
 
 class PaginatedCvmInfosV20260121(CloudModel):
     items: list[CvmInfoV20260121]
+    total: int
+    page: int
+    page_size: int
+    pages: int
+
+
+class CvmInfoV20260522(CloudModel):
+    id: str
+    name: str
+    app_id: str | None = None
+    vm_uuid: str | None = None
+    instance_id: str | None = None
+    resource: CvmResourceV20260121
+    node_info: NodeRef | None = None
+    os: CvmOsInfoV20260121 | None = None
+    kms_type: KmsType | None = None
+    kms_info: CvmKmsInfoV20260121 | None = None
+    status: str
+    in_progress: bool = False
+    progress: CvmProgressInfoV20260121 | None = None
+    compose_hash: str | None = None
+    docker_compose_hash: str | None = None
+    pre_launch_script_hash: str | None = None
+    gateway: CvmGatewayInfoV20260121 | None = None
+    logs: CvmLogUrlsV20260121 = Field(default_factory=CvmLogUrlsV20260121)
+    services: list | None = Field(default_factory=list)
+    endpoints: list | None = None
+    public_logs: bool | None = None
+    public_sysinfo: bool | None = None
+    public_tcbinfo: bool | None = None
+    gateway_enabled: bool | None = None
+    secure_time: bool | None = None
+    listed: bool = False
+    storage_fs: str | None = None
+    workspace: WorkspaceRef | None = None
+    creator: UserRef | None = None
+    created_at: str | None = None
+    deleted_at: str | None = None
+    project_type: str | None = None
+    updated_at: str | None = None
+    app_url: str | None = None
+    base_image: str | None = None
+    features: list[str] | None = Field(default_factory=list)
+    runner: str | None = None
+    manifest_version: str | None = None
+
+
+class CvmInfoDetailV20260522(CvmInfoV20260522):
+    compose_file: str | dict | None = None
+
+
+class PaginatedCvmInfosV20260522(CloudModel):
+    items: list[CvmInfoV20260522]
     total: int
     page: int
     page_size: int
@@ -235,7 +302,10 @@ class CvmAttestation(CloudModel):
     compose_file: str | None = None
 
 
-PaginatedCvmInfos = PaginatedCvmInfosV20260121 | PaginatedCvmInfosV20251028
+PaginatedCvmInfosAny = (
+    PaginatedCvmInfosV20260522 | PaginatedCvmInfosV20260121 | PaginatedCvmInfosV20251028
+)
+PaginatedCvmInfos = PaginatedCvmInfosV20260522
 
 
 # Is-Allowed types
@@ -248,8 +318,7 @@ class CheckCvmIsAllowedRequest(AliasModel):
     device_id: str | None = None
 
 
-class IsAllowedResult(CloudModel):
-    cvm_id: str | None = None
+class IsAllowedResultBase(CloudModel):
     app_contract_address: str
     compose_hash: str
     device_id: str
@@ -258,6 +327,18 @@ class IsAllowedResult(CloudModel):
     device_id_allowed: bool | None = None
     is_allowed: bool
     error: str | None = None
+
+
+class IsAllowedResultV20260121(IsAllowedResultBase):
+    cvm_id: int | None = None
+
+
+class IsAllowedResultV20260522(IsAllowedResultBase):
+    cvm_id: str | None = None
+
+
+IsAllowedResultAny = IsAllowedResultV20260522 | IsAllowedResultV20260121
+IsAllowedResult = IsAllowedResultV20260522
 
 
 class CheckAppIsAllowedRequest(AliasModel):
@@ -272,11 +353,27 @@ class CheckAppCvmsIsAllowedRequest(AliasModel):
     app_id: str = Field(..., alias="appId")
 
 
-class AppCvmsBatchIsAllowedResponse(CloudModel):
+class AppCvmsBatchIsAllowedResponseBase(CloudModel):
     is_onchain: bool
-    results: list[IsAllowedResult] = Field(default_factory=list)
     total: int = 0
     allowed_count: int = 0
     denied_count: int = 0
     error_count: int = 0
+
+
+class AppCvmsBatchIsAllowedResponseV20260121(AppCvmsBatchIsAllowedResponseBase):
+    results: list[IsAllowedResultV20260121] = Field(default_factory=list)
+    skipped_cvm_ids: list[int] = Field(default_factory=list)
+
+
+class AppCvmsBatchIsAllowedResponseV20260522(AppCvmsBatchIsAllowedResponseBase):
+    results: list[IsAllowedResultV20260522] = Field(default_factory=list)
     skipped_cvm_ids: list[str] = Field(default_factory=list)
+
+
+class AppCvmsBatchIsAllowedResponseAny(AppCvmsBatchIsAllowedResponseBase):
+    results: list[IsAllowedResultV20260522 | IsAllowedResultV20260121] = Field(default_factory=list)
+    skipped_cvm_ids: list[int | str] = Field(default_factory=list)
+
+
+AppCvmsBatchIsAllowedResponse = AppCvmsBatchIsAllowedResponseV20260522

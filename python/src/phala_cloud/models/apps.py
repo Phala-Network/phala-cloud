@@ -3,7 +3,7 @@ from __future__ import annotations
 from pydantic import Field
 
 from .base import CloudModel
-from .cvms import CvmInfoV20260121, CvmRef, UserRef, WorkspaceRef
+from .cvms import CvmInfoV20260121, CvmInfoV20260522, CvmRef, UserRef, WorkspaceRef
 
 
 class AppProfileV20260121(CloudModel):
@@ -29,6 +29,28 @@ class DstackAppFullResponseV20260121(CloudModel):
 
 class DstackAppListResponseV20260121(CloudModel):
     dstack_apps: list[DstackAppFullResponseV20260121] = Field(default_factory=list)
+    page: int
+    page_size: int
+    total: int
+    total_pages: int
+
+
+class DstackAppFullResponseV20260522(CloudModel):
+    id: str
+    name: str
+    app_id: str
+    app_provision_type: str | None = None
+    app_icon_url: str | None = None
+    created_at: str
+    kms_type: str
+    profile: AppProfileV20260121 | None = None
+    current_cvm: CvmInfoV20260522 | None = None
+    cvms: list[CvmInfoV20260522] = Field(default_factory=list)
+    cvm_count: int = 0
+
+
+class DstackAppListResponseV20260522(CloudModel):
+    dstack_apps: list[DstackAppFullResponseV20260522] = Field(default_factory=list)
     page: int
     page_size: int
     total: int
@@ -72,17 +94,44 @@ class AppRevisionsResponse(CloudModel):
     total_pages: int
 
 
-class DeviceAllowlistItem(CloudModel):
+class DeviceAllowlistItemBase(CloudModel):
     device_id: str
     node_name: str | None = None
-    cvm_ids: list[str] = Field(default_factory=list)
     allowed_onchain: bool
     status: str
 
 
-class DeviceAllowlistResponse(CloudModel):
+class DeviceAllowlistItemV20260121(DeviceAllowlistItemBase):
+    cvm_ids: list[int] = Field(default_factory=list)
+
+
+class DeviceAllowlistItemV20260522(DeviceAllowlistItemBase):
+    cvm_ids: list[str] = Field(default_factory=list)
+
+
+DeviceAllowlistItemAny = DeviceAllowlistItemV20260522 | DeviceAllowlistItemV20260121
+DeviceAllowlistItem = DeviceAllowlistItemV20260522
+
+
+class DeviceAllowlistResponseBase(CloudModel):
     is_onchain_kms: bool
     allow_any_device: bool | None = None
     chain_id: int | None = None
     app_contract_address: str | None = None
-    devices: list[DeviceAllowlistItem] = Field(default_factory=list)
+
+
+class DeviceAllowlistResponseV20260121(DeviceAllowlistResponseBase):
+    devices: list[DeviceAllowlistItemV20260121] = Field(default_factory=list)
+
+
+class DeviceAllowlistResponseV20260522(DeviceAllowlistResponseBase):
+    devices: list[DeviceAllowlistItemV20260522] = Field(default_factory=list)
+
+
+class DeviceAllowlistResponseAny(DeviceAllowlistResponseBase):
+    devices: list[DeviceAllowlistItemV20260522 | DeviceAllowlistItemV20260121] = Field(
+        default_factory=list
+    )
+
+
+DeviceAllowlistResponse = DeviceAllowlistResponseV20260522
