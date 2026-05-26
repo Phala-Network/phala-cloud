@@ -3028,5 +3028,19 @@
     "RAG",
     "AI Infrastructure"
   ]
-}
+},
+{
+    "id": "faiss",
+    "name": "facebookresearch/faiss",
+    "description": "CPU-safe FAISS vector-search demo API that installs and imports the real faiss-cpu package, builds deterministic in-memory CPU indexes, and serves health, demo, and OpenAI-compatible-ish model metadata endpoints without GPU, model downloads, external databases, or credentials.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/faiss",
+    "author": "Meta/Facebook Research",
+    "icon": "faiss.png",
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Data & Storage", "Developer Tools"]
+  }
 ]
