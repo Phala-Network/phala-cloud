@@ -3042,5 +3042,31 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Data & Storage", "Developer Tools"]
+  },
+{
+    "id": "lancedb",
+    "name": "lancedb/lancedb",
+    "description": "CPU-safe LanceDB HTTP demo that installs and imports the real lancedb Python package, creates a local named-volume database, seeds fixed text/vector rows, and serves deterministic vector search endpoints without provider credentials or model downloads.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/lancedb",
+    "author": "lancedb",
+    "icon": "lancedb.png",
+    "envs": [
+      {
+        "key": "LANCEDB_VERSION",
+        "required": false,
+        "description": "Pinned lancedb Python package version installed at container startup.",
+        "default": "0.30.2"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 10
+    },
+    "tags": [
+      "Vector Database",
+      "Data & Storage",
+      "Web Data & Search"
+    ]
   }
 ]
