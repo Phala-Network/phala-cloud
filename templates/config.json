@@ -3182,5 +3182,37 @@
     ],
     "defaultResource": { "vCPU": 1, "memory": 1024, "diskSize": 10 },
     "tags": ["MCP Servers", "Developer Tools", "AI Agents"]
+  },
+{
+    "id": "codex",
+    "name": "Codex CLI",
+    "description": "OpenAI Codex CLI local verifier. This CPU-safe HTTP demo installs the real @openai/codex npm package, exposes health and metadata endpoints, and proves the CLI is available without requiring provider credentials or external model calls.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/codex",
+    "author": "openai",
+    "icon": "codex.png",
+    "envs": [
+      {
+        "key": "CODEX_PACKAGE_VERSION",
+        "required": false,
+        "default": "0.133.0",
+        "description": "Pinned @openai/codex npm package version installed by the demo service at container startup."
+      },
+      {
+        "key": "OPENAI_API_KEY",
+        "required": false,
+        "description": "Optional OpenAI-compatible provider API key for real Codex CLI sessions. The default verifier endpoints do not use it."
+      },
+      {
+        "key": "OPENAI_BASE_URL",
+        "required": false,
+        "description": "Optional OpenAI-compatible API base URL for custom provider workflows. The default verifier endpoints do not use it."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["AI Agents", "Developer Tools", "Automation"]
   }
 ]

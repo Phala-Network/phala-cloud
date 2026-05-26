@@ -1,0 +1,245 @@
+services:
+  app:
+    image: node:22-bookworm-slim
+    restart: unless-stopped
+    init: true
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: ${PORT:-3000}
+      CODEX_PACKAGE_VERSION: ${CODEX_PACKAGE_VERSION:-0.133.0}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      NODE_ENV: production
+      NPM_CONFIG_UPDATE_NOTIFIER: "false"
+    configs:
+      - source: codex_demo_app
+        target: /opt/codex-demo/server.js
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        npm install --global --no-audit --no-fund "@openai/codex@$${CODEX_PACKAGE_VERSION}"
+        exec node /opt/codex-demo/server.js
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:' + (process.env.PORT || '3000') + '/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+configs:
+  codex_demo_app:
+    content: |
+      const http = require("node:http");
+      const os = require("node:os");
+      const { execFile } = require("node:child_process");
+      const { promisify } = require("node:util");
+
+      const execFileAsync = promisify(execFile);
+      const startedAt = Date.now();
+      const port = Number.parseInt(process.env.PORT || "3000", 10);
+      const packageName = "@openai/codex";
+      const packageVersion = process.env.CODEX_PACKAGE_VERSION || "0.133.0";
+
+      function publicEnvState() {
+        return {
+          openai_api_key_configured: Boolean(process.env.OPENAI_API_KEY),
+          openai_base_url_configured: Boolean(process.env.OPENAI_BASE_URL),
+        };
+      }
+
+      async function runCommand(command, args, timeoutMs) {
+        const started = Date.now();
+        try {
+          const { stdout, stderr } = await execFileAsync(command, args, {
+            timeout: timeoutMs,
+            maxBuffer: 1024 * 1024,
+            env: process.env,
+          });
+          return {
+            ok: true,
+            command: [command].concat(args).join(" "),
+            stdout: stdout.trim(),
+            stderr: stderr.trim(),
+            duration_ms: Date.now() - started,
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            command: [command].concat(args).join(" "),
+            stdout: (error.stdout || "").trim(),
+            stderr: (error.stderr || "").trim(),
+            code: error.code || null,
+            signal: error.signal || null,
+            message: error.message,
+            duration_ms: Date.now() - started,
+          };
+        }
+      }
+
+      async function packageCheck() {
+        const result = await runCommand("npm", ["list", "-g", "--depth=0", packageName, "--json"], 10000);
+        let installedVersion = null;
+        if (result.stdout) {
+          try {
+            const parsed = JSON.parse(result.stdout);
+            installedVersion = parsed.dependencies && parsed.dependencies[packageName]
+              ? parsed.dependencies[packageName].version
+              : null;
+          } catch (error) {
+            result.parse_error = error.message;
+          }
+        }
+        return {
+          package: packageName,
+          requested_version: packageVersion,
+          installed_version: installedVersion,
+          present: Boolean(installedVersion),
+          npm_check_ok: result.ok,
+        };
+      }
+
+      async function codexVersionCheck() {
+        const result = await runCommand("codex", ["--version"], 10000);
+        return {
+          cli: "codex",
+          present: result.ok,
+          version_output: result.stdout,
+          command: result.command,
+          stderr: result.stderr,
+          error: result.ok ? null : result.message,
+          exit_code: result.code,
+        };
+      }
+
+      async function startupChecks() {
+        const [pkg, cli] = await Promise.all([packageCheck(), codexVersionCheck()]);
+        return {
+          ok: pkg.present && cli.present,
+          package: pkg,
+          cli,
+        };
+      }
+
+      const startupChecksPromise = startupChecks();
+
+      function writeJson(res, status, payload) {
+        const body = Buffer.from(JSON.stringify(payload, null, 2) + "\n", "utf8");
+        res.writeHead(status, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Content-Length": body.length,
+        });
+        res.end(body);
+      }
+
+      async function responseFor(path) {
+        const uptimeSeconds = Math.round((Date.now() - startedAt) / 100) / 10;
+        if (path === "/healthz") {
+          const checks = await startupChecksPromise;
+          return {
+            status: checks.ok ? 200 : 503,
+            body: {
+              status: checks.ok ? "ok" : "unhealthy",
+              service: "codex-cli-demo",
+              uptime_seconds: uptimeSeconds,
+              codex_cli_present: checks.cli.present,
+              codex_package_present: checks.package.present,
+              provider_credentials_required_for_health: false,
+              provider_network_calls_performed: false,
+              configured_provider_env: publicEnvState(),
+              codex: checks,
+            },
+          };
+        }
+
+        if (path === "/demo") {
+          const version = await codexVersionCheck();
+          return {
+            status: version.present ? 200 : 503,
+            body: {
+              name: "Codex CLI local verifier",
+              description: "Runs a deterministic local `codex --version` check against the installed @openai/codex package.",
+              credentials_required: false,
+              provider_network_calls_performed: false,
+              command: version.command,
+              codex_cli_present: version.present,
+              version_output: version.version_output,
+              stderr: version.stderr,
+              error: version.error,
+            },
+          };
+        }
+
+        if (path === "/v1/models") {
+          return {
+            status: 200,
+            body: {
+              object: "list",
+              data: [
+                {
+                  id: "codex-cli/local-verifier",
+                  object: "model",
+                  created: 0,
+                  owned_by: "openai",
+                  description: "Metadata-only OpenAI-compatible response for the local Codex CLI verifier. No model is hosted and no provider API is called.",
+                },
+              ],
+            },
+          };
+        }
+
+        if (path === "/") {
+          return {
+            status: 200,
+            body: {
+              service: "codex-cli-demo",
+              endpoints: ["/healthz", "/demo", "/v1/models"],
+              node: process.version,
+              platform: os.platform() + "/" + os.arch(),
+            },
+          };
+        }
+
+        return {
+          status: 404,
+          body: {
+            error: "not_found",
+            endpoints: ["/healthz", "/demo", "/v1/models"],
+          },
+        };
+      }
+
+      const server = http.createServer(async (req, res) => {
+        if (req.method !== "GET") {
+          writeJson(res, 405, { error: "method_not_allowed" });
+          return;
+        }
+        const url = new URL(req.url, "http://127.0.0.1");
+        const path = url.pathname.replace(/\/+$/, "") || "/";
+        try {
+          const response = await responseFor(path);
+          writeJson(res, response.status, response.body);
+        } catch (error) {
+          writeJson(res, 500, {
+            error: "internal_error",
+            message: error.message,
+          });
+        }
+      });
+
+      server.listen(port, "0.0.0.0", async () => {
+        const checks = await startupChecksPromise;
+        console.log(JSON.stringify({
+          event: "startup",
+          port,
+          checks,
+          provider_credentials_required_for_health: false,
+        }));
+      });
