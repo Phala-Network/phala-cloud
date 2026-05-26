@@ -3102,5 +3102,27 @@
       "diskSize": 10
     },
     "tags": ["Data & Storage", "Vector Database", "AI Apps"]
+  },
+{
+    "id": "mem0",
+    "name": "mem0ai/mem0",
+    "description": "CPU-safe mem0 package-load and deterministic memory API demo for Phala Cloud. Imports the official mem0ai Python package and exposes health, demo search, and OpenAI-compatible model-list endpoints without provider credentials.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/mem0",
+    "author": "mem0ai",
+    "icon": "mem0.png",
+    "envs": [
+      {
+        "key": "MEM0AI_VERSION",
+        "required": false,
+        "description": "mem0ai Python package version installed at container startup.",
+        "default": "2.0.2"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 10
+    },
+    "tags": ["AI Memory Systems", "AI Agents", "Developer Tools"]
   }
 ]
