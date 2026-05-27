@@ -3295,5 +3295,42 @@
       "diskSize": 10
     },
     "tags": ["Developer Tools", "AI Agents", "Automation"]
+  },
+{
+    "id": "cline",
+    "name": "Cline CLI",
+    "description": "Open source AI coding agent for IDEs and terminals. This CPU-safe HTTP verifier installs the real cline npm package, checks package metadata, imports @cline/sdk, and runs cline --version without provider credentials, browser auth, model downloads, GPU, or hosted model calls.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/cline",
+    "author": "cline",
+    "icon": "cline.png",
+    "envs": [
+      {
+        "key": "CLINE_PACKAGE_VERSION",
+        "required": false,
+        "default": "3.0.13",
+        "description": "Published npm cline package version installed by the verifier at container startup."
+      },
+      {
+        "key": "ANTHROPIC_API_KEY",
+        "required": false,
+        "description": "Optional Anthropic provider API key for later real Cline sessions. The default verifier endpoints do not use it."
+      },
+      {
+        "key": "OPENAI_API_KEY",
+        "required": false,
+        "description": "Optional OpenAI-compatible provider API key for later real Cline sessions. The default verifier endpoints do not use it."
+      },
+      {
+        "key": "OPENAI_BASE_URL",
+        "required": false,
+        "description": "Optional OpenAI-compatible API base URL for later custom provider workflows. The default verifier endpoints do not use it."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["AI Agents", "Developer Tools", "Automation"]
   }
 ]
