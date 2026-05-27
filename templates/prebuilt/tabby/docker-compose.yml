@@ -1,0 +1,287 @@
+services:
+  app:
+    image: python:3.11-slim-bookworm
+    ports:
+      - "8080:8080"
+    environment:
+      - TABBY_REF=${TABBY_REF:-v0.32.0}
+      - PYTHONUNBUFFERED=1
+    command:
+      - python
+      - /server.py
+    configs:
+      - source: server_py
+        target: /server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    restart: unless-stopped
+
+configs:
+  server_py:
+    content: |
+      import hashlib
+      import json
+      import os
+      import platform
+      import re
+      import sys
+      import time
+      import urllib.error
+      import urllib.parse
+      import urllib.request
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+      STARTED_AT = time.time()
+      UPSTREAM = "https://github.com/TabbyML/tabby"
+      RAW_BASE = "https://raw.githubusercontent.com/TabbyML/tabby"
+      GITHUB_API = "https://api.github.com/repos/TabbyML/tabby"
+      DEFAULT_REF = "v0.32.0"
+      MAX_SOURCE_BYTES = 2 * 1024 * 1024
+
+      REQUIRED_SOURCES = [
+          ("README.md", "project README and positioning"),
+          ("Cargo.toml", "workspace version metadata"),
+          ("crates/tabby/Cargo.toml", "Tabby CLI package metadata"),
+          ("crates/tabby/src/serve.rs", "server CLI, health routes, and model loading logic"),
+          ("crates/tabby/src/routes/health.rs", "health endpoint implementation"),
+          ("crates/tabby/src/routes/models.rs", "model-list endpoint implementation"),
+          ("website/docs/quick-start/installation/docker.mdx", "upstream Docker deployment guide"),
+          ("website/docs/quick-start/installation/docker-compose.mdx", "upstream Docker Compose guide"),
+      ]
+
+
+      def read_env(name, default):
+          value = os.environ.get(name, "").strip()
+          return value or default
+
+
+      def source_url(ref, path):
+          encoded_ref = urllib.parse.quote(ref, safe="")
+          encoded_path = urllib.parse.quote(path, safe="/")
+          return f"{RAW_BASE}/{encoded_ref}/{encoded_path}"
+
+
+      def fetch_url(url):
+          request = urllib.request.Request(
+              url,
+              headers={
+                  "Accept": "application/vnd.github+json",
+                  "User-Agent": "phala-cloud-tabby-template",
+              },
+          )
+          with urllib.request.urlopen(request, timeout=30) as response:
+              return response.read(MAX_SOURCE_BYTES + 1)
+
+
+      def fetch_source(ref, path):
+          url = source_url(ref, path)
+          data = fetch_url(url)
+          if len(data) > MAX_SOURCE_BYTES:
+              raise RuntimeError(f"{path} is larger than {MAX_SOURCE_BYTES} bytes")
+          return {
+              "path": path,
+              "url": url,
+              "bytes": len(data),
+              "sha256": hashlib.sha256(data).hexdigest(),
+              "text": data.decode("utf-8", errors="replace"),
+          }
+
+
+      def fetch_release(ref):
+          tag = ref if ref.startswith("v") else ""
+          if not tag:
+              return {"checked": False, "reason": "TABBY_REF is not a release tag"}
+          url = f"{GITHUB_API}/releases/tags/{urllib.parse.quote(tag, safe='')}"
+          try:
+              data = fetch_url(url)
+              if len(data) > MAX_SOURCE_BYTES:
+                  raise RuntimeError("release response is too large")
+              release = json.loads(data.decode("utf-8"))
+              asset_names = [asset.get("name", "") for asset in release.get("assets", [])]
+              return {
+                  "checked": True,
+                  "tag_name": release.get("tag_name"),
+                  "name": release.get("name"),
+                  "published_at": release.get("published_at"),
+                  "html_url": release.get("html_url"),
+                  "asset_names": asset_names,
+                  "has_cpu_linux_asset": any(name == "tabby_x86_64-manylinux_2_28.tar.gz" for name in asset_names),
+                  "has_cuda_linux_asset": any("cuda" in name and name.endswith(".tar.gz") for name in asset_names),
+                  "has_vulkan_linux_asset": any("vulkan" in name and name.endswith(".tar.gz") for name in asset_names),
+              }
+          except urllib.error.HTTPError as exc:
+              return {"checked": False, "reason": f"release tag lookup failed: HTTP {exc.code}"}
+          except Exception as exc:
+              return {"checked": False, "reason": f"{type(exc).__name__}: {exc}"}
+
+
+      def build_check():
+          ref = read_env("TABBY_REF", DEFAULT_REF)
+          files = []
+          errors = []
+          sources = {}
+
+          for path, purpose in REQUIRED_SOURCES:
+              try:
+                  source = fetch_source(ref, path)
+                  files.append({
+                      "path": path,
+                      "purpose": purpose,
+                      "bytes": source["bytes"],
+                      "sha256": source["sha256"],
+                      "url": source["url"],
+                      "present": True,
+                      "contains_expected_content": True,
+                  })
+                  sources[path] = source
+              except Exception as exc:
+                  errors.append({"path": path, "purpose": purpose, "error": f"{type(exc).__name__}: {exc}"})
+
+          readme = sources.get("README.md", {}).get("text", "")
+          workspace_cargo = sources.get("Cargo.toml", {}).get("text", "")
+          tabby_cargo = sources.get("crates/tabby/Cargo.toml", {}).get("text", "")
+          serve = sources.get("crates/tabby/src/serve.rs", {}).get("text", "")
+          health_route = sources.get("crates/tabby/src/routes/health.rs", {}).get("text", "")
+          models_route = sources.get("crates/tabby/src/routes/models.rs", {}).get("text", "")
+          docker_doc = sources.get("website/docs/quick-start/installation/docker.mdx", {}).get("text", "")
+          compose_doc = sources.get("website/docs/quick-start/installation/docker-compose.mdx", {}).get("text", "")
+
+          version_match = re.search(
+              r"\[workspace\.package\][\s\S]*?version\s*=\s*[\"']([^\"']+)[\"']",
+              workspace_cargo,
+          )
+          version = version_match.group(1) if version_match else None
+
+          content_checks = {
+              "readme_describes_self_hosted_ai_coding_assistant": "self-hosted AI coding assistant" in readme,
+              "readme_mentions_consumer_grade_gpus": "Supports consumer-grade GPUs" in readme,
+              "workspace_version_matches_ref": bool(version) and (ref.lstrip("v") == version or not ref.startswith("v")),
+              "tabby_package_default_run_present": 'default-run = "tabby"' in tabby_cargo,
+              "tabby_package_uses_llama_cpp_runtime": "llama-cpp-server" in tabby_cargo,
+              "serve_args_define_model_chat_and_device": "struct ServeArgs" in serve and "model:" in serve and "chat_model:" in serve and "device:" in serve,
+              "serve_loads_models_by_downloading_when_needed": "download_model_if_needed" in serve and "ModelKind::Completion" in serve and "ModelKind::Chat" in serve,
+              "serve_defines_health_and_model_routes": '"/v1/health"' in serve and '"/v1beta/models"' in serve,
+              "health_route_returns_health_state": "pub async fn health" in health_route and "HealthState" in health_route,
+              "models_route_returns_configured_models": "pub async fn models" in models_route and "ModelInfo" in models_route,
+              "docker_docs_require_gpu_and_models": "--gpus all" in docker_doc and "--model StarCoder-1B" in docker_doc and "--chat-model Qwen2-1.5B-Instruct" in docker_doc,
+              "compose_docs_require_gpu_and_host_volume": "capabilities: [gpu]" in compose_doc and "$HOME/.tabby:/data" in compose_doc,
+          }
+
+          for name, ok in content_checks.items():
+              if not ok:
+                  errors.append({"check": name, "error": "Expected upstream source marker was not found"})
+
+          release = fetch_release(ref)
+          if release.get("checked"):
+              if release.get("tag_name") != ref:
+                  errors.append({"check": "release_tag_matches_ref", "error": "GitHub release tag did not match TABBY_REF"})
+              if not release.get("has_cpu_linux_asset"):
+                  errors.append({"check": "release_has_cpu_linux_asset", "error": "Expected Linux CPU release artifact was not found"})
+
+          return {
+              "ok": not errors,
+              "ref": ref,
+              "version": version,
+              "upstream": UPSTREAM,
+              "raw_base": RAW_BASE,
+              "files": files,
+              "content_checks": content_checks,
+              "release": release,
+              "errors": errors,
+          }
+
+
+      SOURCE_CHECK = build_check()
+
+
+      def base_payload():
+          return {
+              "service": "tabby-demo",
+              "upstream": UPSTREAM,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "source_check": SOURCE_CHECK,
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "tabby-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              path = urllib.parse.urlparse(self.path).path
+              status = 200 if SOURCE_CHECK["ok"] else 500
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  payload.update({
+                      "ok": SOURCE_CHECK["ok"],
+                      "status": "ready" if SOURCE_CHECK["ok"] else "source_check_failed",
+                      "cpu_only": True,
+                      "model_downloaded": False,
+                      "model_loaded": False,
+                      "inference_started": False,
+                      "tabby_server_started": False,
+                  })
+                  self.respond_json(status, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  payload.update({
+                      "ok": SOURCE_CHECK["ok"],
+                      "check": "Fetch a pinned Tabby release/source ref and verify CLI, HTTP route, model-download, Docker, and release markers.",
+                      "cpu_only": True,
+                      "model_downloaded": False,
+                      "model_loaded": False,
+                      "inference_started": False,
+                      "tabby_server_started": False,
+                      "message": (
+                          "This Phala template verifies Tabby upstream source facts and release metadata. "
+                          "It does not run the full Tabby server, download model weights, request GPU devices, "
+                          "or mount host paths."
+                      ),
+                  })
+                  self.respond_json(status, payload)
+                  return
+
+              if path == "/v1/models":
+                  payload = {
+                      "object": "list",
+                      "data": [],
+                      "demo": "No Tabby inference server or model worker is running in this CPU-safe verifier template.",
+                      "source_ok": SOURCE_CHECK["ok"],
+                      "source_ref": SOURCE_CHECK["ref"],
+                      "tabby_version": SOURCE_CHECK["version"],
+                  }
+                  if SOURCE_CHECK["errors"]:
+                      payload["errors"] = SOURCE_CHECK["errors"]
+                  self.respond_json(status, payload)
+                  return
+
+              self.respond_json(404, {"ok": False, "error": "not found"})
+
+
+      port = int(os.environ.get("PORT", "8080"))
+      server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+      print(f"tabby demo server listening on 0.0.0.0:{port}", flush=True)
+      server.serve_forever()

@@ -3429,5 +3429,27 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools"]
+  },
+{
+    "id": "tabby",
+    "name": "TabbyML/tabby",
+    "description": "CPU-safe Tabby source and release verifier with health, demo, and model-list endpoints, without starting full inference or downloading model weights.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/tabby",
+    "author": "TabbyML",
+    "icon": "tabby.png",
+    "envs": [
+      {
+        "key": "TABBY_REF",
+        "required": false,
+        "description": "Tabby Git release tag, commit, or simple branch ref used for CPU-safe source checks.",
+        "default": "v0.32.0"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["LLM Inference & Model Serving", "Developer Tools", "TEE & Privacy"]
   }
 ]
