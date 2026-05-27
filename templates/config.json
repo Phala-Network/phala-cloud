@@ -3228,5 +3228,45 @@
     "diskSize": 20
   },
   "tags": ["Data & Storage", "RAG", "Infrastructure"]
-}
+},
+{
+    "id": "cognee",
+    "name": "topoteretes/cognee",
+    "description": "Memory control plane using knowledge graphs; cloud-deployable. This CPU-safe Phala Cloud demo imports the official Cognee Python package and exposes deterministic memory-graph HTTP endpoints without provider credentials.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/cognee",
+    "author": "topoteretes",
+    "icon": "cognee.png",
+    "envs": [
+      {
+        "key": "COGNEE_PACKAGE_VERSION",
+        "required": false,
+        "default": "1.1.0",
+        "description": "Published Cognee Python package version installed at container startup."
+      },
+      {
+        "key": "COGNEE_DEMO_TOP_K",
+        "required": false,
+        "default": "2",
+        "description": "Number of deterministic memory-graph matches returned by the demo endpoint."
+      },
+      {
+        "key": "LOG_LEVEL",
+        "required": false,
+        "default": "WARNING",
+        "description": "Log level passed to Cognee during import."
+      },
+      {
+        "key": "OTEL_SDK_DISABLED",
+        "required": false,
+        "default": "true",
+        "description": "Keeps OpenTelemetry SDK activity disabled in the default demo environment."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["Data & Storage", "AI Agents", "RAG"]
+  }
 ]
