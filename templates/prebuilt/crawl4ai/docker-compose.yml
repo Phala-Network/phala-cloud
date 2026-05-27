@@ -1,0 +1,256 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      APP_PORT: "8080"
+      CRAWL4AI_VERSION: ${CRAWL4AI_VERSION:-0.8.6}
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PYTHONUNBUFFERED: "1"
+      UV_SYSTEM_PYTHON: "1"
+    configs:
+      - source: crawl4ai_demo_app
+        target: /opt/crawl4ai-demo/main.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache "Crawl4AI==$${CRAWL4AI_VERSION}"
+        exec python /opt/crawl4ai-demo/main.py
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8080'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+configs:
+  crawl4ai_demo_app:
+    content: |
+      import importlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "Crawl4AI"
+      UPSTREAM_REPO = "https://github.com/unclecode/crawl4ai"
+      DEMO_HTML = """
+      <html>
+        <head>
+          <title>Phala Cloud Crawl4AI smoke</title>
+          <meta name="description" content="Deterministic local Crawl4AI demo">
+        </head>
+        <body>
+          <main>
+            <h1>Phala Cloud Crawl4AI smoke</h1>
+            <p>Crawl4AI turns web content into clean LLM-ready Markdown.</p>
+            <p>This bundled page is converted locally without fetching a URL.</p>
+            <ul>
+              <li>No browser is launched.</li>
+              <li>No model is downloaded.</li>
+              <li>No provider API key is required.</li>
+            </ul>
+            <a href="/docs">Example local link</a>
+          </main>
+        </body>
+      </html>
+      """
+
+
+      def import_checks():
+          result = {
+              "package": PACKAGE_NAME,
+              "distribution_version": None,
+              "module_version": None,
+              "import_ok": False,
+              "demo_ok": False,
+              "checked_symbols": {},
+              "error": None,
+          }
+          try:
+              result["distribution_version"] = importlib.metadata.version(PACKAGE_NAME)
+              crawl4ai = importlib.import_module("crawl4ai")
+              version_module = importlib.import_module("crawl4ai.__version__")
+              result["module_version"] = getattr(version_module, "__version__", None)
+              for symbol in (
+                  "AsyncWebCrawler",
+                  "BrowserConfig",
+                  "CrawlerRunConfig",
+                  "DefaultMarkdownGenerator",
+                  "JsonCssExtractionStrategy",
+              ):
+                  result["checked_symbols"][symbol] = hasattr(crawl4ai, symbol)
+
+              generator = crawl4ai.DefaultMarkdownGenerator()
+              markdown = generator.generate_markdown(
+                  DEMO_HTML,
+                  base_url="https://example.invalid",
+              )
+              result["demo_ok"] = (
+                  "Phala Cloud Crawl4AI smoke" in markdown.raw_markdown
+                  and "Example local link" in markdown.markdown_with_citations
+              )
+              result["import_ok"] = (
+                  bool(result["distribution_version"])
+                  and bool(result["module_version"])
+                  and all(result["checked_symbols"].values())
+                  and result["demo_ok"]
+              )
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      IMPORT_STATUS = import_checks()
+
+
+      def run_demo():
+          crawl4ai = importlib.import_module("crawl4ai")
+          generator = crawl4ai.DefaultMarkdownGenerator()
+          markdown = generator.generate_markdown(
+              DEMO_HTML,
+              base_url="https://example.invalid",
+          )
+          raw_lines = [line for line in markdown.raw_markdown.splitlines() if line.strip()]
+          cited_lines = [
+              line for line in markdown.markdown_with_citations.splitlines() if line.strip()
+          ]
+          return {
+              "input": {
+                  "source": "bundled HTML string",
+                  "bytes": len(DEMO_HTML.encode("utf-8")),
+              },
+              "output": {
+                  "raw_markdown_preview": raw_lines[:8],
+                  "markdown_with_citations_preview": cited_lines[:8],
+                  "raw_markdown_bytes": len(markdown.raw_markdown.encode("utf-8")),
+                  "references_markdown": markdown.references_markdown,
+              },
+              "crawl4ai_api": "DefaultMarkdownGenerator.generate_markdown",
+              "external_network_requests": False,
+              "browser_launched": False,
+              "llm_provider_calls": False,
+              "model_downloaded": False,
+          }
+
+
+      def response_body(path):
+          uptime_seconds = round(time.time() - STARTED_AT, 3)
+          if path in ("/", "/healthz"):
+              status = "ok" if IMPORT_STATUS["import_ok"] else "unhealthy"
+              code = HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+              return code, {
+                  "status": status,
+                  "uptime_seconds": uptime_seconds,
+                  "service": "crawl4ai-package-demo",
+                  "endpoints": ["/healthz", "/demo", "/v1/models"],
+                  "crawl4ai": IMPORT_STATUS,
+              }
+
+          if path == "/demo":
+              if not IMPORT_STATUS["import_ok"]:
+                  return HTTPStatus.SERVICE_UNAVAILABLE, {
+                      "status": "unhealthy",
+                      "crawl4ai": IMPORT_STATUS,
+                  }
+              payload = {
+                  "name": "Crawl4AI local Markdown demo",
+                  "description": (
+                      "Installs and imports the real Crawl4AI Python package, then "
+                      "converts bundled HTML to Markdown without browser, model, or "
+                      "provider setup."
+                  ),
+                  "upstream": UPSTREAM_REPO,
+                  "crawl4ai": IMPORT_STATUS,
+                  "demo": run_demo(),
+              }
+              return HTTPStatus.OK, payload
+
+          if path == "/v1/models":
+              code = HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+              payload = {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "crawl4ai/local-markdown-demo",
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "unclecode",
+                          "description": (
+                              "OpenAI-shaped metadata endpoint for smoke tests. "
+                              "The default template does not host or call an LLM."
+                          ),
+                      }
+                  ],
+              }
+              if not IMPORT_STATUS["import_ok"]:
+                  payload["error"] = IMPORT_STATUS["error"]
+              return code, payload
+
+          return HTTPStatus.NOT_FOUND, {
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "crawl4ai-package-demo"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+              status, payload = response_body(path)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8080"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "crawl4ai": IMPORT_STATUS,
+                      "browser_launched": False,
+                      "llm_provider_calls": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
