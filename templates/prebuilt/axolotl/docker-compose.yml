@@ -1,0 +1,538 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    ports:
+      - "8000:8000"
+    environment:
+      AXOLOTL_UPSTREAM: "https://github.com/axolotl-ai-cloud/axolotl"
+      AXOLOTL_REF_NAME: "main"
+      AXOLOTL_REF: "3c4ff59f25c1f648aa8ea76d4fb4793fb0aed9d7"
+      AXOLOTL_LATEST_RELEASE: "v0.16.1"
+      AXOLOTL_LATEST_RELEASE_PUBLISHED_AT: "2026-04-02T21:47:32Z"
+      VERIFY_TIMEOUT_SECONDS: "15"
+      PYTHONUNBUFFERED: "1"
+    command:
+      - python
+      - /server.py
+    configs:
+      - source: server_py
+        target: /server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 6
+      start_period: 60s
+    restart: unless-stopped
+
+configs:
+  server_py:
+    content: |
+      import hashlib
+      import json
+      import os
+      import platform
+      import re
+      import sys
+      import threading
+      import time
+      import tomllib
+      import urllib.error
+      import urllib.parse
+      import urllib.request
+      from datetime import datetime, timezone
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+      STARTED_AT = time.time()
+      SERVICE = "axolotl-source-verifier"
+      UPSTREAM = os.environ.get("AXOLOTL_UPSTREAM", "https://github.com/axolotl-ai-cloud/axolotl")
+      REF_NAME = os.environ.get("AXOLOTL_REF_NAME", "main")
+      REF = os.environ.get("AXOLOTL_REF", "3c4ff59f25c1f648aa8ea76d4fb4793fb0aed9d7")
+      LATEST_RELEASE = os.environ.get("AXOLOTL_LATEST_RELEASE", "v0.16.1")
+      LATEST_RELEASE_PUBLISHED_AT = os.environ.get("AXOLOTL_LATEST_RELEASE_PUBLISHED_AT", "2026-04-02T21:47:32Z")
+      TIMEOUT_SECONDS = float(os.environ.get("VERIFY_TIMEOUT_SECONDS", "15"))
+
+      FILES = [
+          {
+              "path": "README.md",
+              "sha256": "6ba0cf7a9fb170c35c7babb1444ba736b7348130e0429742839eadb42897819a",
+              "checks": [
+                  ("fine_tuning_positioning", "A Free and Open Source LLM Fine-tuning Framework"),
+                  ("lora_support", "LoRA"),
+                  ("qlora_support", "QLoRA"),
+                  ("fsdp_deepspeed_support", "FSDP1, FSDP2, DeepSpeed"),
+                  ("gpu_requirement_documented", "NVIDIA GPU"),
+                  ("telemetry_opt_out", "AXOLOTL_DO_NOT_TRACK=1"),
+              ],
+          },
+          {
+              "path": "VERSION",
+              "sha256": "e7aaceeb300acae6e4e7ace5d5157d02519772ad9391a31361b78dd7bec7dccb",
+              "checks": [("version_present", "0.16.2.dev0")],
+          },
+          {
+              "path": "pyproject.toml",
+              "sha256": "f7ac713101f6d04511a22b1f5ef8b4dd433ca66a65a56e850a6470d1bc0968e3",
+              "checks": [
+                  ("package_name", 'name = "axolotl"'),
+                  ("torch_dependency", '"torch>=2.9.1"'),
+                  ("transformers_dependency", '"transformers==5.8.1"'),
+                  ("deepspeed_extra", "deepspeed = ["),
+                  ("deepspeed_dependency", '"deepspeed>=0.18.6,<0.19.0"'),
+              ],
+          },
+          {
+              "path": "examples/llama-3/lora-1b.yml",
+              "sha256": "e2ff74493ba45829769998a167429509f2e7ec4687bcd274576f6afa746d390f",
+              "checks": [
+                  ("llama_3_1b_base_model", "base_model: NousResearch/Llama-3.2-1B"),
+                  ("lora_adapter", "adapter: lora"),
+                  ("eight_bit_optimizer", "optimizer: adamw_8bit"),
+                  ("flash_attention_config", "attn_implementation: flash_attention_2"),
+              ],
+          },
+          {
+              "path": "deepspeed_configs/zero3.json",
+              "sha256": "6f89006dc88c2dbcdd75732c1329751eca8e77168d79dbb7f3355fb68d742d7e",
+              "checks": [
+                  ("zero_stage_3", '"stage": 3'),
+                  ("bf16_auto", '"bf16"'),
+                  ("micro_batch_auto", '"train_micro_batch_size_per_gpu": "auto"'),
+              ],
+          },
+          {
+              "path": "src/axolotl/cli/main.py",
+              "sha256": "a9c38d63436cae3c86b287d4fde5d2db3ca209cbf1a559bd2a408a6a74e962e6",
+              "checks": [
+                  ("train_command", "def train("),
+                  ("fetch_command", "def fetch("),
+                  ("agent_docs_command", "def agent_docs("),
+                  ("config_schema_command", "def config_schema("),
+              ],
+          },
+          {
+              "path": "docs/agents/sft.md",
+              "sha256": "107c4c4bebda159989408e874a87dcf7f6686802af101b54217b87f0d42a12cd",
+              "checks": [
+                  ("sft_reference", "Supervised fine-tuning pipeline reference"),
+                  ("qlora_reference", "QLoRA"),
+                  ("sample_packing_reference", "sample_packing"),
+                  ("chat_template_reference", "chat_template"),
+                  ("distributed_training_reference", "DeepSpeed shards model across GPUs"),
+              ],
+          },
+      ]
+
+      VERIFY_LOCK = threading.Lock()
+      VERIFY_RESULT = {
+          "status": "starting",
+          "ok": False,
+          "message": "verification has not completed yet",
+      }
+
+
+      def iso_now():
+          return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+      def set_result(result):
+          global VERIFY_RESULT
+          with VERIFY_LOCK:
+              VERIFY_RESULT = result
+
+
+      def get_result():
+          with VERIFY_LOCK:
+              return json.loads(json.dumps(VERIFY_RESULT))
+
+
+      def raw_url(path):
+          quoted_path = urllib.parse.quote(path, safe="/")
+          return f"https://raw.githubusercontent.com/axolotl-ai-cloud/axolotl/{REF}/{quoted_path}"
+
+
+      def fetch_bytes(url):
+          request = urllib.request.Request(
+              url,
+              headers={"User-Agent": "phala-axolotl-template-verifier/1.0"},
+          )
+          with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+              return response.read()
+
+
+      def verify_file(spec):
+          url = raw_url(spec["path"])
+          item = {
+              "path": spec["path"],
+              "url": url,
+              "expected_sha256": spec["sha256"],
+          }
+          try:
+              body = fetch_bytes(url)
+              text = body.decode("utf-8", errors="replace")
+              actual = hashlib.sha256(body).hexdigest()
+              checks = []
+              checks_ok = True
+              for name, needle in spec.get("checks", []):
+                  ok = needle in text
+                  checks.append({"name": name, "ok": ok})
+                  checks_ok = checks_ok and ok
+
+              item.update({
+                  "ok": actual == spec["sha256"] and checks_ok,
+                  "bytes": len(body),
+                  "sha256": actual,
+                  "sha256_ok": actual == spec["sha256"],
+                  "checks": checks,
+                  "text": text,
+              })
+          except (urllib.error.URLError, TimeoutError, OSError, UnicodeError) as exc:
+              item.update({
+                  "ok": False,
+                  "error": f"{type(exc).__name__}: {exc}",
+              })
+          return item
+
+
+      def parse_scalar(value):
+          value = value.strip()
+          if value == "":
+              return None
+          if value in {"true", "false"}:
+              return value == "true"
+          if value == "auto":
+              return value
+          if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+              return value[1:-1]
+          try:
+              return int(value)
+          except ValueError:
+              pass
+          try:
+              return float(value)
+          except ValueError:
+              return value
+
+
+      def parse_top_level_yaml(text):
+          parsed = {}
+          for raw_line in text.splitlines():
+              line = raw_line.split("#", 1)[0].rstrip()
+              if not line or line.startswith(" ") or ":" not in line:
+                  continue
+              key, value = line.split(":", 1)
+              parsed[key.strip()] = parse_scalar(value)
+          return parsed
+
+
+      def parse_list_after_key(text, key):
+          lines = text.splitlines()
+          values = []
+          capture = False
+          for raw_line in lines:
+              if raw_line.startswith(f"{key}:"):
+                  capture = True
+                  continue
+              if capture:
+                  if raw_line.startswith("  - "):
+                      values.append(raw_line[4:].strip())
+                      continue
+                  if raw_line and not raw_line.startswith(" "):
+                      break
+          return values
+
+
+      def first_yaml_list_value(text, field):
+          match = re.search(rf"(?m)^\\s+- {re.escape(field)}: ([^\\n]+)", text)
+          return match.group(1).strip() if match else None
+
+
+      def dependency_by_name(dependencies, name):
+          for dependency in dependencies:
+              if dependency == name or dependency.startswith(f"{name}=") or dependency.startswith(f"{name}>") or dependency.startswith(f"{name}<"):
+                  return dependency
+          return None
+
+
+      def build_evidence(texts):
+          evidence = {
+              "ok": False,
+              "checks": [],
+              "top_level_axolotl_import_attempted": False,
+              "training_started": False,
+              "model_weights_downloaded": False,
+              "provider_calls_made": False,
+          }
+
+          pyproject = tomllib.loads(texts["pyproject.toml"])
+          project = pyproject["project"]
+          dependencies = project.get("dependencies", [])
+          optional_dependencies = project.get("optional-dependencies", {})
+          lora_config = parse_top_level_yaml(texts["examples/llama-3/lora-1b.yml"])
+          lora_targets = parse_list_after_key(texts["examples/llama-3/lora-1b.yml"], "lora_target_modules")
+          deepspeed_zero3 = json.loads(texts["deepspeed_configs/zero3.json"])
+
+          compile(
+              texts["src/axolotl/cli/main.py"],
+              "src/axolotl/cli/main.py",
+              "exec",
+          )
+
+          checks = [
+              {"name": "pyproject_name", "ok": project.get("name") == "axolotl"},
+              {"name": "requires_python_present", "ok": project.get("requires-python") == ">=3.10"},
+              {"name": "torch_dependency_detected", "ok": dependency_by_name(dependencies, "torch") == "torch>=2.9.1"},
+              {"name": "transformers_dependency_detected", "ok": dependency_by_name(dependencies, "transformers") == "transformers==5.8.1"},
+              {"name": "peft_dependency_detected", "ok": dependency_by_name(dependencies, "peft") == "peft>=0.19.1,<0.20.0"},
+              {"name": "deepspeed_extra_detected", "ok": "deepspeed" in optional_dependencies},
+              {"name": "lora_example_adapter", "ok": lora_config.get("adapter") == "lora"},
+              {"name": "lora_example_optimizer", "ok": lora_config.get("optimizer") == "adamw_8bit"},
+              {"name": "lora_targets_detected", "ok": len(lora_targets) >= 7},
+              {"name": "deepspeed_zero_stage_3", "ok": deepspeed_zero3.get("zero_optimization", {}).get("stage") == 3},
+              {"name": "cli_source_compiles", "ok": True},
+              {"name": "agent_sft_doc_mentions_training_flow", "ok": "YAML Config" in texts["docs/agents/sft.md"]},
+          ]
+
+          evidence.update({
+              "ok": all(check["ok"] for check in checks),
+              "checks": checks,
+              "package": {
+                  "name": project.get("name"),
+                  "version_file": texts["VERSION"].strip(),
+                  "description": project.get("description"),
+                  "requires_python": project.get("requires-python"),
+                  "script": pyproject.get("project", {}).get("scripts", {}).get("axolotl"),
+              },
+              "dependencies_checked": {
+                  "torch": dependency_by_name(dependencies, "torch"),
+                  "transformers": dependency_by_name(dependencies, "transformers"),
+                  "accelerate": dependency_by_name(dependencies, "accelerate"),
+                  "peft": dependency_by_name(dependencies, "peft"),
+                  "datasets": dependency_by_name(dependencies, "datasets"),
+                  "bitsandbytes": dependency_by_name(dependencies, "bitsandbytes"),
+                  "triton": dependency_by_name(dependencies, "triton"),
+                  "deepspeed_extra": optional_dependencies.get("deepspeed", []),
+              },
+              "sample_lora_config": {
+                  "source": "examples/llama-3/lora-1b.yml",
+                  "metadata_only": True,
+                  "base_model": lora_config.get("base_model"),
+                  "dataset_path": first_yaml_list_value(texts["examples/llama-3/lora-1b.yml"], "path"),
+                  "dataset_type": first_yaml_list_value(texts["examples/llama-3/lora-1b.yml"], "type"),
+                  "adapter": lora_config.get("adapter"),
+                  "lora_r": lora_config.get("lora_r"),
+                  "lora_alpha": lora_config.get("lora_alpha"),
+                  "lora_dropout": lora_config.get("lora_dropout"),
+                  "lora_target_modules": lora_targets,
+                  "sequence_len": lora_config.get("sequence_len"),
+                  "sample_packing": lora_config.get("sample_packing"),
+                  "micro_batch_size": lora_config.get("micro_batch_size"),
+                  "gradient_accumulation_steps": lora_config.get("gradient_accumulation_steps"),
+                  "num_epochs": lora_config.get("num_epochs"),
+                  "optimizer": lora_config.get("optimizer"),
+                  "learning_rate": lora_config.get("learning_rate"),
+                  "attn_implementation": lora_config.get("attn_implementation"),
+              },
+              "deepspeed_zero3_config": {
+                  "source": "deepspeed_configs/zero3.json",
+                  "metadata_only": True,
+                  "zero_optimization_stage": deepspeed_zero3.get("zero_optimization", {}).get("stage"),
+                  "bf16": deepspeed_zero3.get("bf16"),
+                  "fp16": deepspeed_zero3.get("fp16"),
+                  "train_batch_size": deepspeed_zero3.get("train_batch_size"),
+                  "train_micro_batch_size_per_gpu": deepspeed_zero3.get("train_micro_batch_size_per_gpu"),
+              },
+              "source_compilation": {
+                  "file": "src/axolotl/cli/main.py",
+                  "compiled_with_python": sys.version.split()[0],
+                  "executed": False,
+                  "imports_executed": False,
+              },
+              "features_verified_from_source": [
+                  "LoRA",
+                  "QLoRA",
+                  "SFT",
+                  "FSDP",
+                  "DeepSpeed ZeRO-3",
+                  "agent-docs",
+                  "config-schema",
+              ],
+          })
+          return evidence
+
+
+      def verify_upstream():
+          set_result({
+              "status": "running",
+              "ok": False,
+              "started_at": iso_now(),
+              "ref": REF,
+              "ref_name": REF_NAME,
+          })
+
+          files = [verify_file(spec) for spec in FILES]
+          texts = {item["path"]: item.get("text", "") for item in files}
+          for item in files:
+              item.pop("text", None)
+
+          files_ok = all(item.get("ok") is True for item in files)
+          try:
+              evidence = build_evidence(texts)
+          except Exception as exc:
+              evidence = {
+                  "ok": False,
+                  "error": f"{type(exc).__name__}: {exc}",
+                  "top_level_axolotl_import_attempted": False,
+                  "training_started": False,
+                  "model_weights_downloaded": False,
+                  "provider_calls_made": False,
+              }
+
+          runtime = {
+              "python": sys.version.split()[0],
+              "implementation": platform.python_implementation(),
+              "platform": platform.platform(),
+              "tomllib_available": True,
+          }
+
+          ok = files_ok and evidence.get("ok") is True
+          result = {
+              "status": "complete",
+              "ok": ok,
+              "verified_at": iso_now(),
+              "upstream": UPSTREAM,
+              "ref_name": REF_NAME,
+              "ref": REF,
+              "source_url": f"{UPSTREAM}/tree/{REF}",
+              "latest_release": LATEST_RELEASE,
+              "latest_release_published_at": LATEST_RELEASE_PUBLISHED_AT,
+              "latest_release_url": f"{UPSTREAM}/releases/tag/{LATEST_RELEASE}",
+              "runtime": runtime,
+              "files": files,
+              "evidence": evidence,
+              "template_mode": "cpu-safe Axolotl source/config verifier demo",
+              "limitations": [
+                  "the axolotl Python package is not installed or imported",
+                  "no fine-tuning, preprocessing, evaluation, quantization, inference, or vLLM serving command is run",
+                  "no Hugging Face model, tokenizer, dataset, or adapter weights are downloaded",
+                  "no CUDA, GPU, torch, bitsandbytes, xformers, triton, flash-attn, DeepSpeed, or FSDP runtime is required",
+                  "no Hugging Face, Weights & Biases, cloud storage, or model-provider credentials are read or used",
+              ],
+              "full_finetune_started": False,
+              "model_weights_downloaded": False,
+              "provider_credentials_required": False,
+              "gpu_required_for_verifier": False,
+              "gpu_required_for_real_training": True,
+              "safe_for_tdx_small_smoke": True,
+          }
+          if not ok:
+              result["message"] = "one or more pinned upstream verification checks failed"
+          set_result(result)
+
+
+      def start_verifier():
+          thread = threading.Thread(target=verify_upstream, name="verify-upstream", daemon=True)
+          thread.start()
+
+
+      def base_payload():
+          result = get_result()
+          return {
+              "service": SERVICE,
+              "ok": result.get("ok") is True,
+              "status": "ready" if result.get("ok") is True else result.get("status", "not_ready"),
+              "upstream": UPSTREAM,
+              "ref_name": REF_NAME,
+              "ref": REF,
+              "template_mode": "cpu-safe Axolotl source/config verifier demo",
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "axolotl-verifier/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              path = urllib.parse.urlparse(self.path).path
+              result = get_result()
+              ready_status = 200 if result.get("ok") is True else 503
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  payload["verifier"] = result
+                  self.respond_json(ready_status, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  payload.update({
+                      "verifier": result,
+                      "demo": {
+                          "mode": "CPU-safe Axolotl source/config verifier",
+                          "description": "Verifies pinned upstream Axolotl metadata and representative LoRA/DeepSpeed/config-schema source facts without importing or running the training stack.",
+                          "full_finetune_started": False,
+                          "model_weights_downloaded": False,
+                          "gpu_required_for_verifier": False,
+                          "gpu_required_for_real_training": True,
+                          "provider_credentials_required_for_verifier": False,
+                          "safe_for_tdx_small_smoke": True,
+                          "sample_config": result.get("evidence", {}).get("sample_lora_config"),
+                          "deepspeed": result.get("evidence", {}).get("deepspeed_zero3_config"),
+                          "features": result.get("evidence", {}).get("features_verified_from_source"),
+                          "notes": [
+                              "This endpoint returns source verification evidence only.",
+                              "It does not call Hugging Face, Weights & Biases, OpenAI-compatible providers, or external model providers.",
+                              "Use upstream Axolotl with GPU resources, model/data access, and credentials for real fine-tuning.",
+                          ],
+                      },
+                  })
+                  self.respond_json(ready_status, payload)
+                  return
+
+              if path == "/v1/models":
+                  payload = {
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "axolotl/source-verifier-demo",
+                              "object": "model",
+                              "created": 0,
+                              "owned_by": "axolotl-ai-cloud",
+                              "metadata": {
+                                  "template_mode": "CPU-safe verifier/demo",
+                                  "serves_inference": False,
+                                  "local_mock": True,
+                                  "source_ok": result.get("ok") is True,
+                                  "upstream": UPSTREAM,
+                                  "ref": REF,
+                                  "description": "Compatibility-shaped local verifier entry; no LLM is hosted or called.",
+                              },
+                          }
+                      ],
+                  }
+                  self.respond_json(ready_status, payload)
+                  return
+
+              self.respond_json(404, {"ok": False, "error": "not found", "paths": ["/healthz", "/demo", "/v1/models"]})
+
+
+      if __name__ == "__main__":
+          start_verifier()
+          server = ThreadingHTTPServer(("0.0.0.0", 8000), Handler)
+          print(f"{SERVICE} listening on 0.0.0.0:8000", flush=True)
+          server.serve_forever()
