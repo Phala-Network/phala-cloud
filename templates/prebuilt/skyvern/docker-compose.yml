@@ -1,0 +1,251 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8000"
+    environment:
+      APP_PORT: "8000"
+      SKYVERN_PACKAGE_VERSION: ${SKYVERN_PACKAGE_VERSION:-1.0.36}
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+      PIP_ROOT_USER_ACTION: ignore
+      PYTHONUNBUFFERED: "1"
+      UV_SYSTEM_PYTHON: "1"
+    configs:
+      - source: skyvern_demo_app
+        target: /opt/skyvern-demo/main.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache "skyvern==$${SKYVERN_PACKAGE_VERSION}"
+        exec python /opt/skyvern-demo/main.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5).read()\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+          reverse_proxy app:8000
+      }
+
+  skyvern_demo_app:
+    content: |
+      import importlib
+      import importlib.metadata
+      import inspect
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "skyvern"
+
+
+      def package_metadata():
+          metadata = importlib.metadata.metadata(PACKAGE_NAME)
+          return {
+              "name": metadata.get("Name"),
+              "version": importlib.metadata.version(PACKAGE_NAME),
+              "summary": metadata.get("Summary"),
+              "requires_python": metadata.get("Requires-Python"),
+          }
+
+
+      def import_checks():
+          result = {
+              "package": PACKAGE_NAME,
+              "distribution": None,
+              "module_version": None,
+              "import_ok": False,
+              "checks": {},
+              "signatures": {},
+              "error": None,
+          }
+          try:
+              result["distribution"] = package_metadata()
+              skyvern = importlib.import_module("skyvern")
+              client = importlib.import_module("skyvern.client")
+              types = importlib.import_module("skyvern.client.types")
+              result["module_version"] = getattr(skyvern, "__version__", None)
+
+              symbols = {
+                  "skyvern.Skyvern": getattr(skyvern, "Skyvern", None),
+                  "skyvern.client.Skyvern": getattr(client, "Skyvern", None),
+                  "skyvern.client.AsyncSkyvern": getattr(client, "AsyncSkyvern", None),
+                  "skyvern.client.WorkflowRunStatus": getattr(client, "WorkflowRunStatus", None),
+                  "skyvern.client.types.WorkflowRunStatus": getattr(types, "WorkflowRunStatus", None),
+              }
+              for name, value in symbols.items():
+                  result["checks"][name] = value is not None
+
+              for name in ("Skyvern", "AsyncSkyvern"):
+                  cls = getattr(client, name)
+                  result["signatures"][name] = str(inspect.signature(cls))
+
+              result["import_ok"] = bool(result["distribution"]["version"]) and all(
+                  result["checks"].values()
+              )
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      IMPORT_STATUS = import_checks()
+
+
+      def response_body(path):
+          uptime_seconds = round(time.time() - STARTED_AT, 3)
+          if path == "/healthz":
+              status = "ok" if IMPORT_STATUS["import_ok"] else "unhealthy"
+              return HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE, {
+                  "status": status,
+                  "uptime_seconds": uptime_seconds,
+                  "skyvern": IMPORT_STATUS,
+              }
+
+          if path == "/demo":
+              return HTTPStatus.OK, {
+                  "name": "Skyvern package verifier",
+                  "description": (
+                      "This service installs and imports the real Skyvern Python package, "
+                      "then reports SDK metadata without starting browser automation or "
+                      "calling Skyvern Cloud or LLM providers."
+                  ),
+                  "upstream": "https://github.com/Skyvern-AI/skyvern",
+                  "credentials_required": False,
+                  "browser_session_started": False,
+                  "llm_provider_calls": False,
+                  "model_downloaded": False,
+                  "checked_capabilities": [
+                      "Python SDK import",
+                      "Skyvern sync client",
+                      "Skyvern async client",
+                      "workflow run status types",
+                  ],
+                  "production_paths": [
+                      "Use Skyvern Cloud with SKYVERN_API_KEY from app.skyvern.com.",
+                      "Use upstream skyvern[all] or Docker Compose for a full local UI and server.",
+                  ],
+                  "skyvern": IMPORT_STATUS,
+              }
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "skyvern/no-llm-demo",
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "Skyvern-AI",
+                          "description": (
+                              "Placeholder metadata endpoint. The default template "
+                              "does not host, download, or call an LLM model."
+                          ),
+                      }
+                  ],
+              }
+
+          if path == "/":
+              return HTTPStatus.OK, {
+                  "service": "skyvern-demo",
+                  "endpoints": ["/healthz", "/demo", "/v1/models"],
+                  "python": sys.version.split()[0],
+                  "platform": platform.platform(),
+                  "skyvern_import_ok": IMPORT_STATUS["import_ok"],
+              }
+
+          return HTTPStatus.NOT_FOUND, {
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "skyvern-demo"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+              status, payload = response_body(path)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8000"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "skyvern": IMPORT_STATUS,
+                      "browser_session_started": False,
+                      "llm_provider_calls": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+
+networks:
+  internal:
+    driver: bridge
