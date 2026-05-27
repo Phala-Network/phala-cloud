@@ -1,0 +1,295 @@
+services:
+  app:
+    image: python:3.11-slim-bookworm
+    ports:
+      - "8080:8080"
+    environment:
+      - AIDER_PACKAGE_VERSION=${AIDER_PACKAGE_VERSION:-0.86.2}
+      - AIDER_MODEL=${AIDER_MODEL:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - AIDER_ANALYTICS_DISABLE=true
+      - AIDER_CHECK_UPDATE=false
+      - NO_COLOR=1
+      - PIP_DISABLE_PIP_VERSION_CHECK=1
+      - PIP_NO_CACHE_DIR=1
+      - PIP_ROOT_USER_ACTION=ignore
+      - PORT=8080
+      - PYTHONUNBUFFERED=1
+      - HOME=/tmp/aider-home
+    working_dir: /workspace
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        apt-get update
+        apt-get install -y --no-install-recommends git ca-certificates
+        rm -rf /var/lib/apt/lists/*
+        mkdir -p "$$HOME" /workspace
+        python -m pip install --no-cache-dir "aider-chat==$${AIDER_PACKAGE_VERSION}"
+        exec python /server.py
+    configs:
+      - source: server_py
+        target: /server.py
+    volumes:
+      - aider_workspace:/workspace
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+    restart: unless-stopped
+
+configs:
+  server_py:
+    content: |
+      import importlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import shutil
+      import subprocess
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "aider-chat"
+      MODULE_NAME = "aider"
+      CLI_NAME = "aider"
+      UPSTREAM = "https://github.com/Aider-AI/aider"
+
+
+      def clean_text(value):
+          return str(value or "").replace("\x1b", "").strip()[:2000]
+
+
+      def check_import():
+          result = {
+              "package": PACKAGE_NAME,
+              "module": MODULE_NAME,
+              "distribution_version": None,
+              "module_version": None,
+              "import_ok": False,
+              "error": None,
+          }
+          try:
+              result["distribution_version"] = importlib.metadata.version(PACKAGE_NAME)
+              module = importlib.import_module(MODULE_NAME)
+              result["module_version"] = getattr(module, "__version__", None)
+              result["import_ok"] = bool(result["distribution_version"])
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      def verifier_env():
+          return {
+              "PATH": os.environ.get(
+                  "PATH",
+                  "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+              ),
+              "HOME": os.environ.get("HOME", "/tmp/aider-home"),
+              "AIDER_ANALYTICS_DISABLE": "true",
+              "AIDER_CHECK_UPDATE": "false",
+              "NO_COLOR": "1",
+              "TERM": "dumb",
+          }
+
+
+      def check_cli():
+          result = {
+              "command": f"{CLI_NAME} --version",
+              "path": shutil.which(CLI_NAME),
+              "version": None,
+              "ok": False,
+              "exit_code": None,
+              "stdout": "",
+              "stderr": "",
+              "timed_out": False,
+              "error": None,
+          }
+          if not result["path"]:
+              result["error"] = "aider executable not found on PATH"
+              return result
+
+          try:
+              completed = subprocess.run(
+                  [CLI_NAME, "--version"],
+                  check=False,
+                  capture_output=True,
+                  encoding="utf-8",
+                  env=verifier_env(),
+                  timeout=20,
+              )
+              result["exit_code"] = completed.returncode
+              result["stdout"] = clean_text(completed.stdout)
+              result["stderr"] = clean_text(completed.stderr)
+              result["version"] = result["stdout"] or result["stderr"]
+              result["ok"] = completed.returncode == 0 and bool(result["version"])
+          except subprocess.TimeoutExpired as exc:
+              result["exit_code"] = 124
+              result["timed_out"] = True
+              result["stdout"] = clean_text(exc.stdout)
+              result["stderr"] = clean_text(exc.stderr)
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      def provider_configuration():
+          provider_keys = {
+              "openai": bool(os.environ.get("OPENAI_API_KEY")),
+              "anthropic": bool(os.environ.get("ANTHROPIC_API_KEY")),
+              "gemini": bool(os.environ.get("GEMINI_API_KEY")),
+              "openrouter": bool(os.environ.get("OPENROUTER_API_KEY")),
+          }
+          return {
+              "configured": provider_keys,
+              "any_configured": any(provider_keys.values()),
+              "aider_model_set": bool(os.environ.get("AIDER_MODEL")),
+          }
+
+
+      def base_payload():
+          import_status = check_import()
+          cli_status = check_cli()
+          ok = import_status["import_ok"] and cli_status["ok"]
+          return {
+              "ok": ok,
+              "service": "aider-smoke",
+              "upstream": UPSTREAM,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "credentials_required": False,
+              "cpu_only": True,
+              "remote_model_calls": False,
+              "model_downloaded": False,
+              "workspace": "/workspace",
+              "package": import_status,
+              "cli": cli_status,
+          }
+
+
+      def write_json(handler, status, payload):
+          body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+          handler.send_response(status)
+          handler.send_header("Content-Type", "application/json; charset=utf-8")
+          handler.send_header("Cache-Control", "no-store")
+          handler.send_header("Content-Length", str(len(body)))
+          handler.end_headers()
+          handler.wfile.write(body)
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "aider-smoke"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  payload["status"] = "ready" if payload["ok"] else "unhealthy"
+                  write_json(self, HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  payload["demo"] = {
+                      "name": "Aider local CLI verifier",
+                      "what_ran": "import aider; aider --version",
+                      "verifies": [
+                          "The real aider-chat Python package is installed.",
+                          "The aider module imports successfully.",
+                          "The aider command can execute locally.",
+                          "No prompt is sent to a hosted LLM provider.",
+                      ],
+                      "sample_workflow": [
+                          "Create or clone a git repository inside /workspace.",
+                          "Configure a model and provider API key outside the default smoke path.",
+                          "Run aider interactively from a shell when you are ready to edit code.",
+                      ],
+                  }
+                  write_json(self, HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload)
+                  return
+
+              if path == "/v1/models":
+                  payload = base_payload()
+                  write_json(
+                      self,
+                      HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE,
+                      {
+                          "object": "list",
+                          "data": [
+                              {
+                                  "id": "aider-local-smoke",
+                                  "object": "model",
+                                  "created": 1719878400,
+                                  "owned_by": "aider-template",
+                                  "description": (
+                                      "Local Aider package and CLI verifier. Provider credentials "
+                                      "are not configured by default, so no LLM model is loaded or called."
+                                  ),
+                              }
+                          ],
+                          "provider_configuration": provider_configuration(),
+                          "package_version": payload["package"]["distribution_version"],
+                          "cli_version": payload["cli"]["version"],
+                          "remote_model_calls": False,
+                      },
+                  )
+                  return
+
+              write_json(self, HTTPStatus.NOT_FOUND, {"ok": False, "error": "not found"})
+
+
+      def main():
+          port = int(os.environ.get("PORT", "8080"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "service": "aider-smoke",
+                      "remote_model_calls": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+
+
+      if __name__ == "__main__":
+          main()
+
+volumes:
+  aider_workspace:

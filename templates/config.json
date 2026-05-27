@@ -3354,5 +3354,52 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools", "Web Apps"]
+  },
+{
+    "id": "aider",
+    "name": "Aider-AI/aider",
+    "description": "AI pair programming CLI that edits code in your local git repo. This CPU-safe HTTP verifier installs the real aider-chat Python package, imports aider, and checks local aider --version execution without provider credentials, model downloads, GPU, or hosted model calls.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/aider",
+    "author": "Aider-AI",
+    "icon": "aider.svg",
+    "envs": [
+      {
+        "key": "AIDER_PACKAGE_VERSION",
+        "required": false,
+        "default": "0.86.2",
+        "description": "Published aider-chat Python package version installed by the verifier at container startup."
+      },
+      {
+        "key": "AIDER_MODEL",
+        "required": false,
+        "description": "Optional Aider model name for later manual interactive CLI use. Not required or used by the default verifier endpoints."
+      },
+      {
+        "key": "OPENAI_API_KEY",
+        "required": false,
+        "description": "Optional OpenAI-compatible provider API key for later manual Aider sessions. Not required or used by the default verifier endpoints."
+      },
+      {
+        "key": "ANTHROPIC_API_KEY",
+        "required": false,
+        "description": "Optional Anthropic API key for later manual Aider sessions. Not required or used by the default verifier endpoints."
+      },
+      {
+        "key": "GEMINI_API_KEY",
+        "required": false,
+        "description": "Optional Gemini API key for later manual Aider sessions. Not required or used by the default verifier endpoints."
+      },
+      {
+        "key": "OPENROUTER_API_KEY",
+        "required": false,
+        "description": "Optional OpenRouter API key for later manual Aider sessions. Not required or used by the default verifier endpoints."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools", "Automation"]
   }
 ]
