@@ -1,0 +1,395 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    ports:
+      - "8080:8080"
+    environment:
+      FIRECRAWL_UPSTREAM_TIMEOUT_SECONDS: "${FIRECRAWL_UPSTREAM_TIMEOUT_SECONDS:-5}"
+      FIRECRAWL_VERIFY_ON_STARTUP: "${FIRECRAWL_VERIFY_ON_STARTUP:-true}"
+      PORT: "8080"
+      PYTHONUNBUFFERED: "1"
+    command:
+      - python
+      - /server.py
+    configs:
+      - source: server_py
+        target: /server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    restart: unless-stopped
+
+configs:
+  server_py:
+    content: |
+      import hashlib
+      import json
+      import os
+      import platform
+      import sys
+      import threading
+      import time
+      import urllib.error
+      import urllib.parse
+      import urllib.request
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+      STARTED_AT = time.time()
+      UPSTREAM_REPO = "https://github.com/firecrawl/firecrawl"
+      UPSTREAM_AUTHOR = "firecrawl"
+      UPSTREAM_COMMIT = "c5bb852969f7a88ecaf5a213567872bcf0c6a2ea"
+      UPSTREAM_COMMIT_URL = f"{UPSTREAM_REPO}/tree/{UPSTREAM_COMMIT}"
+      RAW_BASE_URL = f"https://raw.githubusercontent.com/firecrawl/firecrawl/{UPSTREAM_COMMIT}"
+      USER_AGENT = "phala-firecrawl-template-verifier/1.0"
+
+      PINNED_FILES = [
+          {
+              "path": "README.md",
+              "size": 20616,
+              "sha256": "08fde76d7dabb0b9da9790421529a5223e3e8f79ed1820ae83abc82d9b3c4de9",
+              "purpose": "Public project overview and API examples.",
+          },
+          {
+              "path": "SELF_HOST.md",
+              "size": 10430,
+              "sha256": "e201c1327954b31a8d57766b8520e9073844185561021d442fca5155b0fa5a3a",
+              "purpose": "Upstream self-hosting instructions and caveats.",
+          },
+          {
+              "path": "docker-compose.yaml",
+              "size": 5263,
+              "sha256": "b56adf2b19464d7a61b3542cd138e0e69d2c455aa9d626305c1439a31bd6166f",
+              "purpose": "Upstream production compose stack shape.",
+          },
+          {
+              "path": "apps/api/package.json",
+              "size": 7790,
+              "sha256": "76bf98a07f49d27a6718b7fb31a70465c6f7f7979ef1db005b05a2b787ef2bb4",
+              "purpose": "Upstream API package metadata and dependency surface.",
+          },
+      ]
+
+      VERIFICATION_CACHE = None
+      VERIFICATION_LOCK = threading.Lock()
+
+
+      def bool_env(name, default):
+          value = os.environ.get(name)
+          if value is None:
+              return default
+          return value.strip().lower() in ("1", "true", "yes", "on")
+
+
+      def timeout_seconds():
+          raw = os.environ.get("FIRECRAWL_UPSTREAM_TIMEOUT_SECONDS", "5")
+          try:
+              return max(1.0, min(float(raw), 30.0))
+          except ValueError:
+              return 5.0
+
+
+      def raw_url(path):
+          return f"{RAW_BASE_URL}/{urllib.parse.quote(path, safe='/')}"
+
+
+      def empty_verification(status):
+          return {
+              "status": status,
+              "checked_at_unix": None,
+              "duration_seconds": 0,
+              "timeout_seconds": timeout_seconds(),
+              "upstream_repository": UPSTREAM_REPO,
+              "upstream_commit": UPSTREAM_COMMIT,
+              "upstream_commit_url": UPSTREAM_COMMIT_URL,
+              "files": [
+                  {
+                      "path": spec["path"],
+                      "url": raw_url(spec["path"]),
+                      "expected": {
+                          "size": spec["size"],
+                          "sha256": spec["sha256"],
+                      },
+                      "status": "not_checked",
+                      "purpose": spec["purpose"],
+                  }
+                  for spec in PINNED_FILES
+              ],
+          }
+
+
+      def verify_one(spec, timeout):
+          url = raw_url(spec["path"])
+          result = {
+              "path": spec["path"],
+              "url": url,
+              "purpose": spec["purpose"],
+              "expected": {
+                  "size": spec["size"],
+                  "sha256": spec["sha256"],
+              },
+          }
+          try:
+              request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+              with urllib.request.urlopen(request, timeout=timeout) as response:
+                  data = response.read(spec["size"] + 1)
+                  result["http_status"] = getattr(response, "status", None)
+          except Exception as exc:
+              result.update(
+                  {
+                      "status": "unreachable",
+                      "error": f"{type(exc).__name__}: {exc}",
+                  }
+              )
+              return result
+
+          actual_size = len(data)
+          actual_sha256 = hashlib.sha256(data).hexdigest()
+          result["actual"] = {
+              "size": actual_size,
+              "sha256": actual_sha256,
+          }
+          if actual_size == spec["size"] and actual_sha256 == spec["sha256"]:
+              result["status"] = "verified"
+          else:
+              result["status"] = "mismatch"
+          return result
+
+
+      def overall_status(results):
+          statuses = {item.get("status") for item in results}
+          if statuses == {"verified"}:
+              return "verified"
+          if "mismatch" in statuses:
+              return "failed"
+          if "unreachable" in statuses:
+              if statuses <= {"unreachable"}:
+                  return "unreachable"
+              return "partial_unreachable"
+          return "unknown"
+
+
+      def run_verification():
+          started = time.time()
+          timeout = timeout_seconds()
+          results = [verify_one(spec, timeout) for spec in PINNED_FILES]
+          return {
+              "status": overall_status(results),
+              "checked_at_unix": int(time.time()),
+              "duration_seconds": round(time.time() - started, 3),
+              "timeout_seconds": timeout,
+              "upstream_repository": UPSTREAM_REPO,
+              "upstream_commit": UPSTREAM_COMMIT,
+              "upstream_commit_url": UPSTREAM_COMMIT_URL,
+              "files": results,
+          }
+
+
+      def get_verification(refresh=False):
+          global VERIFICATION_CACHE
+          with VERIFICATION_LOCK:
+              if refresh or VERIFICATION_CACHE is None:
+                  VERIFICATION_CACHE = run_verification()
+              return VERIFICATION_CACHE
+
+
+      def verification_summary():
+          cached = VERIFICATION_CACHE or empty_verification("not_run")
+          files = cached.get("files", [])
+          return {
+              "status": cached.get("status", "unknown"),
+              "checked_at_unix": cached.get("checked_at_unix"),
+              "verified_files": sum(1 for item in files if item.get("status") == "verified"),
+              "total_files": len(files),
+              "upstream_commit": UPSTREAM_COMMIT,
+          }
+
+
+      def base_payload():
+          return {
+              "service": "firecrawl-source-verifier",
+              "template": "firecrawl",
+              "mode": "cpu-safe verifier demo",
+              "upstream": {
+                  "repository": UPSTREAM_REPO,
+                  "author": UPSTREAM_AUTHOR,
+                  "commit": UPSTREAM_COMMIT,
+                  "commit_url": UPSTREAM_COMMIT_URL,
+                  "license": "AGPL-3.0",
+              },
+              "runtime": {
+                  "python": sys.version.split()[0],
+                  "platform": platform.platform(),
+                  "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              },
+              "guarantees": {
+                  "credentials_required": False,
+                  "browser_launched": False,
+                  "live_crawling_performed": False,
+                  "model_downloaded": False,
+                  "gpu_required": False,
+                  "docker_socket_required": False,
+              },
+          }
+
+
+      def demo_payload():
+          return {
+              "ok": True,
+              "status": "ok",
+              "note": (
+                  "This endpoint describes Firecrawl use cases without performing "
+                  "live crawling, search, browser launch, AI extraction, or provider calls."
+              ),
+              "examples": [
+                  {
+                      "operation": "scrape",
+                      "sample_input": {"url": "https://docs.firecrawl.dev"},
+                      "would_return": ["markdown", "html", "metadata", "links"],
+                      "performed_by_demo": False,
+                  },
+                  {
+                      "operation": "crawl",
+                      "sample_input": {"url": "https://firecrawl.dev", "limit": 3},
+                      "would_return": ["page documents", "crawl status", "crawl id"],
+                      "performed_by_demo": False,
+                  },
+                  {
+                      "operation": "search",
+                      "sample_input": {"query": "confidential computing web scraping"},
+                      "would_return": ["ranked web results", "optional page content"],
+                      "performed_by_demo": False,
+                  },
+                  {
+                      "operation": "extract",
+                      "sample_input": {
+                          "url": "https://example.com",
+                          "schema": {"title": "string", "summary": "string"},
+                      },
+                      "would_return": ["structured JSON"],
+                      "performed_by_demo": False,
+                  },
+              ],
+              "what_this_demo_proves": [
+                  "The Phala template container starts on a small CPU-only runtime.",
+                  "The HTTP smoke endpoints are reachable without secrets.",
+                  "Pinned public Firecrawl source files can be verified by SHA256 and size through /upstream.",
+                  "The full Firecrawl production crawler stack is intentionally not started by default.",
+              ],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "firecrawl-source-verifier/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              parsed = urllib.parse.urlparse(self.path)
+              path = parsed.path.rstrip("/") or "/"
+              params = urllib.parse.parse_qs(parsed.query)
+
+              if path == "/":
+                  payload = base_payload()
+                  payload.update(
+                      {
+                          "ok": True,
+                          "status": "ok",
+                          "endpoints": ["/healthz", "/demo", "/v1/models", "/upstream"],
+                      }
+                  )
+                  self.respond_json(200, payload)
+                  return
+
+              if path == "/healthz":
+                  summary = verification_summary()
+                  payload = base_payload()
+                  payload.update(
+                      {
+                          "ok": True,
+                          "status": "ok",
+                          "firecrawl": {
+                              "upstream_repository": UPSTREAM_REPO,
+                              "upstream_commit": UPSTREAM_COMMIT,
+                              "upstream_verification_status": summary["status"],
+                          },
+                          "upstream_verification": summary,
+                          "endpoints": ["/healthz", "/demo", "/v1/models", "/upstream"],
+                      }
+                  )
+                  self.respond_json(200, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  payload["demo"] = demo_payload()
+                  self.respond_json(200, payload)
+                  return
+
+              if path == "/v1/models":
+                  payload = {
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "firecrawl-source-verifier-demo",
+                              "object": "model",
+                              "created": 0,
+                              "owned_by": "firecrawl",
+                              "description": (
+                                  "OpenAI-compatible smoke-test shape for the CPU-safe "
+                                  "Firecrawl source verifier. This is not an inference model."
+                              ),
+                          }
+                      ],
+                  }
+                  self.respond_json(200, payload)
+                  return
+
+              if path == "/upstream":
+                  refresh = params.get("refresh", ["false"])[0].lower() in ("1", "true", "yes")
+                  payload = base_payload()
+                  payload.update(
+                      {
+                          "ok": True,
+                          "status": "ok",
+                          "verification": get_verification(refresh=refresh),
+                      }
+                  )
+                  self.respond_json(200, payload)
+                  return
+
+              self.respond_json(
+                  404,
+                  {
+                      "ok": False,
+                      "status": "not_found",
+                      "error": "unknown endpoint",
+                      "endpoints": ["/healthz", "/demo", "/v1/models", "/upstream"],
+                  },
+              )
+
+
+      if bool_env("FIRECRAWL_VERIFY_ON_STARTUP", True):
+          get_verification(refresh=True)
+      else:
+          VERIFICATION_CACHE = empty_verification("not_run")
+
+      port = int(os.environ.get("PORT", "8080"))
+      server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+      print(f"firecrawl source verifier listening on port {port}", flush=True)
+      server.serve_forever()

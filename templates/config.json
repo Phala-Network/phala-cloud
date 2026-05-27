@@ -3549,5 +3549,33 @@
       "diskSize": 10
     },
     "tags": ["Web Data & Search", "AI Agents", "Developer Tools"]
+  },
+{
+    "id": "firecrawl",
+    "name": "firecrawl/firecrawl",
+    "description": "CPU-safe verifier/demo for Firecrawl that verifies selected pinned upstream source files and exposes HTTP smoke endpoints without starting the full production crawler stack or requiring provider credentials.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/firecrawl",
+    "author": "firecrawl",
+    "icon": "firecrawl.png",
+    "envs": [
+      {
+        "key": "FIRECRAWL_UPSTREAM_TIMEOUT_SECONDS",
+        "required": false,
+        "default": "5",
+        "description": "Per-file timeout in seconds for pinned public upstream file verification."
+      },
+      {
+        "key": "FIRECRAWL_VERIFY_ON_STARTUP",
+        "required": false,
+        "default": "true",
+        "description": "Verify pinned upstream Firecrawl public files once before the HTTP server starts."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["Web Data & Search", "AI Agents", "Developer Tools"]
   }
 ]
