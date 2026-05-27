@@ -3451,5 +3451,59 @@
       "diskSize": 10
     },
     "tags": ["LLM Inference & Model Serving", "Developer Tools", "TEE & Privacy"]
+  },
+{
+    "id": "goose",
+    "name": "Block Goose",
+    "description": "A CPU-safe HTTP verifier for Goose, the open source AI agent founded by Block and now stewarded by AAIF. This template installs the real upstream Goose CLI, validates a local Goose recipe, and exposes health/demo endpoints without provider credentials, hosted model calls, GPU, or model downloads.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/goose",
+    "author": "aaif-goose",
+    "icon": "goose.svg",
+    "envs": [
+      {
+        "key": "GOOSE_VERSION",
+        "required": false,
+        "default": "1.35.0",
+        "description": "Pinned Goose CLI release installed by the official upstream installer."
+      },
+      {
+        "key": "GOOSE_PROVIDER",
+        "required": false,
+        "description": "Optional Goose provider name for manual production sessions. Not used by the default smoke endpoints."
+      },
+      {
+        "key": "GOOSE_MODEL",
+        "required": false,
+        "description": "Optional Goose model name for manual production sessions. Not used by the default smoke endpoints."
+      },
+      {
+        "key": "OPENAI_API_KEY",
+        "required": false,
+        "description": "Optional OpenAI API key for manual Goose sessions. Leave empty for the credential-free smoke demo."
+      },
+      {
+        "key": "ANTHROPIC_API_KEY",
+        "required": false,
+        "description": "Optional Anthropic API key for manual Goose sessions. Leave empty for the credential-free smoke demo."
+      },
+      {
+        "key": "GOOSE_TELEMETRY_ENABLED",
+        "required": false,
+        "default": "false",
+        "description": "Keeps Goose telemetry disabled by default in the demo container."
+      },
+      {
+        "key": "GOOSE_DISABLE_KEYRING",
+        "required": false,
+        "default": "1",
+        "description": "Forces file-based configuration behavior suitable for headless containers."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools"]
   }
 ]
