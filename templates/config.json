@@ -3720,5 +3720,33 @@
       "diskSize": 30
     },
     "tags": ["LLM Inference & Model Serving", "Developer Tools", "AI Agents"]
+  },
+{
+    "id": "peft",
+    "name": "huggingface/peft",
+    "description": "Hugging Face PEFT package verifier for parameter-efficient fine-tuning. This CPU-safe demo installs and imports the real PEFT package, checks safe LoRA symbols/configs, and avoids fine-tuning, model downloads, GPU/CUDA, and provider credentials by default.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/peft",
+    "author": "huggingface",
+    "icon": "peft.png",
+    "envs": [
+      {
+        "key": "PEFT_PACKAGE_VERSION",
+        "required": false,
+        "default": "0.19.1",
+        "description": "Pinned Hugging Face PEFT Python package version installed by the demo service at container startup."
+      },
+      {
+        "key": "TORCH_CPU_VERSION",
+        "required": false,
+        "default": "2.7.1+cpu",
+        "description": "CPU-only PyTorch wheel version installed from the official PyTorch CPU wheel index before PEFT."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["LLM Inference & Model Serving", "Developer Tools", "AI Agents"]
   }
 ]
