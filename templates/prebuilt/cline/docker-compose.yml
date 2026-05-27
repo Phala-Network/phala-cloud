@@ -1,0 +1,339 @@
+services:
+  app:
+    image: node:22-bookworm-slim
+    restart: unless-stopped
+    init: true
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: ${PORT:-3000}
+      CLINE_PACKAGE_VERSION: ${CLINE_PACKAGE_VERSION:-3.0.13}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      NODE_ENV: production
+      HOME: /tmp/cline-home
+      XDG_CONFIG_HOME: /tmp/cline-config
+      CI: "true"
+      NO_COLOR: "1"
+      NPM_CONFIG_UPDATE_NOTIFIER: "false"
+    configs:
+      - source: cline_demo_app
+        target: /opt/cline-demo/server.mjs
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        mkdir -p "$$HOME" "$$XDG_CONFIG_HOME" /tmp/cline-workspace
+        npm install --global --omit=dev --no-audit --no-fund "cline@$${CLINE_PACKAGE_VERSION}"
+        exec node /opt/cline-demo/server.mjs
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:' + (process.env.PORT || '3000') + '/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+configs:
+  cline_demo_app:
+    content: |
+      import { execFileSync, spawnSync } from "node:child_process";
+      import fs from "node:fs";
+      import http from "node:http";
+      import os from "node:os";
+      import path from "node:path";
+      import { pathToFileURL } from "node:url";
+
+      const startedAt = Date.now();
+      const port = Number.parseInt(process.env.PORT || "3000", 10);
+      const packageName = "cline";
+      const sdkPackageName = "@cline/sdk";
+      const requestedVersion = process.env.CLINE_PACKAGE_VERSION || "3.0.13";
+      const upstreamRepo = "https://github.com/cline/cline";
+
+      function cleanText(value) {
+        return String(value || "")
+          .replace(/\u001b\[[0-9;]*m/g, "")
+          .trim()
+          .slice(0, 4000);
+      }
+
+      function publicEnvState() {
+        return {
+          anthropic_api_key_configured: Boolean(process.env.ANTHROPIC_API_KEY),
+          openai_api_key_configured: Boolean(process.env.OPENAI_API_KEY),
+          openai_base_url_configured: Boolean(process.env.OPENAI_BASE_URL),
+        };
+      }
+
+      function commandEnv() {
+        return {
+          PATH: process.env.PATH || "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          HOME: process.env.HOME || "/tmp/cline-home",
+          XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME || "/tmp/cline-config",
+          CI: "true",
+          NO_COLOR: "1",
+          TERM: "dumb",
+        };
+      }
+
+      function runCommand(command, args, timeoutMs) {
+        const started = Date.now();
+        const result = spawnSync(command, args, {
+          encoding: "utf8",
+          env: commandEnv(),
+          timeout: timeoutMs,
+        });
+        const timedOut = Boolean(result.error && result.error.code === "ETIMEDOUT");
+        return {
+          ok: !timedOut && result.status === 0,
+          command: [command].concat(args).join(" "),
+          exit_code: timedOut ? 124 : result.status,
+          stdout: cleanText(result.stdout),
+          stderr: cleanText(result.stderr),
+          timed_out: timedOut,
+          error: result.error ? result.error.message : null,
+          duration_ms: Date.now() - started,
+        };
+      }
+
+      function globalPackageRoot() {
+        return cleanText(execFileSync("npm", ["root", "-g"], {
+          encoding: "utf8",
+          timeout: 10000,
+        }));
+      }
+
+      function readPackageMetadata() {
+        try {
+          const packageRoot = path.join(globalPackageRoot(), packageName);
+          const packageJsonPath = path.join(packageRoot, "package.json");
+          const data = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+          const repositoryUrl = data.repository && data.repository.url ? data.repository.url : "";
+          return {
+            ok: data.name === packageName && repositoryUrl.includes("github.com/cline/cline"),
+            package_root: packageRoot,
+            package_json_path: packageJsonPath,
+            name: data.name,
+            version: data.version,
+            description: data.description,
+            license: data.license,
+            repository: data.repository,
+            bin: data.bin,
+            dependencies: {
+              cline_sdk: data.dependencies && data.dependencies[sdkPackageName] ? data.dependencies[sdkPackageName] : null,
+              cline_core: data.dependencies && data.dependencies["@cline/core"] ? data.dependencies["@cline/core"] : null,
+              cline_agents: data.dependencies && data.dependencies["@cline/agents"] ? data.dependencies["@cline/agents"] : null,
+            },
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            error: error.name + ": " + error.message,
+          };
+        }
+      }
+
+      async function importSdk(packageRoot) {
+        try {
+          const sdkPath = path.join(packageRoot, "node_modules", "@cline", "sdk", "dist", "index.js");
+          const module = await import(pathToFileURL(sdkPath).href);
+          return {
+            ok: true,
+            package: sdkPackageName,
+            entrypoint: sdkPath,
+            exported_symbols_sample: Object.keys(module).sort().slice(0, 12),
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            package: sdkPackageName,
+            error: error.name + ": " + error.message,
+          };
+        }
+      }
+
+      function inspectCliVersion() {
+        const result = runCommand("cline", ["--version"], 15000);
+        return {
+          ok: result.ok && result.stdout.length > 0,
+          version: result.stdout,
+          check: result,
+        };
+      }
+
+      async function inspectCline() {
+        const metadata = readPackageMetadata();
+        const importCheck = metadata.ok
+          ? await importSdk(metadata.package_root)
+          : { ok: false, package: sdkPackageName, error: "package metadata is unavailable" };
+        const cliVersion = inspectCliVersion();
+        const versionMatchesPackage = metadata.ok && cliVersion.ok && cliVersion.version === metadata.version;
+        return {
+          ok: metadata.ok && importCheck.ok && cliVersion.ok,
+          package: metadata,
+          import: importCheck,
+          cli: {
+            ok: cliVersion.ok,
+            version_ready: cliVersion.ok,
+            version: cliVersion.version,
+            version_matches_package: versionMatchesPackage,
+            check: cliVersion.check,
+          },
+        };
+      }
+
+      const startupChecksPromise = inspectCline();
+
+      function basePayload(checks) {
+        return {
+          ok: checks.ok,
+          service: "cline-cli-verifier",
+          upstream: upstreamRepo,
+          node: process.version,
+          platform: os.platform() + "/" + os.arch(),
+          uptime_seconds: Math.round((Date.now() - startedAt) / 100) / 10,
+          cpu_only: true,
+          credentials_required_for_health: false,
+          provider_network_calls_performed: false,
+          browser_auth_started: false,
+          model_downloaded: false,
+          configured_provider_env: publicEnvState(),
+          readiness: {
+            package_metadata_ready: checks.package.ok,
+            import_ready: checks.import.ok,
+            cli_ready: checks.cli.ok,
+            version_ready: checks.cli.version_ready,
+          },
+          cline: checks,
+        };
+      }
+
+      function writeJson(response, status, payload) {
+        const body = Buffer.from(JSON.stringify(payload, null, 2) + "\n", "utf8");
+        response.writeHead(status, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Content-Length": String(body.length),
+          "Cache-Control": "no-store",
+        });
+        response.end(body);
+      }
+
+      async function responseFor(pathName) {
+        if (pathName === "/healthz") {
+          const checks = await startupChecksPromise;
+          const payload = basePayload(checks);
+          payload.status = checks.ok ? "ok" : "unhealthy";
+          return { status: checks.ok ? 200 : 503, body: payload };
+        }
+
+        if (pathName === "/demo") {
+          const checks = await inspectCline();
+          const payload = basePayload(checks);
+          payload.demo = {
+            name: "Cline CLI local verifier",
+            mode: "safe deterministic package and CLI smoke test",
+            what_ran: [
+              "Read package metadata from the installed npm cline package.",
+              "Imported the installed @cline/sdk module entrypoint.",
+              "Executed cline --version with provider credentials omitted from the command environment.",
+            ],
+            upstream_package_facts: {
+              npm_package: packageName,
+              requested_version: requestedVersion,
+              installed_version: checks.package.version || null,
+              repository: checks.package.repository || null,
+              license: checks.package.license || null,
+              cli_version: checks.cli.version || null,
+            },
+            credentials_required: false,
+            provider_network_calls_performed: false,
+            model_downloaded: false,
+          };
+          return { status: checks.ok ? 200 : 503, body: payload };
+        }
+
+        if (pathName === "/v1/models") {
+          const checks = await startupChecksPromise;
+          return {
+            status: 200,
+            body: {
+              object: "list",
+              data: [
+                {
+                  id: "cline-cli/local-verifier",
+                  object: "model",
+                  created: 0,
+                  owned_by: "cline-template",
+                  description: "OpenAI-style metadata entry for the local Cline CLI verifier. No LLM is hosted and no provider API is called.",
+                },
+              ],
+              package_version: checks.package.version || null,
+              cli_version: checks.cli.version || null,
+              remote_model_calls: false,
+            },
+          };
+        }
+
+        if (pathName === "/") {
+          const checks = await startupChecksPromise;
+          return {
+            status: 200,
+            body: {
+              service: "cline-cli-verifier",
+              endpoints: ["/healthz", "/demo", "/v1/models"],
+              status: checks.ok ? "ok" : "unhealthy",
+            },
+          };
+        }
+
+        return {
+          status: 404,
+          body: {
+            error: "not_found",
+            endpoints: ["/healthz", "/demo", "/v1/models"],
+          },
+        };
+      }
+
+      const server = http.createServer(async (request, response) => {
+        if (request.method !== "GET") {
+          writeJson(response, 405, { error: "method_not_allowed" });
+          return;
+        }
+
+        const requestUrl = new URL(request.url, "http://127.0.0.1");
+        const pathName = requestUrl.pathname.replace(/\/+$/, "") || "/";
+
+        try {
+          const result = await responseFor(pathName);
+          writeJson(response, result.status, result.body);
+        } catch (error) {
+          writeJson(response, 500, {
+            error: "internal_error",
+            message: error.name + ": " + error.message,
+          });
+        }
+      });
+
+      server.listen(port, "0.0.0.0", async () => {
+        const checks = await startupChecksPromise;
+        console.log(JSON.stringify({
+          event: "startup",
+          service: "cline-cli-verifier",
+          port,
+          ok: checks.ok,
+          readiness: {
+            package_metadata_ready: checks.package.ok,
+            import_ready: checks.import.ok,
+            cli_ready: checks.cli.ok,
+            version_ready: checks.cli.version_ready,
+          },
+          provider_credentials_required_for_health: false,
+        }));
+      });
