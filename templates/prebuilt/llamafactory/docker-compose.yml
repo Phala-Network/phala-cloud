@@ -1,0 +1,321 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      LLAMAFACTORY_REF: ${LLAMAFACTORY_REF:-v0.9.4}
+      PYTHONUNBUFFERED: "1"
+    command:
+      - python
+      - /opt/llamafactory-demo/server.py
+    configs:
+      - source: llamafactory_demo_server
+        target: /opt/llamafactory-demo/server.py
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5).read()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+configs:
+  llamafactory_demo_server:
+    content: |
+      import hashlib
+      import json
+      import os
+      import platform
+      import re
+      import sys
+      import time
+      import urllib.parse
+      import urllib.request
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+      STARTED_AT = time.time()
+      UPSTREAM = "https://github.com/hiyouga/LlamaFactory"
+      RAW_BASE = "https://raw.githubusercontent.com/hiyouga/LLaMA-Factory"
+      DEFAULT_REF = "v0.9.4"
+      MAX_SOURCE_BYTES = 2 * 1024 * 1024
+
+      REQUIRED_SOURCES = [
+          ("README.md", "project README, requirements, Docker, Web UI, and API docs"),
+          ("pyproject.toml", "Python package metadata and console entry points"),
+          ("src/llamafactory/__init__.py", "Python package root"),
+          ("src/llamafactory/cli.py", "llamafactory-cli entry point"),
+          ("src/llamafactory/launcher.py", "CLI command dispatcher for train, api, chat, webui, and export"),
+          ("src/llamafactory/train/tuner.py", "training workflow entry points"),
+          ("src/llamafactory/api/app.py", "OpenAI-style FastAPI server source"),
+          ("src/llamafactory/api/protocol.py", "OpenAI-style API protocol models"),
+          ("src/llamafactory/extras/env.py", "package version and runtime environment metadata"),
+          ("docker/docker-cuda/README.md", "official Docker GPU runtime notes"),
+          ("docker/docker-cuda/docker-compose.yml", "official Docker Compose GPU runtime shape"),
+          ("examples/inference/qwen3.yaml", "upstream inference example config"),
+          ("examples/train_lora/qwen3_lora_sft.yaml", "upstream LoRA fine-tuning example config"),
+      ]
+
+      PYTHON_SOURCES = {
+          "src/llamafactory/__init__.py",
+          "src/llamafactory/cli.py",
+          "src/llamafactory/launcher.py",
+          "src/llamafactory/train/tuner.py",
+          "src/llamafactory/api/app.py",
+          "src/llamafactory/api/protocol.py",
+          "src/llamafactory/extras/env.py",
+      }
+
+
+      def read_env(name, default):
+          value = os.environ.get(name, "").strip()
+          return value or default
+
+
+      def source_url(ref, path):
+          encoded_ref = urllib.parse.quote(ref, safe="")
+          encoded_path = urllib.parse.quote(path, safe="/")
+          return f"{RAW_BASE}/{encoded_ref}/{encoded_path}"
+
+
+      def fetch_source(ref, path):
+          url = source_url(ref, path)
+          request = urllib.request.Request(url, headers={"User-Agent": "phala-cloud-llamafactory-template/1.0"})
+          with urllib.request.urlopen(request, timeout=30) as response:
+              data = response.read(MAX_SOURCE_BYTES + 1)
+          if len(data) > MAX_SOURCE_BYTES:
+              raise RuntimeError(f"{path} is larger than {MAX_SOURCE_BYTES} bytes")
+          text = data.decode("utf-8", errors="replace")
+          return {
+              "path": path,
+              "url": url,
+              "bytes": len(data),
+              "sha256": hashlib.sha256(data).hexdigest(),
+              "text": text,
+          }
+
+
+      def contains_all(text, markers):
+          return all(marker in text for marker in markers)
+
+
+      def parse_version(env_py):
+          match = re.search(r"VERSION\s*=\s*[\"']([^\"']+)[\"']", env_py)
+          return match.group(1) if match else None
+
+
+      def build_check():
+          ref = read_env("LLAMAFACTORY_REF", DEFAULT_REF)
+          files = []
+          sources = {}
+          errors = []
+
+          for path, purpose in REQUIRED_SOURCES:
+              try:
+                  source = fetch_source(ref, path)
+                  sources[path] = source
+                  files.append(
+                      {
+                          "path": path,
+                          "purpose": purpose,
+                          "url": source["url"],
+                          "bytes": source["bytes"],
+                          "sha256": source["sha256"],
+                          "present": True,
+                      }
+                  )
+              except Exception as exc:
+                  errors.append({"path": path, "purpose": purpose, "error": f"{type(exc).__name__}: {exc}"})
+
+          compiled = []
+          for path in sorted(PYTHON_SOURCES):
+              source = sources.get(path)
+              if not source:
+                  continue
+              try:
+                  compile(source["text"], path, "exec")
+                  compiled.append(path)
+              except Exception as exc:
+                  errors.append({"path": path, "check": "python_compile", "error": f"{type(exc).__name__}: {exc}"})
+
+          readme = sources.get("README.md", {}).get("text", "")
+          pyproject = sources.get("pyproject.toml", {}).get("text", "")
+          cli_py = sources.get("src/llamafactory/cli.py", {}).get("text", "")
+          launcher_py = sources.get("src/llamafactory/launcher.py", {}).get("text", "")
+          api_app = sources.get("src/llamafactory/api/app.py", {}).get("text", "")
+          api_protocol = sources.get("src/llamafactory/api/protocol.py", {}).get("text", "")
+          env_py = sources.get("src/llamafactory/extras/env.py", {}).get("text", "")
+          docker_readme = sources.get("docker/docker-cuda/README.md", {}).get("text", "")
+          docker_compose = sources.get("docker/docker-cuda/docker-compose.yml", {}).get("text", "")
+          train_example = sources.get("examples/train_lora/qwen3_lora_sft.yaml", {}).get("text", "")
+          inference_example = sources.get("examples/inference/qwen3.yaml", {}).get("text", "")
+
+          content_checks = {
+              "readme_logo_present": "assets/logo.png" in readme,
+              "readme_describes_llamafactory": "Unified Efficient Fine-Tuning" in readme,
+              "readme_has_hardware_requirements": "Hardware Requirement" in readme and "QLoRA" in readme,
+              "readme_has_webui_command": "llamafactory-cli webui" in readme,
+              "readme_has_openai_api_command": "llamafactory-cli api" in readme and "OpenAI-style API" in readme,
+              "pyproject_package_name": 'name = "llamafactory"' in pyproject,
+              "pyproject_cli_entrypoint": 'llamafactory-cli = "llamafactory.cli:main"' in pyproject,
+              "cli_launches_dispatcher": "launcher.launch()" in cli_py,
+              "launcher_commands_present": contains_all(
+                  launcher_py,
+                  ['command == "train"', 'command == "api"', 'command == "webui"', 'command == "export"'],
+              ),
+              "api_models_endpoint_present": '"/v1/models"' in api_app and "FastAPI" in api_app,
+              "api_protocol_models_present": "ModelList" in api_protocol and "ChatCompletionRequest" in api_protocol,
+              "official_docker_gpu_oriented": "NVIDIA GPU support" in docker_readme and "--gpus=all" in readme,
+              "official_compose_uses_gpu_and_host_ipc": "capabilities: [ gpu ]" in docker_compose and "ipc: host" in docker_compose,
+              "train_example_references_model_and_dataset": contains_all(train_example, ["model_name_or_path", "dataset", "output_dir"]),
+              "inference_example_references_model": "model_name_or_path" in inference_example,
+          }
+
+          for name, ok in content_checks.items():
+              if not ok:
+                  errors.append({"check": name, "error": "Expected upstream source marker was not found"})
+
+          version = parse_version(env_py)
+          if not version:
+              errors.append({"path": "src/llamafactory/extras/env.py", "error": "Could not parse VERSION"})
+
+          return {
+              "ok": not errors,
+              "ref": ref,
+              "version": version,
+              "upstream": UPSTREAM,
+              "raw_base": RAW_BASE,
+              "files": files,
+              "compiled_python_sources": compiled,
+              "content_checks": content_checks,
+              "errors": errors,
+          }
+
+
+      SOURCE_CHECK = build_check()
+
+
+      def base_payload():
+          return {
+              "service": "llamafactory-source-verifier",
+              "display_name": "hiyouga/LlamaFactory",
+              "upstream": UPSTREAM,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "source_check": SOURCE_CHECK,
+          }
+
+
+      def runtime_flags():
+          return {
+              "cpu_only": True,
+              "credentials_required": False,
+              "model_downloaded": False,
+              "model_loaded": False,
+              "training_started": False,
+              "inference_started": False,
+              "web_ui_started": False,
+              "provider_calls": False,
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "llamafactory-source-verifier/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              path = urllib.parse.urlparse(self.path).path.rstrip("/") or "/"
+              status = HTTPStatus.OK if SOURCE_CHECK["ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  payload.update(runtime_flags())
+                  payload.update({"ok": SOURCE_CHECK["ok"], "status": "ready" if SOURCE_CHECK["ok"] else "source_check_failed"})
+                  self.respond_json(status, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  payload.update(runtime_flags())
+                  payload.update(
+                      {
+                          "ok": SOURCE_CHECK["ok"],
+                          "check": (
+                              "Fetch release-tagged LlamaFactory source files, compile selected Python modules, "
+                              "verify package metadata, CLI, Web UI, OpenAI-style API, Docker GPU/runtime facts, "
+                              "and example training/inference configs."
+                          ),
+                          "message": (
+                              "This Phala Cloud template is an honest CPU-safe verifier. It does not install the full "
+                              "LlamaFactory stack, start LLaMA Board, train, serve inference, download model weights, "
+                              "or call Hugging Face, W&B, SwanLab, ModelScope, or other providers."
+                          ),
+                          "official_runtime_notes": {
+                              "docker_image": "hiyouga/llamafactory:latest",
+                              "upstream_docker_is_cuda_oriented": True,
+                              "upstream_docs_use_gpus_all": True,
+                              "upstream_compose_uses_host_ipc": True,
+                              "phala_default_avoids_gpu_and_host_ipc": True,
+                          },
+                      }
+                  )
+                  self.respond_json(status, payload)
+                  return
+
+              if path == "/v1/models":
+                  payload = {
+                      "object": "list",
+                      "data": [],
+                      "demo": "No LlamaFactory OpenAI-style API server or model worker is running in this CPU-safe verifier.",
+                      "source_ok": SOURCE_CHECK["ok"],
+                      "source_ref": SOURCE_CHECK["ref"],
+                      "llamafactory_version": SOURCE_CHECK["version"],
+                      "model_downloaded": False,
+                      "model_loaded": False,
+                      "inference_started": False,
+                  }
+                  if SOURCE_CHECK["errors"]:
+                      payload["errors"] = SOURCE_CHECK["errors"]
+                  self.respond_json(status, payload)
+                  return
+
+              self.respond_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not_found", "endpoints": ["/healthz", "/demo", "/v1/models"]})
+
+
+      if __name__ == "__main__":
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "service": "llamafactory-source-verifier",
+                      "source_ref": SOURCE_CHECK["ref"],
+                      "source_ok": SOURCE_CHECK["ok"],
+                      "version": SOURCE_CHECK["version"],
+                      "port": 8080,
+                  },
+                  sort_keys=True,
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
