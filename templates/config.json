@@ -3401,5 +3401,33 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools", "Automation"]
+  },
+{
+    "id": "continue",
+    "name": "continuedev/continue",
+    "description": "Open-source AI code assistant for VS Code and JetBrains. This CPU-safe HTTP verifier installs the real @continuedev/cli npm package and checks local CLI execution without IDEs, provider credentials, model downloads, or hosted model calls.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/continue",
+    "author": "continuedev",
+    "icon": "continue.png",
+    "envs": [
+      {
+        "key": "CONTINUE_CLI_VERSION",
+        "required": false,
+        "default": "1.5.45",
+        "description": "Published @continuedev/cli npm package version installed by the verifier at container startup."
+      },
+      {
+        "key": "PORT",
+        "required": false,
+        "default": "3000",
+        "description": "HTTP port used inside the container."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools"]
   }
 ]

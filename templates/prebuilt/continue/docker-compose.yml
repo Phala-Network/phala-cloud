@@ -1,0 +1,238 @@
+services:
+  app:
+    image: node:22-bookworm-slim
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${PORT:-3000}:${PORT:-3000}"
+    environment:
+      PORT: ${PORT:-3000}
+      CONTINUE_CLI_VERSION: ${CONTINUE_CLI_VERSION:-1.5.45}
+      NODE_ENV: production
+      NPM_CONFIG_UPDATE_NOTIFIER: "false"
+      NPM_CONFIG_FUND: "false"
+    configs:
+      - source: continue_demo_app
+        target: /opt/continue-demo/server.js
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        npm install --global --no-audit --no-fund "@continuedev/cli@$${CONTINUE_CLI_VERSION}"
+        exec node /opt/continue-demo/server.js
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:' + (process.env.PORT || '3000') + '/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+configs:
+  continue_demo_app:
+    content: |
+      const http = require("node:http");
+      const os = require("node:os");
+      const { execFile } = require("node:child_process");
+      const { promisify } = require("node:util");
+
+      const execFileAsync = promisify(execFile);
+      const startedAt = Date.now();
+      const port = Number.parseInt(process.env.PORT || "3000", 10);
+      const packageName = "@continuedev/cli";
+      const packageVersion = process.env.CONTINUE_CLI_VERSION || "1.5.45";
+      const cliName = "cn";
+
+      async function runCommand(command, args, timeoutMs) {
+        const started = Date.now();
+        try {
+          const { stdout, stderr } = await execFileAsync(command, args, {
+            timeout: timeoutMs,
+            maxBuffer: 1024 * 1024,
+            env: process.env,
+          });
+          return {
+            ok: true,
+            command: [command].concat(args).join(" "),
+            stdout: stdout.trim(),
+            stderr: stderr.trim(),
+            duration_ms: Date.now() - started,
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            command: [command].concat(args).join(" "),
+            stdout: (error.stdout || "").trim(),
+            stderr: (error.stderr || "").trim(),
+            code: error.code || null,
+            signal: error.signal || null,
+            message: error.message,
+            duration_ms: Date.now() - started,
+          };
+        }
+      }
+
+      async function packageCheck() {
+        const result = await runCommand("npm", ["list", "-g", "--depth=0", packageName, "--json"], 10000);
+        let installedVersion = null;
+        if (result.stdout) {
+          try {
+            const parsed = JSON.parse(result.stdout);
+            installedVersion = parsed.dependencies && parsed.dependencies[packageName]
+              ? parsed.dependencies[packageName].version
+              : null;
+          } catch (error) {
+            result.parse_error = error.message;
+          }
+        }
+        return {
+          package: packageName,
+          requested_version: packageVersion,
+          installed_version: installedVersion,
+          present: Boolean(installedVersion),
+          npm_check_ok: result.ok,
+          error: result.ok ? null : result.message,
+        };
+      }
+
+      async function cliVersionCheck() {
+        const result = await runCommand(cliName, ["--version"], 10000);
+        return {
+          cli: cliName,
+          present: result.ok,
+          version_output: result.stdout || result.stderr,
+          command: result.command,
+          stderr: result.stderr,
+          error: result.ok ? null : result.message,
+          exit_code: result.code,
+        };
+      }
+
+      async function startupChecks() {
+        const [pkg, cli] = await Promise.all([packageCheck(), cliVersionCheck()]);
+        return {
+          ok: pkg.present && cli.present,
+          package: pkg,
+          cli,
+        };
+      }
+
+      const startupChecksPromise = startupChecks();
+
+      function writeJson(res, status, payload) {
+        const body = Buffer.from(JSON.stringify(payload, null, 2) + "\n", "utf8");
+        res.writeHead(status, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Content-Length": body.length,
+        });
+        res.end(body);
+      }
+
+      async function responseFor(path) {
+        const uptimeSeconds = Math.round((Date.now() - startedAt) / 100) / 10;
+
+        if (path === "/healthz") {
+          const checks = await startupChecksPromise;
+          return {
+            status: checks.ok ? 200 : 503,
+            body: {
+              status: checks.ok ? "ok" : "unhealthy",
+              service: "continue-cli-demo",
+              uptime_seconds: uptimeSeconds,
+              continue_cli_present: checks.cli.present,
+              continue_package_present: checks.package.present,
+              ide_required_for_health: false,
+              provider_credentials_required_for_health: false,
+              provider_network_calls_performed: false,
+              gpu_required: false,
+              continue: checks,
+            },
+          };
+        }
+
+        if (path === "/demo") {
+          const version = await cliVersionCheck();
+          return {
+            status: version.present ? 200 : 503,
+            body: {
+              name: "Continue CLI local verifier",
+              description: "Runs a deterministic local `cn --version` check against the installed @continuedev/cli package.",
+              package: packageName,
+              requested_version: packageVersion,
+              credentials_required: false,
+              provider_network_calls_performed: false,
+              ide_required: false,
+              command: version.command,
+              continue_cli_present: version.present,
+              version_output: version.version_output,
+              stderr: version.stderr,
+              error: version.error,
+            },
+          };
+        }
+
+        if (path === "/v1/models") {
+          return {
+            status: 200,
+            body: {
+              object: "list",
+              data: [
+                {
+                  id: "continue-cli/local-verifier",
+                  object: "model",
+                  created: 0,
+                  owned_by: "continuedev",
+                  description: "Metadata-only OpenAI-compatible response for the local Continue CLI verifier. No model is hosted and no provider API is called.",
+                },
+              ],
+            },
+          };
+        }
+
+        if (path === "/") {
+          return {
+            status: 200,
+            body: {
+              service: "continue-cli-demo",
+              endpoints: ["/healthz", "/demo", "/v1/models"],
+              node: process.version,
+              platform: os.platform() + "/" + os.arch(),
+            },
+          };
+        }
+
+        return {
+          status: 404,
+          body: {
+            error: "not_found",
+            endpoints: ["/healthz", "/demo", "/v1/models"],
+          },
+        };
+      }
+
+      const server = http.createServer(async (req, res) => {
+        if (req.method !== "GET") {
+          writeJson(res, 405, { error: "method_not_allowed" });
+          return;
+        }
+
+        try {
+          const url = new URL(req.url, "http://127.0.0.1");
+          const response = await responseFor(url.pathname);
+          writeJson(res, response.status, response.body);
+        } catch (error) {
+          writeJson(res, 500, {
+            error: "internal_error",
+            message: error.message,
+          });
+        }
+      });
+
+      server.listen(port, "0.0.0.0", () => {
+        console.log("Continue CLI demo listening on port " + port);
+      });
