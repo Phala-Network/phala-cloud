@@ -3505,5 +3505,27 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools"]
+  },
+{
+    "id": "browser-use",
+    "name": "browser-use/browser-use",
+    "description": "Browser automation and web-agent framework. This CPU-safe verifier installs and imports the real browser-use package and serves deterministic local JSON endpoints without LLM keys, browser credentials, browser launch, model downloads, or GPU access.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/browser-use",
+    "author": "browser-use",
+    "icon": "browser-use.png",
+    "envs": [
+      {
+        "key": "BROWSER_USE_VERSION",
+        "required": false,
+        "description": "Browser Use Python package version installed by the verifier service.",
+        "default": "0.12.9"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Automation", "Web Data & Search"]
   }
 ]
