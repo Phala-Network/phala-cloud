@@ -1,0 +1,336 @@
+services:
+  app:
+    image: python:3.13-slim-bookworm
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      UNSLOTH_VERSION: ${UNSLOTH_VERSION:-2026.5.8}
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+      PIP_ROOT_USER_ACTION: ignore
+      PYTHONUNBUFFERED: "1"
+    configs:
+      - source: unsloth_demo_server
+        target: /opt/unsloth-demo/server.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        python -m pip install --no-cache-dir --no-deps "unsloth==$${UNSLOTH_VERSION}"
+        exec python /opt/unsloth-demo/server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 8
+      start_period: 240s
+
+configs:
+  unsloth_demo_server:
+    content: |
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import re
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "unsloth"
+      EXPECTED_VERSION = os.environ.get("UNSLOTH_VERSION", "2026.5.8").strip()
+      UPSTREAM_REPOSITORY = "https://github.com/unslothai/unsloth"
+      UPSTREAM_DOCS = "https://unsloth.ai/docs"
+      APP_PORT = 8080
+      REQUIRED_FILES = [
+          "unsloth/__init__.py",
+          "unsloth/models/_utils.py",
+          "unsloth_cli/__init__.py",
+      ]
+      GPU_STACK_TERMS = (
+          "torch",
+          "torchvision",
+          "xformers",
+          "bitsandbytes",
+          "triton",
+          "cuda",
+          "huggingface_hub",
+          "transformers",
+          "peft",
+          "trl",
+          "accelerate",
+      )
+
+
+      def project_urls(metadata):
+          urls = {}
+          for value in metadata.get_all("Project-URL") or []:
+              name, separator, url = value.partition(",")
+              if separator and url.strip():
+                  urls[name.strip().lower()] = url.strip()
+          return urls
+
+
+      def console_scripts():
+          entry_points = importlib.metadata.entry_points()
+          if hasattr(entry_points, "select"):
+              scripts = entry_points.select(group="console_scripts")
+          else:
+              scripts = entry_points.get("console_scripts", [])
+          return {
+              entry_point.name: entry_point.value
+              for entry_point in scripts
+              if entry_point.name == "unsloth" or entry_point.value.startswith("unsloth_cli")
+          }
+
+
+      def source_version(root):
+          version_file = root / "unsloth" / "models" / "_utils.py"
+          try:
+              match = re.search(
+                  r"""__version__\s*=\s*["']([^"']+)["']""",
+                  version_file.read_text(encoding="utf-8"),
+              )
+          except OSError:
+              return None
+          return match.group(1) if match else None
+
+
+      def inspect_distribution():
+          result = {
+              "distribution": PACKAGE_NAME,
+              "expected_version": EXPECTED_VERSION,
+              "installed": False,
+              "version": None,
+              "source_version": None,
+              "summary": None,
+              "license": None,
+              "requires_python": None,
+              "project_urls": {},
+              "requires_dist_count": 0,
+              "gpu_stack_requirement_examples": [],
+              "console_scripts": {},
+              "required_files": {},
+              "installed_files_count": 0,
+              "install_mode": "pip install --no-deps",
+              "import_attempted": False,
+              "import_skipped_reason": (
+                  "The top-level Unsloth import on Linux enters GPU-oriented initialization "
+                  "and expects the full training stack. This CPU-safe template verifies the "
+                  "published wheel metadata and source version without importing Unsloth or "
+                  "starting training."
+              ),
+              "checks": {},
+              "error": None,
+          }
+
+          try:
+              distribution = importlib.metadata.distribution(PACKAGE_NAME)
+          except importlib.metadata.PackageNotFoundError as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+              result["checks"] = {"distribution_installed": False}
+              result["ok"] = False
+              return result
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+              result["checks"] = {"metadata_loaded": False}
+              result["ok"] = False
+              return result
+
+          metadata = distribution.metadata
+          root = Path(distribution.locate_file(""))
+          files = [str(path) for path in (distribution.files or [])]
+          requires_dist = metadata.get_all("Requires-Dist") or []
+          urls = project_urls(metadata)
+          scripts = console_scripts()
+          required_files = {
+              file_name: (root / file_name).is_file()
+              for file_name in REQUIRED_FILES
+          }
+          gpu_requirements = [
+              requirement
+              for requirement in requires_dist
+              if any(term in requirement.lower() for term in GPU_STACK_TERMS)
+          ]
+
+          result.update(
+              {
+                  "installed": True,
+                  "version": distribution.version,
+                  "source_version": source_version(root),
+                  "summary": metadata.get("Summary"),
+                  "license": metadata.get("License-Expression") or metadata.get("License"),
+                  "requires_python": metadata.get("Requires-Python"),
+                  "project_urls": urls,
+                  "requires_dist_count": len(requires_dist),
+                  "gpu_stack_requirement_examples": gpu_requirements[:12],
+                  "console_scripts": scripts,
+                  "required_files": required_files,
+                  "installed_files_count": len(files),
+              }
+          )
+
+          checks = {
+              "distribution_installed": result["installed"],
+              "package_version_matches_env": distribution.version == EXPECTED_VERSION,
+              "source_version_matches_distribution": result["source_version"] == distribution.version,
+              "repository_url_matches_upstream": urls.get("repository") == UPSTREAM_REPOSITORY,
+              "documentation_url_present": urls.get("documentation") == UPSTREAM_DOCS,
+              "console_script_registered": scripts.get("unsloth") == "unsloth_cli:app",
+              "required_files_present": all(required_files.values()),
+              "gpu_stack_detected_in_metadata": len(gpu_requirements) > 0,
+          }
+          result["checks"] = checks
+          result["ok"] = all(checks.values())
+          return result
+
+
+      PACKAGE_STATUS = inspect_distribution()
+
+
+      def base_payload():
+          return {
+              "service": "unsloth-metadata-demo",
+              "upstream_repository": UPSTREAM_REPOSITORY,
+              "upstream_docs": UPSTREAM_DOCS,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "package": PACKAGE_STATUS,
+          }
+
+
+      def json_response(handler, status, payload):
+          body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+          handler.send_response(status)
+          handler.send_header("Content-Type", "application/json; charset=utf-8")
+          handler.send_header("Cache-Control", "no-store")
+          handler.send_header("Content-Length", str(len(body)))
+          handler.end_headers()
+          handler.wfile.write(body)
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "unsloth-metadata-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      },
+                      sort_keys=True,
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+
+              if path in ("/", "/healthz"):
+                  ok = bool(PACKAGE_STATUS.get("ok"))
+                  payload = base_payload()
+                  payload.update(
+                      {
+                          "ok": ok,
+                          "status": "ready" if ok else "metadata_check_failed",
+                          "smoke_test": (
+                              "Installed the pinned published Unsloth wheel with --no-deps, "
+                              "then verified wheel metadata, source version, upstream URLs, "
+                              "console script registration, and required package files."
+                          ),
+                          "cpu_only": True,
+                          "credentials_required": False,
+                          "model_downloaded": False,
+                          "model_loaded": False,
+                          "training_started": False,
+                          "remote_model_calls": False,
+                      }
+                  )
+                  json_response(self, HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE, payload)
+                  return
+
+              if path == "/demo":
+                  ok = bool(PACKAGE_STATUS.get("ok"))
+                  payload = base_payload()
+                  payload.update(
+                      {
+                          "ok": ok,
+                          "demo": {
+                              "result": "metadata_verified" if ok else "metadata_check_failed",
+                              "cpu_only": True,
+                              "install_mode": "pip install --no-deps unsloth==<UNSLOTH_VERSION>",
+                              "package_imported": False,
+                              "training_started": False,
+                              "studio_started": False,
+                              "model_downloaded": False,
+                              "model_loaded": False,
+                              "hugging_face_token_required": False,
+                              "message": (
+                                  "This template proves the pinned published Unsloth package "
+                                  "is present and internally versioned without running GPU "
+                                  "fine-tuning, Unsloth Studio, model downloads, or hosted "
+                                  "provider calls."
+                              ),
+                          },
+                      }
+                  )
+                  json_response(self, HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE, payload)
+                  return
+
+              if path == "/v1/models":
+                  ok = bool(PACKAGE_STATUS.get("ok"))
+                  payload = {
+                      "object": "list",
+                      "data": [],
+                      "demo": {
+                          "metadata_ready": ok,
+                          "message": (
+                              "This CPU-safe Unsloth template does not serve or load models. "
+                              "Use /demo for the package metadata verifier result."
+                          ),
+                          "cpu_only": True,
+                          "model_downloaded": False,
+                          "model_loaded": False,
+                      },
+                  }
+                  json_response(self, HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE, payload)
+                  return
+
+              json_response(
+                  self,
+                  HTTPStatus.NOT_FOUND,
+                  {"ok": False, "error": "not_found", "endpoints": ["/healthz", "/demo", "/v1/models"]},
+              )
+
+
+      print(
+          json.dumps(
+              {
+                  "event": "startup",
+                  "port": APP_PORT,
+                  "package_ok": PACKAGE_STATUS.get("ok"),
+                  "package_version": PACKAGE_STATUS.get("version"),
+                  "install_mode": PACKAGE_STATUS.get("install_mode"),
+                  "import_attempted": PACKAGE_STATUS.get("import_attempted"),
+              },
+              sort_keys=True,
+          ),
+          flush=True,
+      )
+      ThreadingHTTPServer(("0.0.0.0", APP_PORT), Handler).serve_forever()

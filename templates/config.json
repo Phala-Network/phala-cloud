@@ -3621,5 +3621,27 @@
     "diskSize": 10
   },
   "tags": ["LLM Inference & Model Serving", "Developer Tools", "AI Agents"]
-}
+},
+{
+    "id": "unsloth",
+    "name": "unslothai/unsloth",
+    "description": "GPU-oriented fine-tuning and training toolkit. This CPU-safe template installs the pinned published Unsloth wheel with --no-deps, verifies package/source metadata through a small HTTP service, and avoids model downloads, hosted calls, credentials, GPU checks, and training jobs by default.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/unsloth",
+    "author": "Unsloth AI team / unslothai",
+    "icon": "unsloth.png",
+    "envs": [
+      {
+        "key": "UNSLOTH_VERSION",
+        "required": false,
+        "description": "Published Unsloth Python package version installed with --no-deps for metadata verification.",
+        "default": "2026.5.8"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["LLM Inference & Model Serving", "Developer Tools", "AI Agents"]
+  }
 ]
