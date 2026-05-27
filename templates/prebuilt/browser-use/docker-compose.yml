@@ -1,0 +1,254 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    init: true
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      BROWSER_USE_VERSION: ${BROWSER_USE_VERSION:-0.12.9}
+      ANONYMIZED_TELEMETRY: "false"
+      BROWSER_USE_CLOUD_SYNC: "false"
+      BROWSER_USE_VERSION_CHECK: "false"
+      BROWSER_USE_SETUP_LOGGING: "false"
+      BROWSER_USE_LOGGING_LEVEL: warning
+      BROWSER_USE_CONFIG_DIR: /tmp/browser-use-config
+      PYTHONUNBUFFERED: "1"
+      UV_SYSTEM_PYTHON: "1"
+    configs:
+      - source: browser_use_demo_app
+        target: /opt/browser-use-demo/server.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache "browser-use==$${BROWSER_USE_VERSION}"
+        exec python /opt/browser-use-demo/server.py
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import sys, urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+configs:
+  browser_use_demo_app:
+    content: |
+      import importlib
+      import importlib.metadata
+      import json
+      import platform
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "browser-use"
+      MODULE_NAME = "browser_use"
+      REQUIRED_EXPORTS = ("Agent", "Browser", "BrowserSession", "Tools", "ChatBrowserUse")
+      REQUIRED_SUBMODULES = {
+          "browser_use.agent.service": "Agent",
+          "browser_use.browser": "BrowserSession",
+          "browser_use.tools.service": "Tools",
+          "browser_use.llm.browser_use.chat": "ChatBrowserUse",
+      }
+
+
+      def import_checks():
+          result = {
+              "distribution": PACKAGE_NAME,
+              "distribution_version": None,
+              "module": MODULE_NAME,
+              "module_import_ok": False,
+              "exports": {},
+              "submodules": {},
+              "import_ok": False,
+              "error": None,
+          }
+          try:
+              result["distribution_version"] = importlib.metadata.version(PACKAGE_NAME)
+              browser_use = importlib.import_module(MODULE_NAME)
+              result["module_import_ok"] = browser_use.__name__ == MODULE_NAME
+
+              exports = set(getattr(browser_use, "__all__", ()))
+              for name in REQUIRED_EXPORTS:
+                  result["exports"][name] = name in exports
+
+              for module_name, symbol in REQUIRED_SUBMODULES.items():
+                  module = importlib.import_module(module_name)
+                  result["submodules"][module_name] = {
+                      "import_ok": True,
+                      "required_symbol": symbol,
+                      "has_required_symbol": hasattr(module, symbol),
+                  }
+
+              result["import_ok"] = (
+                  bool(result["distribution_version"])
+                  and result["module_import_ok"]
+                  and all(result["exports"].values())
+                  and all(
+                      item["has_required_symbol"]
+                      for item in result["submodules"].values()
+                  )
+              )
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      IMPORT_STATUS = import_checks()
+
+
+      def base_payload():
+          return {
+              "service": "browser-use-verifier",
+              "upstream": "https://github.com/browser-use/browser-use",
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "browser_use": IMPORT_STATUS,
+          }
+
+
+      def response_body(path):
+          if path == "/healthz":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": IMPORT_STATUS["import_ok"],
+                      "status": "ready" if IMPORT_STATUS["import_ok"] else "import_failed",
+                  }
+              )
+              status = HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+              return status, payload
+
+          if path == "/demo":
+              payload = base_payload()
+              if not IMPORT_STATUS["import_ok"]:
+                  payload.update({"ok": False, "error": IMPORT_STATUS["error"]})
+                  return HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+              payload.update(
+                  {
+                      "ok": True,
+                      "cpu_only": True,
+                      "credentials_required": False,
+                      "llm_provider_calls": False,
+                      "browser_launched": False,
+                      "model_downloaded": False,
+                      "demo_model": "browser-use-local-verifier",
+                      "task": "Summarize a browser automation task plan without running it.",
+                      "plan": [
+                          {
+                              "step": 1,
+                              "capability": "plan",
+                              "description": "Accept a natural-language browser task.",
+                          },
+                          {
+                              "step": 2,
+                              "capability": "inspect",
+                              "description": "Use browser state and DOM context in a real deployment.",
+                          },
+                          {
+                              "step": 3,
+                              "capability": "act",
+                              "description": "Invoke browser actions only after an LLM and browser runtime are configured.",
+                          },
+                      ],
+                      "verifier_scope": (
+                          "This endpoint imports browser-use and returns deterministic local JSON. "
+                          "It does not instantiate an Agent, call an LLM provider, or launch a browser."
+                      ),
+                  }
+              )
+              return HTTPStatus.OK, payload
+
+          if path == "/v1/models":
+              payload = {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "browser-use-local-verifier",
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "browser-use",
+                          "description": (
+                              "OpenAI-style smoke-test surface for the local browser-use verifier. "
+                              "It is not an inference model and does not call browser-use cloud APIs."
+                          ),
+                      }
+                  ],
+              }
+              return HTTPStatus.OK, payload
+
+          if path == "/":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": IMPORT_STATUS["import_ok"],
+                      "endpoints": ["/healthz", "/demo", "/v1/models"],
+                      "default_model": "browser-use-local-verifier",
+                  }
+              )
+              status = HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+              return status, payload
+
+          return HTTPStatus.NOT_FOUND, {
+              "ok": False,
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "browser-use-verifier"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+              status, payload = response_body(path)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": 8080,
+                      "browser_use": IMPORT_STATUS,
+                      "llm_provider_calls": False,
+                      "browser_launched": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
