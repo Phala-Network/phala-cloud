@@ -1,0 +1,300 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    ports:
+      - "8080:8080"
+    environment:
+      DEEPSPEED_SOURCE_REF: ${DEEPSPEED_SOURCE_REF:-v0.19.1}
+      PYTHONUNBUFFERED: "1"
+    command:
+      - python
+      - /server.py
+    configs:
+      - source: server_py
+        target: /server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+configs:
+  server_py:
+    content: |
+      import hashlib
+      import json
+      import os
+      import platform
+      import py_compile
+      import shutil
+      import sys
+      import threading
+      import time
+      import urllib.parse
+      import urllib.request
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path
+
+      STARTED_AT = time.time()
+      SOURCE_REPO = "deepspeedai/DeepSpeed"
+      UPSTREAM = f"https://github.com/{SOURCE_REPO}"
+      RAW_BASE = f"https://raw.githubusercontent.com/{SOURCE_REPO}"
+      DEFAULT_REF = "v0.19.1"
+      SOURCE_REF = os.environ.get("DEEPSPEED_SOURCE_REF", DEFAULT_REF).strip() or DEFAULT_REF
+      SOURCE_ROOT = Path("/tmp/deepspeed-source")
+      MAX_SOURCE_BYTES = 2 * 1024 * 1024
+
+      SOURCE_FILES = [
+          {
+              "path": "README.md",
+              "purpose": "Project README and high-level DeepSpeed positioning",
+              "markers": ["Extreme Speed and Scale", "ZeRO", "DeepSpeed"],
+              "compile": False,
+          },
+          {
+              "path": "deepspeed/launcher/runner.py",
+              "purpose": "Distributed launcher front-end source",
+              "markers": ["DeepSpeed runner", "--num_gpus", "PDSHRunner"],
+              "compile": True,
+          },
+          {
+              "path": "deepspeed/runtime/engine.py",
+              "purpose": "DeepSpeed runtime engine source",
+              "markers": ["class DeepSpeedEngine", "def backward", "zero_optimization"],
+              "compile": True,
+          },
+          {
+              "path": "deepspeed/runtime/config.py",
+              "purpose": "DeepSpeed runtime configuration parser source",
+              "markers": ["class DeepSpeedConfig", "train_batch_size", "gradient_accumulation_steps"],
+              "compile": True,
+          },
+          {
+              "path": "deepspeed/inference/engine.py",
+              "purpose": "DeepSpeed inference engine source",
+              "markers": ["class InferenceEngine", "replace_with_kernel_inject", "enable_cuda_graph"],
+              "compile": True,
+          },
+          {
+              "path": "docs/_pages/config-json.md",
+              "purpose": "DeepSpeed JSON configuration documentation",
+              "markers": ["DeepSpeed Configuration JSON", "train_micro_batch_size_per_gpu", "zero_optimization"],
+              "compile": False,
+          },
+          {
+              "path": "docs/_pages/inference.md",
+              "purpose": "DeepSpeed inference documentation",
+              "markers": ["DeepSpeed-Inference", "model parallelism", "inference-customized kernels"],
+              "compile": False,
+          },
+      ]
+
+      STATE_LOCK = threading.Lock()
+      CHECK_STATE = {
+          "ok": False,
+          "status": "starting",
+          "message": "Source verification has not completed yet.",
+          "ref": SOURCE_REF,
+      }
+
+
+      def source_url(path):
+          encoded_ref = urllib.parse.quote(SOURCE_REF, safe="")
+          encoded_path = urllib.parse.quote(path, safe="/")
+          return f"{RAW_BASE}/{encoded_ref}/{encoded_path}"
+
+
+      def fetch_file(spec):
+          path = spec["path"]
+          target = SOURCE_ROOT / path
+          target.parent.mkdir(parents=True, exist_ok=True)
+          request = urllib.request.Request(
+              source_url(path),
+              headers={"User-Agent": "phala-cloud-deepspeed-template/1.0"},
+          )
+          with urllib.request.urlopen(request, timeout=30) as response:
+              data = response.read(MAX_SOURCE_BYTES + 1)
+          if len(data) > MAX_SOURCE_BYTES:
+              raise RuntimeError(f"{path} exceeds {MAX_SOURCE_BYTES} bytes")
+          target.write_bytes(data)
+          text = data.decode("utf-8", errors="replace")
+          marker_results = {marker: marker in text for marker in spec["markers"]}
+          missing_markers = [marker for marker, present in marker_results.items() if not present]
+          return {
+              "path": path,
+              "purpose": spec["purpose"],
+              "url": source_url(path),
+              "bytes": len(data),
+              "sha256": hashlib.sha256(data).hexdigest(),
+              "markers": marker_results,
+              "missing_markers": missing_markers,
+              "compile": spec["compile"],
+          }
+
+
+      def verify_source():
+          state = {
+              "ok": False,
+              "status": "checking",
+              "source_repo": SOURCE_REPO,
+              "upstream": UPSTREAM,
+              "ref": SOURCE_REF,
+              "files": [],
+              "compiled": [],
+              "errors": [],
+              "cpu_only": True,
+              "deepspeed_imported": False,
+              "torch_imported": False,
+              "cuda_required": False,
+              "distributed_training_started": False,
+              "model_downloaded": False,
+              "provider_credentials_required": False,
+          }
+
+          try:
+              shutil.rmtree(SOURCE_ROOT, ignore_errors=True)
+              SOURCE_ROOT.mkdir(parents=True, exist_ok=True)
+
+              for spec in SOURCE_FILES:
+                  try:
+                      result = fetch_file(spec)
+                      state["files"].append(result)
+                      if result["missing_markers"]:
+                          state["errors"].append({
+                              "path": spec["path"],
+                              "error": "Expected source markers were not found",
+                              "missing_markers": result["missing_markers"],
+                          })
+                      if spec["compile"]:
+                          py_compile.compile(str(SOURCE_ROOT / spec["path"]), doraise=True)
+                          state["compiled"].append(spec["path"])
+                  except Exception as exc:
+                      state["errors"].append({
+                          "path": spec["path"],
+                          "error": f"{type(exc).__name__}: {exc}",
+                      })
+
+              state["ok"] = not state["errors"]
+              state["status"] = "ready" if state["ok"] else "source_check_failed"
+              state["message"] = (
+                  "Downloaded selected upstream DeepSpeed source and documentation files, "
+                  "verified launcher/runtime/inference/config markers, and py_compile checked "
+                  "selected Python source files. The demo did not import deepspeed, import torch, "
+                  "download model weights, start distributed training, or request CUDA/GPU access."
+              )
+          except Exception as exc:
+              state["status"] = "source_check_failed"
+              state["errors"].append({"error": f"{type(exc).__name__}: {exc}"})
+              state["message"] = (
+                  "The HTTP verifier is running, but upstream source verification failed. "
+                  "Retry later or set DEEPSPEED_SOURCE_REF to a reachable branch, tag, or commit."
+              )
+
+          with STATE_LOCK:
+              global CHECK_STATE
+              CHECK_STATE = state
+
+
+      def current_state():
+          with STATE_LOCK:
+              return json.loads(json.dumps(CHECK_STATE))
+
+
+      def base_payload():
+          return {
+              "service": "deepspeed-source-verifier",
+              "display_name": "deepspeedai/DeepSpeed",
+              "upstream": UPSTREAM,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "demo_scope": (
+                  "CPU-safe source/runtime verifier. It is not a DeepSpeed training, "
+                  "inference, or distributed launcher server."
+              ),
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "deepspeed-source-verifier/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              path = urllib.parse.urlparse(self.path).path.rstrip("/") or "/"
+              state = current_state()
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  payload.update({
+                      "ok": state.get("ok") is True,
+                      "status": state.get("status", "unknown"),
+                      "source_ref": state.get("ref", SOURCE_REF),
+                      "cpu_only": True,
+                      "cuda_required": False,
+                      "model_downloaded": False,
+                      "distributed_training_started": False,
+                      "provider_credentials_required": False,
+                      "deepspeed_imported": False,
+                      "endpoints": ["/healthz", "/demo", "/v1/models"],
+                  })
+                  if state.get("errors"):
+                      payload["errors"] = state["errors"]
+                  self.respond_json(200, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  payload.update({
+                      "ok": state.get("ok") is True,
+                      "check": (
+                          "Fetch a pinned DeepSpeed ref from GitHub, verify source markers "
+                          "for launcher/runtime/inference/config concepts, and compile selected "
+                          "Python source files without importing DeepSpeed."
+                      ),
+                      "source_check": state,
+                  })
+                  self.respond_json(200, payload)
+                  return
+
+              if path == "/v1/models":
+                  payload = {
+                      "object": "list",
+                      "data": [],
+                      "demo": {
+                          "message": (
+                              "No DeepSpeed model server is running in this CPU-safe source verifier."
+                          ),
+                          "source_ok": state.get("ok") is True,
+                          "source_ref": state.get("ref", SOURCE_REF),
+                          "model_downloaded": False,
+                          "inference_started": False,
+                      },
+                  }
+                  if state.get("errors"):
+                      payload["errors"] = state["errors"]
+                  self.respond_json(200, payload)
+                  return
+
+              self.respond_json(404, {"ok": False, "error": "not found"})
+
+
+      threading.Thread(target=verify_source, daemon=True).start()
+      server = ThreadingHTTPServer(("0.0.0.0", 8080), Handler)
+      print("deepspeed source verifier listening on 0.0.0.0:8080", flush=True)
+      server.serve_forever()

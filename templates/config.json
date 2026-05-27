@@ -3748,5 +3748,27 @@
       "diskSize": 20
     },
     "tags": ["LLM Inference & Model Serving", "Developer Tools", "AI Agents"]
-  }
+  },
+{
+  "id": "deepspeed",
+  "name": "deepspeedai/DeepSpeed",
+  "description": "CPU-safe DeepSpeed source/runtime verifier with health, demo, and model-list endpoints. It verifies upstream launcher/runtime/inference/config files without importing DeepSpeed, downloading models, running training, or requiring GPU access.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/deepspeed",
+  "author": "deepspeedai",
+  "icon": "deepspeed.svg",
+  "envs": [
+    {
+      "key": "DEEPSPEED_SOURCE_REF",
+      "required": false,
+      "description": "DeepSpeed Git tag, branch, or commit used for CPU-safe source verification.",
+      "default": "v0.19.1"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": ["LLM Inference & Model Serving", "Developer Tools", "AI Agents"]
+}
 ]
