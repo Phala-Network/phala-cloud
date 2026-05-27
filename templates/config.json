@@ -3332,5 +3332,27 @@
       "diskSize": 20
     },
     "tags": ["AI Agents", "Developer Tools", "Automation"]
+  },
+{
+    "id": "openhands",
+    "name": "OpenHands/OpenHands",
+    "description": "Cloud-native autonomous software engineering agent platform. This template runs a CPU-safe HTTP verifier for pinned OpenHands upstream release metadata and avoids Docker socket access, LLM credentials, model downloads, GPU, and privileged sandboxing by default.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/openhands",
+    "author": "OpenHands",
+    "icon": "openhands.png",
+    "envs": [
+      {
+        "key": "OPENHANDS_DEMO_TOPIC",
+        "required": false,
+        "default": "Phala Cloud",
+        "description": "Short non-secret label echoed by the verifier demo endpoint."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools", "Web Apps"]
   }
 ]

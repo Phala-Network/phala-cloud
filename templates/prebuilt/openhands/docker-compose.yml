@@ -1,0 +1,300 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile_inline: |
+        # syntax=docker/dockerfile:1.6
+        FROM python:3.12-slim-bookworm
+
+        ENV PYTHONDONTWRITEBYTECODE=1 \
+            PYTHONUNBUFFERED=1
+
+        WORKDIR /opt/openhands-verifier
+
+        RUN python - <<'PY'
+        import hashlib
+        import json
+        from pathlib import Path
+        from urllib.request import Request, urlopen
+
+        root = Path("/opt/openhands-upstream")
+        files = [
+            {
+                "path": "README.md",
+                "url": "https://raw.githubusercontent.com/OpenHands/OpenHands/1.7.0/README.md",
+                "sha256": "520aa2b10c568f2bf3ea95438d7039f993efe89f2aca1a8d9a0e598153885b8f",
+                "size": 8390,
+            },
+            {
+                "path": "pyproject.toml",
+                "url": "https://raw.githubusercontent.com/OpenHands/OpenHands/1.7.0/pyproject.toml",
+                "sha256": "32235e4fe98f9409ba8c2affb0cd9e009be1af16e2b3c43b16dc4bfe933823c7",
+                "size": 7861,
+            },
+            {
+                "path": "openhands/__init__.py",
+                "url": "https://raw.githubusercontent.com/OpenHands/OpenHands/1.7.0/openhands/__init__.py",
+                "sha256": "092fa9e3a2ab52d819ec39bf271f72cfae5d03cb4e655350ba49dfd627f25e04",
+                "size": 453,
+            },
+        ]
+
+        root.mkdir(parents=True, exist_ok=True)
+        for item in files:
+            request = Request(item["url"], headers={"User-Agent": "phala-openhands-template-verifier"})
+            with urlopen(request, timeout=30) as response:
+                body = response.read()
+            digest = hashlib.sha256(body).hexdigest()
+            if digest != item["sha256"] or len(body) != item["size"]:
+                raise SystemExit(f"upstream verification failed for {item['path']}: sha={digest} size={len(body)}")
+            target = root / item["path"]
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(body)
+
+        manifest = {
+            "upstream": "https://github.com/OpenHands/OpenHands",
+            "release": "1.7.0",
+            "commit": "43bd8d12e59d2e9254fa8b490ad3e1234902e33b",
+            "files": files,
+        }
+        (root / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        PY
+
+        COPY <<'PY' /opt/openhands-verifier/server.py
+        import hashlib
+        import json
+        import os
+        import platform
+        import sys
+        import time
+        import tomllib
+        from http import HTTPStatus
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from pathlib import Path
+        from urllib.parse import urlparse
+
+
+        STARTED_AT = time.time()
+        ROOT = Path("/opt/openhands-upstream")
+        MANIFEST = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
+        DEMO_TOPIC = os.environ.get("OPENHANDS_DEMO_TOPIC", "Phala Cloud").strip() or "Phala Cloud"
+
+
+        def verify_files():
+            files = []
+            ok = True
+            for item in MANIFEST["files"]:
+                target = ROOT / item["path"]
+                exists = target.is_file()
+                size = None
+                digest = None
+                matches = False
+                if exists:
+                    body = target.read_bytes()
+                    size = len(body)
+                    digest = hashlib.sha256(body).hexdigest()
+                    matches = size == item["size"] and digest == item["sha256"]
+                ok = ok and matches
+                files.append(
+                    {
+                        "path": item["path"],
+                        "url": item["url"],
+                        "exists": exists,
+                        "expected_size": item["size"],
+                        "actual_size": size,
+                        "expected_sha256": item["sha256"],
+                        "actual_sha256": digest,
+                        "verified": matches,
+                    }
+                )
+            return {"ok": ok, "files": files}
+
+
+        def pyproject_summary():
+            text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+            data = tomllib.loads(text)
+            project = data.get("project", {})
+            poetry = data.get("tool", {}).get("poetry", {})
+            dependencies = project.get("dependencies", [])
+            notable = [
+                dep
+                for dep in dependencies
+                if dep.startswith(("docker", "litellm", "openhands-", "playwright", "fastapi", "uvicorn"))
+            ]
+            return {
+                "project_name": project.get("name"),
+                "poetry_version": poetry.get("version"),
+                "requires_python": project.get("requires-python"),
+                "dependency_count": len(dependencies),
+                "notable_dependencies": notable,
+            }
+
+
+        def readme_summary():
+            text = (ROOT / "README.md").read_text(encoding="utf-8")
+            sections = [
+                "OpenHands Software Agent SDK",
+                "OpenHands CLI",
+                "OpenHands Local GUI",
+                "OpenHands Cloud",
+                "OpenHands Enterprise",
+            ]
+            return {
+                "title_present": "OpenHands: AI-Driven Development" in text,
+                "logo_url_present": "OpenHands/docs/main/openhands/static/img/logo.png" in text,
+                "documented_surfaces": [section for section in sections if section in text],
+            }
+
+
+        def base_payload():
+            verification = verify_files()
+            return {
+                "service": "openhands-source-verifier",
+                "status": "ok" if verification["ok"] else "unhealthy",
+                "ok": verification["ok"],
+                "uptime_seconds": round(time.time() - STARTED_AT, 3),
+                "python": sys.version.split()[0],
+                "platform": platform.platform(),
+                "upstream": {
+                    "repo": MANIFEST["upstream"],
+                    "release": MANIFEST["release"],
+                    "commit": MANIFEST["commit"],
+                },
+                "verification": verification,
+            }
+
+
+        def demo_payload():
+            payload = base_payload()
+            payload.update(
+                {
+                    "demo_topic": DEMO_TOPIC,
+                    "readme": readme_summary(),
+                    "pyproject": pyproject_summary(),
+                    "runtime_contract": {
+                        "cpu_only": True,
+                        "credentials_required": False,
+                        "llm_provider_calls": False,
+                        "model_downloaded": False,
+                        "docker_socket_mounted": False,
+                        "privileged_mode": False,
+                        "host_bind_mounts": False,
+                    },
+                    "what_is_verified": [
+                        "OpenHands/OpenHands release tag 1.7.0 public README.md",
+                        "OpenHands/OpenHands release tag 1.7.0 pyproject.toml package metadata",
+                        "OpenHands/OpenHands release tag 1.7.0 openhands namespace package initializer",
+                        "SHA-256 and byte-size checks for the pinned files copied into this image",
+                    ],
+                    "what_is_not_run": [
+                        "The full OpenHands GUI/server",
+                        "Docker sandbox creation",
+                        "Agent execution against a repository",
+                        "Hosted or local LLM inference",
+                    ],
+                }
+            )
+            return payload
+
+
+        def models_payload():
+            return {
+                "object": "list",
+                "data": [
+                    {
+                        "id": "openhands/source-verifier-1.7.0",
+                        "object": "model",
+                        "created": 0,
+                        "owned_by": "OpenHands",
+                        "description": "Metadata-only smoke endpoint. This template does not host or call an LLM.",
+                    }
+                ],
+            }
+
+
+        def route(path):
+            if path in ("", "/", "/healthz"):
+                payload = base_payload()
+                return HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload
+            if path == "/demo":
+                payload = demo_payload()
+                return HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload
+            if path == "/v1/models":
+                return HTTPStatus.OK, models_payload()
+            return HTTPStatus.NOT_FOUND, {
+                "error": "not_found",
+                "endpoints": ["/healthz", "/demo", "/v1/models"],
+            }
+
+
+        class Handler(BaseHTTPRequestHandler):
+            server_version = "openhands-source-verifier"
+
+            def log_message(self, fmt, *args):
+                print(
+                    json.dumps(
+                        {
+                            "ts": time.time(),
+                            "client": self.client_address[0],
+                            "request": self.requestline,
+                            "message": fmt % args,
+                        }
+                    ),
+                    flush=True,
+                )
+
+            def do_GET(self):
+                path = urlparse(self.path).path.rstrip("/") or "/"
+                status, payload = route(path)
+                body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+
+        if __name__ == "__main__":
+            port = int(os.environ.get("APP_PORT", "8080"))
+            print(
+                json.dumps(
+                    {
+                        "event": "startup",
+                        "port": port,
+                        "upstream_release": MANIFEST["release"],
+                        "verification_ok": verify_files()["ok"],
+                    }
+                ),
+                flush=True,
+            )
+            ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+        PY
+
+        RUN useradd --create-home --uid 10001 appuser \
+            && chown -R appuser:appuser /opt/openhands-verifier /opt/openhands-upstream
+
+        USER appuser
+        EXPOSE 8080
+        CMD ["python", "/opt/openhands-verifier/server.py"]
+    image: openhands-source-verifier:1.7.0
+    pull_policy: build
+    init: true
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      APP_PORT: "8080"
+      OPENHANDS_DEMO_TOPIC: ${OPENHANDS_DEMO_TOPIC:-Phala Cloud}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('APP_PORT', '8080') + '/healthz', timeout=5).read()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
