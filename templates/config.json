@@ -3577,5 +3577,27 @@
       "diskSize": 10
     },
     "tags": ["Web Data & Search", "AI Agents", "Developer Tools"]
+  },
+{
+    "id": "skyvern",
+    "name": "Skyvern-AI/skyvern",
+    "description": "Browser workflow automation with AI; Skyvern Cloud managed service",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/skyvern",
+    "author": "Skyvern-AI",
+    "icon": "skyvern.png",
+    "envs": [
+      {
+        "key": "SKYVERN_PACKAGE_VERSION",
+        "required": false,
+        "default": "1.0.36",
+        "description": "Pinned Skyvern Python package version installed by the verifier at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Automation", "Web Data & Search"]
   }
 ]
