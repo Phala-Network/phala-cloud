@@ -3643,5 +3643,36 @@
       "diskSize": 10
     },
     "tags": ["LLM Inference & Model Serving", "Developer Tools", "AI Agents"]
+  },
+{
+    "id": "axolotl",
+    "name": "axolotl-ai-cloud/axolotl",
+    "description": "LLM fine-tuning framework with LoRA/QLoRA/FSDP/DeepSpeed configs. This template runs a CPU-safe HTTP source verifier for pinned upstream Axolotl metadata and example configs without model downloads, GPU access, or provider credentials.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/axolotl",
+    "author": "axolotl-ai-cloud",
+    "icon": "axolotl.svg",
+    "envs": [
+      {
+        "key": "HF_TOKEN",
+        "required": false,
+        "description": "Optional Hugging Face token for users who later convert this verifier into real Axolotl fine-tuning. Not used by default smoke endpoints."
+      },
+      {
+        "key": "WANDB_API_KEY",
+        "required": false,
+        "description": "Optional Weights & Biases API key for real training runs. Not used by default smoke endpoints."
+      },
+      {
+        "key": "AXOLOTL_DO_NOT_TRACK",
+        "required": false,
+        "description": "Optional Axolotl telemetry opt-out flag for real Axolotl runs. Not used by default smoke endpoints."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["LLM Inference & Model Serving", "Developer Tools", "AI Agents"]
   }
 ]
