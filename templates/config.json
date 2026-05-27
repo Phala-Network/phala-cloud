@@ -3599,5 +3599,27 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Automation", "Web Data & Search"]
-  }
+  },
+{
+  "id": "llamafactory",
+  "name": "hiyouga/LlamaFactory",
+  "description": "CPU-safe LlamaFactory source/runtime verifier for LLM fine-tuning and inference workflows. It checks release-tagged upstream CLI, Web UI, OpenAI-style API, Docker, and example config files without model downloads, training, inference, GPU, or provider credentials.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/llamafactory",
+  "author": "hiyouga / LlamaFactory team",
+  "icon": "llamafactory.png",
+  "envs": [
+    {
+      "key": "LLAMAFACTORY_REF",
+      "required": false,
+      "description": "LlamaFactory Git tag, commit, or simple branch ref used for the CPU-safe source verifier.",
+      "default": "v0.9.4"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": ["LLM Inference & Model Serving", "Developer Tools", "AI Agents"]
+}
 ]
