@@ -1,0 +1,413 @@
+services:
+  app:
+    image: python:3.11-slim-bookworm
+    ports:
+      - "8080:8000"
+    environment:
+      APP_PORT: "8000"
+      TRL_PACKAGE_VERSION: ${TRL_PACKAGE_VERSION:-0.24.0}
+      PYTORCH_CPU_VERSION: ${PYTORCH_CPU_VERSION:-2.9.1+cpu}
+      TRANSFORMERS_PACKAGE_VERSION: ${TRANSFORMERS_PACKAGE_VERSION:-4.57.6}
+      ACCELERATE_PACKAGE_VERSION: ${ACCELERATE_PACKAGE_VERSION:-1.13.0}
+      DATASETS_PACKAGE_VERSION: ${DATASETS_PACKAGE_VERSION:-4.8.5}
+      HF_DATASETS_OFFLINE: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      PIP_DEFAULT_TIMEOUT: "180"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+      PIP_ROOT_USER_ACTION: ignore
+      PYTHONUNBUFFERED: "1"
+      TOKENIZERS_PARALLELISM: "false"
+      TRANSFORMERS_OFFLINE: "1"
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        python -m pip install --no-cache-dir \
+          --index-url https://download.pytorch.org/whl/cpu \
+          --extra-index-url https://pypi.org/simple \
+          "torch==$${PYTORCH_CPU_VERSION}"
+        python -m pip install --no-cache-dir \
+          "trl==$${TRL_PACKAGE_VERSION}" \
+          "transformers==$${TRANSFORMERS_PACKAGE_VERSION}" \
+          "accelerate==$${ACCELERATE_PACKAGE_VERSION}" \
+          "datasets==$${DATASETS_PACKAGE_VERSION}"
+        python -m pip check
+        exec python /opt/trl-demo/server.py
+    configs:
+      - source: server_py
+        target: /opt/trl-demo/server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 600s
+    restart: unless-stopped
+
+configs:
+  server_py:
+    content: |
+      import dataclasses
+      import hashlib
+      import importlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "trl"
+      UPSTREAM = "https://github.com/huggingface/trl"
+      REQUIRED_SYMBOLS = (
+          "SFTConfig",
+          "SFTTrainer",
+          "DPOConfig",
+          "DPOTrainer",
+          "PPOConfig",
+          "PPOTrainer",
+          "RewardConfig",
+          "RewardTrainer",
+      )
+      PACKAGE_NAMES = (
+          "trl",
+          "torch",
+          "transformers",
+          "accelerate",
+          "datasets",
+      )
+      TRL_OBJECTS = {}
+
+
+      def distribution_version(name):
+          try:
+              return importlib.metadata.version(name)
+          except Exception as exc:
+              return f"unavailable: {type(exc).__name__}: {exc}"
+
+
+      def import_checks():
+          result = {
+              "package": PACKAGE_NAME,
+              "distribution_version": None,
+              "module_version": None,
+              "module_file": None,
+              "packages": {},
+              "symbols": {},
+              "torch": {},
+              "import_ok": False,
+              "error": None,
+          }
+          try:
+              result["distribution_version"] = distribution_version(PACKAGE_NAME)
+              trl = importlib.import_module(PACKAGE_NAME)
+              result["module_version"] = getattr(trl, "__version__", None)
+              result["module_file"] = getattr(trl, "__file__", None)
+              result["packages"] = {name: distribution_version(name) for name in PACKAGE_NAMES}
+
+              for symbol in REQUIRED_SYMBOLS:
+                  try:
+                      obj = getattr(trl, symbol)
+                      TRL_OBJECTS[symbol] = obj
+                      result["symbols"][symbol] = {
+                          "ok": True,
+                          "module": getattr(obj, "__module__", None),
+                          "qualname": getattr(obj, "__qualname__", symbol),
+                      }
+                  except Exception as exc:
+                      result["symbols"][symbol] = {
+                          "ok": False,
+                          "error": f"{type(exc).__name__}: {exc}",
+                      }
+
+              torch = importlib.import_module("torch")
+              result["torch"] = {
+                  "module_version": getattr(torch, "__version__", None),
+                  "cuda_available": bool(torch.cuda.is_available()),
+                  "cuda_version": getattr(torch.version, "cuda", None),
+              }
+              result["import_ok"] = (
+                  bool(result["distribution_version"])
+                  and bool(result["module_version"])
+                  and all(item.get("ok") for item in result["symbols"].values())
+              )
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      IMPORT_STATUS = import_checks()
+
+
+      LOCAL_SFT_RECORDS = [
+          {
+              "messages": [
+                  {"role": "system", "content": "You are a deterministic verifier."},
+                  {"role": "user", "content": "What does this TRL template do?"},
+                  {
+                      "role": "assistant",
+                      "content": "It verifies package imports and local data flow without training.",
+                  },
+              ]
+          },
+          {
+              "messages": [
+                  {"role": "user", "content": "Does the verifier download weights?"},
+                  {"role": "assistant", "content": "No. It uses local metadata only."},
+              ]
+          },
+      ]
+      LOCAL_PREFERENCE_RECORD = {
+          "prompt": [{"role": "user", "content": "State the default safety boundary."}],
+          "chosen": [
+              {
+                  "role": "assistant",
+                  "content": "CPU-only verification, no model weights, no GPU, no credentials, and no training.",
+              }
+          ],
+          "rejected": [
+              {
+                  "role": "assistant",
+                  "content": "Start RLHF training immediately with a remote model.",
+              }
+          ],
+      }
+
+
+      def config_fields(class_name, wanted):
+          cls = TRL_OBJECTS.get(class_name)
+          if cls is None or not dataclasses.is_dataclass(cls):
+              return {"class": class_name, "dataclass": False, "fields_present": {}}
+          available = {field.name for field in dataclasses.fields(cls)}
+          return {
+              "class": class_name,
+              "dataclass": True,
+              "module": getattr(cls, "__module__", None),
+              "fields_present": {field: field in available for field in wanted},
+          }
+
+
+      def trainer_metadata():
+          metadata = {}
+          for name in ("SFTTrainer", "DPOTrainer", "PPOTrainer", "RewardTrainer"):
+              cls = TRL_OBJECTS.get(name)
+              metadata[name] = {
+                  "imported": cls is not None,
+                  "module": getattr(cls, "__module__", None) if cls is not None else None,
+                  "qualname": getattr(cls, "__qualname__", None) if cls is not None else None,
+              }
+          return metadata
+
+
+      def run_local_demo():
+          if not IMPORT_STATUS["import_ok"]:
+              raise RuntimeError(IMPORT_STATUS.get("error") or "TRL import checks failed")
+
+          from datasets import Dataset
+          from trl.data_utils import is_conversational
+
+          sft_dataset = Dataset.from_list(LOCAL_SFT_RECORDS)
+          sft_rows = []
+          for index, row in enumerate(sft_dataset):
+              roles = [message["role"] for message in row["messages"]]
+              sft_rows.append(
+                  {
+                      "id": f"sft-{index}",
+                      "turns": len(row["messages"]),
+                      "roles": roles,
+                      "is_conversational": is_conversational(row),
+                  }
+              )
+
+          preference_is_conversational = is_conversational(LOCAL_PREFERENCE_RECORD)
+          digest_source = {
+              "sft": LOCAL_SFT_RECORDS,
+              "preference": LOCAL_PREFERENCE_RECORD,
+          }
+          digest = hashlib.sha256(
+              json.dumps(digest_source, sort_keys=True, separators=(",", ":")).encode("utf-8")
+          ).hexdigest()
+
+          return {
+              "name": "TRL CPU-safe verifier",
+              "upstream": UPSTREAM,
+              "package": IMPORT_STATUS,
+              "smoke_path": [
+                  "import real trl package",
+                  "resolve trainer classes",
+                  "inspect trainer config dataclasses",
+                  "build tiny in-memory datasets",
+                  "skip trainer construction and train()",
+              ],
+              "trainer_classes": trainer_metadata(),
+              "config_checks": {
+                  "SFTConfig": config_fields(
+                      "SFTConfig",
+                      ("output_dir", "dataset_text_field", "max_length", "packing", "learning_rate"),
+                  ),
+                  "DPOConfig": config_fields(
+                      "DPOConfig",
+                      ("output_dir", "max_length", "beta", "loss_type", "learning_rate"),
+                  ),
+                  "PPOConfig": config_fields(
+                      "PPOConfig",
+                      ("output_dir", "learning_rate", "num_ppo_epochs", "response_length"),
+                  ),
+              },
+              "data_flow": {
+                  "sft_dataset_rows": sft_dataset.num_rows,
+                  "sft_dataset_columns": list(sft_dataset.column_names),
+                  "sft_rows": sft_rows,
+                  "preference_record_keys": sorted(LOCAL_PREFERENCE_RECORD.keys()),
+                  "preference_is_conversational": preference_is_conversational,
+                  "sha256": digest,
+              },
+              "model_downloaded": False,
+              "model_loaded": False,
+              "training_started": False,
+              "trainer_constructed": False,
+              "gpu_required": False,
+              "credentials_required": False,
+              "external_provider_calls": False,
+          }
+
+
+      def base_payload():
+          return {
+              "service": "trl-cpu-safe-verifier",
+              "upstream": UPSTREAM,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+          }
+
+
+      def response_body(path):
+          if path == "/healthz":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": IMPORT_STATUS["import_ok"],
+                      "status": "ready" if IMPORT_STATUS["import_ok"] else "import_failed",
+                      "trl": IMPORT_STATUS,
+                  }
+              )
+              return (
+                  HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE,
+                  payload,
+              )
+
+          if path == "/demo":
+              payload = base_payload()
+              try:
+                  payload.update({"ok": True, "demo": run_local_demo()})
+                  return HTTPStatus.OK, payload
+              except Exception as exc:
+                  payload.update(
+                      {
+                          "ok": False,
+                          "error": f"{type(exc).__name__}: {exc}",
+                          "trl": IMPORT_STATUS,
+                      }
+                  )
+                  return HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/v1/models":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": IMPORT_STATUS["import_ok"],
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "trl-cpu-safe-verifier",
+                              "object": "model",
+                              "created": 0,
+                              "owned_by": "huggingface",
+                              "description": (
+                                  "Metadata-only TRL verifier. It imports trainer/config APIs "
+                                  "and checks local data flow, but does not host or train a model."
+                              ),
+                          }
+                      ],
+                      "model_loaded": False,
+                      "training_started": False,
+                  }
+              )
+              if not IMPORT_STATUS["import_ok"]:
+                  payload["trl"] = IMPORT_STATUS
+              return (
+                  HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE,
+                  payload,
+              )
+
+          if path == "/":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": IMPORT_STATUS["import_ok"],
+                      "endpoints": ["/healthz", "/demo", "/v1/models"],
+                  }
+              )
+              return HTTPStatus.OK, payload
+
+          return HTTPStatus.NOT_FOUND, {
+              "ok": False,
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "trl-cpu-safe-verifier/1.0"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+              status, payload = response_body(path)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8000"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "trl": IMPORT_STATUS,
+                      "model_downloaded": False,
+                      "training_started": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()

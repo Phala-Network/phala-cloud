@@ -3674,5 +3674,51 @@
       "diskSize": 10
     },
     "tags": ["LLM Inference & Model Serving", "Developer Tools", "AI Agents"]
+  },
+{
+    "id": "trl",
+    "name": "huggingface/trl",
+    "description": "Hugging Face TRL reinforcement learning and alignment fine-tuning library. This template runs a CPU-safe HTTP verifier that installs/imports the real TRL package and checks package, trainer/config, and local data-flow metadata without downloading models, requiring CUDA, credentials, or starting training.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/trl",
+    "author": "huggingface",
+    "icon": "trl.png",
+    "envs": [
+      {
+        "key": "TRL_PACKAGE_VERSION",
+        "required": false,
+        "default": "0.24.0",
+        "description": "Pinned TRL Python package version installed by the CPU-safe verifier."
+      },
+      {
+        "key": "PYTORCH_CPU_VERSION",
+        "required": false,
+        "default": "2.9.1+cpu",
+        "description": "Pinned CPU-only PyTorch wheel version installed before TRL dependencies are resolved."
+      },
+      {
+        "key": "TRANSFORMERS_PACKAGE_VERSION",
+        "required": false,
+        "default": "4.57.6",
+        "description": "Pinned Transformers package version used by the verifier."
+      },
+      {
+        "key": "ACCELERATE_PACKAGE_VERSION",
+        "required": false,
+        "default": "1.13.0",
+        "description": "Pinned Accelerate package version used by the verifier."
+      },
+      {
+        "key": "DATASETS_PACKAGE_VERSION",
+        "required": false,
+        "default": "4.8.5",
+        "description": "Pinned Datasets package version used for the in-memory data-flow check."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 30
+    },
+    "tags": ["LLM Inference & Model Serving", "Developer Tools", "AI Agents"]
   }
 ]
