@@ -1,0 +1,297 @@
+services:
+  app:
+    image: node:22-bookworm-slim
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: ${PORT:-8080}
+      CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-2.1.150}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      NODE_ENV: production
+      HOME: /tmp/claude-home
+      XDG_CONFIG_HOME: /tmp/claude-config
+      NPM_CONFIG_CACHE: /tmp/npm-cache
+      NPM_CONFIG_AUDIT: "false"
+      NPM_CONFIG_FUND: "false"
+      NPM_CONFIG_UPDATE_NOTIFIER: "false"
+      CI: "true"
+      NO_COLOR: "1"
+      DISABLE_AUTOUPDATER: "1"
+      DISABLE_UPDATES: "1"
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+    configs:
+      - source: claude_code_demo_app
+        target: /opt/claude-code-demo/server.js
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        mkdir -p "$$HOME" "$$XDG_CONFIG_HOME" "$$NPM_CONFIG_CACHE"
+        npm install --global --omit=dev --no-audit --no-fund "@anthropic-ai/claude-code@$${CLAUDE_CODE_VERSION}"
+        exec node /opt/claude-code-demo/server.js
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:' + (process.env.PORT || '8080') + '/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+configs:
+  claude_code_demo_app:
+    content: |
+      const fs = require("node:fs");
+      const http = require("node:http");
+      const os = require("node:os");
+      const path = require("node:path");
+      const { execFileSync, spawnSync } = require("node:child_process");
+
+      const STARTED_AT = Date.now();
+      const PACKAGE_NAME = "@anthropic-ai/claude-code";
+      const REQUESTED_VERSION = process.env.CLAUDE_CODE_VERSION || "2.1.150";
+      const UPSTREAM_REPO = "https://github.com/anthropics/claude-code";
+      const ENDPOINTS = ["/healthz", "/demo", "/v1/models"];
+
+      function cleanText(value) {
+        return String(value || "")
+          .replace(/\u001b\[[0-9;]*m/g, "")
+          .trim()
+          .slice(0, 4000);
+      }
+
+      function commandEnv() {
+        return {
+          PATH: process.env.PATH || "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          HOME: process.env.HOME || "/tmp/claude-home",
+          XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME || "/tmp/claude-config",
+          CI: "true",
+          NO_COLOR: "1",
+          DISABLE_AUTOUPDATER: "1",
+          DISABLE_UPDATES: "1",
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+          NPM_CONFIG_UPDATE_NOTIFIER: "false",
+        };
+      }
+
+      function runCommand(command, args, timeoutMs) {
+        const started = Date.now();
+        const result = spawnSync(command, args, {
+          encoding: "utf8",
+          env: commandEnv(),
+          timeout: timeoutMs,
+        });
+        const timedOut = Boolean(result.error && result.error.code === "ETIMEDOUT");
+        const exitCode = timedOut ? 124 : result.status;
+        return {
+          ok: exitCode === 0 && !timedOut,
+          command: [command].concat(args).join(" "),
+          exit_code: exitCode,
+          stdout: cleanText(result.stdout),
+          stderr: cleanText(result.stderr),
+          timed_out: timedOut,
+          error: result.error ? result.error.message : null,
+          duration_ms: Date.now() - started,
+        };
+      }
+
+      function globalPackageRoot() {
+        return cleanText(execFileSync("npm", ["root", "-g"], {
+          encoding: "utf8",
+          timeout: 10000,
+        }));
+      }
+
+      function readPackageMetadata() {
+        try {
+          const packageJsonPath = path.join(globalPackageRoot(), "@anthropic-ai", "claude-code", "package.json");
+          const data = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+          return {
+            ok: data.name === PACKAGE_NAME,
+            package_json_path: packageJsonPath,
+            name: data.name,
+            requested_version: REQUESTED_VERSION,
+            installed_version: data.version,
+            description: data.description || null,
+            bin: data.bin || null,
+            engines: data.engines || null,
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            requested_version: REQUESTED_VERSION,
+            error: error.name + ": " + error.message,
+          };
+        }
+      }
+
+      function npmListCheck() {
+        const result = runCommand("npm", ["list", "-g", "--depth=0", PACKAGE_NAME, "--json"], 10000);
+        let installedVersion = null;
+        let parseError = null;
+        if (result.stdout) {
+          try {
+            const parsed = JSON.parse(result.stdout);
+            installedVersion = parsed.dependencies && parsed.dependencies[PACKAGE_NAME]
+              ? parsed.dependencies[PACKAGE_NAME].version
+              : null;
+          } catch (error) {
+            parseError = error.message;
+          }
+        }
+        return {
+          ok: result.ok && Boolean(installedVersion),
+          package: PACKAGE_NAME,
+          requested_version: REQUESTED_VERSION,
+          installed_version: installedVersion,
+          present: Boolean(installedVersion),
+          command: result,
+          parse_error: parseError,
+        };
+      }
+
+      function claudeVersionCheck() {
+        const result = runCommand("claude", ["--version"], 10000);
+        return {
+          ok: result.ok && result.stdout.length > 0,
+          cli: "claude",
+          version_output: result.stdout,
+          command: result.command,
+          exit_code: result.exit_code,
+          stderr: result.stderr,
+          error: result.ok ? null : result.error,
+          duration_ms: result.duration_ms,
+        };
+      }
+
+      function credentialState() {
+        return {
+          anthropic_api_key_configured: Boolean(process.env.ANTHROPIC_API_KEY),
+        };
+      }
+
+      function inspectClaudeCode() {
+        const packageMetadata = readPackageMetadata();
+        const npmPackage = npmListCheck();
+        const cliVersion = claudeVersionCheck();
+        return {
+          ok: packageMetadata.ok && npmPackage.present && cliVersion.ok,
+          package: packageMetadata,
+          npm_package_check: npmPackage,
+          cli_version_check: cliVersion,
+        };
+      }
+
+      function basePayload() {
+        const checks = inspectClaudeCode();
+        return {
+          ok: checks.ok,
+          status: checks.ok ? "ready" : "unhealthy",
+          service: "claude-code-cli-verifier",
+          upstream: UPSTREAM_REPO,
+          package_name: PACKAGE_NAME,
+          requested_package_version: REQUESTED_VERSION,
+          uptime_seconds: Math.round((Date.now() - STARTED_AT) / 100) / 10,
+          node: process.version,
+          platform: os.platform() + "/" + os.arch(),
+          cpu_only: true,
+          credentials_required_for_health: false,
+          hosted_llm_calls_performed: false,
+          browser_auth_performed: false,
+          model_downloaded: false,
+          configured_credentials: credentialState(),
+          checks,
+        };
+      }
+
+      function writeJson(response, status, payload) {
+        const body = Buffer.from(JSON.stringify(payload, null, 2) + "\n", "utf8");
+        response.writeHead(status, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Content-Length": String(body.length),
+          "Cache-Control": "no-store",
+        });
+        response.end(body);
+      }
+
+      function modelsPayload(payload) {
+        return {
+          object: "list",
+          data: [
+            {
+              id: "claude-code/local-verifier",
+              object: "model",
+              created: 0,
+              owned_by: "anthropic",
+              description: "Local Claude Code CLI package and `claude --version` verifier. No model is hosted and no Anthropic API request is made.",
+            },
+          ],
+          service: payload.service,
+          package_name: payload.package_name,
+          package_version: payload.checks.package.installed_version || null,
+          cli_version_output: payload.checks.cli_version_check.version_output || null,
+          hosted_llm_calls_performed: false,
+        };
+      }
+
+      const server = http.createServer((request, response) => {
+        if (request.method !== "GET") {
+          writeJson(response, 405, { ok: false, error: "method_not_allowed", endpoints: ENDPOINTS });
+          return;
+        }
+
+        const requestUrl = new URL(request.url, "http://127.0.0.1");
+        const pathName = requestUrl.pathname.replace(/\/+$/, "") || "/";
+
+        try {
+          if (pathName === "/" || pathName === "/healthz") {
+            const payload = basePayload();
+            writeJson(response, payload.ok ? 200 : 503, payload);
+            return;
+          }
+
+          if (pathName === "/demo") {
+            const payload = basePayload();
+            payload.demo = {
+              name: "Claude Code local verifier",
+              what_ran: "claude --version",
+              verifies: [
+                "The real @anthropic-ai/claude-code npm package is installed.",
+                "The claude binary can execute locally.",
+                "No prompt is sent to Claude and no hosted model API is called.",
+              ],
+              production_credentials: "Real Claude Code agent sessions need an Anthropic API key or an authenticated Claude Code account/subscription in an interactive environment. This verifier does not include or require those secrets.",
+            };
+            writeJson(response, payload.ok ? 200 : 503, payload);
+            return;
+          }
+
+          if (pathName === "/v1/models") {
+            const payload = basePayload();
+            writeJson(response, payload.ok ? 200 : 503, modelsPayload(payload));
+            return;
+          }
+
+          writeJson(response, 404, { ok: false, error: "not_found", endpoints: ENDPOINTS });
+        } catch (error) {
+          writeJson(response, 500, { ok: false, error: "internal_error", message: error.message });
+        }
+      });
+
+      const port = Number.parseInt(process.env.PORT || "8080", 10);
+      server.listen(port, "0.0.0.0", () => {
+        const payload = basePayload();
+        console.log(JSON.stringify({
+          event: "startup",
+          port,
+          ok: payload.ok,
+          package_version: payload.checks.package.installed_version || null,
+          cli_version_output: payload.checks.cli_version_check.version_output || null,
+          credentials_required_for_health: false,
+        }));
+      });

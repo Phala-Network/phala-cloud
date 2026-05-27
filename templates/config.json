@@ -3268,5 +3268,32 @@
       "diskSize": 20
     },
     "tags": ["Data & Storage", "AI Agents", "RAG"]
+  },
+{
+    "id": "claude-code",
+    "name": "Claude Code",
+    "description": "Anthropic's terminal coding agent local verifier. This CPU-safe HTTP demo installs the real @anthropic-ai/claude-code npm package, checks claude --version, and exposes smoke endpoints without requiring Anthropic credentials, browser auth, model downloads, GPU, or hosted model calls.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/claude-code",
+    "author": "anthropics",
+    "icon": "claude-code.svg",
+    "envs": [
+      {
+        "key": "CLAUDE_CODE_VERSION",
+        "required": false,
+        "default": "2.1.150",
+        "description": "Published @anthropic-ai/claude-code npm package version installed by the verifier at container startup."
+      },
+      {
+        "key": "ANTHROPIC_API_KEY",
+        "required": false,
+        "description": "Optional Anthropic API key for later real Claude Code use. Not required or used by the default verifier endpoints."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["Developer Tools", "AI Agents", "Automation"]
   }
 ]
