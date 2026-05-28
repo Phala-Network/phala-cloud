@@ -4000,5 +4000,27 @@
       "diskSize": 20
     },
     "tags": ["AI Agents", "Developer Tools"]
+  },
+{
+    "id": "dspy",
+    "name": "stanfordnlp/dspy",
+    "description": "Programming—not prompting—LLMs; optimizes prompts automatically. This template runs a CPU-safe HTTP smoke demo that installs the real DSPy package and exercises deterministic local DSPy primitives without provider credentials, model downloads, or hosted LLM calls.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/dspy",
+    "author": "stanfordnlp",
+    "icon": "dspy.png",
+    "envs": [
+      {
+        "key": "DSPY_PACKAGE_VERSION",
+        "required": false,
+        "default": "3.2.1",
+        "description": "Pinned DSPy Python package version installed by the demo service at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools"]
   }
 ]
