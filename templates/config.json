@@ -3846,5 +3846,33 @@
       "diskSize": 20
     },
     "tags": ["LLM Inference & Model Serving", "Infrastructure", "Developer Tools"]
+  },
+{
+    "id": "helicone",
+    "name": "Helicone/helicone",
+    "description": "LLM observability and gateway platform. This template runs a CPU-safe Helicone source verifier/demo that checks pinned public upstream files and exposes health, demo, model-list, and upstream metadata endpoints without running the full dashboard, databases, proxy, workers, or requiring provider keys.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/helicone",
+    "author": "Helicone",
+    "icon": "helicone.svg",
+    "envs": [
+      {
+        "key": "HELICONE_SOURCE_REF",
+        "required": false,
+        "default": "094b210b405a3dcc4887d55bfe2d4b4c37af2f20",
+        "description": "Public Helicone Git commit, branch, or tag used for source checks. The default pinned commit enforces SHA-256 hashes; other refs use marker checks only."
+      },
+      {
+        "key": "VERIFY_TIMEOUT_SECONDS",
+        "required": false,
+        "default": "15",
+        "description": "Timeout, in seconds, for each public upstream source fetch."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["LLM Inference & Model Serving", "Developer Tools", "Infrastructure"]
   }
 ]
