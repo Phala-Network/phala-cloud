@@ -3916,5 +3916,33 @@
     "diskSize": 10
   },
   "tags": ["Developer Tools", "AI Agents", "Infrastructure"]
-}
+},
+{
+    "id": "phoenix",
+    "name": "Arize-ai/phoenix",
+    "description": "Open-source AI observability and evaluation platform. This template runs the official Phoenix container on CPU with SQLite persistence, public HTTP/OTLP ports, and no provider credentials required for startup or smoke verification.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/phoenix",
+    "author": "Arize-ai",
+    "icon": "phoenix.png",
+    "envs": [
+      {
+        "key": "PHOENIX_TELEMETRY_ENABLED",
+        "required": false,
+        "default": "false",
+        "description": "Controls Phoenix product telemetry. Disabled by default in this template."
+      },
+      {
+        "key": "PHOENIX_ALLOW_EXTERNAL_RESOURCES",
+        "required": false,
+        "default": "true",
+        "description": "Allows Phoenix UI external resources such as fonts. Set to false for air-gapped deployments."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["AI Agents", "Data & Storage", "Developer Tools"]
+  }
 ]
