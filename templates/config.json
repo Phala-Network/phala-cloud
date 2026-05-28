@@ -3888,5 +3888,33 @@
     "diskSize": 10
   },
   "tags": ["LLM Inference & Model Serving", "Infrastructure", "Developer Tools"]
+},
+{
+  "id": "langfuse",
+  "name": "langfuse/langfuse",
+  "description": "Open-source LLM observability, traces, prompt management, evaluations, and metrics. This template runs a CPU-safe HTTP verifier for pinned Langfuse upstream source and self-hosted stack metadata without starting databases, object storage, workers, LLM calls, model downloads, or requiring secrets.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/langfuse",
+  "author": "langfuse",
+  "icon": "langfuse.svg",
+  "envs": [
+    {
+      "key": "APP_PORT",
+      "required": false,
+      "default": "8080",
+      "description": "HTTP port used by the Langfuse verifier service. The compose file publishes the same host and container port."
+    },
+    {
+      "key": "LANGFUSE_VERIFY_TIMEOUT_SECONDS",
+      "required": false,
+      "default": "15",
+      "description": "Timeout in seconds for each pinned public upstream file verification request."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": ["Developer Tools", "AI Agents", "Infrastructure"]
 }
 ]
