@@ -3944,5 +3944,33 @@
       "diskSize": 20
     },
     "tags": ["AI Agents", "Data & Storage", "Developer Tools"]
-  }
+  },
+{
+  "id": "opik",
+  "name": "comet-ml/opik",
+  "description": "Open-source LLM observability and evaluation platform by Comet. This template runs a CPU-safe local Opik package and evaluation verifier without provider credentials, external databases, model downloads, or GPU.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/opik",
+  "author": "comet-ml",
+  "icon": "opik.svg",
+  "envs": [
+    {
+      "key": "OPIK_PACKAGE_VERSION",
+      "required": false,
+      "default": "2.0.49",
+      "description": "Pinned Opik Python package version installed at container startup."
+    },
+    {
+      "key": "OPIK_DEMO_TITLE",
+      "required": false,
+      "default": "Opik CPU local evaluation demo",
+      "description": "Optional label returned by /healthz and /demo."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": ["Developer Tools", "AI Agents", "Data & Storage"]
+}
 ]

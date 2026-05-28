@@ -1,0 +1,366 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.11-bookworm-slim
+    init: true
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      OPIK_PACKAGE_VERSION: ${OPIK_PACKAGE_VERSION:-2.0.49}
+      OPIK_DEMO_TITLE: ${OPIK_DEMO_TITLE:-Opik CPU local evaluation demo}
+      PYTHONUNBUFFERED: "1"
+      UV_SYSTEM_PYTHON: "1"
+    configs:
+      - source: opik_demo_app
+        target: /opt/opik-demo/server.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache "opik==$${OPIK_PACKAGE_VERSION}"
+        exec python /opt/opik-demo/server.py
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import sys, urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+configs:
+  opik_demo_app:
+    content: |
+      import hashlib
+      import importlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "opik"
+      MODULE_NAME = "opik"
+      MODEL_ID = "opik-local-evaluation-verifier"
+      UPSTREAM_REPOSITORY = "https://github.com/comet-ml/opik"
+      UPSTREAM_COMPOSE = "https://github.com/comet-ml/opik/blob/main/deployment/docker-compose/docker-compose.yaml"
+      UPSTREAM_DOCS = "https://www.comet.com/docs/opik/"
+      ICON_SOURCE = "https://github.com/comet-ml/opik/blob/main/apps/opik-frontend/src/icons/opik.svg"
+
+
+      def score_to_dict(score):
+          return {
+              "name": getattr(score, "name", None),
+              "value": getattr(score, "value", None),
+              "reason": getattr(score, "reason", None),
+              "category_name": getattr(score, "category_name", None),
+              "metadata": getattr(score, "metadata", None),
+              "scoring_failed": bool(getattr(score, "scoring_failed", False)),
+          }
+
+
+      def import_checks():
+          result = {
+              "distribution": PACKAGE_NAME,
+              "distribution_version": None,
+              "module": MODULE_NAME,
+              "module_import_ok": False,
+              "required_exports": {},
+              "metric_imports": {},
+              "import_ok": False,
+              "error": None,
+          }
+          try:
+              result["distribution_version"] = importlib.metadata.version(PACKAGE_NAME)
+              opik = importlib.import_module(MODULE_NAME)
+              result["module_import_ok"] = opik.__name__ == MODULE_NAME
+
+              for export_name in ("track", "evaluate", "Opik", "configure"):
+                  result["required_exports"][export_name] = hasattr(opik, export_name)
+
+              metrics_module = importlib.import_module("opik.evaluation.metrics")
+              for metric_name in ("Contains", "Equals", "LevenshteinRatio", "RegexMatch"):
+                  result["metric_imports"][metric_name] = hasattr(metrics_module, metric_name)
+
+              result["import_ok"] = (
+                  bool(result["distribution_version"])
+                  and result["module_import_ok"]
+                  and all(result["required_exports"].values())
+                  and all(result["metric_imports"].values())
+              )
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      IMPORT_STATUS = import_checks()
+
+
+      def run_local_demo():
+          if not IMPORT_STATUS["import_ok"]:
+              raise RuntimeError(IMPORT_STATUS["error"] or "Opik import checks failed")
+
+          from opik.evaluation.metrics import Contains, Equals, LevenshteinRatio, RegexMatch
+
+          sample = {
+              "input": "What is the capital of France?",
+              "reference": "Paris is the capital of France.",
+              "output": "Paris is the capital of France.",
+              "context": [
+                  "France is a country in Europe.",
+                  "Paris is the capital and most populous city of France.",
+              ],
+          }
+          trace_material = json.dumps(sample, sort_keys=True).encode("utf-8")
+          trace_id = hashlib.sha256(trace_material).hexdigest()[:16]
+
+          scores = [
+              score_to_dict(Contains(case_sensitive=False, track=False).score(
+                  output=sample["output"],
+                  reference="Paris",
+              )),
+              score_to_dict(Equals(case_sensitive=False, track=False).score(
+                  output=sample["output"],
+                  reference=sample["reference"],
+              )),
+              score_to_dict(LevenshteinRatio(case_sensitive=False, track=False).score(
+                  output=sample["output"],
+                  reference=sample["reference"],
+              )),
+              score_to_dict(RegexMatch(
+                  regex=r"^Paris is the capital of France\.$",
+                  track=False,
+              ).score(output=sample["output"])),
+          ]
+          numeric_scores = [
+              score["value"]
+              for score in scores
+              if isinstance(score.get("value"), (int, float)) and not score["scoring_failed"]
+          ]
+          aggregate_score = round(sum(numeric_scores) / len(numeric_scores), 6) if numeric_scores else 0.0
+
+          return {
+              "title": os.environ.get("OPIK_DEMO_TITLE", "Opik CPU local evaluation demo"),
+              "trace": {
+                  "id": f"trace-{trace_id}",
+                  "name": "local-rag-answer-evaluation",
+                  "spans": [
+                      {
+                          "name": "retrieve_context",
+                          "type": "retrieval",
+                          "input": sample["input"],
+                          "output_items": len(sample["context"]),
+                      },
+                      {
+                          "name": "generate_answer",
+                          "type": "generation",
+                          "output": sample["output"],
+                          "provider_call": False,
+                      },
+                      {
+                          "name": "score_answer",
+                          "type": "evaluation",
+                          "metric_count": len(scores),
+                          "aggregate_score": aggregate_score,
+                      },
+                  ],
+              },
+              "sample": sample,
+              "scores": scores,
+              "aggregate_score": aggregate_score,
+              "checks": {
+                  "opik_package_imported": True,
+                  "opik_heuristic_metrics_used": True,
+                  "deterministic": True,
+                  "cpu_only": True,
+                  "provider_calls": False,
+                  "model_downloaded": False,
+                  "external_database": False,
+                  "hosted_credentials_required": False,
+              },
+          }
+
+
+      try:
+          DEMO_STATUS = run_local_demo()
+          DEMO_ERROR = None
+      except Exception as exc:
+          DEMO_STATUS = None
+          DEMO_ERROR = f"{type(exc).__name__}: {exc}"
+
+
+      def base_payload():
+          return {
+              "service": "opik-cpu-demo",
+              "upstream": UPSTREAM_REPOSITORY,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "package": {
+                  "name": PACKAGE_NAME,
+                  "version": IMPORT_STATUS["distribution_version"],
+              },
+          }
+
+
+      def health_payload():
+          ok = IMPORT_STATUS["import_ok"] and DEMO_STATUS is not None
+          payload = base_payload()
+          payload.update(
+              {
+                  "ok": ok,
+                  "status": "ready" if ok else "not_ready",
+                  "readiness": {
+                      "package_metadata_ok": bool(IMPORT_STATUS["distribution_version"]),
+                      "module_import_ok": IMPORT_STATUS["module_import_ok"],
+                      "required_exports_ok": all(IMPORT_STATUS["required_exports"].values()),
+                      "metrics_import_ok": all(IMPORT_STATUS["metric_imports"].values()),
+                      "demo_ok": DEMO_STATUS is not None,
+                      "http_server_ok": True,
+                  },
+                  "credentials_required": False,
+                  "remote_model_calls": False,
+                  "external_databases": False,
+              }
+          )
+          if IMPORT_STATUS["error"]:
+              payload["import_error"] = IMPORT_STATUS["error"]
+          if DEMO_ERROR:
+              payload["demo_error"] = DEMO_ERROR
+          return payload
+
+
+      def upstream_payload():
+          payload = base_payload()
+          payload.update(
+              {
+                  "ok": IMPORT_STATUS["import_ok"],
+                  "repository": UPSTREAM_REPOSITORY,
+                  "documentation": UPSTREAM_DOCS,
+                  "python_package": "https://pypi.org/project/opik/",
+                  "icon_source": ICON_SOURCE,
+                  "production_stack_note": {
+                      "full_platform_started": False,
+                      "reason": (
+                          "The upstream self-hosted Docker Compose stack includes MySQL, Redis, "
+                          "ClickHouse, ZooKeeper, MinIO, backend, frontend, Python backend, "
+                          "optional guardrails, profiles, build contexts, and production secrets. "
+                          "This template is a CPU-safe verifier only."
+                      ),
+                      "source": UPSTREAM_COMPOSE,
+                  },
+              }
+          )
+          return payload
+
+
+      def models_payload():
+          return {
+              "object": "list",
+              "data": [
+                  {
+                      "id": MODEL_ID,
+                      "object": "model",
+                      "created": 0,
+                      "owned_by": "comet-ml-opik",
+                      "description": (
+                          "OpenAI-compatible metadata endpoint for the local Opik evaluation verifier. "
+                          "It is not an inference model and does not call hosted LLM providers."
+                      ),
+                  }
+              ],
+              "package": {
+                  "name": PACKAGE_NAME,
+                  "version": IMPORT_STATUS["distribution_version"],
+              },
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "opik-cpu-demo"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+
+              if path in ("/", "/healthz"):
+                  payload = health_payload()
+                  status = HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+                  self.respond_json(status, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  if DEMO_STATUS is None:
+                      payload.update({"ok": False, "error": DEMO_ERROR})
+                      self.respond_json(HTTPStatus.SERVICE_UNAVAILABLE, payload)
+                      return
+                  payload.update({"ok": True, "demo": run_local_demo()})
+                  self.respond_json(HTTPStatus.OK, payload)
+                  return
+
+              if path == "/v1/models":
+                  self.respond_json(HTTPStatus.OK, models_payload())
+                  return
+
+              if path == "/upstream":
+                  self.respond_json(HTTPStatus.OK, upstream_payload())
+                  return
+
+              self.respond_json(
+                  HTTPStatus.NOT_FOUND,
+                  {
+                      "ok": False,
+                      "error": "not_found",
+                      "endpoints": ["/healthz", "/demo", "/v1/models", "/upstream"],
+                  },
+              )
+
+
+      if __name__ == "__main__":
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": 8080,
+                      "package": IMPORT_STATUS,
+                      "demo_ready": DEMO_STATUS is not None,
+                      "remote_model_calls": False,
+                      "external_databases": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
