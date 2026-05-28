@@ -3972,5 +3972,33 @@
     "diskSize": 10
   },
   "tags": ["Developer Tools", "AI Agents", "Data & Storage"]
-}
+},
+{
+    "id": "promptfoo",
+    "name": "promptfoo/promptfoo",
+    "description": "Prompt, agent, RAG evaluation and red-team framework; CPU-safe demo installs real promptfoo CLI and runs deterministic local assertion smoke without provider credentials.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/promptfoo",
+    "author": "promptfoo",
+    "icon": "promptfoo.png",
+    "envs": [
+      {
+        "key": "PROMPTFOO_VERSION",
+        "required": false,
+        "default": "0.121.12",
+        "description": "promptfoo npm package version installed globally at container startup."
+      },
+      {
+        "key": "PORT",
+        "required": false,
+        "default": "3000",
+        "description": "HTTP port exposed by the demo service."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["AI Agents", "Developer Tools"]
+  }
 ]

@@ -1,0 +1,369 @@
+services:
+  app:
+    image: node:22-bookworm-slim
+    init: true
+    ports:
+      - "${PORT:-3000}:${PORT:-3000}"
+    environment:
+      - PORT=${PORT:-3000}
+      - PROMPTFOO_VERSION=${PROMPTFOO_VERSION:-0.121.12}
+      - PROMPTFOO_DISABLE_TELEMETRY=true
+      - PROMPTFOO_DISABLE_UPDATE=true
+      - PROMPTFOO_DISABLE_SHARING=true
+      - PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST=true
+      - CI=true
+      - NODE_ENV=production
+      - NPM_CONFIG_UPDATE_NOTIFIER=false
+      - NPM_CONFIG_FUND=false
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        npm install --global --no-audit --no-fund "promptfoo@$${PROMPTFOO_VERSION}"
+        exec node /opt/promptfoo-demo/server.js
+    configs:
+      - source: server_js
+        target: /opt/promptfoo-demo/server.js
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "node -e \"fetch('http://127.0.0.1:' + (process.env.PORT || '3000') + '/healthz').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    restart: unless-stopped
+
+configs:
+  server_js:
+    content: |
+      const childProcess = require("node:child_process");
+      const fs = require("node:fs/promises");
+      const http = require("node:http");
+      const os = require("node:os");
+      const path = require("node:path");
+
+      const STARTED_AT = Date.now();
+      const PORT = Number.parseInt(process.env.PORT || "3000", 10);
+      const PROMPTFOO_VERSION = process.env.PROMPTFOO_VERSION || "0.121.12";
+
+      function runSync(command, args, options = {}) {
+        try {
+          const stdout = childProcess.execFileSync(command, args, {
+            encoding: "utf8",
+            timeout: options.timeout || 20000,
+            maxBuffer: 1024 * 1024,
+          });
+          return { ok: true, stdout: stdout.trim(), stderr: "" };
+        } catch (error) {
+          return {
+            ok: false,
+            stdout: error.stdout ? String(error.stdout).trim() : "",
+            stderr: error.stderr ? String(error.stderr).trim() : "",
+            error: (error.name || "Error") + ": " + error.message,
+          };
+        }
+      }
+
+      function runAsync(command, args, options = {}) {
+        return new Promise((resolve) => {
+          childProcess.execFile(command, args, {
+            cwd: options.cwd,
+            encoding: "utf8",
+            timeout: options.timeout || 60000,
+            maxBuffer: 4 * 1024 * 1024,
+            env: {
+              ...process.env,
+              PROMPTFOO_DISABLE_TELEMETRY: "true",
+              PROMPTFOO_DISABLE_UPDATE: "true",
+              PROMPTFOO_DISABLE_SHARING: "true",
+              PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST: "true",
+              CI: "true",
+            },
+          }, (error, stdout, stderr) => {
+            resolve({
+              ok: !error,
+              stdout: stdout ? stdout.trim() : "",
+              stderr: stderr ? stderr.trim() : "",
+              error: error ? (error.name || "Error") + ": " + error.message : null,
+            });
+          });
+        });
+      }
+
+      function verifyPromptfoo() {
+        const npmList = runSync("npm", ["list", "-g", "--depth=0", "promptfoo", "--json"]);
+        let packageVersion = null;
+        let packageError = null;
+
+        if (npmList.ok) {
+          try {
+            const parsed = JSON.parse(npmList.stdout);
+            packageVersion = parsed.dependencies && parsed.dependencies.promptfoo
+              ? parsed.dependencies.promptfoo.version
+              : null;
+            if (!packageVersion) {
+              packageError = "promptfoo was not present in global npm dependencies";
+            }
+          } catch (error) {
+            packageError = "could not parse npm list output: " + error.message;
+          }
+        } else {
+          packageError = npmList.error || npmList.stderr || "npm list failed";
+        }
+
+        const cliVersion = runSync("promptfoo", ["--version"]);
+        const cliVersionText = cliVersion.ok ? cliVersion.stdout.split(/\s+/).filter(Boolean).pop() : null;
+
+        return {
+          ok: Boolean(packageVersion && cliVersion.ok),
+          requested_version: PROMPTFOO_VERSION,
+          npm_package: {
+            ok: Boolean(packageVersion),
+            version: packageVersion,
+            command: "npm list -g --depth=0 promptfoo --json",
+            error: packageError,
+          },
+          cli: {
+            ok: cliVersion.ok,
+            version: cliVersionText,
+            command: "promptfoo --version",
+            error: cliVersion.ok ? null : (cliVersion.error || cliVersion.stderr || "promptfoo --version failed"),
+          },
+        };
+      }
+
+      const STARTUP_CHECKS = verifyPromptfoo();
+
+      function basePayload() {
+        return {
+          service: "promptfoo-local-eval-verifier",
+          upstream: "https://github.com/promptfoo/promptfoo",
+          package: "https://www.npmjs.com/package/promptfoo",
+          docs: "https://www.promptfoo.dev/docs/",
+          uptime_seconds: Number(((Date.now() - STARTED_AT) / 1000).toFixed(3)),
+          promptfoo: STARTUP_CHECKS,
+        };
+      }
+
+      function jsonResponse(res, status, payload) {
+        const body = JSON.stringify(payload, null, 2);
+        res.writeHead(status, {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": Buffer.byteLength(body),
+          "cache-control": "no-store",
+        });
+        res.end(body);
+      }
+
+      async function runDemo() {
+        const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "promptfoo-demo-"));
+        let cleanup = { attempted: false, ok: false, error: null };
+
+        try {
+          await fs.writeFile(
+            path.join(tempDir, "assertions.yaml"),
+            [
+              "- type: contains",
+              "  value: Phala Cloud",
+              "- type: contains",
+              "  value: deterministic",
+              "",
+            ].join("\n"),
+            "utf8",
+          );
+          await fs.writeFile(
+            path.join(tempDir, "outputs.json"),
+            JSON.stringify(["Phala Cloud deterministic local eval verifier"], null, 2),
+            "utf8",
+          );
+
+          const command = [
+            "eval",
+            "--assertions",
+            "assertions.yaml",
+            "--model-outputs",
+            "outputs.json",
+            "--no-cache",
+            "--no-write",
+            "--no-progress-bar",
+            "--no-table",
+            "--output",
+            "result.json",
+          ];
+          const execution = await runAsync("promptfoo", command, { cwd: tempDir, timeout: 60000 });
+
+          let result = null;
+          let resultError = null;
+          try {
+            result = JSON.parse(await fs.readFile(path.join(tempDir, "result.json"), "utf8"));
+          } catch (error) {
+            resultError = (error.name || "Error") + ": " + error.message;
+          }
+
+          return {
+            ok: execution.ok,
+            command: "promptfoo " + command.join(" "),
+            execution: {
+              ok: execution.ok,
+              stdout: execution.stdout,
+              stderr: execution.stderr,
+              error: execution.error,
+            },
+            local_eval: {
+              mode: "standalone assertions",
+              assertions: ["contains: Phala Cloud", "contains: deterministic"],
+              model_outputs: 1,
+              result_file_written: Boolean(result),
+              stats: result ? extractStats(result) : null,
+              result_top_level_keys: result ? Object.keys(result).slice(0, 20) : [],
+              result_parse_error: resultError,
+            },
+            provider_credentials_required: false,
+            provider_credentials_used: false,
+            model_downloads: false,
+            gpu_required: false,
+            cpu_only: true,
+            network_model_calls: false,
+            temporary_directory_removed: null,
+          };
+        } finally {
+          cleanup.attempted = true;
+          try {
+            await fs.rm(tempDir, { recursive: true, force: true });
+            cleanup.ok = true;
+          } catch (error) {
+            cleanup.error = (error.name || "Error") + ": " + error.message;
+          }
+          runDemo.lastCleanup = cleanup;
+        }
+      }
+
+      function extractStats(result) {
+        if (result && typeof result === "object") {
+          if (result.stats && typeof result.stats === "object") {
+            return result.stats;
+          }
+          if (result.results && result.results.stats && typeof result.results.stats === "object") {
+            return result.results.stats;
+          }
+          if (result.summary && result.summary.stats && typeof result.summary.stats === "object") {
+            return result.summary.stats;
+          }
+        }
+        return null;
+      }
+
+      async function handleRequest(req, res) {
+        const requestUrl = new URL(req.url, "http://127.0.0.1");
+
+        if (req.method !== "GET") {
+          jsonResponse(res, 405, { ok: false, error: "method not allowed" });
+          return;
+        }
+
+        if (requestUrl.pathname === "/healthz") {
+          jsonResponse(res, STARTUP_CHECKS.ok ? 200 : 503, {
+            ...basePayload(),
+            ok: STARTUP_CHECKS.ok,
+            status: STARTUP_CHECKS.ok ? "ready" : "startup_check_failed",
+          });
+          return;
+        }
+
+        if (requestUrl.pathname === "/demo") {
+          if (!STARTUP_CHECKS.ok) {
+            jsonResponse(res, 503, {
+              ...basePayload(),
+              ok: false,
+              error: "promptfoo package or CLI startup check failed",
+            });
+            return;
+          }
+
+          const payload = {
+            ...basePayload(),
+            ok: true,
+            demo_scope: "Runs promptfoo standalone assertions against a local JSON model-output file.",
+          };
+          try {
+            const demo = await runDemo();
+            const cleanup = runDemo.lastCleanup || { attempted: false, ok: false, error: null };
+            demo.temporary_directory_removed = cleanup.ok;
+            if (cleanup.error) {
+              demo.cleanup_error = cleanup.error;
+            }
+            payload.ok = demo.ok;
+            payload.demo = demo;
+            jsonResponse(res, demo.ok ? 200 : 500, payload);
+          } catch (error) {
+            jsonResponse(res, 500, {
+              ...payload,
+              ok: false,
+              error: (error.name || "Error") + ": " + error.message,
+              temporary_directory_removed: runDemo.lastCleanup ? runDemo.lastCleanup.ok : false,
+            });
+          }
+          return;
+        }
+
+        if (requestUrl.pathname === "/v1/models") {
+          jsonResponse(res, 200, {
+            object: "list",
+            data: [
+              {
+                id: "promptfoo/local-eval-verifier",
+                object: "model",
+                created: 0,
+                owned_by: "promptfoo",
+                metadata: {
+                  mode: "metadata-only",
+                  provider_credentials_required: false,
+                  model_downloads: false,
+                  gpu_required: false,
+                  upstream: "https://github.com/promptfoo/promptfoo",
+                },
+              },
+            ],
+          });
+          return;
+        }
+
+        if (requestUrl.pathname === "/upstream") {
+          jsonResponse(res, 200, {
+            upstream_repo: "https://github.com/promptfoo/promptfoo",
+            npm_package: "https://www.npmjs.com/package/promptfoo",
+            docs: "https://www.promptfoo.dev/docs/",
+            cli_docs: "https://www.promptfoo.dev/docs/usage/command-line/",
+            standalone_assertions_docs: "https://www.promptfoo.dev/docs/guides/evaluate-model-outputs/",
+            demo_scope: "Local deterministic assertion smoke test only; no provider credentials, model downloads, or GPU.",
+          });
+          return;
+        }
+
+        if (requestUrl.pathname === "/") {
+          jsonResponse(res, 200, {
+            ...basePayload(),
+            ok: STARTUP_CHECKS.ok,
+            endpoints: {
+              health: "/healthz",
+              demo: "/demo",
+              models: "/v1/models",
+              upstream: "/upstream",
+            },
+          });
+          return;
+        }
+
+        jsonResponse(res, 404, { ok: false, error: "not found" });
+      }
+
+      const server = http.createServer((req, res) => {
+        handleRequest(req, res).catch((error) => {
+          jsonResponse(res, 500, { ok: false, error: (error.name || "Error") + ": " + error.message });
+        });
+      });
+
+      server.listen(PORT, "0.0.0.0", () => {
+        console.log("promptfoo local eval verifier listening on " + PORT);
+      });
