@@ -1,0 +1,41 @@
+services:
+  litellm:
+    image: docker.litellm.ai/berriai/litellm:${LITELLM_IMAGE_TAG:-main-stable}
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - LITELLM_LOG=${LITELLM_LOG:-INFO}
+      - STORE_MODEL_IN_DB=False
+      - LITELLM_MASTER_KEY
+      - OPENAI_API_KEY
+      - ANTHROPIC_API_KEY
+      - GOOGLE_API_KEY
+    command:
+      - --config=/app/config.yaml
+      - --host=0.0.0.0
+      - --port=4000
+    configs:
+      - source: litellm_config
+        target: /app/config.yaml
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=5).read()"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+configs:
+  litellm_config:
+    content: |
+      model_list: []
+
+      litellm_settings:
+        drop_params: true
+        request_timeout: 60
+        telemetry: false
+
+      general_settings:
+        store_model_in_db: false
