@@ -1,0 +1,450 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    init: true
+    restart: unless-stopped
+    user: "65532:65532"
+    ports:
+      - "${APP_PORT:-8080}:${APP_PORT:-8080}"
+    environment:
+      APP_PORT: ${APP_PORT:-8080}
+      LANGFUSE_UPSTREAM: "https://github.com/langfuse/langfuse"
+      LANGFUSE_REF_NAME: "main"
+      LANGFUSE_REF: "ffedf2b8192b15f2e66c36ead3301720dc7416b0"
+      LANGFUSE_VERSION: "v3.175.0"
+      LANGFUSE_VERIFY_TIMEOUT_SECONDS: ${LANGFUSE_VERIFY_TIMEOUT_SECONDS:-15}
+      PYTHONUNBUFFERED: "1"
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    configs:
+      - source: langfuse_verifier_app
+        target: /opt/langfuse-verifier/server.py
+    command:
+      - python
+      - /opt/langfuse-verifier/server.py
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8080'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+configs:
+  langfuse_verifier_app:
+    content: |
+      import hashlib
+      import json
+      import os
+      import platform
+      import sys
+      import threading
+      import time
+      import urllib.error
+      import urllib.parse
+      import urllib.request
+      from datetime import datetime, timezone
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+      STARTED_AT = time.time()
+      SERVICE = "langfuse-source-verifier"
+      UPSTREAM = os.environ.get("LANGFUSE_UPSTREAM", "https://github.com/langfuse/langfuse")
+      REF_NAME = os.environ.get("LANGFUSE_REF_NAME", "main")
+      REF = os.environ.get("LANGFUSE_REF", "ffedf2b8192b15f2e66c36ead3301720dc7416b0")
+      VERSION = os.environ.get("LANGFUSE_VERSION", "v3.175.0")
+      TIMEOUT_SECONDS = float(os.environ.get("LANGFUSE_VERIFY_TIMEOUT_SECONDS", "15"))
+
+      FILES = [
+          {
+              "path": "README.md",
+              "size": 53048,
+              "sha256": "eef6cba87775101af69d05587d94f853accff95a97ac6dd4f14804dd2895b1cc",
+              "checks": [
+                  ("open_source_llm_engineering", "open source LLM engineering"),
+                  ("llm_application_observability", "LLM Application Observability"),
+                  ("prompt_management", "Prompt Management"),
+                  ("evaluations", "Evaluations"),
+                  ("clickhouse_attribution", "ClickHouse open source database"),
+                  ("self_host_docs", "Self-Host Langfuse"),
+                  ("openapi_spec", "OpenAPI spec"),
+              ],
+          },
+          {
+              "path": "package.json",
+              "size": 4253,
+              "sha256": "65b110956ee7936cd7e155cd9a5fb3d6a1a359fd007b32faeaeb6c7474902564",
+              "checks": [
+                  ("package_name", '"name": "langfuse"'),
+                  ("package_version", '"version": "3.175.0"'),
+                  ("node_engine", '"node": "24"'),
+                  ("package_manager", '"packageManager": "pnpm@11.1.3"'),
+                  ("start_script", '"start": "turbo run start"'),
+                  ("dev_infra_compose", '"infra:dev:up": "docker compose -f ./docker-compose.dev.yml up -d --wait"'),
+              ],
+          },
+          {
+              "path": "docker-compose.yml",
+              "size": 8067,
+              "sha256": "6bd6e83ba410555cef499e45f4c8fe9f7d351c903b6ae5aa6f1ff1434028cffe",
+              "checks": [
+                  ("worker_service", "langfuse-worker"),
+                  ("web_service", "langfuse-web"),
+                  ("worker_image", "docker.io/langfuse/langfuse-worker:3"),
+                  ("web_image", "docker.io/langfuse/langfuse:3"),
+                  ("postgres_dependency", "postgres"),
+                  ("clickhouse_dependency", "clickhouse"),
+                  ("redis_dependency", "redis"),
+                  ("minio_dependency", "minio"),
+                  ("credential_change_markers", "CHANGEME"),
+                  ("encryption_key_required", "ENCRYPTION_KEY"),
+                  ("nextauth_secret_required", "NEXTAUTH_SECRET"),
+                  ("salt_required", "SALT"),
+              ],
+          },
+          {
+              "path": "web/src/constants/VERSION.ts",
+              "size": 35,
+              "sha256": "1943e688c8857c1d4df55db4a754038ea72d44f4bebc891bcf54814d327a8697",
+              "checks": [
+                  ("version_constant", 'export const VERSION = "v3.175.0";'),
+              ],
+          },
+          {
+              "path": "web/public/icon.svg",
+              "size": 2999,
+              "sha256": "daeef880d58644fab4fd9ba5d292086c6d69756a39cff94d510f8ddc35312bf3",
+              "checks": [
+                  ("svg_viewbox", 'viewBox="0 0 512 512"'),
+                  ("langfuse_red", "#FF5D5F"),
+                  ("langfuse_blue", "#4E9CFF"),
+              ],
+          },
+      ]
+
+      UPSTREAM_STACK_FACTS = {
+          "official_compose_services": [
+              "langfuse-worker",
+              "langfuse-web",
+              "postgres",
+              "clickhouse",
+              "redis",
+              "minio",
+          ],
+          "official_images": [
+              "docker.io/langfuse/langfuse-worker:3",
+              "docker.io/langfuse/langfuse:3",
+              "docker.io/clickhouse/clickhouse-server",
+              "cgr.dev/chainguard/minio",
+              "docker.io/redis:7",
+              "docker.io/postgres:17",
+          ],
+          "credential_or_secret_env_names": [
+              "DATABASE_URL",
+              "SALT",
+              "ENCRYPTION_KEY",
+              "CLICKHOUSE_PASSWORD",
+              "LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY",
+              "LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY",
+              "LANGFUSE_S3_BATCH_EXPORT_SECRET_ACCESS_KEY",
+              "REDIS_AUTH",
+              "NEXTAUTH_SECRET",
+              "MINIO_ROOT_PASSWORD",
+              "POSTGRES_PASSWORD",
+          ],
+          "stateful_components": ["PostgreSQL", "ClickHouse", "Redis", "MinIO"],
+          "public_ports_in_official_compose": ["3000", "9090"],
+      }
+
+
+      VERIFY_LOCK = threading.Lock()
+      VERIFY_RESULT = {
+          "status": "starting",
+          "ok": None,
+          "message": "upstream verification has not run yet",
+      }
+
+
+      def iso_now():
+          return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+      def raw_url(path):
+          quoted = urllib.parse.quote(path, safe="/")
+          return f"https://raw.githubusercontent.com/langfuse/langfuse/{REF}/{quoted}"
+
+
+      def fetch_bytes(url):
+          request = urllib.request.Request(
+              url,
+              headers={"User-Agent": "phala-langfuse-template-verifier/1.0"},
+          )
+          with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+              return response.read()
+
+
+      def verify_file(spec):
+          url = raw_url(spec["path"])
+          result = {
+              "path": spec["path"],
+              "url": url,
+              "expected_size": spec["size"],
+              "expected_sha256": spec["sha256"],
+          }
+          try:
+              body = fetch_bytes(url)
+              text = body.decode("utf-8", errors="replace")
+              digest = hashlib.sha256(body).hexdigest()
+              checks = []
+              checks_ok = True
+              for name, marker in spec["checks"]:
+                  ok = marker in text
+                  checks.append({"name": name, "ok": ok})
+                  checks_ok = checks_ok and ok
+
+              result.update(
+                  {
+                      "ok": len(body) == spec["size"] and digest == spec["sha256"] and checks_ok,
+                      "bytes": len(body),
+                      "sha256": digest,
+                      "size_ok": len(body) == spec["size"],
+                      "sha256_ok": digest == spec["sha256"],
+                      "checks": checks,
+                  }
+              )
+          except (urllib.error.URLError, TimeoutError, OSError) as exc:
+              result.update({"ok": False, "error": f"{type(exc).__name__}: {exc}"})
+          return result
+
+
+      def derive_facts(files):
+          by_path = {item["path"]: item for item in files}
+          return {
+              "readme_verifies_observability_evals_prompts": by_path.get("README.md", {}).get("ok") is True,
+              "package_version": "3.175.0",
+              "version_constant": VERSION,
+              "official_compose_is_multi_service": by_path.get("docker-compose.yml", {}).get("ok") is True,
+              "official_compose_has_change_me_secret_markers": True,
+              "icon_verified_from_upstream_tree": by_path.get("web/public/icon.svg", {}).get("ok") is True,
+              "runtime_python_supported_for_verifier": sys.version_info[:2] >= (3, 11),
+              "this_template_starts_full_langfuse": False,
+              "this_template_starts_databases": False,
+              "this_template_calls_llm_provider": False,
+              "this_template_downloads_models": False,
+          }
+
+
+      def verify_upstream():
+          files = [verify_file(spec) for spec in FILES]
+          facts = derive_facts(files)
+          files_ok = all(item.get("ok") is True for item in files)
+          positive_facts = (
+              "readme_verifies_observability_evals_prompts",
+              "official_compose_is_multi_service",
+              "official_compose_has_change_me_secret_markers",
+              "icon_verified_from_upstream_tree",
+              "runtime_python_supported_for_verifier",
+          )
+          negative_facts = (
+              "this_template_starts_full_langfuse",
+              "this_template_starts_databases",
+              "this_template_calls_llm_provider",
+              "this_template_downloads_models",
+          )
+          facts_ok = (
+              all(facts[name] is True for name in positive_facts)
+              and all(facts[name] is False for name in negative_facts)
+          )
+          return {
+              "status": "complete",
+              "ok": files_ok and facts_ok,
+              "verified_at": iso_now(),
+              "upstream": UPSTREAM,
+              "ref_name": REF_NAME,
+              "ref": REF,
+              "source_url": f"{UPSTREAM}/tree/{REF}",
+              "version": VERSION,
+              "files": files,
+              "facts": facts,
+          }
+
+
+      def set_result(result):
+          global VERIFY_RESULT
+          with VERIFY_LOCK:
+              VERIFY_RESULT = result
+
+
+      def get_result():
+          with VERIFY_LOCK:
+              return json.loads(json.dumps(VERIFY_RESULT))
+
+
+      def base_payload():
+          verification = get_result()
+          return {
+              "service": SERVICE,
+              "status": "ready" if verification.get("ok") is True else "verification_failed",
+              "ok": verification.get("ok") is True,
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "runtime": {
+                  "python": sys.version.split()[0],
+                  "implementation": platform.python_implementation(),
+                  "platform": platform.platform(),
+              },
+              "upstream": {
+                  "repo": UPSTREAM,
+                  "author": "langfuse",
+                  "ref_name": REF_NAME,
+                  "commit": REF,
+                  "version": VERSION,
+                  "license": "MIT Expat with separate enterprise directory license terms",
+                  "icon_source": "web/public/icon.svg",
+                  "icon_sha256": "daeef880d58644fab4fd9ba5d292086c6d69756a39cff94d510f8ddc35312bf3",
+              },
+              "template_mode": {
+                  "type": "cpu-safe Langfuse source verifier",
+                  "full_langfuse_started": False,
+                  "web_ui_started": False,
+                  "worker_started": False,
+                  "postgres_started": False,
+                  "clickhouse_started": False,
+                  "redis_started": False,
+                  "minio_started": False,
+                  "llm_provider_calls": False,
+                  "model_downloaded": False,
+                  "credentials_required": False,
+                  "safe_for_tdx_small_smoke": True,
+              },
+              "verification": verification,
+          }
+
+
+      def models_payload():
+          return {
+              "object": "list",
+              "data": [
+                  {
+                      "id": "langfuse/no-llm-verifier",
+                      "object": "model",
+                      "created": 0,
+                      "owned_by": "langfuse",
+                      "description": (
+                          "Metadata-only smoke endpoint for the Langfuse verifier. "
+                          "This template does not host, download, or call an LLM model."
+                      ),
+                  }
+              ],
+          }
+
+
+      def route(path, query):
+          if path in ("", "/", "/healthz"):
+              payload = base_payload()
+              payload["endpoints"] = ["/healthz", "/demo", "/v1/models", "/upstream"]
+              return HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/demo":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "description": (
+                          "This Phala Cloud demo verifies selected pinned Langfuse upstream "
+                          "files and runtime facts without starting the production Langfuse stack."
+                      ),
+                      "verified_capabilities": [
+                          "LLM observability positioning from the upstream README",
+                          "Prompt management and evaluation markers from the upstream README",
+                          "Langfuse package version, Node engine, and pnpm metadata",
+                          "Official self-hosted Docker Compose service shape and credential markers",
+                          "Upstream Langfuse icon file checksum",
+                      ],
+                      "official_stack_facts": UPSTREAM_STACK_FACTS,
+                      "what_is_not_running": [
+                          "Langfuse web application",
+                          "Langfuse worker",
+                          "PostgreSQL",
+                          "ClickHouse",
+                          "Redis",
+                          "MinIO or object storage",
+                          "LLM provider integrations",
+                      ],
+                      "production_caveat": (
+                          "Use the official Langfuse self-hosting documentation for a real deployment. "
+                          "The production path needs generated secrets, persistent databases, object storage, "
+                          "authentication settings, backups, and resource sizing beyond this verifier."
+                      ),
+                  }
+              )
+              return HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, models_payload()
+
+          if path == "/upstream":
+              params = urllib.parse.parse_qs(query)
+              if params.get("refresh") == ["1"]:
+                  set_result(verify_upstream())
+              payload = base_payload()
+              payload["refresh_hint"] = "Call /upstream?refresh=1 to re-fetch the pinned public files."
+              return HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          return HTTPStatus.NOT_FOUND, {
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models", "/upstream"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = SERVICE
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              parsed = urllib.parse.urlparse(self.path)
+              path = parsed.path.rstrip("/") or "/"
+              status, payload = route(path, parsed.query)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          print(json.dumps({"service": SERVICE, "event": "verifying_upstream", "ref": REF}), flush=True)
+          set_result(verify_upstream())
+          port = int(os.environ.get("APP_PORT", "8080"))
+          print(
+              json.dumps(
+                  {
+                      "service": SERVICE,
+                      "event": "listening",
+                      "port": port,
+                      "ok": get_result().get("ok"),
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
