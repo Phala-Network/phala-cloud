@@ -3798,5 +3798,53 @@
       "diskSize": 20
     },
     "tags": ["Infrastructure", "Developer Tools", "AI Agents"]
+  },
+{
+    "id": "litellm",
+    "name": "BerriAI/litellm",
+    "description": "Unified API for 100+ LLM providers; LiteLLM Proxy Server, cloud-native. This CPU-safe template starts the official proxy image without provider credentials and exposes health plus OpenAI-compatible model-list endpoints for smoke verification.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/litellm",
+    "author": "BerriAI",
+    "icon": "litellm.jpg",
+    "envs": [
+      {
+        "key": "LITELLM_IMAGE_TAG",
+        "required": false,
+        "default": "main-stable",
+        "description": "LiteLLM proxy image tag used by Docker Compose. Pin to a tested release tag for production."
+      },
+      {
+        "key": "LITELLM_LOG",
+        "required": false,
+        "default": "INFO",
+        "description": "LiteLLM proxy log level."
+      },
+      {
+        "key": "LITELLM_MASTER_KEY",
+        "required": false,
+        "description": "Optional LiteLLM proxy admin/API key. Set a long value with the sk- prefix before exposing real model routes."
+      },
+      {
+        "key": "OPENAI_API_KEY",
+        "required": false,
+        "description": "Optional OpenAI API key for model routes you add to the LiteLLM config."
+      },
+      {
+        "key": "ANTHROPIC_API_KEY",
+        "required": false,
+        "description": "Optional Anthropic API key for model routes you add to the LiteLLM config."
+      },
+      {
+        "key": "GOOGLE_API_KEY",
+        "required": false,
+        "description": "Optional Google AI Studio/Gemini API key for model routes you add to the LiteLLM config."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["LLM Inference & Model Serving", "Infrastructure", "Developer Tools"]
   }
 ]
