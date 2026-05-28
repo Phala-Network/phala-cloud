@@ -1,0 +1,379 @@
+services:
+  app:
+    image: rayproject/ray:2.55.1-py311-cpu
+    ports:
+      - "18080:8000"
+    environment:
+      PORT: "8000"
+      PYTHONUNBUFFERED: "1"
+      RAY_DEDUP_LOGS: "0"
+      RAY_DEMO_NUM_CPUS: "${RAY_DEMO_NUM_CPUS:-1}"
+      RAY_OBJECT_STORE_MEMORY_BYTES: "${RAY_OBJECT_STORE_MEMORY_BYTES:-83886080}"
+      RAY_TMPDIR: /tmp/ray
+      RAY_USAGE_STATS_ENABLED: "0"
+      RAY_USE_MULTIPROCESSING_CPU_COUNT: "1"
+    command:
+      - python
+      - /server.py
+    configs:
+      - source: server_py
+        target: /server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/healthz", timeout=10).read()
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+
+configs:
+  server_py:
+    content: |
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import signal
+      import sys
+      import time
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import parse_qs, urlparse
+
+      SERVICE = "ray-local-cpu-demo"
+      UPSTREAM = "https://github.com/ray-project/ray"
+      STARTED_AT = time.time()
+      IMPORT_ERROR = None
+      INIT_ERROR = None
+      RAY_INITIALIZED_AT = None
+      PACKAGE = {}
+      ray = None
+
+      try:
+          import ray as _ray
+
+          ray = _ray
+          PACKAGE = {
+              "distribution": "ray",
+              "version": importlib.metadata.version("ray"),
+              "module": ray.__name__,
+              "upstream": UPSTREAM,
+          }
+      except Exception as exc:
+          IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+
+
+      def parse_int_env(name, default, minimum, maximum):
+          raw = os.environ.get(name, str(default))
+          try:
+              value = int(raw)
+          except ValueError:
+              return default
+          return max(minimum, min(maximum, value))
+
+
+      def normalize_resources(resources):
+          return {
+              str(key): round(float(value), 6)
+              for key, value in sorted(resources.items())
+              if value
+          }
+
+
+      def _tiny_task(value):
+          return {
+              "executed_by": "ray.remote",
+              "input": value,
+              "output": value + 1,
+          }
+
+
+      def _square_task(value):
+          return {
+              "value": value,
+              "square": value * value,
+              "cube": value * value * value,
+              "parity": "even" if value % 2 == 0 else "odd",
+          }
+
+
+      class _Accumulator:
+          def __init__(self):
+              self.total = 0
+
+          def add(self, values):
+              self.total += sum(values)
+              return self.total
+
+
+      def ensure_ray():
+          global INIT_ERROR, RAY_INITIALIZED_AT
+
+          if IMPORT_ERROR:
+              INIT_ERROR = IMPORT_ERROR
+              return False
+          if ray.is_initialized():
+              return True
+
+          try:
+              ray_tmpdir = os.environ.get("RAY_TMPDIR", "/tmp/ray")
+              os.makedirs(ray_tmpdir, exist_ok=True)
+              ray.init(
+                  include_dashboard=False,
+                  ignore_reinit_error=True,
+                  log_to_driver=False,
+                  num_cpus=parse_int_env("RAY_DEMO_NUM_CPUS", 1, 1, 4),
+                  object_store_memory=parse_int_env(
+                      "RAY_OBJECT_STORE_MEMORY_BYTES",
+                      83886080,
+                      78643200,
+                      268435456,
+                  ),
+                  _temp_dir=ray_tmpdir,
+              )
+              RAY_INITIALIZED_AT = time.time()
+              INIT_ERROR = None
+              return True
+          except Exception as exc:
+              INIT_ERROR = f"{type(exc).__name__}: {exc}"
+              return False
+
+
+      def run_health_task():
+          tiny_task = ray.remote(_tiny_task)
+          result = ray.get(tiny_task.remote(41), timeout=15)
+          return {
+              "pass": result.get("output") == 42,
+              "task": result,
+          }
+
+
+      def run_demo(n):
+          values = list(range(1, n + 1))
+          square_task = ray.remote(_square_task)
+          rows = ray.get([square_task.remote(value) for value in values], timeout=20)
+          accumulator_cls = ray.remote(_Accumulator)
+          accumulator = accumulator_cls.remote()
+          sum_squares = ray.get(
+              accumulator.add.remote([row["square"] for row in rows]),
+              timeout=20,
+          )
+          return {
+              "input": {"values": values},
+              "tasks": rows,
+              "actor": {
+                  "class": "Accumulator",
+                  "method": "add",
+                  "sum_squares": sum_squares,
+              },
+              "summary": {
+                  "count": len(rows),
+                  "sum_squares": sum_squares,
+                  "even_values": [row["value"] for row in rows if row["parity"] == "even"],
+                  "max_cube": max(row["cube"] for row in rows),
+              },
+          }
+
+
+      def ray_runtime():
+          if IMPORT_ERROR or ray is None or not ray.is_initialized():
+              return {
+                  "initialized": False,
+                  "init_error": INIT_ERROR,
+              }
+
+          try:
+              nodes = ray.nodes()
+              return {
+                  "initialized": True,
+                  "initialized_at": RAY_INITIALIZED_AT,
+                  "node_count": len(nodes),
+                  "cluster_resources": normalize_resources(ray.cluster_resources()),
+                  "available_resources": normalize_resources(ray.available_resources()),
+              }
+          except Exception as exc:
+              return {
+                  "initialized": True,
+                  "resource_error": f"{type(exc).__name__}: {exc}",
+              }
+
+
+      def base_payload():
+          return {
+              "service": SERVICE,
+              "upstream": UPSTREAM,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "package": PACKAGE,
+              "runtime": ray_runtime(),
+              "cpu_only": True,
+              "credentials_required": False,
+              "external_services_required": False,
+              "model_downloaded": False,
+          }
+
+
+      def parse_demo_n(query):
+          raw = parse_qs(query).get("n", ["6"])[0]
+          try:
+              value = int(raw)
+          except ValueError:
+              value = 6
+          return max(1, min(20, value))
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "ray-local-cpu-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              request = urlparse(self.path)
+              path = request.path.rstrip("/") or "/"
+
+              if path == "/":
+                  payload = base_payload()
+                  payload.update(
+                      {
+                          "ok": IMPORT_ERROR is None and INIT_ERROR is None,
+                          "endpoints": ["/healthz", "/demo", "/v1/models"],
+                      }
+                  )
+                  self.respond_json(200, payload)
+                  return
+
+              if path == "/healthz":
+                  payload = base_payload()
+                  if not ensure_ray():
+                      payload.update(
+                          {
+                              "ok": False,
+                              "status": "ray_unavailable",
+                              "error": INIT_ERROR or IMPORT_ERROR,
+                          }
+                      )
+                      self.respond_json(500, payload)
+                      return
+
+                  try:
+                      check = run_health_task()
+                      payload = base_payload()
+                      payload.update(
+                          {
+                              "ok": check["pass"],
+                              "status": "ready" if check["pass"] else "task_failed",
+                              "check": check,
+                          }
+                      )
+                      self.respond_json(200 if check["pass"] else 500, payload)
+                  except Exception as exc:
+                      payload.update(
+                          {
+                              "ok": False,
+                              "status": "task_error",
+                              "error": f"{type(exc).__name__}: {exc}",
+                          }
+                      )
+                      self.respond_json(500, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  if not ensure_ray():
+                      payload.update(
+                          {
+                              "ok": False,
+                              "error": INIT_ERROR or IMPORT_ERROR,
+                          }
+                      )
+                      self.respond_json(500, payload)
+                      return
+
+                  try:
+                      n = parse_demo_n(request.query)
+                      payload = base_payload()
+                      payload.update(
+                          {
+                              "ok": True,
+                              "ray_apis": ["ray.init", "ray.remote", "ray.get", "ray actor"],
+                              "demo": run_demo(n),
+                          }
+                      )
+                      self.respond_json(200, payload)
+                  except Exception as exc:
+                      payload.update(
+                          {
+                              "ok": False,
+                              "error": f"{type(exc).__name__}: {exc}",
+                          }
+                      )
+                      self.respond_json(500, payload)
+                  return
+
+              if path == "/v1/models":
+                  payload = base_payload()
+                  if not ensure_ray():
+                      payload.update(
+                          {
+                              "ok": False,
+                              "object": "list",
+                              "data": [],
+                              "error": INIT_ERROR or IMPORT_ERROR,
+                          }
+                      )
+                      self.respond_json(500, payload)
+                      return
+
+                  self.respond_json(
+                      200,
+                      {
+                          "ok": True,
+                          "object": "list",
+                          "data": [
+                              {
+                                  "id": "ray-local-cpu-runtime",
+                                  "object": "model",
+                                  "created": 0,
+                                  "owned_by": "ray-project",
+                                  "description": (
+                                      "Metadata entry for this local Ray Core CPU "
+                                      "demo. It executes deterministic Ray tasks "
+                                      "and is not an LLM inference model."
+                                  ),
+                              }
+                          ],
+                          "runtime": payload,
+                      },
+                  )
+                  return
+
+              self.respond_json(404, {"ok": False, "error": "not found"})
+
+
+      def handle_shutdown(signum, frame):
+          if ray is not None and ray.is_initialized():
+              ray.shutdown()
+          raise SystemExit(0)
+
+
+      signal.signal(signal.SIGTERM, handle_shutdown)
+      signal.signal(signal.SIGINT, handle_shutdown)
+
+      ensure_ray()
+      port = int(os.environ.get("PORT", "8000"))
+      server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+      print(f"ray local CPU demo listening on 0.0.0.0:{port}", flush=True)
+      server.serve_forever()
