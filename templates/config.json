@@ -3874,5 +3874,19 @@
       "diskSize": 10
     },
     "tags": ["LLM Inference & Model Serving", "Developer Tools", "Infrastructure"]
-  }
+  },
+{
+  "id": "gateway",
+  "name": "portkey-ai/gateway",
+  "description": "Official Portkey AI Gateway deployment for routing OpenAI-compatible requests to external LLM providers. The template starts without provider credentials, exposes the upstream no-secret root smoke route, and keeps provider API keys out of Compose by requiring request-time credentials for real routing.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/gateway",
+  "author": "Portkey-AI",
+  "icon": "gateway.svg",
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": ["LLM Inference & Model Serving", "Infrastructure", "Developer Tools"]
+}
 ]

@@ -1,0 +1,17 @@
+services:
+  gateway:
+    image: portkeyai/gateway:latest
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8787:8787"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:8787/').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
