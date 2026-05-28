@@ -3770,5 +3770,33 @@
     "diskSize": 10
   },
   "tags": ["LLM Inference & Model Serving", "Developer Tools", "AI Agents"]
-}
+},
+{
+    "id": "ray",
+    "name": "ray-project/ray",
+    "description": "Distributed AI compute engine; Anyscale Cloud managed service. This template runs a single-node CPU-safe HTTP demo on the official Ray CPU image and executes deterministic local Ray tasks without GPUs, model downloads, or cloud credentials.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/ray",
+    "author": "ray-project",
+    "icon": "ray.svg",
+    "envs": [
+      {
+        "key": "RAY_DEMO_NUM_CPUS",
+        "required": false,
+        "default": "1",
+        "description": "Logical CPU count passed to the local Ray runtime for demo tasks."
+      },
+      {
+        "key": "RAY_OBJECT_STORE_MEMORY_BYTES",
+        "required": false,
+        "default": "83886080",
+        "description": "Ray object store memory in bytes for the single-node local runtime."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["Infrastructure", "Developer Tools", "AI Agents"]
+  }
 ]
