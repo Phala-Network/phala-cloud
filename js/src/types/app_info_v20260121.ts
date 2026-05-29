@@ -30,35 +30,12 @@ export const DstackAppFullResponseV20260522Schema = DstackAppFullResponseV202601
 });
 export type DstackAppFullResponseV20260522 = z.infer<typeof DstackAppFullResponseV20260522Schema>;
 
-export const DstackAppMinimalResponseV20260121Schema = z.object({
-  id: z.null().optional(),
-  app_id: z.string(),
-  name: z.null().optional(),
-  app_provision_type: z.null().optional(),
-  app_icon_url: z.null().optional(),
-  created_at: z.null().optional(),
-  kms_type: z.null().optional(),
-  profile: z.null().optional(),
-  current_cvm: z.null().optional(),
-  cvms: z.null().optional(),
-  cvm_count: z.null().optional(),
-});
-export type DstackAppMinimalResponseV20260121 = z.infer<
-  typeof DstackAppMinimalResponseV20260121Schema
->;
-
-export const DstackAppWithCvmResponseV20260121Schema = z.union([
-  DstackAppFullResponseV20260121Schema,
-  DstackAppMinimalResponseV20260121Schema,
-]);
+export const DstackAppWithCvmResponseV20260121Schema = DstackAppFullResponseV20260121Schema;
 export type DstackAppWithCvmResponseV20260121 = z.infer<
   typeof DstackAppWithCvmResponseV20260121Schema
 >;
 
-export const DstackAppWithCvmResponseV20260522Schema = z.union([
-  DstackAppFullResponseV20260522Schema,
-  DstackAppMinimalResponseV20260121Schema,
-]);
+export const DstackAppWithCvmResponseV20260522Schema = DstackAppFullResponseV20260522Schema;
 export type DstackAppWithCvmResponseV20260522 = z.infer<
   typeof DstackAppWithCvmResponseV20260522Schema
 >;

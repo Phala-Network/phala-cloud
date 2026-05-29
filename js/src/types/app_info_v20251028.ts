@@ -47,26 +47,7 @@ export const DstackAppFullResponseV20251028Schema = z.object({
 });
 export type DstackAppFullResponseV20251028 = z.infer<typeof DstackAppFullResponseV20251028Schema>;
 
-export const DstackAppMinimalResponseV20251028Schema = z.object({
-  id: z.null().optional(),
-  app_id: z.string(),
-  name: z.null().optional(),
-  app_provision_type: z.null().optional(),
-  app_icon_url: z.null().optional(),
-  created_at: z.null().optional(),
-  kms_type: z.null().optional(),
-  current_cvm: z.null().optional(),
-  cvms: z.null().optional(),
-  cvm_count: z.null().optional(),
-});
-export type DstackAppMinimalResponseV20251028 = z.infer<
-  typeof DstackAppMinimalResponseV20251028Schema
->;
-
-export const DstackAppWithCvmResponseV20251028Schema = z.union([
-  DstackAppFullResponseV20251028Schema,
-  DstackAppMinimalResponseV20251028Schema,
-]);
+export const DstackAppWithCvmResponseV20251028Schema = DstackAppFullResponseV20251028Schema;
 export type DstackAppWithCvmResponseV20251028 = z.infer<
   typeof DstackAppWithCvmResponseV20251028Schema
 >;
