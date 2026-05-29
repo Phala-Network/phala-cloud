@@ -4222,5 +4222,33 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools", "Automation"]
+  },
+{
+    "id": "mastra",
+    "name": "mastra-ai/mastra",
+    "description": "TypeScript-first AI agent framework. This CPU-safe template installs the real Mastra core and CLI packages, then runs a deterministic local tool workflow without provider credentials, model downloads, GPU, or hosted services.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/mastra",
+    "author": "Mastra AI",
+    "icon": "mastra.png",
+    "envs": [
+      {
+        "key": "MASTRA_CORE_VERSION",
+        "required": false,
+        "default": "1.37.1",
+        "description": "@mastra/core package version installed by the demo service at container startup."
+      },
+      {
+        "key": "MASTRA_CLI_VERSION",
+        "required": false,
+        "default": "1.10.2",
+        "description": "Mastra CLI package version installed by the demo service at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["AI Agents", "Developer Tools", "Starter Kits"]
   }
 ]

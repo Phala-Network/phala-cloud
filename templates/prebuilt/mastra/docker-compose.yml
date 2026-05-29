@@ -1,0 +1,330 @@
+services:
+  app:
+    image: node:22-bookworm-slim
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      MASTRA_CORE_VERSION: ${MASTRA_CORE_VERSION:-1.37.1}
+      MASTRA_CLI_VERSION: ${MASTRA_CLI_VERSION:-1.10.2}
+      NPM_CONFIG_AUDIT: "false"
+      NPM_CONFIG_FUND: "false"
+      NPM_CONFIG_UPDATE_NOTIFIER: "false"
+    working_dir: /opt/mastra-demo
+    configs:
+      - source: mastra_demo_server
+        target: /opt/mastra-demo/server.mjs
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        npm install --omit=dev --no-audit --no-fund --no-package-lock \
+          "@mastra/core@$${MASTRA_CORE_VERSION}" \
+          "mastra@$${MASTRA_CLI_VERSION}" \
+          "zod@3.25.76"
+        export PATH="/opt/mastra-demo/node_modules/.bin:$${PATH}"
+        exec node /opt/mastra-demo/server.mjs
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:' + (process.env.PORT || '8080') + '/healthz').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+
+configs:
+  mastra_demo_server:
+    content: |
+      import http from "node:http";
+      import os from "node:os";
+      import process from "node:process";
+      import { createRequire } from "node:module";
+      import { execFileSync } from "node:child_process";
+      import { z } from "zod";
+      import { Mastra } from "@mastra/core";
+      import { createTool } from "@mastra/core/tools";
+
+      const require = createRequire(import.meta.url);
+      const startedAt = Date.now();
+      const serviceName = "mastra-demo";
+      const upstreamRepo = "https://github.com/mastra-ai/mastra";
+      const endpointList = ["/healthz", "/demo", "/v1/models"];
+      const mastraCorePackage = require("@mastra/core/package.json");
+      const mastraCliPackage = require("mastra/package.json");
+
+      function errorMessage(error) {
+        if (!error) {
+          return "unknown error";
+        }
+        const name = error.name || "Error";
+        const message = error.message || String(error);
+        return name + ": " + message;
+      }
+
+      function normalizeTopic(value) {
+        const text = typeof value === "string" && value.trim().length > 0 ? value.trim() : "phala cloud confidential agents";
+        return text.slice(0, 160);
+      }
+
+      const classifyTool = createTool({
+        id: "classify-topic",
+        description: "Classifies a topic deterministically without calling an external model.",
+        inputSchema: z.object({
+          topic: z.string(),
+        }),
+        outputSchema: z.object({
+          normalized_topic: z.string(),
+          words: z.array(z.string()),
+          word_count: z.number(),
+          checksum: z.number(),
+          category: z.string(),
+        }),
+        execute: async ({ topic }) => {
+          const normalizedTopic = normalizeTopic(topic);
+          const words = normalizedTopic.toLowerCase().match(/[a-z0-9]+/g) || [];
+          const checksum = Array.from(normalizedTopic).reduce(
+            (total, character) => (total + character.charCodeAt(0)) % 9973,
+            0
+          );
+          const joined = words.join(" ");
+          const category = joined.includes("workflow")
+            ? "workflow"
+            : joined.includes("memory") || joined.includes("rag")
+              ? "context"
+              : "agent";
+
+          return {
+            normalized_topic: normalizedTopic,
+            words,
+            word_count: words.length,
+            checksum,
+            category,
+          };
+        },
+      });
+
+      const mastra = new Mastra({
+        tools: {
+          classifyTopic: classifyTool,
+        },
+      });
+
+      let cliVersion = null;
+      let cliError = null;
+      try {
+        cliVersion = execFileSync("mastra", ["--version"], {
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"],
+          timeout: 15000,
+        }).trim();
+      } catch (error) {
+        cliError = errorMessage(error);
+      }
+
+      async function toolEvidence(topic) {
+        const input = normalizeTopic(topic);
+        const result = await classifyTool.execute({ topic: input });
+        return {
+          id: classifyTool.id,
+          description: classifyTool.description,
+          input,
+          result,
+        };
+      }
+
+      function runtimeEvidence() {
+        return {
+          node: process.version,
+          platform: process.platform,
+          arch: process.arch,
+          hostname: os.hostname(),
+          uptime_seconds: Math.round((Date.now() - startedAt) / 100) / 10,
+        };
+      }
+
+      async function healthPayload() {
+        const tool = await toolEvidence("phala cloud mastra smoke");
+        const packageStatus = {
+          core: {
+            package: "@mastra/core",
+            version: mastraCorePackage.version,
+            import_ok: typeof Mastra === "function",
+          },
+          cli: {
+            package: "mastra",
+            version: mastraCliPackage.version,
+            command_version: cliVersion,
+            command_ok: typeof cliVersion === "string" && cliVersion.length > 0,
+            error: cliError,
+          },
+          tool: {
+            create_tool_ok: typeof createTool === "function",
+            execute_ok: tool.result.word_count > 0,
+          },
+        };
+
+        const ok = packageStatus.core.import_ok && packageStatus.cli.command_ok && packageStatus.tool.execute_ok;
+        return {
+          status: ok ? "ok" : "unhealthy",
+          ok,
+          service: serviceName,
+          upstream: upstreamRepo,
+          credentials_required: false,
+          remote_calls: false,
+          model_downloaded: false,
+          runtime: runtimeEvidence(),
+          mastra: packageStatus,
+        };
+      }
+
+      async function demoPayload(topic) {
+        const tool = await toolEvidence(topic);
+        return {
+          ok: true,
+          service: serviceName,
+          demo: "deterministic Mastra tool workflow without model-provider calls",
+          credentials_required: false,
+          remote_calls: false,
+          cpu_only: true,
+          model_downloaded: false,
+          framework: {
+            package: "@mastra/core",
+            version: mastraCorePackage.version,
+            mastra_instance: mastra.constructor.name,
+            registered_tool_ids: [classifyTool.id],
+          },
+          workflow: {
+            input: tool.input,
+            steps: [
+              {
+                order: 1,
+                name: "normalize-topic",
+                result: tool.result.normalized_topic,
+              },
+              {
+                order: 2,
+                name: "classify-topic-tool",
+                result: tool.result,
+              },
+              {
+                order: 3,
+                name: "prepare-agent-response",
+                result: "Mastra framework primitives loaded and a local tool executed inside the CVM.",
+              },
+            ],
+          },
+        };
+      }
+
+      function modelsPayload() {
+        return {
+          object: "list",
+          data: [
+            {
+              id: "mastra/local-deterministic-agent-demo",
+              object: "model",
+              created: 0,
+              owned_by: "mastra-ai",
+              description: "Compatibility endpoint for the local Mastra package smoke demo. No LLM model is loaded.",
+            },
+          ],
+          mastra: {
+            core_version: mastraCorePackage.version,
+            cli_version: mastraCliPackage.version,
+            cli_command_version: cliVersion,
+          },
+        };
+      }
+
+      function rootPayload() {
+        return {
+          service: serviceName,
+          status: cliVersion ? "ok" : "unhealthy",
+          upstream: upstreamRepo,
+          endpoints: endpointList,
+          credentials_required: false,
+          remote_calls: false,
+        };
+      }
+
+      function sendJson(response, statusCode, payload) {
+        const body = Buffer.from(JSON.stringify(payload, null, 2) + "\n", "utf8");
+        response.writeHead(statusCode, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Content-Length": body.length,
+        });
+        response.end(body);
+      }
+
+      const server = http.createServer((request, response) => {
+        const url = new URL(request.url || "/", "http://localhost");
+        const path = url.pathname.replace(/\/+$/, "") || "/";
+
+        if (request.method !== "GET") {
+          sendJson(response, 405, {
+            ok: false,
+            error: "method_not_allowed",
+            endpoints: endpointList,
+          });
+          return;
+        }
+
+        Promise.resolve()
+          .then(async () => {
+            if (path === "/") {
+              sendJson(response, cliVersion ? 200 : 503, rootPayload());
+              return;
+            }
+
+            if (path === "/healthz") {
+              const payload = await healthPayload();
+              sendJson(response, payload.ok ? 200 : 503, payload);
+              return;
+            }
+
+            if (path === "/demo") {
+              const payload = await demoPayload(url.searchParams.get("topic"));
+              sendJson(response, payload.ok ? 200 : 503, payload);
+              return;
+            }
+
+            if (path === "/v1/models") {
+              sendJson(response, cliVersion ? 200 : 503, modelsPayload());
+              return;
+            }
+
+            sendJson(response, 404, {
+              ok: false,
+              error: "not_found",
+              endpoints: endpointList,
+            });
+          })
+          .catch((error) => {
+            sendJson(response, 500, {
+              ok: false,
+              error: errorMessage(error),
+            });
+          });
+      });
+
+      const port = Number(process.env.PORT || "8080");
+      server.listen(port, "0.0.0.0", () => {
+        console.log(JSON.stringify({
+          event: "startup",
+          service: serviceName,
+          port,
+          mastra_core: mastraCorePackage.version,
+          mastra_cli: mastraCliPackage.version,
+          cli_version: cliVersion,
+          credentials_required: false,
+          remote_calls: false,
+        }));
+      });
