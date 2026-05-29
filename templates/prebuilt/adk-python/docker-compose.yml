@@ -1,0 +1,293 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8000"
+    environment:
+      APP_PORT: ${APP_PORT:-8000}
+      GOOGLE_ADK_PACKAGE_VERSION: ${GOOGLE_ADK_PACKAGE_VERSION:-2.1.0}
+      PYTHONUNBUFFERED: "1"
+      UV_SYSTEM_PYTHON: "1"
+    configs:
+      - source: adk_python_demo_app
+        target: /opt/adk-python-demo/main.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache "google-adk==$${GOOGLE_ADK_PACKAGE_VERSION}"
+        exec python /opt/adk-python-demo/main.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8000'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+          reverse_proxy app:8000
+      }
+
+  adk_python_demo_app:
+    content: |
+      import importlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "google-adk"
+      IMPORT_NAME = "google.adk"
+
+
+      def local_echo(topic: str = "Agent Development Kit"):
+          return {
+              "topic": topic,
+              "provider_calls": False,
+              "credentials_required": False,
+          }
+
+
+      def safe_model_dump(value):
+          if hasattr(value, "model_dump"):
+              return value.model_dump(mode="json", exclude_none=True)
+          return repr(value)
+
+
+      def import_checks():
+          result = {
+              "package": PACKAGE_NAME,
+              "distribution_version": None,
+              "module_version": None,
+              "import_ok": False,
+              "checks": {},
+              "primitives": {},
+              "error": None,
+          }
+          try:
+              result["distribution_version"] = importlib.metadata.version(PACKAGE_NAME)
+              adk = importlib.import_module(IMPORT_NAME)
+              agents = importlib.import_module("google.adk.agents")
+              runners = importlib.import_module("google.adk.runners")
+              sessions = importlib.import_module("google.adk.sessions")
+              tools = importlib.import_module("google.adk.tools")
+              workflow = importlib.import_module("google.adk.workflow")
+
+              result["module_version"] = getattr(adk, "__version__", None)
+              symbol_sources = {
+                  "Agent": agents,
+                  "LlmAgent": agents,
+                  "SequentialAgent": agents,
+                  "ParallelAgent": agents,
+                  "LoopAgent": agents,
+                  "Runner": runners,
+                  "InMemorySessionService": sessions,
+                  "FunctionTool": tools,
+                  "Workflow": workflow,
+                  "FunctionNode": workflow,
+              }
+              for symbol, module in symbol_sources.items():
+                  result["checks"][symbol] = hasattr(module, symbol)
+
+              agent = agents.Agent(
+                  name="local_metadata_agent",
+                  model="adk/no-provider-call",
+                  instruction="Metadata-only ADK demo. Do not invoke a model.",
+              )
+              local_workflow = workflow.Workflow(name="local_metadata_workflow")
+              function_node = workflow.FunctionNode(func=local_echo, name="local_echo")
+
+              result["primitives"] = {
+                  "agent": {
+                      "class": type(agent).__name__,
+                      "metadata": safe_model_dump(agent),
+                  },
+                  "workflow": {
+                      "class": type(local_workflow).__name__,
+                      "metadata": safe_model_dump(local_workflow),
+                  },
+                  "function_node": {
+                      "class": type(function_node).__name__,
+                      "name": getattr(function_node, "name", None),
+                      "callable": "local_echo",
+                  },
+              }
+              result["import_ok"] = bool(result["distribution_version"]) and all(
+                  result["checks"].values()
+              )
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      IMPORT_STATUS = import_checks()
+
+
+      def response_body(path):
+          uptime_seconds = round(time.time() - STARTED_AT, 3)
+          if path == "/healthz":
+              status = "ok" if IMPORT_STATUS["import_ok"] else "unhealthy"
+              return HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE, {
+                  "status": status,
+                  "uptime_seconds": uptime_seconds,
+                  "google_adk": IMPORT_STATUS,
+                  "provider_calls": False,
+                  "credentials_required": False,
+              }
+
+          if path == "/demo":
+              return HTTPStatus.OK, {
+                  "name": "google/adk-python local metadata demo",
+                  "description": (
+                      "This service imports the real google-adk Python package and "
+                      "instantiates safe local ADK primitives without running a model, "
+                      "calling hosted providers, downloading model weights, or reading "
+                      "credentials."
+                  ),
+                  "provider_calls": False,
+                  "hosted_model_calls": False,
+                  "credentials_required": False,
+                  "model_downloads": False,
+                  "building_blocks": [
+                      "Agent",
+                      "Workflow",
+                      "FunctionNode",
+                      "Runner",
+                      "InMemorySessionService",
+                  ],
+                  "local_flow": {
+                      "steps": [
+                          "Import google.adk package metadata",
+                          "Create an Agent object with a non-provider model label",
+                          "Create a Workflow and FunctionNode object",
+                          "Serve only metadata over HTTP",
+                      ],
+                      "not_performed": [
+                          "Runner execution",
+                          "LLM generation",
+                          "Gemini, Vertex AI, OpenAI, or other provider API calls",
+                          "Credential lookup",
+                          "Model downloads",
+                      ],
+                  },
+                  "google_adk": IMPORT_STATUS,
+              }
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "google-adk/no-llm-demo",
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "google",
+                          "description": (
+                              "Placeholder metadata endpoint. The default template "
+                              "does not host, download, or call an LLM model."
+                          ),
+                      }
+                  ],
+              }
+
+          if path == "/":
+              return HTTPStatus.OK, {
+                  "service": "adk-python-demo",
+                  "endpoints": ["/healthz", "/demo", "/v1/models"],
+                  "python": sys.version.split()[0],
+                  "platform": platform.platform(),
+                  "google_adk_import_ok": IMPORT_STATUS["import_ok"],
+              }
+
+          return HTTPStatus.NOT_FOUND, {
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "adk-python-demo"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+              status, payload = response_body(path)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8000"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "google_adk": IMPORT_STATUS,
+                      "provider_calls": False,
+                      "credentials_required": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+
+networks:
+  internal:
+    driver: bridge
