@@ -4072,5 +4072,27 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools", "Automation"]
+  },
+{
+    "id": "smolagents",
+    "name": "huggingface/smolagents",
+    "description": "Hugging Face's lightweight agent framework. This tdx.small-safe HTTP demo installs and imports the real smolagents Python package, exercises deterministic local Tool and AgentText primitives, and avoids external LLM calls, provider credentials, model downloads, GPU, browser automation, Docker socket access, host binds, env_file, privileged mode, and external databases.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/smolagents",
+    "author": "huggingface",
+    "icon": "smolagents.png",
+    "envs": [
+      {
+        "key": "SMOLAGENTS_VERSION",
+        "required": false,
+        "default": "1.25.0",
+        "description": "Pinned smolagents Python package version installed by the demo service at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools"]
   }
 ]
