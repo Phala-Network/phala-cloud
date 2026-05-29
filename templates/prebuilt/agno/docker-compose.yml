@@ -1,0 +1,344 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      AGNO_VERSION: ${AGNO_VERSION:-2.6.9}
+      AGNO_TELEMETRY: ${AGNO_TELEMETRY:-false}
+      APP_PORT: "8080"
+      PYTHONUNBUFFERED: "1"
+      UV_SYSTEM_PYTHON: "1"
+    configs:
+      - source: agno_demo_app
+        target: /opt/agno-demo/server.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache "agno==$${AGNO_VERSION}"
+        exec python /opt/agno-demo/server.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8080'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+configs:
+  agno_demo_app:
+    content: |
+      import importlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "agno"
+      IMPORT_ERROR = None
+
+      try:
+          from agno.agent import Agent
+          from agno.team import Team, TeamMode
+          from agno.tools import Toolkit, tool
+      except Exception as exc:
+          IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+          Agent = None
+          Team = None
+          TeamMode = None
+          Toolkit = None
+          tool = None
+
+
+      def package_version(name):
+          try:
+              return importlib.metadata.version(name)
+          except Exception as exc:
+              return f"unavailable: {type(exc).__name__}: {exc}"
+
+
+      def base_payload():
+          return {
+              "service": "agno-local-verifier",
+              "upstream": "https://github.com/agno-agi/agno",
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "package": {
+                  "name": PACKAGE_NAME,
+                  "version": package_version(PACKAGE_NAME),
+              },
+          }
+
+
+      if IMPORT_ERROR is None:
+          @tool(
+              name="keyword_profile",
+              description="Count deterministic keywords in a short text sample.",
+          )
+          def keyword_profile(text: str) -> dict:
+              normalized = text.lower()
+              keywords = ("agno", "agent", "runtime", "tool", "cloud", "model", "credential")
+              return {
+                  "keywords": {
+                      keyword: normalized.count(keyword)
+                      for keyword in keywords
+                  },
+                  "length": len(text),
+              }
+
+
+          @tool(
+              name="readiness_plan",
+              description="Build a deterministic production-readiness checklist.",
+          )
+          def readiness_plan(include_provider: bool = False) -> list[str]:
+              steps = [
+                  "install the upstream agno package",
+                  "define agents, tools, teams, or workflows",
+                  "serve production workloads through AgentOS when credentials are configured",
+                  "protect public endpoints with authentication before handling private data",
+              ]
+              if include_provider:
+                  steps.append("configure a real model provider key outside the compose file")
+              return steps
+
+
+      def function_summary(function):
+          return function.model_dump(
+              mode="json",
+              exclude={
+                  "entrypoint",
+                  "pre_hook",
+                  "post_hook",
+                  "tool_hooks",
+              },
+          )
+
+
+      def run_local_demo():
+          if IMPORT_ERROR is not None:
+              raise RuntimeError(IMPORT_ERROR)
+
+          toolkit = Toolkit(
+              name="local_verifier",
+              tools=[keyword_profile, readiness_plan],
+              instructions="Use only deterministic local checks.",
+          )
+          verifier = Agent(
+              id="local-verifier",
+              name="Local Verifier",
+              model=None,
+              tools=[toolkit],
+              instructions=[
+                  "Report package and tool metadata.",
+                  "Do not call external model providers.",
+              ],
+              markdown=True,
+              telemetry=False,
+          )
+          reviewer = Agent(
+              id="production-reviewer",
+              name="Production Reviewer",
+              model=None,
+              instructions="Document production caveats for real AgentOS usage.",
+              telemetry=False,
+          )
+          team = Team(
+              members=[verifier, reviewer],
+              id="local-demo-team",
+              name="Local Demo Team",
+              mode=TeamMode.coordinate,
+              instructions="Coordinate local verification metadata only.",
+              telemetry=False,
+          )
+
+          sample = (
+              "Agno builds agent platforms with tools, AgentOS runtime APIs, "
+              "model integrations, and cloud deployment options."
+          )
+          functions = toolkit.get_functions()
+          profile = functions["keyword_profile"].entrypoint(sample)
+          checklist = functions["readiness_plan"].entrypoint(include_provider=True)
+
+          return {
+              "sample": sample,
+              "framework_primitives": {
+                  "agent_class": f"{Agent.__module__}.{Agent.__name__}",
+                  "team_class": f"{Team.__module__}.{Team.__name__}",
+                  "toolkit_class": f"{Toolkit.__module__}.{Toolkit.__name__}",
+                  "team_mode": team.mode.value,
+                  "agents": [
+                      {
+                          "id": verifier.id,
+                          "name": verifier.name,
+                          "model_configured": verifier.model is not None,
+                          "tools": sorted(functions.keys()),
+                      },
+                      {
+                          "id": reviewer.id,
+                          "name": reviewer.name,
+                          "model_configured": reviewer.model is not None,
+                          "tools": [],
+                      },
+                  ],
+                  "team": {
+                      "id": team.id,
+                      "name": team.name,
+                      "members": [member.id for member in team.members],
+                  },
+                  "tools": [
+                      function_summary(function)
+                      for function in functions.values()
+                  ],
+              },
+              "tool_results": {
+                  "keyword_profile": profile,
+                  "readiness_plan": checklist,
+              },
+              "cpu_only": True,
+              "credentials_required": False,
+              "model_downloaded": False,
+              "model_loaded": False,
+              "provider_calls": False,
+              "remote_calls": False,
+          }
+
+
+      def import_status():
+          status = {
+              "distribution_version": package_version(PACKAGE_NAME),
+              "import_ok": IMPORT_ERROR is None,
+              "modules": {},
+              "error": IMPORT_ERROR,
+          }
+          for module_name in ("agno.agent", "agno.team", "agno.tools"):
+              try:
+                  importlib.import_module(module_name)
+                  status["modules"][module_name] = True
+              except Exception as exc:
+                  status["modules"][module_name] = f"{type(exc).__name__}: {exc}"
+          return status
+
+
+      def response_body(path):
+          if path == "/":
+              payload = base_payload()
+              payload.update({
+                  "ok": IMPORT_ERROR is None,
+                  "endpoints": ["/healthz", "/demo", "/v1/models"],
+                  "credentials_required": False,
+                  "provider_calls": False,
+              })
+              if IMPORT_ERROR is not None:
+                  payload["error"] = IMPORT_ERROR
+              return HTTPStatus.OK if IMPORT_ERROR is None else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/healthz":
+              payload = base_payload()
+              payload.update({
+                  "ok": IMPORT_ERROR is None,
+                  "status": "ready" if IMPORT_ERROR is None else "import_failed",
+                  "agno": import_status(),
+                  "credentials_required": False,
+                  "provider_calls": False,
+              })
+              return HTTPStatus.OK if IMPORT_ERROR is None else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/demo":
+              payload = base_payload()
+              try:
+                  payload.update({
+                      "ok": True,
+                      "demo": run_local_demo(),
+                  })
+                  return HTTPStatus.OK, payload
+              except Exception as exc:
+                  payload.update({
+                      "ok": False,
+                      "error": f"{type(exc).__name__}: {exc}",
+                  })
+                  return HTTPStatus.INTERNAL_SERVER_ERROR, payload
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "agno/no-llm-local-verifier",
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "agno-agi",
+                          "description": (
+                              "Placeholder metadata endpoint for the deterministic "
+                              "Agno verifier. The default template does not host, "
+                              "download, or call an LLM model."
+                          ),
+                      }
+                  ],
+                  "package": base_payload()["package"],
+              }
+
+          return HTTPStatus.NOT_FOUND, {
+              "ok": False,
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "agno-local-verifier"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+              status, payload = response_body(path)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8080"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "agno": import_status(),
+                      "provider_calls": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()

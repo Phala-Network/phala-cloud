@@ -4022,5 +4022,33 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools"]
+  },
+{
+    "id": "agno",
+    "name": "agno-agi/agno",
+    "description": "High-performance agent platform (formerly Phidata); cloud-native, model-agnostic",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/agno",
+    "author": "agno-agi",
+    "icon": "agno.svg",
+    "envs": [
+      {
+        "key": "AGNO_VERSION",
+        "required": false,
+        "default": "2.6.9",
+        "description": "Agno Python package version installed by the verifier service at container startup."
+      },
+      {
+        "key": "AGNO_TELEMETRY",
+        "required": false,
+        "default": "false",
+        "description": "Keeps Agno telemetry disabled by default for the verifier."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools", "Automation"]
   }
 ]
