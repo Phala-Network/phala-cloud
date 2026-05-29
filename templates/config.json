@@ -4418,5 +4418,27 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools", "Automation"]
+  },
+{
+    "id": "diffusers",
+    "name": "huggingface/diffusers",
+    "description": "Hugging Face Diffusers package verifier for diffusion schedulers and pipelines. This CPU-safe demo installs and imports the real Diffusers package, checks local ConfigMixin/BaseOutput primitives with DDIMScheduler metadata, and avoids image generation, model downloads, GPU/CUDA, and provider credentials by default.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/diffusers",
+    "author": "huggingface",
+    "icon": "diffusers.jpg",
+    "envs": [
+      {
+        "key": "DIFFUSERS_PACKAGE_VERSION",
+        "required": false,
+        "default": "0.38.0",
+        "description": "Pinned Hugging Face Diffusers Python package version installed by the demo service at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 30
+    },
+    "tags": ["Media & Design", "Developer Tools"]
   }
 ]

@@ -1,0 +1,295 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8000"
+    environment:
+      APP_PORT: ${APP_PORT:-8000}
+      DIFFUSERS_PACKAGE_VERSION: ${DIFFUSERS_PACKAGE_VERSION:-0.38.0}
+      HF_HUB_DISABLE_TELEMETRY: ${HF_HUB_DISABLE_TELEMETRY:-1}
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-1}
+      TRANSFORMERS_OFFLINE: ${TRANSFORMERS_OFFLINE:-1}
+      DIFFUSERS_VERBOSITY: ${DIFFUSERS_VERBOSITY:-error}
+      PYTHONUNBUFFERED: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      HF_HOME: /tmp/huggingface
+    configs:
+      - source: diffusers_demo_app
+        target: /opt/diffusers-demo/main.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        python -c 'import os, subprocess, sys; version = os.environ.get("DIFFUSERS_PACKAGE_VERSION", "0.38.0"); subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-cache-dir", f"diffusers=={version}"])'
+        exec python /opt/diffusers-demo/main.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8000'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      - app
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+          reverse_proxy app:8000
+      }
+
+  diffusers_demo_app:
+    content: |
+      import importlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from dataclasses import dataclass
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "diffusers"
+
+
+      def import_checks():
+          result = {
+              "package": PACKAGE_NAME,
+              "distribution_version": None,
+              "module_version": None,
+              "import_ok": False,
+              "checks": {},
+              "demo_config": None,
+              "demo_output": None,
+              "optional_backends": {},
+              "error": None,
+          }
+          try:
+              result["distribution_version"] = importlib.metadata.version(PACKAGE_NAME)
+              diffusers = importlib.import_module(PACKAGE_NAME)
+              from diffusers.configuration_utils import ConfigMixin
+              from diffusers.utils import BaseOutput, is_torch_available, logging
+
+              class TinyDiffusersConfig(ConfigMixin):
+                  config_name = "tiny_diffusers_demo.json"
+
+                  def __init__(
+                      self,
+                      scheduler="DDIMScheduler",
+                      inference_steps=4,
+                      prediction_type="epsilon",
+                  ):
+                      self.register_to_config(
+                          scheduler=scheduler,
+                          inference_steps=inference_steps,
+                          prediction_type=prediction_type,
+                          model_downloads=False,
+                          weights_loaded=False,
+                      )
+
+              @dataclass
+              class DemoOutput(BaseOutput):
+                  scheduler: str
+                  inference_steps: int
+                  model_downloads: bool
+                  weights_loaded: bool
+
+              config = TinyDiffusersConfig()
+              output = DemoOutput(
+                  scheduler=config.config.scheduler,
+                  inference_steps=config.config.inference_steps,
+                  model_downloads=False,
+                  weights_loaded=False,
+              )
+              logging.set_verbosity_error()
+
+              result["module_version"] = getattr(diffusers, "__version__", None)
+              result["checks"] = {
+                  "ConfigMixin": isinstance(config, ConfigMixin),
+                  "BaseOutput": isinstance(output, BaseOutput),
+                  "config_registered": config.config.scheduler == "DDIMScheduler",
+                  "output_tuple_shape": len(output.to_tuple()) == 4,
+                  "no_model_downloads": output.model_downloads is False,
+                  "no_weights_loaded": output.weights_loaded is False,
+              }
+              result["demo_config"] = dict(config.config)
+              result["demo_output"] = {
+                  "scheduler": output.scheduler,
+                  "inference_steps": output.inference_steps,
+                  "model_downloads": output.model_downloads,
+                  "weights_loaded": output.weights_loaded,
+              }
+              result["optional_backends"] = {
+                  "torch_available": bool(is_torch_available()),
+                  "torch_required_for_default_smoke": False,
+                  "cuda_required": False,
+              }
+              result["import_ok"] = (
+                  bool(result["distribution_version"])
+                  and bool(result["module_version"])
+                  and all(result["checks"].values())
+              )
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      IMPORT_STATUS = import_checks()
+
+
+      def response_body(path):
+          uptime_seconds = round(time.time() - STARTED_AT, 3)
+          no_runtime_work = {
+              "pipeline_started": False,
+              "image_generation_started": False,
+              "model_downloads": False,
+              "model_loaded": False,
+              "weights_loaded": False,
+              "gpu_or_cuda_required": False,
+              "provider_api_calls": False,
+              "credentials_required": False,
+          }
+
+          if path == "/healthz":
+              status = "ok" if IMPORT_STATUS["import_ok"] else "unhealthy"
+              return HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE, {
+                  "status": status,
+                  "uptime_seconds": uptime_seconds,
+                  "diffusers": IMPORT_STATUS,
+                  "runtime": no_runtime_work,
+              }
+
+          if path == "/demo":
+              return HTTPStatus.OK, {
+                  "name": "Hugging Face Diffusers config demo",
+                  "description": (
+                      "This service imports the real diffusers Python package and verifies "
+                      "safe local ConfigMixin/BaseOutput primitives without downloading or "
+                      "loading model weights."
+                  ),
+                  "purpose": "Diffusion package/config primitive verifier",
+                  "runtime": no_runtime_work,
+                  "building_blocks": [
+                      "ConfigMixin",
+                      "BaseOutput",
+                      "DDIMScheduler metadata fixture",
+                      "Diffusers logging controls",
+                  ],
+                  "example_config": IMPORT_STATUS["demo_config"],
+                  "example_output": IMPORT_STATUS["demo_output"],
+                  "diffusers": IMPORT_STATUS,
+              }
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "diffusers/no-model-download-demo",
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "huggingface",
+                          "description": (
+                              "Metadata placeholder for diffusers smoke tests. The default "
+                              "template does not host, download, generate with, or load a model."
+                          ),
+                      }
+                  ],
+              }
+
+          if path == "/":
+              return HTTPStatus.OK, {
+                  "service": "diffusers-demo",
+                  "endpoints": ["/healthz", "/demo", "/v1/models"],
+                  "python": sys.version.split()[0],
+                  "platform": platform.platform(),
+                  "diffusers_import_ok": IMPORT_STATUS["import_ok"],
+                  "runtime": no_runtime_work,
+              }
+
+          return HTTPStatus.NOT_FOUND, {
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "diffusers-demo"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+              status, payload = response_body(path)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8000"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "diffusers": IMPORT_STATUS,
+                      "pipeline_started": False,
+                      "model_downloads": False,
+                      "model_loaded": False,
+                      "provider_api_calls": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+
+networks:
+  internal:
+    driver: bridge
