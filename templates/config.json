@@ -4144,5 +4144,27 @@
       "diskSize": 20
     },
     "tags": ["AI Agents", "Developer Tools", "Automation"]
+  },
+{
+    "id": "metagpt",
+    "name": "FoundationAgents/MetaGPT",
+    "description": "Multi-agent framework for software-company style agent workflows. This CPU-safe demo installs the real MetaGPT wheel, imports the top-level package, verifies installed source facts through Caddy, and avoids external LLM calls or provider credentials by default.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/metagpt",
+    "author": "FoundationAgents",
+    "icon": "metagpt.png",
+    "envs": [
+      {
+        "key": "METAGPT_VERSION",
+        "required": false,
+        "default": "0.8.1",
+        "description": "Pinned MetaGPT Python package version installed by the demo service at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools", "Automation"]
   }
 ]

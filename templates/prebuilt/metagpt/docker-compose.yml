@@ -1,0 +1,367 @@
+services:
+  app:
+    image: python:3.11-slim-bookworm
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8000"
+    environment:
+      METAGPT_VERSION: ${METAGPT_VERSION:-0.8.1}
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+      PIP_ROOT_USER_ACTION: ignore
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    configs:
+      - source: metagpt_demo_app
+        target: /opt/metagpt-demo/main.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        python -m pip install --no-cache-dir --no-deps "metagpt==$${METAGPT_VERSION}"
+        exec python /opt/metagpt-demo/main.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import sys, urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+          reverse_proxy app:8000
+      }
+
+  metagpt_demo_app:
+    content: |
+      import hashlib
+      import importlib
+      import importlib.metadata
+      import json
+      import platform
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "metagpt"
+      UPSTREAM_REPO = "https://github.com/FoundationAgents/MetaGPT"
+      PUBLIC_ENDPOINTS = ["/healthz", "/demo", "/v1/models"]
+
+      SOURCE_MARKERS = {
+          "software_company.py": [
+              "def generate_repo(",
+              "ProductManager",
+              "Architect",
+              "Engineer",
+              "Team",
+          ],
+          "team.py": [
+              "class Team(",
+              "def hire(",
+              "def invest(",
+              "def run_project(",
+              "async def run(",
+          ],
+          "roles/product_manager.py": [
+              "class ProductManager(",
+              "PrepareDocuments",
+              "WritePRD",
+              "self.set_actions([PrepareDocuments, WritePRD])",
+          ],
+          "roles/architect.py": [
+              "class Architect(",
+              "WriteDesign",
+              "WritePRD",
+              "design a concise, usable, complete software system",
+          ],
+          "roles/engineer.py": [
+              "class Engineer(",
+              "WriteCode",
+              "WriteCodeReview",
+              "n_borg",
+          ],
+          "actions/write_prd.py": [
+              "class WritePRD(",
+              "WRITE_PRD_NODE",
+              "_handle_new_requirement",
+          ],
+          "actions/design_api.py": [
+              "class WriteDesign(",
+              "DESIGN_API_NODE",
+              "_save_data_api_design",
+          ],
+      }
+
+
+      def package_metadata():
+          result = {
+              "package": PACKAGE_NAME,
+              "distribution_version": None,
+              "summary": None,
+              "home_page": None,
+              "author": None,
+              "license": None,
+              "requires_python": None,
+              "requires_dist_count": 0,
+              "selected_requires_dist": [],
+              "files_count": None,
+              "metadata_ok": False,
+              "error": None,
+          }
+          try:
+              dist = importlib.metadata.distribution(PACKAGE_NAME)
+              metadata = dist.metadata
+              requires_dist = metadata.get_all("Requires-Dist") or []
+              result.update(
+                  {
+                      "distribution_version": dist.version,
+                      "summary": metadata.get("Summary"),
+                      "home_page": metadata.get("Home-page"),
+                      "author": metadata.get("Author"),
+                      "license": metadata.get("License"),
+                      "requires_python": metadata.get("Requires-Python"),
+                      "requires_dist_count": len(requires_dist),
+                      "selected_requires_dist": [item.split(";", 1)[0].strip() for item in requires_dist[:12]],
+                      "files_count": len(list(dist.files or [])),
+                  }
+              )
+              result["metadata_ok"] = (
+                  result["distribution_version"] is not None
+                  and result["summary"] == "The Multi-Agent Framework"
+                  and result["requires_python"] is not None
+              )
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      def source_fingerprint(path):
+          digest = hashlib.sha256(path.read_bytes()).hexdigest()
+          return digest[:16]
+
+
+      def source_checks():
+          result = {
+              "import_ok": False,
+              "package_file": None,
+              "package_root": None,
+              "source_ok": False,
+              "files": {},
+              "error": None,
+          }
+          try:
+              module = importlib.import_module(PACKAGE_NAME)
+              package_file = Path(module.__file__).resolve()
+              package_root = package_file.parent
+              result["import_ok"] = True
+              result["package_file"] = str(package_file)
+              result["package_root"] = str(package_root)
+
+              for relative_path, markers in SOURCE_MARKERS.items():
+                  path = package_root / relative_path
+                  file_result = {
+                      "exists": path.exists(),
+                      "size_bytes": None,
+                      "sha256_16": None,
+                      "markers": {},
+                      "ok": False,
+                  }
+                  if path.exists():
+                      text = path.read_text(encoding="utf-8")
+                      file_result["size_bytes"] = path.stat().st_size
+                      file_result["sha256_16"] = source_fingerprint(path)
+                      file_result["markers"] = {marker: marker in text for marker in markers}
+                      file_result["ok"] = all(file_result["markers"].values())
+                  result["files"][relative_path] = file_result
+
+              result["source_ok"] = bool(result["files"]) and all(item["ok"] for item in result["files"].values())
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      METADATA_STATUS = package_metadata()
+      SOURCE_STATUS = source_checks()
+
+
+      def ok():
+          return METADATA_STATUS["metadata_ok"] and SOURCE_STATUS["import_ok"] and SOURCE_STATUS["source_ok"]
+
+
+      def base_payload():
+          return {
+              "service": "metagpt-demo",
+              "upstream": UPSTREAM_REPO,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "install_mode": "pip install --no-deps metagpt",
+              "transitive_dependencies_installed": False,
+              "credentials_required": False,
+              "llm_provider_calls": False,
+              "model_downloaded": False,
+              "gpu_required": False,
+          }
+
+
+      def response_body(path):
+          if path == "/healthz":
+              status = "ok" if ok() else "unhealthy"
+              payload = base_payload()
+              payload.update(
+                  {
+                      "status": status,
+                      "metagpt": {
+                          "metadata_ok": METADATA_STATUS["metadata_ok"],
+                          "import_ok": SOURCE_STATUS["import_ok"],
+                          "source_ok": SOURCE_STATUS["source_ok"],
+                          "version": METADATA_STATUS["distribution_version"],
+                      },
+                  }
+              )
+              if not ok():
+                  payload["errors"] = {
+                      "metadata": METADATA_STATUS["error"],
+                      "source": SOURCE_STATUS["error"],
+                  }
+              return HTTPStatus.OK if ok() else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/demo":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "name": "MetaGPT local source verifier",
+                      "description": (
+                          "Installs the real MetaGPT wheel, imports the top-level metagpt package, "
+                          "and verifies installed source files for the software-company multi-agent workflow. "
+                          "It does not execute agents, initialize provider config, call LLM APIs, or download models."
+                      ),
+                      "safe_for_tdx_small_smoke": True,
+                      "framework_facts": {
+                          "package": METADATA_STATUS,
+                          "source": SOURCE_STATUS,
+                          "deterministic_pipeline": [
+                              "ProductManager writes PRD inputs",
+                              "Architect converts PRD context into design/API artifacts",
+                              "Engineer roles implement and review code",
+                              "Team coordinates hired roles through a shared environment",
+                          ],
+                      },
+                  }
+              )
+              return HTTPStatus.OK if ok() else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "metagpt/no-llm-demo",
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "FoundationAgents",
+                          "description": (
+                              "Metadata-only MetaGPT verifier endpoint. The default template does not "
+                              "host, download, or call an LLM model."
+                          ),
+                      }
+                  ],
+                  "llm_provider_calls": False,
+                  "package_version": METADATA_STATUS["distribution_version"],
+              }
+
+          if path == "/":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": ok(),
+                      "endpoints": PUBLIC_ENDPOINTS,
+                      "package_version": METADATA_STATUS["distribution_version"],
+                  }
+              )
+              return HTTPStatus.OK, payload
+
+          return HTTPStatus.NOT_FOUND, {"error": "not_found", "endpoints": PUBLIC_ENDPOINTS}
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "metagpt-demo"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+              status, payload = response_body(path)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": 8000,
+                      "package_version": METADATA_STATUS["distribution_version"],
+                      "ok": ok(),
+                      "llm_provider_calls": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", 8000), Handler).serve_forever()
+
+networks:
+  internal:
+    driver: bridge
