@@ -4200,5 +4200,27 @@
     "diskSize": 10
   },
   "tags": ["RAG", "Developer Tools", "AI Agents"]
-}
+},
+{
+    "id": "camel",
+    "name": "camel-ai/camel",
+    "description": "Communicative Agents for Mind Exploration; multi-agent role-playing. This template runs a CPU-safe HTTP verifier that installs the real camel-ai package and exercises deterministic local CAMEL prompt, message, enum, and config primitives without provider credentials or model downloads.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/camel",
+    "author": "camel-ai",
+    "icon": "camel.png",
+    "envs": [
+      {
+        "key": "CAMEL_AI_VERSION",
+        "required": false,
+        "default": "0.2.90",
+        "description": "Pinned camel-ai Python package version installed by the verifier service at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools", "Automation"]
+  }
 ]

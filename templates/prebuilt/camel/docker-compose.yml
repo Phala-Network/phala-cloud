@@ -1,0 +1,332 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      APP_PORT: "8080"
+      CAMEL_AI_VERSION: ${CAMEL_AI_VERSION:-0.2.90}
+      PYTHONUNBUFFERED: "1"
+      UV_LINK_MODE: copy
+      UV_SYSTEM_PYTHON: "1"
+    configs:
+      - source: camel_demo_app
+        target: /opt/camel-demo/server.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache "camel-ai==$${CAMEL_AI_VERSION}"
+        exec python /opt/camel-demo/server.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8080'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+configs:
+  camel_demo_app:
+    content: |
+      import importlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import parse_qs, urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "camel-ai"
+      UPSTREAM_REPO = "https://github.com/camel-ai/camel"
+      IMPORT_STATUS = {
+          "package": PACKAGE_NAME,
+          "distribution_version": None,
+          "module_version": None,
+          "import_ok": False,
+          "symbols": {},
+          "error": None,
+      }
+
+      try:
+          camel = importlib.import_module("camel")
+          from camel.configs import ChatGPTConfig
+          from camel.messages import BaseMessage
+          from camel.prompts import TextPrompt
+          from camel.prompts.ai_society import AISocietyPromptTemplateDict
+          from camel.types import OpenAIBackendRole, RoleType, TaskType
+
+          IMPORT_STATUS["distribution_version"] = importlib.metadata.version(PACKAGE_NAME)
+          IMPORT_STATUS["module_version"] = getattr(camel, "__version__", None)
+          for symbol, value in {
+              "BaseMessage": BaseMessage,
+              "TextPrompt": TextPrompt,
+              "AISocietyPromptTemplateDict": AISocietyPromptTemplateDict,
+              "ChatGPTConfig": ChatGPTConfig,
+              "RoleType": RoleType,
+              "TaskType": TaskType,
+              "OpenAIBackendRole": OpenAIBackendRole,
+          }.items():
+              IMPORT_STATUS["symbols"][symbol] = value is not None
+          IMPORT_STATUS["import_ok"] = bool(IMPORT_STATUS["distribution_version"]) and all(
+              IMPORT_STATUS["symbols"].values()
+          )
+      except Exception as exc:
+          IMPORT_STATUS["error"] = f"{type(exc).__name__}: {exc}"
+
+
+      def truncate(value, limit=420):
+          text = str(value)
+          if len(text) <= limit:
+              return text
+          return text[: limit - 3] + "..."
+
+
+      def run_local_demo(topic):
+          if not IMPORT_STATUS["import_ok"]:
+              raise RuntimeError(IMPORT_STATUS["error"] or "CAMEL import check failed")
+
+          task = (
+              "Design a credential-free Phala Cloud smoke test for CAMEL-AI "
+              f"focused on {topic}."
+          )
+          assistant_role = "Framework Verifier"
+          user_role = "Deployment Operator"
+
+          prompt_templates = AISocietyPromptTemplateDict()
+          assistant_prompt = prompt_templates[RoleType.ASSISTANT].format(
+              assistant_role=assistant_role,
+              user_role=user_role,
+              task=task,
+          )
+          user_prompt = prompt_templates[RoleType.USER].format(
+              assistant_role=assistant_role,
+              user_role=user_role,
+              task=task,
+          )
+          local_prompt = TextPrompt(
+              "Agent role: {role}; Task type: {task_type}; Topic: {topic}"
+          ).format(
+              role=assistant_role,
+              task_type=TaskType.AI_SOCIETY.value,
+              topic=topic,
+          )
+
+          messages = [
+              BaseMessage.make_system_message(
+                  role_name="CAMEL Runtime",
+                  content="Use CAMEL local primitives only; do not call model providers.",
+              ),
+              BaseMessage.make_user_message(
+                  role_name=user_role,
+                  content="Prepare a deterministic deployment verification plan.",
+              ),
+              BaseMessage.make_assistant_message(
+                  role_name=assistant_role,
+                  content=(
+                      "Imported CAMEL prompts, messages, enums, and config objects; "
+                      "converted a local transcript without model execution."
+                  ),
+              ),
+          ]
+
+          openai_messages = [
+              messages[0].to_openai_message(OpenAIBackendRole.SYSTEM),
+              messages[1].to_openai_message(OpenAIBackendRole.USER),
+              messages[2].to_openai_message(OpenAIBackendRole.ASSISTANT),
+          ]
+          sharegpt_messages = [
+              {
+                  "from": item.to_sharegpt().from_,
+                  "value": item.to_sharegpt().value,
+              }
+              for item in messages[1:]
+          ]
+          model_config = ChatGPTConfig(temperature=0.0).as_dict()
+
+          return {
+              "ok": True,
+              "demo_type": "deterministic local CAMEL framework primitives",
+              "task_type": TaskType.AI_SOCIETY.value,
+              "roles": {
+                  "assistant": assistant_role,
+                  "user": user_role,
+              },
+              "prompt_templates": {
+                  "assistant_key_words": sorted(prompt_templates[RoleType.ASSISTANT].key_words),
+                  "user_key_words": sorted(prompt_templates[RoleType.USER].key_words),
+                  "assistant_prompt_preview": truncate(assistant_prompt),
+                  "user_prompt_preview": truncate(user_prompt),
+                  "local_prompt": local_prompt,
+              },
+              "messages": {
+                  "camel_dicts": [message.to_dict() for message in messages],
+                  "openai_chat_format": openai_messages,
+                  "sharegpt_format": sharegpt_messages,
+              },
+              "model_config_preview": model_config,
+              "llm_provider_calls": False,
+              "remote_model_calls": False,
+              "credentials_required": False,
+              "model_downloaded": False,
+              "model_loaded": False,
+          }
+
+
+      def demo_result(topic):
+          try:
+              return run_local_demo(topic)
+          except Exception as exc:
+              return {
+                  "ok": False,
+                  "error": f"{type(exc).__name__}: {exc}",
+                  "llm_provider_calls": False,
+                  "remote_model_calls": False,
+                  "credentials_required": False,
+                  "model_downloaded": False,
+                  "model_loaded": False,
+              }
+
+
+      def base_payload():
+          return {
+              "service": "camel-ai-demo",
+              "upstream": UPSTREAM_REPO,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "camel": IMPORT_STATUS,
+          }
+
+
+      def response_body(path, query):
+          if path == "/healthz":
+              demo = demo_result("health check")
+              ok = IMPORT_STATUS["import_ok"] and demo["ok"]
+              payload = base_payload()
+              payload.update(
+                  {
+                      "status": "ready" if ok else "unhealthy",
+                      "ok": ok,
+                      "demo": {
+                          "ok": demo["ok"],
+                          "demo_type": demo.get("demo_type"),
+                          "llm_provider_calls": demo.get("llm_provider_calls", False),
+                          "credentials_required": demo.get("credentials_required", False),
+                      },
+                  }
+              )
+              if not ok:
+                  payload["error"] = demo.get("error") or IMPORT_STATUS["error"]
+              return HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/demo":
+              topic = query.get("topic", ["multi-agent role-playing"])[0][:200]
+              demo = demo_result(topic)
+              payload = base_payload()
+              payload.update(demo)
+              return HTTPStatus.OK if demo["ok"] else HTTPStatus.INTERNAL_SERVER_ERROR, payload
+
+          if path == "/v1/models":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": IMPORT_STATUS["import_ok"],
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "camel-ai/local-primitives-demo",
+                              "object": "model",
+                              "created": 0,
+                              "owned_by": "camel-ai",
+                              "description": (
+                                  "Metadata-only endpoint for the local CAMEL verifier. "
+                                  "The default template does not host or call an LLM."
+                              ),
+                          }
+                      ],
+                      "llm_provider_calls": False,
+                      "credentials_required": False,
+                  }
+              )
+              if IMPORT_STATUS["error"]:
+                  payload["error"] = IMPORT_STATUS["error"]
+              return HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": IMPORT_STATUS["import_ok"],
+                      "endpoints": ["/healthz", "/demo", "/v1/models"],
+                      "llm_provider_calls": False,
+                      "credentials_required": False,
+                  }
+              )
+              return HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          return HTTPStatus.NOT_FOUND, {
+              "ok": False,
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "camel-ai-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              request = urlparse(self.path)
+              path = request.path.rstrip("/") or "/"
+              status, payload = response_body(path, parse_qs(request.query))
+              self.respond_json(status, payload)
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8080"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "camel": IMPORT_STATUS,
+                      "llm_provider_calls": False,
+                      "credentials_required": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
