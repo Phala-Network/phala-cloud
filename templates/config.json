@@ -4336,5 +4336,37 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools", "Starter Kits"]
+  },
+{
+    "id": "autogpt",
+    "name": "Significant-Gravitas/AutoGPT",
+    "description": "The original autonomous AI agent and workflow platform. This template runs a CPU-safe verifier and deterministic local workflow demo for the pinned AutoGPT release without provider credentials, model downloads, browser automation, Docker socket access, or GPU requirements.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/autogpt",
+    "author": "Significant-Gravitas",
+    "icon": "autogpt.png",
+    "envs": [
+      {
+        "key": "AUTOGPT_VERIFY_TIMEOUT_SECONDS",
+        "required": false,
+        "default": "8",
+        "description": "Timeout in seconds for each small public upstream source verification fetch."
+      },
+      {
+        "key": "OPENAI_API_KEY",
+        "required": false,
+        "description": "Optional provider key for custom full AutoGPT extensions. The default verifier demo never calls it."
+      },
+      {
+        "key": "ANTHROPIC_API_KEY",
+        "required": false,
+        "description": "Optional provider key for custom full AutoGPT extensions. The default verifier demo never calls it."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["AI Agents", "Automation", "Developer Tools"]
   }
 ]

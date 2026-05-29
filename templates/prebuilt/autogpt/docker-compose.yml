@@ -1,0 +1,395 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    expose:
+      - "8080"
+    environment:
+      APP_PORT: "8080"
+      AUTOGPT_UPSTREAM: https://github.com/Significant-Gravitas/AutoGPT
+      AUTOGPT_RELEASE: autogpt-platform-beta-v0.6.62
+      AUTOGPT_COMMIT: c194ab1b71839ef1fdb769f8343249c9e4f86abf
+      AUTOGPT_RELEASE_PUBLISHED_AT: "2026-05-28T02:12:41Z"
+      AUTOGPT_VERIFY_TIMEOUT_SECONDS: ${AUTOGPT_VERIFY_TIMEOUT_SECONDS:-8}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    configs:
+      - source: server_py
+        target: /server.py
+        mode: 0444
+    command:
+      - python
+      - /server.py
+    working_dir: /tmp
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import json, urllib.request; data = json.load(urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5)); assert data["ok"] is True and data["service"] == "autogpt-source-verifier"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  proxy:
+    image: caddy:2-alpine
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+        mode: 0444
+    tmpfs:
+      - /config
+      - /data
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+configs:
+  caddyfile:
+    content: |
+      :8080 {
+        encode zstd gzip
+        reverse_proxy app:8080
+      }
+  server_py:
+    content: |
+      import hashlib
+      import json
+      import os
+      import platform
+      import sys
+      import threading
+      import time
+      import urllib.error
+      import urllib.request
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import parse_qs, urlparse
+
+      STARTED_AT = time.time()
+      UPSTREAM = os.environ.get("AUTOGPT_UPSTREAM", "https://github.com/Significant-Gravitas/AutoGPT")
+      RELEASE = os.environ.get("AUTOGPT_RELEASE", "autogpt-platform-beta-v0.6.62")
+      COMMIT = os.environ.get("AUTOGPT_COMMIT", "c194ab1b71839ef1fdb769f8343249c9e4f86abf")
+      RELEASE_PUBLISHED_AT = os.environ.get("AUTOGPT_RELEASE_PUBLISHED_AT", "2026-05-28T02:12:41Z")
+
+      FILES = {
+          "README.md": {
+              "sha256": "31e3b4838cf788a13ef16df97bc4b9f2ed19701c5d7a78ce1626f6e7727138f1",
+              "size": 11844,
+              "markers": [
+                  "AutoGPT: Build, Deploy, and Run AI Agents",
+                  "AutoGPT Platform",
+                  "Docker",
+                  "./run",
+              ],
+          },
+          "autogpt_platform/README.md": {
+              "sha256": "76cfad6c08b736bf7533f1deea1a41c01332e49d09b197dc3c402391a81e9c5b",
+              "size": 5245,
+              "markers": [
+                  "AutoGPT Platform",
+                  "creating and running AI agents",
+                  "backend",
+                  "frontend",
+              ],
+          },
+          "autogpt_platform/backend/pyproject.toml": {
+              "sha256": "48c187110a9eb0655a062e2c151c923497ea5f722431c2ea37c8d6f936c5a1c9",
+              "size": 5147,
+              "markers": [
+                  "autogpt-platform-backend",
+                  "fastapi",
+                  "prisma",
+                  "supabase",
+              ],
+          },
+          "autogpt_platform/docker-compose.yml": {
+              "sha256": "e9f342452dfbb9a2b48ea73771115a92952719f61c21d09dd7737586e4be2dbe",
+              "size": 4762,
+              "markers": [
+                  "app-network",
+                  "backend",
+                  "frontend",
+                  "supabase",
+              ],
+          },
+          "classic/original_autogpt/setup.py": {
+              "sha256": "2f547d98006b9be1c701344ff8e45128c2d574fed53af004c000217568c44d49",
+              "size": 2690,
+              "markers": [
+                  "autogpt",
+                  "AutoGPT",
+                  "cx_Freeze",
+                  "setup(",
+              ],
+          },
+          "classic/original_autogpt/autogpt/agents/agent.py": {
+              "sha256": "e83de1c908e86eb45d56e2ddaba0000515680790c251dd79c329cc769a0c3684",
+              "size": 24698,
+              "markers": [
+                  "class Agent",
+                  "propose_action",
+                  "ActionProposal",
+                  "async def",
+              ],
+          },
+      }
+
+      DEMO_BLOCKS = [
+          {
+              "id": "trigger",
+              "name": "Manual trigger",
+              "description": "Starts a deterministic local workflow without calling an LLM provider.",
+          },
+          {
+              "id": "planner",
+              "name": "Workflow planner",
+              "description": "Builds a short task plan from the prompt using bundled rules.",
+          },
+          {
+              "id": "executor",
+              "name": "Safe executor",
+              "description": "Returns a structured answer and never launches browser automation, Docker sandboxes, or model inference.",
+          },
+      ]
+
+      VERIFY_LOCK = threading.Lock()
+      VERIFY_STATE = {
+          "status": "not_started",
+          "checked_at": None,
+          "files": {},
+          "errors": [],
+      }
+
+
+      def now_iso():
+          return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+      def timeout_seconds():
+          try:
+              return max(1.0, float(os.environ.get("AUTOGPT_VERIFY_TIMEOUT_SECONDS", "8")))
+          except ValueError:
+              return 8.0
+
+
+      def fetch_bytes(url):
+          request = urllib.request.Request(
+              url,
+              headers={"User-Agent": "phala-cloud-autogpt-template/1.0"},
+          )
+          with urllib.request.urlopen(request, timeout=timeout_seconds()) as response:
+              return response.read()
+
+
+      def verify_file(name, expected):
+          url = f"https://raw.githubusercontent.com/Significant-Gravitas/AutoGPT/{RELEASE}/{name}"
+          data = fetch_bytes(url)
+          text = data.decode("utf-8", errors="replace")
+          digest = hashlib.sha256(data).hexdigest()
+          marker_results = {marker: marker in text for marker in expected["markers"]}
+          return {
+              "url": url,
+              "bytes": len(data),
+              "bytes_expected": expected["size"],
+              "bytes_ok": len(data) == expected["size"],
+              "sha256": digest,
+              "sha256_expected": expected["sha256"],
+              "sha256_ok": digest == expected["sha256"],
+              "markers_ok": marker_results,
+              "ok": digest == expected["sha256"]
+              and len(data) == expected["size"]
+              and all(marker_results.values()),
+          }
+
+
+      def run_verification():
+          state = {
+              "status": "running",
+              "checked_at": now_iso(),
+              "files": {},
+              "errors": [],
+          }
+          with VERIFY_LOCK:
+              VERIFY_STATE.update(state)
+
+          for name, expected in FILES.items():
+              try:
+                  state["files"][name] = verify_file(name, expected)
+              except Exception as exc:
+                  state["files"][name] = {
+                      "ok": False,
+                      "error": f"{type(exc).__name__}: {exc}",
+                  }
+                  state["errors"].append(f"{name}: {type(exc).__name__}: {exc}")
+
+          state["status"] = "ok" if all(item.get("ok") for item in state["files"].values()) else "failed"
+          with VERIFY_LOCK:
+              VERIFY_STATE.update(state)
+
+
+      def ensure_verification_started():
+          with VERIFY_LOCK:
+              status = VERIFY_STATE.get("status")
+              if status in {"running", "ok", "failed"}:
+                  return
+              VERIFY_STATE["status"] = "queued"
+          thread = threading.Thread(target=run_verification, daemon=True)
+          thread.start()
+
+
+      def verification_snapshot():
+          ensure_verification_started()
+          with VERIFY_LOCK:
+              return json.loads(json.dumps(VERIFY_STATE))
+
+
+      def workflow_demo(goal):
+          cleaned_goal = " ".join((goal or "summarize AutoGPT on Phala Cloud").split())
+          return {
+              "goal": cleaned_goal,
+              "mode": "deterministic local AutoGPT workflow demo",
+              "blocks": DEMO_BLOCKS,
+              "plan": [
+                  "Read the requested goal.",
+                  "Select local workflow blocks that do not need provider credentials.",
+                  "Return a structured response that documents production requirements separately.",
+              ],
+              "result": {
+                  "summary": f"AutoGPT can orchestrate continuous agent workflows for: {cleaned_goal}",
+                  "safe_default": "This Phala template verifies pinned upstream source and serves local demo endpoints only.",
+                  "production_extension": "To run real AutoGPT agents, replace the verifier with the upstream platform stack and provide model, database, auth, and integration credentials through Phala secrets.",
+              },
+              "external_llm_calls": False,
+              "external_provider_calls": False,
+              "browser_automation": False,
+              "model_downloaded": False,
+              "gpu_required": False,
+          }
+
+
+      def base_payload():
+          verification = verification_snapshot()
+          return {
+              "service": "autogpt-source-verifier",
+              "ok": True,
+              "status": "ok",
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "upstream": {
+                  "repo": UPSTREAM,
+                  "release": RELEASE,
+                  "commit": COMMIT,
+                  "release_published_at": RELEASE_PUBLISHED_AT,
+              },
+              "verification_status": verification.get("status"),
+              "runtime_contract": {
+                  "cpu_only": True,
+                  "credentials_required": False,
+                  "llm_provider_calls": False,
+                  "model_downloaded": False,
+                  "docker_socket_mounted": False,
+                  "privileged_mode": False,
+                  "host_bind_mounts": False,
+              },
+          }
+
+
+      def upstream_payload():
+          verification = verification_snapshot()
+          return {
+              "ok": verification.get("status") == "ok",
+              "status": verification.get("status"),
+              "upstream": {
+                  "repo": UPSTREAM,
+                  "release": RELEASE,
+                  "commit": COMMIT,
+                  "release_published_at": RELEASE_PUBLISHED_AT,
+              },
+              "verification": verification,
+          }
+
+
+      def models_payload():
+          return {
+              "object": "list",
+              "data": [
+                  {
+                      "id": "autogpt/source-verifier-autogpt-platform-beta-v0.6.62",
+                      "object": "model",
+                      "created": 0,
+                      "owned_by": "Significant-Gravitas",
+                      "description": "Metadata-only smoke endpoint. This template does not host or call an LLM.",
+                  }
+              ],
+          }
+
+
+      def route(path, query):
+          if path in ("", "/", "/healthz"):
+              return HTTPStatus.OK, base_payload()
+          if path == "/demo":
+              payload = base_payload()
+              goal = parse_qs(query).get("goal", ["summarize AutoGPT on Phala Cloud"])[0]
+              payload["demo"] = workflow_demo(goal)
+              return HTTPStatus.OK, payload
+          if path == "/upstream":
+              payload = upstream_payload()
+              status = HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+              return status, payload
+          if path == "/v1/models":
+              return HTTPStatus.OK, models_payload()
+          return HTTPStatus.NOT_FOUND, {
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/upstream", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "autogpt-source-verifier"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              parsed = urlparse(self.path)
+              path = parsed.path.rstrip("/") or "/"
+              status, payload = route(path, parsed.query)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          ensure_verification_started()
+          port = int(os.environ.get("APP_PORT", "8080"))
+          print(json.dumps({"service": "autogpt-source-verifier", "port": port, "release": RELEASE}), flush=True)
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
