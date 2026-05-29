@@ -4094,5 +4094,33 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools"]
+  },
+{
+    "id": "openai-agents-python",
+    "name": "openai/openai-agents-python",
+    "description": "OpenAI Agents SDK for Python. This CPU-safe template installs and imports the real openai-agents package, constructs local Agent and function_tool primitives, and exposes health, demo, and OpenAI-shaped model metadata endpoints without provider credentials, model downloads, hosted API calls, GPU, host mounts, or external databases.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/openai-agents-python",
+    "author": "OpenAI",
+    "icon": "openai-agents-python.svg",
+    "envs": [
+      {
+        "key": "OPENAI_AGENTS_VERSION",
+        "required": false,
+        "default": "0.17.4",
+        "description": "Pinned openai-agents Python package version installed by the demo service at container startup."
+      },
+      {
+        "key": "OPENAI_AGENTS_DISABLE_TRACING",
+        "required": false,
+        "default": "true",
+        "description": "Disables OpenAI Agents SDK tracing for the default no-remote-call primitive demo."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools", "Automation"]
   }
 ]
