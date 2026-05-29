@@ -4250,5 +4250,47 @@
       "diskSize": 20
     },
     "tags": ["AI Agents", "Developer Tools", "Starter Kits"]
+  },
+{
+    "id": "swe-agent",
+    "name": "SWE-agent/SWE-agent",
+    "description": "Official SWE-agent source-install CLI verifier. This CPU-safe template clones SWE-agent v1.1.0, installs it editable from the upstream source checkout, imports the real sweagent package, and checks python -m sweagent --help without provider credentials, Docker-in-Docker, model downloads, GPU, or hosted model calls.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/swe-agent",
+    "author": "SWE-agent",
+    "icon": "swe-agent.svg",
+    "envs": [
+      {
+        "key": "SWE_AGENT_VERSION",
+        "required": false,
+        "default": "v1.1.0",
+        "description": "Git tag or ref cloned from SWE-agent/SWE-agent at container startup."
+      },
+      {
+        "key": "SWE_AGENT_MODEL",
+        "required": false,
+        "description": "Optional model name for later manual SWE-agent runs. Not required or used by the default verifier endpoints."
+      },
+      {
+        "key": "SWE_AGENT_COST_LIMIT",
+        "required": false,
+        "description": "Optional cost limit value for later manual SWE-agent runs. Not required or used by the default verifier endpoints."
+      },
+      {
+        "key": "OPENAI_API_KEY",
+        "required": false,
+        "description": "Optional OpenAI provider API key for later manual SWE-agent sessions. Not required or used by the default verifier endpoints."
+      },
+      {
+        "key": "ANTHROPIC_API_KEY",
+        "required": false,
+        "description": "Optional Anthropic API key for later manual SWE-agent sessions. Not required or used by the default verifier endpoints."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["AI Agents", "Developer Tools", "Automation"]
   }
 ]

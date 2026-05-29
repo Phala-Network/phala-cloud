@@ -1,0 +1,341 @@
+services:
+  app:
+    image: python:3.11-slim-bookworm
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: ${PORT:-8080}
+      SWE_AGENT_VERSION: ${SWE_AGENT_VERSION:-v1.1.0}
+      SWE_AGENT_MODEL: ${SWE_AGENT_MODEL:-}
+      SWE_AGENT_COST_LIMIT: ${SWE_AGENT_COST_LIMIT:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+      PIP_ROOT_USER_ACTION: ignore
+      PYTHONUNBUFFERED: "1"
+      PYTHONNOUSERSITE: "1"
+      HOME: /opt/swe-agent-home
+      XDG_CACHE_HOME: /opt/swe-agent-home/.cache
+      NO_COLOR: "1"
+      TERM: dumb
+    working_dir: /opt/swe-agent-source
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        export DEBIAN_FRONTEND=noninteractive
+
+        apt-get update
+        apt-get install -y --no-install-recommends git ca-certificates
+        rm -rf /var/lib/apt/lists/*
+
+        source_dir=/opt/swe-agent-source
+        requested_version="$${SWE_AGENT_VERSION:-v1.1.0}"
+        mkdir -p "$$source_dir" "$$HOME" "$$XDG_CACHE_HOME"
+
+        if [ ! -d "$$source_dir/.git" ]; then
+          find "$$source_dir" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+          git clone --depth 1 --branch "$$requested_version" https://github.com/SWE-agent/SWE-agent.git "$$source_dir"
+        else
+          cd "$$source_dir"
+          current_ref="$$(git describe --tags --exact-match 2>/dev/null || true)"
+          if [ "$$current_ref" != "$$requested_version" ]; then
+            git fetch --depth 1 origin "refs/tags/$$requested_version:refs/tags/$$requested_version" || git fetch --depth 1 origin "$$requested_version"
+            git checkout --force "$$requested_version" || git checkout --force FETCH_HEAD
+            git clean -fdx
+          fi
+        fi
+
+        cd "$$source_dir"
+        python -m pip install --upgrade pip
+        python -m pip install --no-cache-dir -e "$$source_dir"
+        exec python /server.py
+    configs:
+      - source: server_py
+        target: /server.py
+    volumes:
+      - swe_agent_source:/opt/swe-agent-source
+      - swe_agent_home:/opt/swe-agent-home
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import os, urllib.request; urllib.request.urlopen("http://127.0.0.1:%s/healthz" % os.environ.get("PORT", "8080"), timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
+
+volumes:
+  swe_agent_source:
+  swe_agent_home:
+
+configs:
+  server_py:
+    content: |
+      import json
+      import os
+      import platform
+      import subprocess
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      SOURCE_DIR = Path(os.environ.get("SWE_AGENT_SOURCE_DIR", "/opt/swe-agent-source"))
+      UPSTREAM = "https://github.com/SWE-agent/SWE-agent"
+      COMMAND_TIMEOUT_SECONDS = 20
+
+
+      def clean_text(value):
+          if isinstance(value, bytes):
+              value = value.decode("utf-8", errors="replace")
+          return str(value or "").replace("\x1b", "").strip()[:4000]
+
+
+      def verifier_env():
+          home = Path("/tmp/swe-agent-health")
+          home.mkdir(parents=True, exist_ok=True)
+          return {
+              "PATH": os.environ.get(
+                  "PATH",
+                  "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+              ),
+              "HOME": str(home),
+              "PYTHONUNBUFFERED": "1",
+              "PYTHONNOUSERSITE": "1",
+              "NO_COLOR": "1",
+              "TERM": "dumb",
+              "SWE_AGENT_CONFIG_DIR": str(SOURCE_DIR / "config"),
+              "SWE_AGENT_TOOLS_DIR": str(SOURCE_DIR / "tools"),
+              "SWE_AGENT_TRAJECTORY_DIR": str(SOURCE_DIR / "trajectories"),
+              "LITELLM_LOG": "CRITICAL",
+          }
+
+
+      def run_subprocess(command, timeout=COMMAND_TIMEOUT_SECONDS):
+          started = time.time()
+          try:
+              result = subprocess.run(
+                  command,
+                  check=False,
+                  cwd=str(SOURCE_DIR),
+                  env=verifier_env(),
+                  text=True,
+                  capture_output=True,
+                  timeout=timeout,
+              )
+              return {
+                  "ok": result.returncode == 0,
+                  "command": " ".join(command),
+                  "exit_code": result.returncode,
+                  "stdout": clean_text(result.stdout),
+                  "stderr": clean_text(result.stderr),
+                  "duration_ms": int((time.time() - started) * 1000),
+              }
+          except subprocess.TimeoutExpired as exc:
+              return {
+                  "ok": False,
+                  "command": " ".join(command),
+                  "exit_code": 124,
+                  "stdout": clean_text(exc.stdout),
+                  "stderr": clean_text(exc.stderr),
+                  "timed_out": True,
+                  "error": type(exc).__name__ + ": " + str(exc),
+                  "duration_ms": int((time.time() - started) * 1000),
+              }
+          except Exception as exc:
+              return {
+                  "ok": False,
+                  "command": " ".join(command),
+                  "exit_code": None,
+                  "stdout": "",
+                  "stderr": "",
+                  "error": type(exc).__name__ + ": " + str(exc),
+                  "duration_ms": int((time.time() - started) * 1000),
+              }
+
+
+      def check_import():
+          code = (
+              "import json, pathlib, sweagent\n"
+              "payload = {\n"
+              "    'module': 'sweagent',\n"
+              "    'version': getattr(sweagent, '__version__', None),\n"
+              "    'import_path': str(pathlib.Path(sweagent.__file__).resolve()),\n"
+              "    'config_dir': str(getattr(sweagent, 'CONFIG_DIR', '')),\n"
+              "    'tools_dir': str(getattr(sweagent, 'TOOLS_DIR', '')),\n"
+              "    'trajectory_dir': str(getattr(sweagent, 'TRAJECTORY_DIR', '')),\n"
+              "    'commit': sweagent.get_agent_commit_hash(),\n"
+              "}\n"
+              "print(json.dumps(payload, sort_keys=True))\n"
+          )
+          command = [sys.executable, "-c", code]
+          result = run_subprocess(command)
+          status = {
+              "module": "sweagent",
+              "import_ok": False,
+              "version": None,
+              "import_path": None,
+              "source_checkout": str(SOURCE_DIR),
+              "command": result,
+          }
+          if not result["ok"]:
+              return status
+          try:
+              payload = json.loads(result["stdout"].splitlines()[-1])
+              status.update(payload)
+              status["import_ok"] = True
+          except Exception as exc:
+              status["command"]["ok"] = False
+              status["parse_error"] = type(exc).__name__ + ": " + str(exc)
+          return status
+
+
+      def check_cli_help():
+          return run_subprocess([sys.executable, "-m", "sweagent", "--help"])
+
+
+      def provider_configuration():
+          return {
+              "openai_api_key_configured": bool(os.environ.get("OPENAI_API_KEY")),
+              "anthropic_api_key_configured": bool(os.environ.get("ANTHROPIC_API_KEY")),
+              "swe_agent_model_set": bool(os.environ.get("SWE_AGENT_MODEL")),
+              "swe_agent_cost_limit_set": bool(os.environ.get("SWE_AGENT_COST_LIMIT")),
+          }
+
+
+      def base_payload():
+          return {
+              "service": "swe-agent-source-verifier",
+              "upstream": UPSTREAM,
+              "requested_version": os.environ.get("SWE_AGENT_VERSION", "v1.1.0"),
+              "source_checkout": str(SOURCE_DIR),
+              "python": platform.python_version(),
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "cpu_only": True,
+              "credentials_required_for_health": False,
+              "remote_model_calls": False,
+              "model_downloaded": False,
+              "model_loaded": False,
+              "docker_required_for_health": False,
+              "provider_env_configured": provider_configuration(),
+          }
+
+
+      def run_checks():
+          import_status = check_import()
+          cli_help = check_cli_help()
+          return {
+              "ok": import_status["import_ok"] and cli_help["ok"],
+              "import": import_status,
+              "cli_help": cli_help,
+          }
+
+
+      def response_for(path):
+          if path in ("/", "/healthz"):
+              checks = run_checks()
+              payload = base_payload()
+              payload.update({
+                  "ok": checks["ok"],
+                  "status": "ready" if checks["ok"] else "unhealthy",
+                  "checks": checks,
+              })
+              return HTTPStatus.OK if checks["ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/demo":
+              checks = run_checks()
+              payload = base_payload()
+              payload.update({
+                  "ok": checks["ok"],
+                  "name": "SWE-agent editable source install verifier",
+                  "description": "Clones the real SWE-agent source, installs it editable, imports sweagent, and runs python -m sweagent --help without provider credentials.",
+                  "what_ran": [
+                      "import sweagent from /opt/swe-agent-source",
+                      "python -m sweagent --help",
+                  ],
+                  "verifies": [
+                      "The upstream SWE-agent repository is present in the named source volume.",
+                      "The real sweagent Python package imports from the source checkout.",
+                      "The SWE-agent CLI help path executes locally.",
+                      "No prompt is sent to a hosted LLM provider.",
+                      "No model weights are downloaded.",
+                      "No Docker socket or Docker-in-Docker path is required for health.",
+                  ],
+                  "checks": checks,
+              })
+              return HTTPStatus.OK if checks["ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/v1/models":
+              import_status = check_import()
+              payload = {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "swe-agent-local-cli-verifier",
+                          "object": "model",
+                          "created": 1746057600,
+                          "owned_by": "SWE-agent",
+                          "description": "Metadata-only endpoint for the local SWE-agent source-install verifier. No model is hosted or proxied.",
+                      }
+                  ],
+                  "sweagent_import_ok": import_status["import_ok"],
+                  "sweagent_version": import_status.get("version"),
+                  "cpu_only": True,
+                  "credentials_required_for_health": False,
+                  "remote_model_calls": False,
+                  "model_downloaded": False,
+                  "docker_required_for_health": False,
+              }
+              return HTTPStatus.OK, payload
+
+          return HTTPStatus.NOT_FOUND, {
+              "ok": False,
+              "error": "not found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "swe-agent-source-verifier/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def write_json(self, status, payload):
+              body = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+              self.send_response(int(status))
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+              status, payload = response_for(path)
+              self.write_json(status, payload)
+
+
+      def main():
+          port = int(os.environ.get("PORT", "8080"))
+          server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+          print(f"SWE-agent source verifier listening on 0.0.0.0:{port}", flush=True)
+          server.serve_forever()
+
+
+      if __name__ == "__main__":
+          main()
