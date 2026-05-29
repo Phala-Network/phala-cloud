@@ -4166,5 +4166,39 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools", "Automation"]
-  }
+  },
+{
+  "id": "haystack",
+  "name": "deepset-ai/haystack",
+  "description": "CPU-safe Haystack local pipeline demo that installs and imports the real haystack-ai package and serves deterministic in-memory pipeline endpoints without provider credentials, model downloads, GPU, or external databases.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/haystack",
+  "author": "deepset-ai",
+  "icon": "haystack.svg",
+  "envs": [
+    {
+      "key": "HAYSTACK_PACKAGE_VERSION",
+      "required": false,
+      "description": "Pinned haystack-ai package version installed at container startup.",
+      "default": "2.29.0"
+    },
+    {
+      "key": "HAYSTACK_DEMO_TOP_K",
+      "required": false,
+      "description": "Number of local demo contexts returned by /demo and /pipeline. Values are clamped to the bundled document count.",
+      "default": "2"
+    },
+    {
+      "key": "HAYSTACK_TELEMETRY_ENABLED",
+      "required": false,
+      "description": "Keeps Haystack telemetry disabled for the default smoke demo.",
+      "default": "false"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": ["RAG", "Developer Tools", "AI Agents"]
+}
 ]

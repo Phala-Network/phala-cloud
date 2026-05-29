@@ -1,0 +1,387 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      HAYSTACK_PACKAGE_VERSION: ${HAYSTACK_PACKAGE_VERSION:-2.29.0}
+      HAYSTACK_DEMO_TOP_K: ${HAYSTACK_DEMO_TOP_K:-2}
+      HAYSTACK_TELEMETRY_ENABLED: ${HAYSTACK_TELEMETRY_ENABLED:-false}
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+      PIP_ROOT_USER_ACTION: ignore
+      PORT: "8080"
+      PYTHONUNBUFFERED: "1"
+    configs:
+      - source: haystack_demo_app
+        target: /opt/haystack-demo/server.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        python -m pip install --no-cache-dir "haystack-ai==$${HAYSTACK_PACKAGE_VERSION}"
+        exec python /opt/haystack-demo/server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+configs:
+  haystack_demo_app:
+    content: |
+      import importlib
+      import importlib.metadata
+      import json
+      import math
+      import os
+      import platform
+      import re
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import parse_qs, urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "haystack-ai"
+      UPSTREAM_REPO = "https://github.com/deepset-ai/haystack"
+      DEFAULT_QUERY = "How does this Haystack template stay CPU safe?"
+      IMPORT_ERROR = None
+      PACKAGE = {}
+
+
+      try:
+          haystack = importlib.import_module("haystack")
+          from haystack import Document, Pipeline, component
+
+          PACKAGE = {
+              "distribution": PACKAGE_NAME,
+              "distribution_version": importlib.metadata.version(PACKAGE_NAME),
+              "module": haystack.__name__,
+              "module_version": getattr(haystack, "__version__", None),
+              "symbols": {
+                  "Document": Document.__name__,
+                  "Pipeline": Pipeline.__name__,
+                  "component": getattr(component, "__name__", "component"),
+              },
+          }
+      except Exception as exc:
+          IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+          Document = None
+          Pipeline = None
+          component = None
+
+
+      if IMPORT_ERROR is None:
+          @component
+          class LocalKeywordRetriever:
+              def __init__(self):
+                  self.documents = [
+                      Document(
+                          content=(
+                              "Haystack is an open source framework for building "
+                              "retrieval augmented generation applications, search "
+                              "systems, agents, and composable AI pipelines."
+                          ),
+                          meta={"id": "haystack", "source": "local-demo"},
+                      ),
+                      Document(
+                          content=(
+                              "Phala Cloud deploys Docker Compose workloads in "
+                              "confidential virtual machines and can expose HTTP "
+                              "services through public endpoints."
+                          ),
+                          meta={"id": "phala-cloud", "source": "local-demo"},
+                      ),
+                      Document(
+                          content=(
+                              "This template uses deterministic local Python "
+                              "components, no model downloads, no hosted LLM calls, "
+                              "no external database, and no GPU devices."
+                          ),
+                          meta={"id": "cpu-safe", "source": "local-demo"},
+                      ),
+                  ]
+
+              @component.output_types(documents=list[Document])
+              def run(self, query: str, top_k: int = 2):
+                  query_terms = set(tokenize(query))
+                  scored = []
+                  for doc in self.documents:
+                      content_terms = set(tokenize(doc.content or ""))
+                      matched_terms = sorted(query_terms & content_terms)
+                      score = len(matched_terms) / math.sqrt(len(content_terms) or 1)
+                      ranked_doc = Document(
+                          content=doc.content,
+                          meta={
+                              **doc.meta,
+                              "score": round(score, 6),
+                              "matched_terms": matched_terms,
+                          },
+                      )
+                      scored.append((score, doc.meta["id"], ranked_doc))
+
+                  ranked = [
+                      doc
+                      for _score, _id, doc in sorted(
+                          scored,
+                          key=lambda item: (-item[0], item[1]),
+                      )[:top_k]
+                  ]
+                  return {"documents": ranked}
+
+
+          @component
+          class LocalAnswerBuilder:
+              @component.output_types(answer=str, contexts=list[dict])
+              def run(self, query: str, documents: list[Document]):
+                  contexts = [
+                      {
+                          "id": doc.meta.get("id"),
+                          "score": doc.meta.get("score"),
+                          "matched_terms": doc.meta.get("matched_terms", []),
+                          "content": doc.content,
+                      }
+                      for doc in documents
+                  ]
+                  selected = ", ".join(item["id"] for item in contexts) or "none"
+                  return {
+                      "answer": (
+                          "The local Haystack pipeline selected "
+                          f"{selected} for query {query!r}. It did not call an "
+                          "LLM provider or load a model."
+                      ),
+                      "contexts": contexts,
+                  }
+
+
+      else:
+          LocalKeywordRetriever = None
+          LocalAnswerBuilder = None
+
+
+      def tokenize(text):
+          return re.findall(r"[a-z0-9]+", text.lower())
+
+
+      def get_top_k(params):
+          raw = params.get("top_k", [os.environ.get("HAYSTACK_DEMO_TOP_K", "2")])[0]
+          try:
+              value = int(raw)
+          except (TypeError, ValueError):
+              value = 2
+          return max(1, min(value, 3))
+
+
+      def get_query(params):
+          return params.get("q", params.get("query", [DEFAULT_QUERY]))[0][:300]
+
+
+      def base_payload():
+          return {
+              "service": "haystack-local-pipeline-demo",
+              "upstream": UPSTREAM_REPO,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "haystack": PACKAGE,
+          }
+
+
+      def run_pipeline(query, top_k):
+          if IMPORT_ERROR:
+              raise RuntimeError(IMPORT_ERROR)
+
+          pipeline = Pipeline()
+          pipeline.add_component("retriever", LocalKeywordRetriever())
+          pipeline.add_component("answer_builder", LocalAnswerBuilder())
+          pipeline.connect("retriever.documents", "answer_builder.documents")
+          result = pipeline.run(
+              {
+                  "retriever": {"query": query, "top_k": top_k},
+                  "answer_builder": {"query": query},
+              }
+          )
+          answer = result["answer_builder"]
+          return {
+              "query": query,
+              "top_k": top_k,
+              "components": ["LocalKeywordRetriever", "LocalAnswerBuilder"],
+              "connections": ["retriever.documents -> answer_builder.documents"],
+              "result": answer,
+              "llm_provider_calls": False,
+              "external_provider_calls": False,
+              "remote_model_calls": False,
+              "model_downloaded": False,
+              "external_database": False,
+              "gpu_required": False,
+              "credentials_required": False,
+          }
+
+
+      def pipeline_payload(params):
+          query = get_query(params)
+          top_k = get_top_k(params)
+          payload = base_payload()
+          payload.update(
+              {
+                  "ok": True,
+                  "cpu_only": True,
+                  "pipeline": run_pipeline(query, top_k),
+              }
+          )
+          return payload
+
+
+      def response_body(path, params):
+          if path == "/healthz":
+              payload = base_payload()
+              if IMPORT_ERROR:
+                  payload.update(
+                      {
+                          "ok": False,
+                          "status": "import_failed",
+                          "error": IMPORT_ERROR,
+                      }
+                  )
+                  return HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+              try:
+                  smoke = run_pipeline(DEFAULT_QUERY, 1)
+              except Exception as exc:
+                  payload.update(
+                      {
+                          "ok": False,
+                          "status": "pipeline_failed",
+                          "error": f"{type(exc).__name__}: {exc}",
+                      }
+                  )
+                  return HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+              payload.update(
+                  {
+                      "ok": True,
+                      "status": "ready",
+                      "checks": [
+                          "import haystack",
+                          "from haystack import Document, Pipeline, component",
+                          "run deterministic local Pipeline",
+                      ],
+                      "smoke": smoke["result"],
+                  }
+              )
+              return HTTPStatus.OK, payload
+
+          if path in ("/demo", "/pipeline"):
+              if IMPORT_ERROR:
+                  payload = base_payload()
+                  payload.update({"ok": False, "error": IMPORT_ERROR})
+                  return HTTPStatus.SERVICE_UNAVAILABLE, payload
+              try:
+                  return HTTPStatus.OK, pipeline_payload(params)
+              except Exception as exc:
+                  payload = base_payload()
+                  payload.update({"ok": False, "error": f"{type(exc).__name__}: {exc}"})
+                  return HTTPStatus.INTERNAL_SERVER_ERROR, payload
+
+          if path == "/v1/models":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": IMPORT_ERROR is None,
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "haystack-local-deterministic-pipeline",
+                              "object": "model",
+                              "created": 0,
+                              "owned_by": "deepset-ai",
+                              "description": (
+                                  "Metadata endpoint for the local deterministic "
+                                  "Haystack pipeline demo. No inference model is "
+                                  "hosted by default."
+                              ),
+                          }
+                      ],
+                  }
+              )
+              if IMPORT_ERROR:
+                  payload["error"] = IMPORT_ERROR
+              return HTTPStatus.OK if IMPORT_ERROR is None else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": IMPORT_ERROR is None,
+                      "endpoints": ["/healthz", "/demo", "/pipeline", "/v1/models"],
+                  }
+              )
+              if IMPORT_ERROR:
+                  payload["error"] = IMPORT_ERROR
+              return HTTPStatus.OK if IMPORT_ERROR is None else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          return HTTPStatus.NOT_FOUND, {
+              "ok": False,
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/pipeline", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "haystack-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              parsed = urlparse(self.path)
+              path = parsed.path.rstrip("/") or "/"
+              status, payload = response_body(path, parse_qs(parsed.query))
+              self.respond_json(status, payload)
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("PORT", "8080"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "haystack": PACKAGE,
+                      "import_error": IMPORT_ERROR,
+                      "credentials_required": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
