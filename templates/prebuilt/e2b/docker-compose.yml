@@ -1,0 +1,288 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    init: true
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      E2B_VERSION: ${E2B_VERSION:-2.25.0}
+      E2B_CODE_INTERPRETER_VERSION: ${E2B_CODE_INTERPRETER_VERSION:-2.7.0}
+      PYTHONUNBUFFERED: "1"
+      UV_SYSTEM_PYTHON: "1"
+    configs:
+      - source: e2b_demo_app
+        target: /opt/e2b-demo/server.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache \
+          "e2b==$${E2B_VERSION}" \
+          "e2b-code-interpreter==$${E2B_CODE_INTERPRETER_VERSION}"
+        exec python /opt/e2b-demo/server.py
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import sys, urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+configs:
+  e2b_demo_app:
+    content: |
+      import importlib
+      import importlib.metadata
+      import inspect
+      import json
+      import platform
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      UPSTREAM = "https://github.com/e2b-dev/E2B"
+      PACKAGES = {
+          "e2b": {
+              "distribution": "e2b",
+              "module": "e2b",
+              "required_symbols": (
+                  "Sandbox",
+                  "AsyncSandbox",
+                  "SandboxInfo",
+                  "CommandHandle",
+                  "ConnectionConfig",
+              ),
+          },
+          "e2b-code-interpreter": {
+              "distribution": "e2b-code-interpreter",
+              "module": "e2b_code_interpreter",
+              "required_symbols": (
+                  "Sandbox",
+                  "AsyncSandbox",
+                  "Result",
+                  "Execution",
+                  "ExecutionError",
+              ),
+          },
+      }
+
+
+      def package_checks():
+          packages = {}
+          import_ok = True
+
+          for key, spec in PACKAGES.items():
+              result = {
+                  "distribution": spec["distribution"],
+                  "distribution_version": None,
+                  "module": spec["module"],
+                  "module_import_ok": False,
+                  "required_symbols": {},
+                  "import_ok": False,
+                  "error": None,
+              }
+              try:
+                  result["distribution_version"] = importlib.metadata.version(spec["distribution"])
+                  module = importlib.import_module(spec["module"])
+                  result["module_import_ok"] = module.__name__ == spec["module"]
+                  for symbol in spec["required_symbols"]:
+                      result["required_symbols"][symbol] = hasattr(module, symbol)
+                  result["import_ok"] = (
+                      bool(result["distribution_version"])
+                      and result["module_import_ok"]
+                      and all(result["required_symbols"].values())
+                  )
+              except Exception as exc:
+                  result["error"] = f"{type(exc).__name__}: {exc}"
+
+              packages[key] = result
+              import_ok = import_ok and result["import_ok"]
+
+          return {"ok": import_ok, "packages": packages}
+
+
+      IMPORT_STATUS = package_checks()
+
+
+      def local_code_interpreter_demo():
+          from e2b_code_interpreter import Execution, Result
+
+          result = Result(
+              text="E2B code-interpreter package imported locally.",
+              json={
+                  "package": "e2b-code-interpreter",
+                  "sandbox_created": False,
+                  "run_code_called": False,
+              },
+              is_main_result=True,
+          )
+          execution = Execution(results=[result], execution_count=1)
+          return {
+              "result_type": type(result).__name__,
+              "execution_type": type(execution).__name__,
+              "result_formats": result.formats(),
+              "execution_count": execution.execution_count,
+              "result_text": result.text,
+              "result_json": result.json,
+              "result_signature": str(inspect.signature(Result)),
+              "execution_signature": str(inspect.signature(Execution)),
+          }
+
+
+      def base_payload():
+          return {
+              "service": "e2b-sdk-verifier",
+              "upstream": UPSTREAM,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "cpu_only": True,
+              "credentials_required": False,
+              "e2b_api_key_required": False,
+              "provider_calls": False,
+              "hosted_llm_calls": False,
+              "model_downloaded": False,
+              "gpu_required": False,
+              "docker_socket_used": False,
+              "sandbox_created": False,
+              "run_code_called": False,
+              "packages": IMPORT_STATUS["packages"],
+          }
+
+
+      def response_body(path):
+          if path == "/healthz":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": IMPORT_STATUS["ok"],
+                      "status": "ready" if IMPORT_STATUS["ok"] else "import_failed",
+                  }
+              )
+              status = HTTPStatus.OK if IMPORT_STATUS["ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+              return status, payload
+
+          if path == "/demo":
+              payload = base_payload()
+              if not IMPORT_STATUS["ok"]:
+                  payload.update({"ok": False, "error": "package_import_failed"})
+                  return HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+              payload.update(
+                  {
+                      "ok": True,
+                      "demo_model": "e2b-local-sdk-verifier",
+                      "what_ran": [
+                          "import e2b",
+                          "import e2b_code_interpreter",
+                          "instantiate e2b_code_interpreter.Result",
+                          "instantiate e2b_code_interpreter.Execution",
+                      ],
+                      "what_did_not_run": [
+                          "Sandbox.create",
+                          "Sandbox.run_code",
+                          "networked E2B API calls",
+                          "hosted LLM calls",
+                          "model downloads",
+                          "Docker socket access",
+                      ],
+                      "local_primitives": local_code_interpreter_demo(),
+                      "verifier_scope": (
+                          "This endpoint imports real E2B Python packages and exercises local "
+                          "code-interpreter metadata classes only. It does not create an E2B "
+                          "sandbox, execute code remotely, contact provider APIs, or require credentials."
+                      ),
+                  }
+              )
+              return HTTPStatus.OK, payload
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "e2b-local-sdk-verifier",
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "e2b-dev",
+                          "description": (
+                              "OpenAI-style compatibility surface for the local E2B SDK verifier. "
+                              "It is not an inference model and does not proxy E2B or LLM APIs."
+                          ),
+                      }
+                  ],
+              }
+
+          if path == "/":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": IMPORT_STATUS["ok"],
+                      "endpoints": ["/healthz", "/demo", "/v1/models"],
+                      "default_model": "e2b-local-sdk-verifier",
+                  }
+              )
+              status = HTTPStatus.OK if IMPORT_STATUS["ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+              return status, payload
+
+          return HTTPStatus.NOT_FOUND, {
+              "ok": False,
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "e2b-sdk-verifier"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+              status, payload = response_body(path)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": 8080,
+                      "imports": IMPORT_STATUS,
+                      "sandbox_created": False,
+                      "run_code_called": False,
+                      "provider_calls": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()

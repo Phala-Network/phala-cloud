@@ -4368,5 +4368,33 @@
       "diskSize": 20
     },
     "tags": ["AI Agents", "Automation", "Developer Tools"]
+  },
+{
+    "id": "e2b",
+    "name": "e2b-dev/E2B",
+    "description": "Secure sandboxes for AI agents and code execution. This CPU-safe verifier installs and imports the real e2b and e2b-code-interpreter Python packages, checks local SDK metadata/primitives, and serves deterministic JSON endpoints without E2B credentials, sandbox creation, code execution, provider calls, model downloads, Docker socket access, or GPU.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/e2b",
+    "author": "e2b-dev",
+    "icon": "e2b.png",
+    "envs": [
+      {
+        "key": "E2B_VERSION",
+        "required": false,
+        "description": "e2b Python package version installed by the verifier service.",
+        "default": "2.25.0"
+      },
+      {
+        "key": "E2B_CODE_INTERPRETER_VERSION",
+        "required": false,
+        "description": "e2b-code-interpreter Python package version installed by the verifier service.",
+        "default": "2.7.0"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools", "Automation"]
   }
 ]
