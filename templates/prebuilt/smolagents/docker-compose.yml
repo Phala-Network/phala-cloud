@@ -1,0 +1,330 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8000"
+    environment:
+      APP_PORT: ${APP_PORT:-8000}
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+      PIP_ROOT_USER_ACTION: ignore
+      PYTHONUNBUFFERED: "1"
+      SMOLAGENTS_VERSION: ${SMOLAGENTS_VERSION:-1.25.0}
+      UV_SYSTEM_PYTHON: "1"
+    configs:
+      - source: smolagents_demo_app
+        target: /opt/smolagents-demo/server.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache "smolagents==$${SMOLAGENTS_VERSION}"
+        exec python /opt/smolagents-demo/server.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8000'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+          reverse_proxy app:8000
+      }
+
+  smolagents_demo_app:
+    content: |
+      import hashlib
+      import importlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import parse_qs, urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "smolagents"
+      UPSTREAM_REPO = "https://github.com/huggingface/smolagents"
+      DEFAULT_TEXT = "Phala Cloud runs this smolagents smoke test locally."
+      MAX_TEXT_LENGTH = 240
+
+
+      def import_checks():
+          result = {
+              "package": PACKAGE_NAME,
+              "distribution_version": None,
+              "module_version": None,
+              "import_ok": False,
+              "symbols": {},
+              "error": None,
+          }
+          try:
+              result["distribution_version"] = importlib.metadata.version(PACKAGE_NAME)
+              smolagents = importlib.import_module(PACKAGE_NAME)
+              result["module_version"] = getattr(smolagents, "__version__", None)
+              for symbol in (
+                  "Tool",
+                  "tool",
+                  "CodeAgent",
+                  "ToolCallingAgent",
+                  "FinalAnswerTool",
+                  "AgentText",
+              ):
+                  result["symbols"][symbol] = hasattr(smolagents, symbol)
+              result["import_ok"] = bool(result["distribution_version"]) and all(result["symbols"].values())
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      IMPORT_STATUS = import_checks()
+
+
+      def run_local_demo(text):
+          if not IMPORT_STATUS["import_ok"]:
+              raise RuntimeError(IMPORT_STATUS["error"] or "smolagents import check failed")
+
+          from smolagents import AgentText, FinalAnswerTool, Tool
+
+          class LocalDigestTool(Tool):
+              name = "local_digest"
+              description = "Return deterministic local metadata for a text input."
+              inputs = {
+                  "text": {
+                      "type": "string",
+                      "description": "Input text to inspect without calling an LLM.",
+                  }
+              }
+              output_type = "string"
+
+              def forward(self, text: str) -> str:
+                  normalized = " ".join(text.split())[:MAX_TEXT_LENGTH]
+                  digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
+                  return json.dumps(
+                      {
+                          "normalized": normalized,
+                          "characters": len(normalized),
+                          "words": len(normalized.split()),
+                          "sha256_16": digest,
+                      },
+                      sort_keys=True,
+                  )
+
+          normalized_input = " ".join(text.split())[:MAX_TEXT_LENGTH] or DEFAULT_TEXT
+          agent_text = AgentText(normalized_input)
+          local_tool = LocalDigestTool()
+          final_answer_tool = FinalAnswerTool()
+          tool_output = local_tool(agent_text.to_raw())
+          final_answer = final_answer_tool(f"smolagents local primitives completed: {tool_output}")
+
+          return {
+              "ok": True,
+              "demo_type": "deterministic local smolagents primitives",
+              "input": {
+                  "text": agent_text.to_raw(),
+                  "agent_text_string": agent_text.to_string(),
+              },
+              "tool": {
+                  "class": type(local_tool).__name__,
+                  "name": local_tool.name,
+                  "description": local_tool.description,
+                  "inputs": local_tool.inputs,
+                  "output_type": local_tool.output_type,
+                  "output": json.loads(tool_output),
+              },
+              "final_answer_tool": {
+                  "name": final_answer_tool.name,
+                  "inputs": final_answer_tool.inputs,
+                  "output_type": final_answer_tool.output_type,
+                  "output": final_answer,
+              },
+              "agent_classes_imported_but_not_run": ["CodeAgent", "ToolCallingAgent"],
+              "llm_provider_calls": False,
+              "hosted_model_calls": False,
+              "remote_model_calls": False,
+              "model_downloaded": False,
+              "model_loaded": False,
+              "credentials_required": False,
+              "browser_automation": False,
+          }
+
+
+      def demo_result(text):
+          try:
+              return run_local_demo(text)
+          except Exception as exc:
+              return {
+                  "ok": False,
+                  "error": f"{type(exc).__name__}: {exc}",
+                  "llm_provider_calls": False,
+                  "hosted_model_calls": False,
+                  "remote_model_calls": False,
+                  "credentials_required": False,
+              }
+
+
+      def base_payload():
+          return {
+              "service": "smolagents-demo",
+              "upstream": UPSTREAM_REPO,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "smolagents": IMPORT_STATUS,
+          }
+
+
+      def response_body(path, query):
+          if path == "/healthz":
+              demo = demo_result(DEFAULT_TEXT)
+              ok = IMPORT_STATUS["import_ok"] and demo["ok"]
+              payload = base_payload()
+              payload.update(
+                  {
+                      "status": "ready" if ok else "unhealthy",
+                      "ok": ok,
+                      "cpu_only": True,
+                      "credential_free": True,
+                      "demo": demo,
+                  }
+              )
+              return HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/demo":
+              text = query.get("text", [DEFAULT_TEXT])[0]
+              demo = demo_result(text)
+              payload = base_payload()
+              payload.update(demo)
+              payload.update({"cpu_only": True, "credential_free": True})
+              return HTTPStatus.OK if demo["ok"] else HTTPStatus.INTERNAL_SERVER_ERROR, payload
+
+          if path == "/v1/models":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": IMPORT_STATUS["import_ok"],
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "smolagents-local-deterministic-primitives",
+                              "object": "model",
+                              "created": 0,
+                              "owned_by": "huggingface",
+                              "description": (
+                                  "Local smolagents Tool and AgentText smoke endpoint. "
+                                  "It is not a hosted LLM and performs no model inference."
+                              ),
+                          }
+                      ],
+                  }
+              )
+              if not IMPORT_STATUS["import_ok"]:
+                  payload["error"] = IMPORT_STATUS["error"]
+              return HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": IMPORT_STATUS["import_ok"],
+                      "endpoints": ["/healthz", "/demo", "/v1/models"],
+                      "cpu_only": True,
+                      "credential_free": True,
+                  }
+              )
+              if not IMPORT_STATUS["import_ok"]:
+                  payload["error"] = IMPORT_STATUS["error"]
+              return HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          return HTTPStatus.NOT_FOUND, {
+              "ok": False,
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "smolagents-demo"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              request = urlparse(self.path)
+              path = request.path.rstrip("/") or "/"
+              status, payload = response_body(path, parse_qs(request.query))
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8000"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "smolagents": IMPORT_STATUS,
+                      "llm_provider_calls": False,
+                      "hosted_model_calls": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+
+networks:
+  internal:
+    driver: bridge
