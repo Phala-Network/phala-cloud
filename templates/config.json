@@ -4050,5 +4050,27 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools", "Automation"]
+  },
+{
+    "id": "pydantic-ai",
+    "name": "pydantic/pydantic-ai",
+    "description": "Production-grade Python agent framework built on Pydantic; type-safe, cloud-deployable",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/pydantic-ai",
+    "author": "pydantic",
+    "icon": "pydantic-ai.svg",
+    "envs": [
+      {
+        "key": "PYDANTIC_AI_VERSION",
+        "required": false,
+        "default": "1.103.0",
+        "description": "Pinned pydantic-ai-slim package version installed by the deterministic demo service at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools", "Automation"]
   }
 ]
