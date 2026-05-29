@@ -4314,5 +4314,27 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools"]
+  },
+{
+    "id": "ai",
+    "name": "vercel/ai",
+    "description": "TypeScript AI SDK for streaming, agents, and structured outputs; Vercel-native. This tdx.small-safe demo installs the real ai npm package and exercises local tools, schemas, and simulated streams without provider credentials.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/ai",
+    "author": "vercel",
+    "icon": "ai.png",
+    "envs": [
+      {
+        "key": "AI_SDK_VERSION",
+        "required": false,
+        "default": "6.0.193",
+        "description": "Version of the ai npm package installed at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools", "Starter Kits"]
   }
 ]
