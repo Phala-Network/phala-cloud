@@ -1,0 +1,373 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        INSTRUCTOR_VERSION: ${INSTRUCTOR_VERSION:-1.15.1}
+      dockerfile_inline: |
+        FROM python:3.11-slim-bookworm
+        ARG INSTRUCTOR_VERSION=1.15.1
+        ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+            PIP_NO_CACHE_DIR=1 \
+            PIP_ROOT_USER_ACTION=ignore \
+            PYTHONDONTWRITEBYTECODE=1 \
+            PYTHONUNBUFFERED=1
+        RUN python -m pip install --no-cache-dir --upgrade pip \
+            && python -m pip install --no-cache-dir "fastapi==0.115.12" "uvicorn==0.34.0" "instructor==$${INSTRUCTOR_VERSION}"
+        RUN useradd --create-home --uid 10001 app
+        WORKDIR /app
+        USER app
+        EXPOSE 8000
+        CMD ["python", "-m", "uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
+    image: phala-instructor-demo:${INSTRUCTOR_VERSION:-1.15.1}
+    pull_policy: build
+    environment:
+      INSTRUCTOR_VERSION: ${INSTRUCTOR_VERSION:-1.15.1}
+      PYTHONUNBUFFERED: "1"
+    expose:
+      - "8000"
+    configs:
+      - source: server_py
+        target: /app/server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    restart: unless-stopped
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          reverse_proxy app:8000
+      }
+  server_py:
+    content: |
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from typing import Any, Literal
+
+      from fastapi import FastAPI
+      from fastapi.responses import JSONResponse
+      from pydantic import BaseModel, Field, ValidationError, field_validator
+
+      SERVICE = "instructor-local-demo"
+      UPSTREAM = "https://github.com/567-labs/instructor"
+      STARTED_AT = time.time()
+      REQUESTED_VERSION = os.environ.get("INSTRUCTOR_VERSION", "1.15.1")
+      REQUIRED_SYMBOLS = [
+          "Mode",
+          "from_provider",
+          "Partial",
+          "Instructor",
+          "AsyncInstructor",
+          "patch",
+          "openai_schema",
+      ]
+      SAMPLE_TEXT = (
+          "Maya from Vector Forge needs a growth plan for 12 engineering seats. "
+          "Reach her at maya@vectorforge.example before Friday."
+      )
+      SAMPLE_JSON = json.dumps(
+          {
+              "company": "Vector Forge",
+              "contact_name": "Maya Chen",
+              "email": "maya@vectorforge.example",
+              "plan": "growth",
+              "seats": 12,
+              "urgency": "high",
+              "confidence": 0.94,
+              "tags": ["engineering", "growth-plan"],
+          }
+      )
+      INVALID_SAMPLE_JSON = json.dumps(
+          {
+              "company": "",
+              "contact_name": "",
+              "email": "not-an-email",
+              "plan": "growth",
+              "seats": 0,
+              "urgency": "later",
+              "confidence": 1.4,
+              "tags": [],
+          }
+      )
+
+      IMPORT_ERROR = None
+      instructor = None
+
+      try:
+          import instructor as _instructor
+
+          instructor = _instructor
+      except Exception as exc:
+          IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+
+
+      class LeadExtraction(BaseModel):
+          """Structured lead extracted from a short inbound request."""
+
+          company: str = Field(..., min_length=1, description="Company name in the request.")
+          contact_name: str = Field(..., min_length=1, description="Primary contact name.")
+          email: str = Field(
+              ...,
+              pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
+              description="Contact email address.",
+          )
+          plan: Literal["starter", "growth", "enterprise"]
+          seats: int = Field(..., ge=1, le=250)
+          urgency: Literal["low", "medium", "high"]
+          confidence: float = Field(..., ge=0.0, le=1.0)
+          tags: list[str] = Field(..., min_length=1, max_length=5)
+
+          @field_validator("tags")
+          @classmethod
+          def tags_must_be_non_empty(cls, value: list[str]) -> list[str]:
+              normalized = [item.strip() for item in value if item.strip()]
+              if not normalized:
+                  raise ValueError("at least one non-empty tag is required")
+              return normalized
+
+
+      app = FastAPI(
+          title="Phala Instructor Local Demo",
+          version="1.0.0",
+          docs_url=None,
+          redoc_url=None,
+      )
+
+
+      def installed_version() -> str | None:
+          try:
+              return importlib.metadata.version("instructor")
+          except Exception:
+              return None
+
+
+      def symbol_checks() -> dict[str, dict[str, Any]]:
+          checks: dict[str, dict[str, Any]] = {}
+          for name in REQUIRED_SYMBOLS:
+              obj = getattr(instructor, name, None) if instructor is not None else None
+              checks[name] = {
+                  "present": obj is not None,
+                  "type": type(obj).__name__ if obj is not None else None,
+                  "callable_or_type": callable(obj) or isinstance(obj, type),
+              }
+          return checks
+
+
+      def compact_validation_errors(exc: ValidationError) -> list[dict[str, Any]]:
+          return [
+              {
+                  "loc": list(error.get("loc", [])),
+                  "msg": error.get("msg", ""),
+                  "type": error.get("type", ""),
+              }
+              for error in exc.errors()
+          ]
+
+
+      def instructor_schema_check() -> dict[str, Any]:
+          if IMPORT_ERROR is not None or instructor is None:
+              return {"ok": False, "error": IMPORT_ERROR or "instructor import unavailable"}
+
+          try:
+              schema_model = instructor.openai_schema(LeadExtraction)
+              function_schema = schema_model.openai_schema
+              partial_model = instructor.Partial[LeadExtraction]
+              mode_values = [mode.value for mode in list(instructor.Mode)[:8]]
+              required_fields = function_schema.get("parameters", {}).get("required", [])
+
+              return {
+                  "ok": (
+                      function_schema.get("name") == "LeadExtraction"
+                      and "contact_name" in required_fields
+                      and partial_model.__name__ == "PartialLeadExtraction"
+                      and "json_mode" in mode_values
+                  ),
+                  "openai_schema_name": function_schema.get("name"),
+                  "openai_schema_required": required_fields,
+                  "openai_schema_properties": sorted(
+                      function_schema.get("parameters", {}).get("properties", {}).keys()
+                  ),
+                  "partial_model": partial_model.__name__,
+                  "mode_examples": mode_values,
+              }
+          except Exception as exc:
+              return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+      def package_payload() -> dict[str, Any]:
+          version = installed_version()
+          symbols = symbol_checks()
+          schema = instructor_schema_check()
+          version_ok = version == REQUESTED_VERSION
+          symbols_ok = all(item["present"] for item in symbols.values())
+          return {
+              "service": SERVICE,
+              "upstream": UPSTREAM,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "requested_instructor_version": REQUESTED_VERSION,
+              "installed_instructor_version": version,
+              "version_ok": version_ok,
+              "import_ok": IMPORT_ERROR is None,
+              "symbol_checks": symbols,
+              "symbols_ok": symbols_ok,
+              "schema_check": schema,
+              "cpu_only": True,
+              "gpu_required": False,
+              "model_downloaded": False,
+              "hosted_model_call_attempted": False,
+              "provider_credentials_required": False,
+          }
+
+
+      def run_demo() -> dict[str, Any]:
+          if IMPORT_ERROR is not None or instructor is None:
+              raise RuntimeError(IMPORT_ERROR or "instructor import unavailable")
+
+          schema_model = instructor.openai_schema(LeadExtraction)
+          function_schema = schema_model.openai_schema
+          partial_model = instructor.Partial[LeadExtraction]
+          validated = LeadExtraction.model_validate_json(SAMPLE_JSON)
+
+          validation_failure: list[dict[str, Any]] = []
+          try:
+              LeadExtraction.model_validate_json(INVALID_SAMPLE_JSON)
+          except ValidationError as exc:
+              validation_failure = compact_validation_errors(exc)
+
+          return {
+              "source_text": SAMPLE_TEXT,
+              "deterministic_json_input": json.loads(SAMPLE_JSON),
+              "validated_result": validated.model_dump(),
+              "result_model": {
+                  "name": LeadExtraction.__name__,
+                  "json_schema_required": LeadExtraction.model_json_schema().get("required", []),
+              },
+              "instructor_primitives": {
+                  "openai_schema_name": function_schema.get("name"),
+                  "openai_schema_required": function_schema.get("parameters", {}).get("required", []),
+                  "partial_model": partial_model.__name__,
+                  "from_provider_available": callable(getattr(instructor, "from_provider", None)),
+                  "mode_count": len(list(instructor.Mode)),
+              },
+              "validation_failure_demo": validation_failure,
+              "hosted_model_call_attempted": False,
+              "provider_credentials_required": False,
+              "model_downloaded": False,
+              "gpu_required": False,
+          }
+
+
+      @app.get("/")
+      def root() -> dict[str, Any]:
+          return {
+              "service": SERVICE,
+              "ok": IMPORT_ERROR is None,
+              "endpoints": ["/healthz", "/demo", "/v1/models", "/upstream"],
+          }
+
+
+      @app.get("/healthz")
+      def healthz() -> JSONResponse:
+          payload = package_payload()
+          ready = (
+              payload["import_ok"]
+              and payload["version_ok"]
+              and payload["symbols_ok"]
+              and payload["schema_check"].get("ok") is True
+          )
+          payload["ok"] = ready
+          payload["status"] = "ready" if ready else "not_ready"
+          if IMPORT_ERROR is not None:
+              payload["error"] = IMPORT_ERROR
+          return JSONResponse(status_code=200 if ready else 503, content=payload)
+
+
+      @app.get("/demo")
+      def demo() -> JSONResponse:
+          payload = package_payload()
+          try:
+              payload["demo"] = run_demo()
+              payload["ok"] = True
+              payload["status"] = "demo_complete"
+          except Exception as exc:
+              payload["ok"] = False
+              payload["status"] = "demo_failed"
+              payload["error"] = f"{type(exc).__name__}: {exc}"
+              return JSONResponse(status_code=503, content=payload)
+
+          return JSONResponse(status_code=200, content=payload)
+
+
+      @app.get("/v1/models")
+      def models() -> dict[str, Any]:
+          return {
+              "object": "list",
+              "data": [
+                  {
+                      "id": "instructor-local-schema-validator",
+                      "object": "model",
+                      "created": 1719878400,
+                      "owned_by": "567-labs",
+                      "description": (
+                          "Metadata endpoint for a local Instructor and Pydantic schema "
+                          "validation demo. No LLM is hosted and no provider API is called."
+                      ),
+                  }
+              ],
+              "instructor_version": installed_version(),
+              "hosted_model_call_attempted": False,
+              "provider_credentials_required": False,
+          }
+
+
+      @app.get("/upstream")
+      def upstream() -> dict[str, Any]:
+          return {
+              "service": SERVICE,
+              "upstream_repository": UPSTREAM,
+              "package": "instructor",
+              "package_version": installed_version(),
+              "package_index": "https://pypi.org/project/instructor/",
+              "icon_source": "https://github.com/567-labs.png",
+              "local_demo": (
+                  "Imports the real instructor package and exercises schema helpers plus "
+                  "Pydantic validation without invoking a hosted model provider."
+              ),
+              "endpoints": ["/healthz", "/demo", "/v1/models", "/upstream"],
+          }
+
+networks:
+  internal:
+    driver: bridge

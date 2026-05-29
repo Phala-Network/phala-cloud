@@ -4292,5 +4292,27 @@
       "diskSize": 20
     },
     "tags": ["AI Agents", "Developer Tools", "Automation"]
+  },
+{
+    "id": "instructor",
+    "name": "567-labs/instructor",
+    "description": "Structured-output framework for Python. This CPU-safe HTTP demo installs and imports the real instructor package, verifies Instructor schema primitives with deterministic Pydantic validation, and avoids hosted model calls, provider credentials, model downloads, and GPU use.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/instructor",
+    "author": "567-labs",
+    "icon": "instructor.png",
+    "envs": [
+      {
+        "key": "INSTRUCTOR_VERSION",
+        "required": false,
+        "default": "1.15.1",
+        "description": "Pinned instructor Python package version installed in the demo image."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools"]
   }
 ]
