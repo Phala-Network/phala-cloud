@@ -4122,5 +4122,27 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools", "Automation"]
+  },
+{
+    "id": "adk-python",
+    "name": "google/adk-python",
+    "description": "Google Agent Development Kit for Python. This CPU-safe demo installs and imports the real google-adk package, exposes local ADK metadata through Caddy, and avoids Gemini, Vertex AI, OpenAI, or other provider calls and credentials by default.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/adk-python",
+    "author": "google",
+    "icon": "adk-python.png",
+    "envs": [
+      {
+        "key": "GOOGLE_ADK_PACKAGE_VERSION",
+        "required": false,
+        "default": "2.1.0",
+        "description": "Pinned google-adk Python package version installed by the demo service at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["AI Agents", "Developer Tools", "Automation"]
   }
 ]
