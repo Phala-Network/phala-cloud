@@ -1,0 +1,311 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8000"
+    environment:
+      APP_PORT: ${APP_PORT:-8000}
+      OPENAI_AGENTS_VERSION: ${OPENAI_AGENTS_VERSION:-0.17.4}
+      OPENAI_AGENTS_DISABLE_TRACING: ${OPENAI_AGENTS_DISABLE_TRACING:-true}
+      OPENAI_AGENTS_DONT_LOG_MODEL_DATA: ${OPENAI_AGENTS_DONT_LOG_MODEL_DATA:-true}
+      OPENAI_AGENTS_DONT_LOG_TOOL_DATA: ${OPENAI_AGENTS_DONT_LOG_TOOL_DATA:-true}
+      PYTHONUNBUFFERED: "1"
+      UV_SYSTEM_PYTHON: "1"
+    configs:
+      - source: openai_agents_demo_app
+        target: /opt/openai-agents-demo/main.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache "openai-agents==$${OPENAI_AGENTS_VERSION}"
+        exec python /opt/openai-agents-demo/main.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8000'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+          reverse_proxy app:8000
+      }
+
+  openai_agents_demo_app:
+    content: |
+      import importlib
+      import importlib.metadata
+      import inspect
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      DISTRIBUTION_NAME = "openai-agents"
+      MODULE_NAME = "agents"
+      UPSTREAM = "https://github.com/openai/openai-agents-python"
+
+
+      def package_version(name):
+          try:
+              return importlib.metadata.version(name)
+          except Exception as exc:
+              return f"unavailable: {type(exc).__name__}: {exc}"
+
+
+      def local_topic_summary(topic: str) -> str:
+          """Return a deterministic local summary for the requested topic."""
+          return f"{topic}: inspected locally by the OpenAI Agents SDK demo"
+
+
+      def import_checks():
+          result = {
+              "distribution": DISTRIBUTION_NAME,
+              "distribution_version": None,
+              "module": MODULE_NAME,
+              "module_version": None,
+              "import_ok": False,
+              "symbols": {},
+              "agent": None,
+              "tool": None,
+              "tracing_disabled": os.environ.get("OPENAI_AGENTS_DISABLE_TRACING", "").lower()
+              in ("1", "true", "yes"),
+              "error": None,
+          }
+          try:
+              result["distribution_version"] = package_version(DISTRIBUTION_NAME)
+              agents = importlib.import_module(MODULE_NAME)
+              result["module_version"] = getattr(agents, "__version__", None)
+
+              from agents import Agent, FunctionTool, function_tool, set_tracing_disabled
+
+              set_tracing_disabled(True)
+
+              result["symbols"] = {
+                  "Agent": inspect.isclass(Agent),
+                  "FunctionTool": inspect.isclass(FunctionTool),
+                  "function_tool": callable(function_tool),
+                  "set_tracing_disabled": callable(set_tracing_disabled),
+              }
+
+              sdk_tool = function_tool(local_topic_summary)
+              sdk_agent = Agent(
+                  name="Local SDK Inspector",
+                  instructions=(
+                      "Inspect OpenAI Agents SDK primitives locally. Do not call a hosted model."
+                  ),
+                  tools=[sdk_tool],
+              )
+
+              result["agent"] = {
+                  "type": f"{sdk_agent.__class__.__module__}.{sdk_agent.__class__.__name__}",
+                  "name": sdk_agent.name,
+                  "model": sdk_agent.model,
+                  "instructions": sdk_agent.instructions,
+                  "tools": [tool.name for tool in sdk_agent.tools],
+                  "handoffs": len(sdk_agent.handoffs),
+                  "runner_invoked": False,
+              }
+              result["tool"] = {
+                  "type": f"{sdk_tool.__class__.__module__}.{sdk_tool.__class__.__name__}",
+                  "name": sdk_tool.name,
+                  "description": sdk_tool.description,
+                  "strict_json_schema": sdk_tool.strict_json_schema,
+                  "params_json_schema": sdk_tool.params_json_schema,
+                  "direct_local_function_result": local_topic_summary("confidential-ai"),
+              }
+              result["import_ok"] = (
+                  result["distribution_version"] != ""
+                  and result["module_version"] is not None
+                  and all(result["symbols"].values())
+                  and sdk_agent.tools[0].name == sdk_tool.name
+              )
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      SDK_STATUS = import_checks()
+
+
+      def base_payload():
+          return {
+              "service": "openai-agents-python-demo",
+              "upstream": UPSTREAM,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "sdk": SDK_STATUS,
+              "no_remote_call_evidence": {
+                  "openai_api_key_required": False,
+                  "openai_api_key_present_in_container": bool(os.environ.get("OPENAI_API_KEY")),
+                  "runner_invoked": False,
+                  "hosted_model_call_attempted": False,
+                  "model_downloaded": False,
+                  "gpu_required": False,
+                  "external_database_required": False,
+                  "network_used_after_startup_package_install": False,
+              },
+          }
+
+
+      def response_body(path):
+          if path == "/healthz":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": SDK_STATUS["import_ok"],
+                      "status": "ready" if SDK_STATUS["import_ok"] else "import_failed",
+                  }
+              )
+              status = HTTPStatus.OK if SDK_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+              return status, payload
+
+          if path == "/demo":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": SDK_STATUS["import_ok"],
+                      "demo": {
+                          "package_metadata": {
+                              "distribution": DISTRIBUTION_NAME,
+                              "version": SDK_STATUS["distribution_version"],
+                              "module": MODULE_NAME,
+                              "module_version": SDK_STATUS["module_version"],
+                          },
+                          "agent_construction": SDK_STATUS["agent"],
+                          "function_tool_schema": SDK_STATUS["tool"],
+                          "remote_call_policy": (
+                              "This endpoint constructs Agent and FunctionTool objects and calls "
+                              "a local Python function directly. It does not invoke Runner, does "
+                              "not configure a model, and does not send requests to OpenAI APIs."
+                          ),
+                      },
+                  }
+              )
+              status = HTTPStatus.OK if SDK_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+              return status, payload
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "openai-agents-python/no-model-local-sdk-demo",
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "openai-agents-python-template",
+                          "description": (
+                              "Metadata-only compatibility entry for the local OpenAI Agents SDK "
+                              "primitive demo. No model is hosted, loaded, downloaded, or called."
+                          ),
+                      }
+                  ],
+                  "demo": {
+                      "hosted_model_call_attempted": False,
+                      "credentials_required": False,
+                      "sdk_import_ok": SDK_STATUS["import_ok"],
+                  },
+              }
+
+          if path == "/":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": SDK_STATUS["import_ok"],
+                      "endpoints": ["/healthz", "/demo", "/v1/models"],
+                  }
+              )
+              return HTTPStatus.OK, payload
+
+          return HTTPStatus.NOT_FOUND, {
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "openai-agents-python-demo"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+              status, payload = response_body(path)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8000"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "sdk_import_ok": SDK_STATUS["import_ok"],
+                      "hosted_model_call_attempted": False,
+                      "credentials_required": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+
+networks:
+  internal:
+    driver: bridge
