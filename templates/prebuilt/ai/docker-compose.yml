@@ -1,0 +1,355 @@
+services:
+  ai:
+    image: node:22-bookworm-slim
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      NODE_ENV: production
+      PORT: "8000"
+      AI_SDK_VERSION: ${AI_SDK_VERSION:-6.0.193}
+      NPM_CONFIG_UPDATE_NOTIFIER: "false"
+      NPM_CONFIG_FUND: "false"
+    ports:
+      - "18080:8000"
+    configs:
+      - source: server_mjs
+        target: /tmp/server.mjs
+    command:
+      - sh
+      - -lc
+      - |
+        set -eu
+        mkdir -p /app
+        cp /tmp/server.mjs /app/server.mjs
+        npm install --omit=dev --no-audit --no-fund --no-package-lock \
+          "ai@$${AI_SDK_VERSION}" \
+          "express@4.21.2" \
+          "zod@4.1.13"
+        exec node server.mjs
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:8000/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+
+configs:
+  server_mjs:
+    content: |
+      import os from 'node:os';
+      import { createRequire } from 'node:module';
+      import express from 'express';
+      import {
+        jsonSchema,
+        simulateReadableStream,
+        tool,
+        zodSchema,
+        createIdGenerator,
+        generateId
+      } from 'ai';
+      import { z } from 'zod';
+
+      const require = createRequire(import.meta.url);
+      const PORT = Number.parseInt(process.env.PORT || '8000', 10);
+      const HOST = '0.0.0.0';
+      const REQUESTED_AI_SDK_VERSION = process.env.AI_SDK_VERSION || '6.0.193';
+      const AI_SDK_VERSION = require('ai/package.json').version;
+      const STARTED_AT = Date.now();
+
+      const topicInputSchema = zodSchema(z.object({
+        topic: z.string().min(1).max(160)
+      }));
+
+      const topicAnalysisSchema = jsonSchema({
+        type: 'object',
+        properties: {
+          normalized_topic: { type: 'string' },
+          words: {
+            type: 'array',
+            items: { type: 'string' }
+          },
+          word_count: { type: 'number' },
+          character_count: { type: 'number' },
+          checksum: { type: 'number' },
+          summary: { type: 'string' }
+        },
+        required: [
+          'normalized_topic',
+          'words',
+          'word_count',
+          'character_count',
+          'checksum',
+          'summary'
+        ],
+        additionalProperties: false
+      });
+
+      function normalizeTopic(value) {
+        const topic = typeof value === 'string' ? value.trim() : '';
+        return (topic.length > 0 ? topic : 'vercel ai sdk on phala cloud').slice(0, 160);
+      }
+
+      function tokenize(topic) {
+        return topic.toLowerCase().match(/[a-z0-9]+/g) || [];
+      }
+
+      function checksum(topic) {
+        return Array.from(topic).reduce(
+          (total, character) => (total * 31 + character.charCodeAt(0)) % 1000003,
+          7
+        );
+      }
+
+      function analyzeTopic(topic) {
+        const words = tokenize(topic);
+        const digest = checksum(topic);
+
+        return {
+          normalized_topic: topic,
+          words,
+          word_count: words.length,
+          character_count: topic.length,
+          checksum: digest,
+          summary:
+            'Local AI SDK tool analyzed ' +
+            String(words.length) +
+            ' words with deterministic checksum ' +
+            String(digest) +
+            '.'
+        };
+      }
+
+      const analyzeTopicTool = tool({
+        description: 'Analyze a short topic locally without calling a model provider.',
+        inputSchema: topicInputSchema,
+        outputSchema: topicAnalysisSchema,
+        execute: async ({ topic }) => analyzeTopic(topic)
+      });
+
+      const primitiveChecks = {
+        tool: typeof tool === 'function',
+        jsonSchema: typeof jsonSchema === 'function',
+        zodSchema: typeof zodSchema === 'function',
+        simulateReadableStream: typeof simulateReadableStream === 'function',
+        createIdGenerator: typeof createIdGenerator === 'function',
+        generateId: typeof generateId === 'function'
+      };
+
+      const importsOk = Object.values(primitiveChecks).every(Boolean) && Boolean(AI_SDK_VERSION);
+
+      function safety() {
+        return {
+          cpu_only: true,
+          provider_credentials_required: false,
+          provider_credentials_used: false,
+          hosted_llm_calls: false,
+          model_downloads: false,
+          gpu_required: false,
+          browser_auth: false,
+          external_database: false
+        };
+      }
+
+      function packageInfo() {
+        return {
+          npm_package: 'ai',
+          requested_version: REQUESTED_AI_SDK_VERSION,
+          installed_version: AI_SDK_VERSION,
+          upstream: 'https://github.com/vercel/ai'
+        };
+      }
+
+      async function validatedTopic(value) {
+        const topic = normalizeTopic(value);
+        const validation = await topicInputSchema.validate({ topic });
+
+        if (!validation.success) {
+          throw new Error('topic validation failed');
+        }
+
+        return validation.value.topic;
+      }
+
+      async function runDemo(rawTopic) {
+        const topic = await validatedTopic(rawTopic);
+        const result = await analyzeTopicTool.execute(
+          { topic },
+          {
+            toolCallId: 'call_local_topic_analysis',
+            messages: [],
+            abortSignal: undefined
+          }
+        );
+
+        return {
+          status: 'ok',
+          mode: 'local-deterministic-no-provider',
+          package: packageInfo(),
+          primitives_used: ['tool', 'zodSchema', 'jsonSchema'],
+          input: {
+            topic
+          },
+          tool: {
+            name: 'analyzeTopic',
+            description: analyzeTopicTool.description,
+            input_schema: topicInputSchema.jsonSchema,
+            output_schema: topicAnalysisSchema.jsonSchema,
+            result
+          },
+          safety: safety()
+        };
+      }
+
+      async function consumeSimulatedStream(rawTopic) {
+        const topic = await validatedTopic(rawTopic);
+        const analysis = analyzeTopic(topic);
+        const plannedChunks = [
+          {
+            index: 0,
+            type: 'start',
+            text: 'local simulated stream for ' + topic
+          },
+          {
+            index: 1,
+            type: 'analysis',
+            word_count: analysis.word_count,
+            checksum: analysis.checksum
+          },
+          {
+            index: 2,
+            type: 'done',
+            text: 'no model provider was called'
+          }
+        ];
+
+        const stream = simulateReadableStream({
+          chunks: plannedChunks,
+          initialDelayInMs: null,
+          chunkDelayInMs: null
+        });
+        const reader = stream.getReader();
+        const consumed = [];
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              break;
+            }
+            consumed.push(value);
+          }
+        } finally {
+          reader.releaseLock();
+        }
+
+        return {
+          status: 'ok',
+          mode: 'local-simulated-readable-stream',
+          package: packageInfo(),
+          primitives_used: ['simulateReadableStream'],
+          input: {
+            topic
+          },
+          stream: {
+            source: 'simulateReadableStream',
+            llm_stream: false,
+            chunk_count: consumed.length,
+            chunks: consumed
+          },
+          safety: safety()
+        };
+      }
+
+      function jsonResponse(response, status, payload) {
+        response.status(status).type('application/json').send(JSON.stringify(payload, null, 2));
+      }
+
+      const app = express();
+      app.disable('x-powered-by');
+
+      app.get('/', (_request, response) => {
+        jsonResponse(response, 200, {
+          service: 'phala-vercel-ai-sdk-demo',
+          description: 'CPU-safe local AI SDK primitive demo',
+          endpoints: ['/healthz', '/demo?topic=phala%20cloud', '/stream?topic=phala%20cloud', '/v1/models'],
+          package: packageInfo(),
+          safety: safety()
+        });
+      });
+
+      app.get('/healthz', (_request, response) => {
+        jsonResponse(response, importsOk ? 200 : 500, {
+          status: importsOk ? 'ok' : 'error',
+          service: 'phala-vercel-ai-sdk-demo',
+          package: packageInfo(),
+          imports: primitiveChecks,
+          runtime: {
+            node: process.version,
+            platform: os.platform(),
+            arch: os.arch(),
+            uptime_seconds: Number(((Date.now() - STARTED_AT) / 1000).toFixed(3))
+          },
+          safety: safety()
+        });
+      });
+
+      app.get('/demo', async (request, response, next) => {
+        try {
+          jsonResponse(response, 200, await runDemo(request.query.topic));
+        } catch (error) {
+          next(error);
+        }
+      });
+
+      app.get('/stream', async (request, response, next) => {
+        try {
+          jsonResponse(response, 200, await consumeSimulatedStream(request.query.topic));
+        } catch (error) {
+          next(error);
+        }
+      });
+
+      app.get('/v1/models', (_request, response) => {
+        jsonResponse(response, 200, {
+          object: 'list',
+          data: [
+            {
+              id: 'local-ai-sdk-primitives',
+              object: 'model',
+              created: 0,
+              owned_by: 'vercel',
+              provider: 'none',
+              capabilities: [
+                'tool',
+                'json-schema',
+                'zod-schema',
+                'simulated-readable-stream',
+                'no-provider-credentials'
+              ]
+            }
+          ]
+        });
+      });
+
+      app.use((request, response) => {
+        jsonResponse(response, 404, {
+          error: 'not_found',
+          path: request.path,
+          endpoints: ['/healthz', '/demo', '/stream', '/v1/models']
+        });
+      });
+
+      app.use((error, _request, response, _next) => {
+        jsonResponse(response, 500, {
+          error: 'internal_error',
+          message: error instanceof Error ? error.message : String(error)
+        });
+      });
+
+      app.listen(PORT, HOST, () => {
+        console.log('Vercel AI SDK demo listening on port ' + String(PORT));
+      });
