@@ -1,0 +1,422 @@
+services:
+  app:
+    image: node:22-bookworm-slim
+    restart: unless-stopped
+    init: true
+    working_dir: /app
+    ports:
+      - "8080:8080"
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      COMPOUND_PLUGIN_REF: ${COMPOUND_PLUGIN_REF:-85987d496fdfdc8a18faf592fd53329e23266537}
+      NPM_CONFIG_UPDATE_NOTIFIER: "false"
+      NPM_CONFIG_FUND: "false"
+      NPM_CONFIG_AUDIT: "false"
+    configs:
+      - source: server_mjs
+        target: /tmp/server.mjs
+    command:
+      - sh
+      - -lc
+      - |
+        set -eu
+        mkdir -p /app
+        cp /tmp/server.mjs /app/server.mjs
+        package_url="https://github.com/EveryInc/compound-engineering-plugin/archive/$${COMPOUND_PLUGIN_REF}.tar.gz"
+        npm install --omit=dev --ignore-scripts --no-audit --no-fund --no-package-lock "$${package_url}"
+        exec node server.mjs
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"const port = process.env.PORT || '8080'; fetch('http://127.0.0.1:' + port + '/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 240s
+
+configs:
+  server_mjs:
+    content: |
+      import crypto from "node:crypto";
+      import fs from "node:fs";
+      import http from "node:http";
+      import { createRequire } from "node:module";
+      import os from "node:os";
+      import path from "node:path";
+
+      const require = createRequire(import.meta.url);
+      const PACKAGE_NAME = "@every-env/compound-plugin";
+      const PLUGIN_ID = "compound-engineering";
+      const LOCAL_MODEL_ID = "compound-engineering-plugin/local-verifier";
+      const SOURCE_REF =
+        process.env.COMPOUND_PLUGIN_REF || "85987d496fdfdc8a18faf592fd53329e23266537";
+      const UPSTREAM_REPO = "https://github.com/EveryInc/compound-engineering-plugin";
+      const PHALA_TEMPLATE =
+        "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/compound-engineering-plugin";
+      const ICON_SOURCE =
+        "https://raw.githubusercontent.com/EveryInc/compound-engineering-plugin/" +
+        SOURCE_REF +
+        "/favicon.png";
+      const STARTED_AT = Date.now();
+      const PORT = Number.parseInt(process.env.PORT || "8080", 10);
+
+      function exists(targetPath) {
+        try {
+          fs.accessSync(targetPath);
+          return true;
+        } catch {
+          return false;
+        }
+      }
+
+      function readJson(targetPath) {
+        try {
+          return {
+            ok: true,
+            path: path.relative(process.cwd(), targetPath),
+            data: JSON.parse(fs.readFileSync(targetPath, "utf8")),
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            path: path.relative(process.cwd(), targetPath),
+            error: error.name + ": " + error.message,
+          };
+        }
+      }
+
+      function listSkillIds(skillsDir) {
+        if (!exists(skillsDir)) return [];
+        return fs
+          .readdirSync(skillsDir, { withFileTypes: true })
+          .filter((entry) => entry.isDirectory())
+          .map((entry) => entry.name)
+          .filter((name) => exists(path.join(skillsDir, name, "SKILL.md")))
+          .sort();
+      }
+
+      function listAgentIds(agentsDir) {
+        if (!exists(agentsDir)) return [];
+        return fs
+          .readdirSync(agentsDir, { withFileTypes: true })
+          .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+          .map((entry) => entry.name.replace(/\.md$/, ""))
+          .sort();
+      }
+
+      function resolvePackageRoot() {
+        try {
+          return path.dirname(require.resolve(PACKAGE_NAME + "/package.json"));
+        } catch (error) {
+          return {
+            error: error.name + ": " + error.message,
+          };
+        }
+      }
+
+      function digest(value) {
+        return crypto.createHash("sha256").update(value).digest("hex").slice(0, 16);
+      }
+
+      function normalizeTopic(value) {
+        const topic = typeof value === "string" ? value.trim() : "";
+        return (topic || "make background job retries safer").slice(0, 160);
+      }
+
+      function loadStatus() {
+        const packageRoot = resolvePackageRoot();
+        if (typeof packageRoot !== "string") {
+          return {
+            ok: false,
+            package_root: null,
+            error: packageRoot.error,
+          };
+        }
+
+        const packageJson = readJson(path.join(packageRoot, "package.json"));
+        const pluginRoot = path.join(packageRoot, "plugins", PLUGIN_ID);
+        const manifests = {
+          codex: readJson(path.join(pluginRoot, ".codex-plugin", "plugin.json")),
+          claude: readJson(path.join(pluginRoot, ".claude-plugin", "plugin.json")),
+          cursor: readJson(path.join(pluginRoot, ".cursor-plugin", "plugin.json")),
+          claude_marketplace: readJson(path.join(packageRoot, ".claude-plugin", "marketplace.json")),
+          agents_marketplace: readJson(path.join(packageRoot, ".agents", "plugins", "marketplace.json")),
+        };
+        const skills = listSkillIds(path.join(pluginRoot, "skills"));
+        const agents = listAgentIds(path.join(pluginRoot, "agents"));
+        const readmePresent = exists(path.join(pluginRoot, "README.md"));
+        const faviconPresent = exists(path.join(packageRoot, "favicon.png"));
+
+        const packageOk = packageJson.ok && packageJson.data.name === PACKAGE_NAME;
+        const pluginManifestOk =
+          manifests.codex.ok &&
+          manifests.codex.data.name === PLUGIN_ID &&
+          manifests.claude.ok &&
+          manifests.claude.data.name === PLUGIN_ID &&
+          manifests.cursor.ok &&
+          manifests.cursor.data.name === PLUGIN_ID;
+        const marketplaceOk = manifests.claude_marketplace.ok && manifests.agents_marketplace.ok;
+        const inventoryOk = skills.length > 0 && agents.length > 0;
+        const ok = packageOk && pluginManifestOk && marketplaceOk && inventoryOk && readmePresent;
+
+        return {
+          ok,
+          package_root: packageRoot,
+          source_ref: SOURCE_REF,
+          package: packageJson.ok
+            ? {
+                name: packageJson.data.name,
+                version: packageJson.data.version,
+                description: packageJson.data.description,
+                homepage: packageJson.data.homepage,
+                repository: packageJson.data.repository,
+              }
+            : {
+                error: packageJson.error,
+              },
+          plugin: manifests.codex.ok
+            ? {
+                name: manifests.codex.data.name,
+                version: manifests.codex.data.version,
+                description: manifests.codex.data.description,
+                author: manifests.codex.data.author,
+                homepage: manifests.codex.data.homepage,
+                repository: manifests.codex.data.repository,
+                interface: manifests.codex.data.interface,
+              }
+            : {
+                error: manifests.codex.error,
+              },
+          manifests: Object.fromEntries(
+            Object.entries(manifests).map(([key, value]) => [
+              key,
+              {
+                ok: value.ok,
+                path: value.path,
+                name: value.data && value.data.name ? value.data.name : null,
+                version: value.data && value.data.version ? value.data.version : null,
+                error: value.error || null,
+              },
+            ]),
+          ),
+          inventory: {
+            skills_count: skills.length,
+            agents_count: agents.length,
+            sample_skills: skills.slice(0, 12),
+            sample_agents: agents.slice(0, 12),
+            expected_core_skills_present: [
+              "ce-setup",
+              "ce-brainstorm",
+              "ce-plan",
+              "ce-work",
+              "ce-code-review",
+              "ce-compound",
+            ].every((skill) => skills.includes(skill)),
+          },
+          files: {
+            plugin_readme: readmePresent,
+            upstream_favicon: faviconPresent,
+          },
+        };
+      }
+
+      const STATUS = loadStatus();
+
+      function safety() {
+        return {
+          cpu_only: true,
+          credentials_required: false,
+          model_provider_calls: false,
+          model_downloads: false,
+          browser_auth: false,
+          gpu_required: false,
+          host_bind_mounts: false,
+          docker_socket: false,
+          package_install_source: "GitHub source tarball pinned by COMPOUND_PLUGIN_REF",
+        };
+      }
+
+      function basePayload() {
+        return {
+          service: "compound-engineering-plugin-verifier",
+          ok: STATUS.ok,
+          uptime_seconds: Math.round((Date.now() - STARTED_AT) / 100) / 10,
+          node: process.version,
+          platform: os.platform() + "/" + os.arch(),
+          upstream: {
+            repo: UPSTREAM_REPO,
+            source_ref: SOURCE_REF,
+            tarball:
+              UPSTREAM_REPO + "/archive/" + SOURCE_REF + ".tar.gz",
+            icon_source: ICON_SOURCE,
+            phala_template: PHALA_TEMPLATE,
+          },
+          safety: safety(),
+        };
+      }
+
+      function demoPayload(topic) {
+        const normalizedTopic = normalizeTopic(topic);
+        const coreFlow = [
+          {
+            step: 1,
+            skill: "ce-setup",
+            purpose: "Inspect local agent environment and project config.",
+          },
+          {
+            step: 2,
+            skill: "ce-brainstorm",
+            purpose: "Turn an idea into requirements before implementation.",
+          },
+          {
+            step: 3,
+            skill: "ce-plan",
+            purpose: "Create a structured implementation plan.",
+          },
+          {
+            step: 4,
+            skill: "ce-work",
+            purpose: "Execute the plan with task tracking.",
+          },
+          {
+            step: 5,
+            skill: "ce-code-review",
+            purpose: "Run structured review with specialized reviewer agents.",
+          },
+          {
+            step: 6,
+            skill: "ce-compound",
+            purpose: "Capture reusable learning for future work.",
+          },
+        ].map((entry) => ({
+          ...entry,
+          installed: STATUS.inventory ? STATUS.inventory.sample_skills.includes(entry.skill) ||
+            [
+              "ce-setup",
+              "ce-brainstorm",
+              "ce-plan",
+              "ce-work",
+              "ce-code-review",
+              "ce-compound",
+            ].includes(entry.skill) && STATUS.inventory.expected_core_skills_present : false,
+        }));
+
+        return {
+          ...basePayload(),
+          mode: "local-deterministic-plugin-inventory",
+          input: {
+            topic: normalizedTopic,
+            digest: digest(normalizedTopic),
+          },
+          package: STATUS.package,
+          plugin: STATUS.plugin,
+          inventory: STATUS.inventory,
+          deterministic_workflow: coreFlow,
+          evidence: {
+            real_package_installed: STATUS.package && STATUS.package.name === PACKAGE_NAME,
+            real_plugin_manifests_read: STATUS.manifests,
+            cli_executed: false,
+            cli_note:
+              "The upstream CLI is Bun-targeted. This verifier intentionally reads installed source artifacts instead of installing into an IDE profile.",
+          },
+        };
+      }
+
+      function responseFor(request) {
+        const url = new URL(request.url, "http://127.0.0.1");
+        const pathname = url.pathname.replace(/\/+$/, "") || "/";
+
+        if (pathname === "/" || pathname === "/healthz") {
+          return {
+            status: STATUS.ok ? 200 : 503,
+            body: {
+              ...basePayload(),
+              status: STATUS.ok ? "ok" : "unhealthy",
+              package: STATUS.package,
+              inventory: STATUS.inventory,
+              endpoints: ["/healthz", "/demo", "/v1/models", "/upstream"],
+              error: STATUS.error || null,
+            },
+          };
+        }
+
+        if (pathname === "/demo") {
+          return {
+            status: STATUS.ok ? 200 : 503,
+            body: demoPayload(url.searchParams.get("topic")),
+          };
+        }
+
+        if (pathname === "/v1/models") {
+          return {
+            status: 200,
+            body: {
+              object: "list",
+              data: [
+                {
+                  id: LOCAL_MODEL_ID,
+                  object: "model",
+                  created: 0,
+                  owned_by: "EveryInc",
+                  description:
+                    "Metadata-only compatibility endpoint. The verifier does not host or call an LLM model.",
+                },
+              ],
+              safety: safety(),
+            },
+          };
+        }
+
+        if (pathname === "/upstream") {
+          return {
+            status: 200,
+            body: {
+              ...basePayload(),
+              package: STATUS.package,
+              plugin: STATUS.plugin,
+              attribution: {
+                upstream_owner: "EveryInc",
+                plugin_author: STATUS.plugin && STATUS.plugin.author ? STATUS.plugin.author : null,
+                icon_source: ICON_SOURCE,
+                inspected_commit: SOURCE_REF,
+              },
+            },
+          };
+        }
+
+        return {
+          status: 404,
+          body: {
+            error: "not_found",
+            endpoints: ["/healthz", "/demo", "/v1/models", "/upstream"],
+          },
+        };
+      }
+
+      const server = http.createServer((request, response) => {
+        const result = responseFor(request);
+        const body = JSON.stringify(result.body, null, 2) + "\n";
+        response.writeHead(result.status, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Length": Buffer.byteLength(body),
+        });
+        response.end(body);
+      });
+
+      server.listen(PORT, "0.0.0.0", () => {
+        console.log(
+          JSON.stringify({
+            event: "startup",
+            port: PORT,
+            ok: STATUS.ok,
+            package: STATUS.package,
+            inventory: STATUS.inventory,
+            safety: safety(),
+          }),
+        );
+      });
