@@ -4440,5 +4440,27 @@
       "diskSize": 30
     },
     "tags": ["Media & Design", "Developer Tools"]
-  }
+  },
+{
+  "id": "moneyprinterturbo",
+  "name": "harry0703/MoneyPrinterTurbo",
+  "description": "利用AI大模型，一键生成高清短视频 Generate short videos with one click using AI LLM.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/moneyprinterturbo",
+  "author": "harry0703",
+  "icon": "moneyprinterturbo.png",
+  "envs": [
+    {
+      "key": "MONEYPRINTERTURBO_REF",
+      "required": false,
+      "default": "042deb84f01ee19936f8afc7b99ea36177502b37",
+      "description": "Git branch, tag, or commit downloaded from harry0703/MoneyPrinterTurbo at startup. Defaults to the upstream main HEAD inspected for this template."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": ["Media & Design", "Automation", "AI Agents"]
+}
 ]
