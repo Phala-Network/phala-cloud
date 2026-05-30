@@ -65,3 +65,37 @@ func TestCreateAppInstance(t *testing.T) {
 		t.Errorf("Status = %q, want running", result.Status)
 	}
 }
+
+// TestRedeployAppRevision covers the SDK method used by the Terraform
+// provider's members-mode update path: redeploy a revision across a set
+// of vm_uuids by POSTing /apps/{id}/revisions/{rev}/redeploy.
+func TestRedeployAppRevision(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			t.Errorf("method = %q, want POST", r.Method)
+		}
+		if r.URL.Path != "/apps/app-1/revisions/rev_42/redeploy" {
+			t.Errorf("path = %q, want /apps/app-1/revisions/rev_42/redeploy", r.URL.Path)
+		}
+		var body RedeployAppRevisionRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if len(body.VMUUIDs) != 2 || body.VMUUIDs[0] != "vm-a" || body.VMUUIDs[1] != "vm-b" {
+			t.Errorf("vm_uuids = %v, want [vm-a vm-b]", body.VMUUIDs)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"message":"ok"}`))
+	}))
+	defer srv.Close()
+
+	client, err := NewClient(WithBaseURL(srv.URL), WithAPIKey("test"))
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	if err := client.RedeployAppRevision(context.Background(), "app-1", "rev_42",
+		&RedeployAppRevisionRequest{VMUUIDs: []string{"vm-a", "vm-b"}}); err != nil {
+		t.Fatalf("RedeployAppRevision: %v", err)
+	}
+}
