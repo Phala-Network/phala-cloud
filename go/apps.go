@@ -132,6 +132,28 @@ func (c *Client) GetAppRevisionDetail(ctx context.Context, appID, revisionID str
 	return &result, nil
 }
 
+// RedeployAppRevisionRequest is the request body for redeploying an app
+// revision across a set of CVMs.
+type RedeployAppRevisionRequest struct {
+	// VMUUIDs lists the CVMs that should adopt the new revision. The
+	// backend locks each CVM row, flips compose_hash in place, and
+	// enqueues the per-CVM update task; vm_uuid and name are preserved.
+	VMUUIDs []string `json:"vm_uuids"`
+}
+
+// RedeployAppRevision schedules an async redeploy of the named revision
+// against the given set of CVMs. The endpoint returns 202 on accept;
+// callers should poll GetCVMInfo per CVM and wait for compose_hash to
+// flip to the new revision's value before reporting completion.
+//
+// HTTP 465 from the backend means on-chain KMS compose-hash registration
+// is required; surfaced as a regular *APIError so callers can decide how
+// to present it.
+func (c *Client) RedeployAppRevision(ctx context.Context, appID, revisionID string, req *RedeployAppRevisionRequest) error {
+	path := fmt.Sprintf("/apps/%s/revisions/%s/redeploy", appID, url.PathEscape(revisionID))
+	return c.doJSON(ctx, "POST", path, req, nil)
+}
+
 // GetAppAttestation returns attestation data for an application.
 func (c *Client) GetAppAttestation(ctx context.Context, appID string) (*AppAttestationResponse, error) {
 	var result AppAttestationResponse
