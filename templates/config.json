@@ -4462,5 +4462,27 @@
     "diskSize": 10
   },
   "tags": ["Media & Design", "Automation", "AI Agents"]
-}
+},
+{
+    "id": "markitdown",
+    "name": "microsoft/markitdown",
+    "description": "Python tool for converting files and office documents to Markdown.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/markitdown",
+    "author": "microsoft",
+    "icon": "markitdown.png",
+    "envs": [
+      {
+        "key": "MARKITDOWN_PACKAGE_VERSION",
+        "required": false,
+        "default": "0.1.6",
+        "description": "Pinned MarkItDown Python package version installed in the demo image."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["Developer Tools", "Data & Storage", "AI Agents"]
+  }
 ]
