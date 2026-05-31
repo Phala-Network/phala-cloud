@@ -37,6 +37,21 @@ func (c *Client) UpdateCVMVisibility(ctx context.Context, cvmID string, req *Upd
 	return &result, nil
 }
 
+// UpdateListedRequest is the request body for toggling a CVM's public
+// marketplace listing.
+type UpdateListedRequest struct {
+	Listed bool `json:"listed"`
+}
+
+// UpdateCVMListed toggles whether a CVM is publicly listed. It hits the
+// dedicated PATCH /cvms/{id}/listed endpoint, which is a pure metadata update
+// (plain DB write) — no compose change, no redeploy, no attestation change.
+func (c *Client) UpdateCVMListed(ctx context.Context, cvmID string, listed bool) error {
+	return c.doWithRetry(ctx, func() error {
+		return c.doJSON(ctx, "PATCH", cvmPath(cvmID, "listed"), &UpdateListedRequest{Listed: listed}, nil)
+	})
+}
+
 // UpdateOSImageRequest is the request for updating CVM OS image.
 type UpdateOSImageRequest struct {
 	OSImageName string `json:"os_image_name"`
