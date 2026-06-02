@@ -1,3 +1,31 @@
+## [0.2.10](https://github.com/Phala-Network/phala-cloud/compare/js-v0.2.9...js-v0.2.10) (2026-06-02)
+
+### feat
+
+* add McDonald's China MCP template (#280) ([7c0c815](https://github.com/Phala-Network/phala-cloud/commit/7c0c815f1a76c15c5a960a514948f0dabc7d5d78)), closes [#280](https://github.com/Phala-Network/phala-cloud/issues/280) [#1449](https://github.com/Phala-Network/phala-cloud/issues/1449)
+* add versioned CVM hashid SDK schemas ([b5b3766](https://github.com/Phala-Network/phala-cloud/commit/b5b376620be08e1efbcb26f1ce78fd71bef90544))
+* expose latest CVM hashid schemas ([d317ebf](https://github.com/Phala-Network/phala-cloud/commit/d317ebf8acb4a1b53d5c080725af07a2a700d2a5))
+* expose request IDs on structured errors ([adcc644](https://github.com/Phala-Network/phala-cloud/commit/adcc6444cf35a993bb37a36ae166e2d4b9b25f50))
+* **js:** add CVM create resource graph ([f229758](https://github.com/Phala-Network/phala-cloud/commit/f229758f8f895ec870664749dbf098d0f624c837))
+* **js:** add pre-launch script upgrade-status and upgrade actions ([dd5dbb3](https://github.com/Phala-Network/phala-cloud/commit/dd5dbb3cd0928edb9f226918a8f7eb6f584b3f9b))
+* **js:** add TCB identity fields to AppAttestationInstanceSchema ([087d36d](https://github.com/Phala-Network/phala-cloud/commit/087d36de8a7575bd2bbd06c70bb40d484e3421c1))
+* **js:** bump default request timeout to 60s ([0b6e022](https://github.com/Phala-Network/phala-cloud/commit/0b6e0227c392106f9f8fd7a24aca884b867c759e))
+* **js:** expose workspace avatar URL ([35236c5](https://github.com/Phala-Network/phala-cloud/commit/35236c5c5a87a733dfa26dae45569d332d78a902))
+* **js:** support app instance names ([4839715](https://github.com/Phala-Network/phala-cloud/commit/48397154b13361d10653084f0df64e03aec71aae))
+* **types:** add port_policy field to LooseAppCompose ([bbdc704](https://github.com/Phala-Network/phala-cloud/commit/bbdc704af2112332454cf84faf9a2ec08db931d6))
+* version CVM create resource hashid schemas ([f34d2c7](https://github.com/Phala-Network/phala-cloud/commit/f34d2c7e69d4b4a939477d28278acd3e6545c4d2))
+
+### fix
+
+* accept versioned IDs in legacy CVM schemas ([0b91912](https://github.com/Phala-Network/phala-cloud/commit/0b91912eacbe7e08a86426575d6340cf8ab23094))
+* align CVMInfo schemas with hashid responses ([49ba6fd](https://github.com/Phala-Network/phala-cloud/commit/49ba6fd53d6ee73ed4d429ea5957d6e4c6f5e71b))
+* allow nullable CVM IDs in instance refresh results ([5c22c18](https://github.com/Phala-Network/phala-cloud/commit/5c22c18f07a0ae5a7d383eb41ab3ffeca11e76a0))
+* drop minimal app response schema ([24617ff](https://github.com/Phala-Network/phala-cloud/commit/24617ffe55dabaeb96981090b7a42859597899ef))
+* **js:** pass through unknown keys on provision compose_file ([409bbca](https://github.com/Phala-Network/phala-cloud/commit/409bbcad38cd5b088cfb4964228a777700409d4c))
+* **js:** shorten timeout message and expose code on PhalaCloudError ([4966c1e](https://github.com/Phala-Network/phala-cloud/commit/4966c1eb949f67e22725818f534999cd670c4c69))
+* **js:** stop rewriting node_id to teepod_id on provision ([c267fec](https://github.com/Phala-Network/phala-cloud/commit/c267fece644b054990260edf0286d9f7adaca5c4)), closes [#1449](https://github.com/Phala-Network/phala-cloud/issues/1449)
+* **js:** surface friendly error for request timeouts ([8c367fd](https://github.com/Phala-Network/phala-cloud/commit/8c367fdd327945b2f944802455591614c6f24665))
+* use hashed CVM IDs in schemas ([0268fa0](https://github.com/Phala-Network/phala-cloud/commit/0268fa0bf24d2d7449e2e338e42a484973bd46f2))
 ## [0.2.9](https://github.com/Phala-Network/phala-cloud/compare/js-v0.2.8...js-v0.2.9) (2026-04-17)
 
 ### feat
