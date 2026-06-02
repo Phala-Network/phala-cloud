@@ -1,0 +1,379 @@
+services:
+  app:
+    image: node:22-alpine
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      ROUTER_BASE_URL: "http://router:20128"
+      ROUTER_IMAGE_TAG: ${ROUTER_IMAGE_TAG:-latest}
+      NODE_ENV: production
+    configs:
+      - source: verifier_mjs
+        target: /opt/9router-verifier/server.mjs
+    command:
+      - node
+      - /opt/9router-verifier/server.mjs
+    depends_on:
+      router:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:' + (process.env.PORT || '8080') + '/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  router:
+    image: decolua/9router:${ROUTER_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    init: true
+    expose:
+      - "20128"
+    environment:
+      DATA_DIR: /app/data
+      PORT: "20128"
+      HOSTNAME: "0.0.0.0"
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      BASE_URL: ${BASE_URL:-http://localhost:20128}
+      CLOUD_URL: ${CLOUD_URL:-https://9router.com}
+      NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-http://localhost:20128}
+      NEXT_PUBLIC_CLOUD_URL: ${NEXT_PUBLIC_CLOUD_URL:-https://9router.com}
+      INITIAL_PASSWORD: ${INITIAL_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:-}
+      API_KEY_SECRET: ${API_KEY_SECRET:-}
+      MACHINE_ID_SALT: ${MACHINE_ID_SALT:-}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      ENABLE_REQUEST_LOGS: ${ENABLE_REQUEST_LOGS:-false}
+    volumes:
+      - 9router_data:/app/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:20128/v1/models').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+configs:
+  verifier_mjs:
+    content: |
+      import http from "node:http";
+      import https from "node:https";
+      import os from "node:os";
+
+      const STARTED_AT = Date.now();
+      const PORT = Number.parseInt(process.env.PORT || "8080", 10);
+      const ROUTER_BASE_URL = process.env.ROUTER_BASE_URL || "http://router:20128";
+      const UPSTREAM_REPO = "https://github.com/decolua/9router";
+      const TEMPLATE_REPO = "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/9router";
+      const ROUTER_IMAGE = "decolua/9router";
+      const LOCAL_ROUTER_HOST = "localhost:20128";
+      const HOP_BY_HOP_HEADERS = new Set([
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+      ]);
+
+      function routerUrl(path) {
+        const base = new URL(ROUTER_BASE_URL);
+        return new URL(path, base);
+      }
+
+      function transportFor(url) {
+        return url.protocol === "https:" ? https : http;
+      }
+
+      function routerRequest(path, options) {
+        const opts = options || {};
+        const url = routerUrl(path);
+        const headers = Object.assign({}, opts.headers || {});
+        if (opts.useLocalHostHeader) {
+          headers.host = LOCAL_ROUTER_HOST;
+        }
+        return new Promise((resolve) => {
+          const req = transportFor(url).request(
+            {
+              hostname: url.hostname,
+              port: url.port || (url.protocol === "https:" ? 443 : 80),
+              path: url.pathname + url.search,
+              method: opts.method || "GET",
+              headers,
+              timeout: opts.timeoutMs || 8000,
+            },
+            (res) => {
+              const chunks = [];
+              res.on("data", (chunk) => chunks.push(chunk));
+              res.on("end", () => {
+                const body = Buffer.concat(chunks);
+                resolve({
+                  ok: res.statusCode >= 200 && res.statusCode < 300,
+                  status: res.statusCode,
+                  headers: res.headers,
+                  body,
+                });
+              });
+            },
+          );
+          req.on("timeout", () => req.destroy(new Error("router request timed out")));
+          req.on("error", (error) => {
+            resolve({
+              ok: false,
+              status: 0,
+              headers: {},
+              body: Buffer.from(""),
+              error: error.name + ": " + error.message,
+            });
+          });
+          if (opts.body) {
+            req.write(opts.body);
+          }
+          req.end();
+        });
+      }
+
+      async function routerJson(path) {
+        const response = await routerRequest(path, {
+          headers: { accept: "application/json" },
+          useLocalHostHeader: true,
+        });
+        let parsed = null;
+        let parseError = null;
+        const text = response.body.toString("utf8");
+        if (text) {
+          try {
+            parsed = JSON.parse(text);
+          } catch (error) {
+            parseError = error.name + ": " + error.message;
+          }
+        }
+        return Object.assign({}, response, {
+          json: parsed,
+          text: text,
+          parseError: parseError,
+        });
+      }
+
+      function writeJson(res, status, payload) {
+        const body = Buffer.from(JSON.stringify(payload, null, 2) + "\n", "utf8");
+        res.writeHead(status, {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "no-store",
+          "content-length": body.length,
+        });
+        res.end(body);
+      }
+
+      function modelSummary(modelsResponse) {
+        const models = Array.isArray(modelsResponse.json && modelsResponse.json.data)
+          ? modelsResponse.json.data
+          : [];
+        return {
+          ok: modelsResponse.ok && Array.isArray(modelsResponse.json && modelsResponse.json.data),
+          status: modelsResponse.status,
+          count: models.length,
+          sample_ids: models
+            .map((model) => model && model.id)
+            .filter((id) => typeof id === "string")
+            .slice(0, 10),
+          parse_error: modelsResponse.parseError,
+          error: modelsResponse.error || null,
+        };
+      }
+
+      function basePayload() {
+        return {
+          service: "9router-phala-verifier",
+          upstream: {
+            repo: UPSTREAM_REPO,
+            docker_image: ROUTER_IMAGE,
+            docker_tag: process.env.ROUTER_IMAGE_TAG || "latest",
+            template: TEMPLATE_REPO,
+            icon_source: "https://github.com/decolua/9router/blob/master/public/favicon.svg",
+          },
+          runtime: {
+            node: process.version,
+            platform: os.platform() + "/" + os.arch(),
+            uptime_seconds: Math.round((Date.now() - STARTED_AT) / 100) / 10,
+          },
+          safety: {
+            official_upstream_image: true,
+            cpu_only: true,
+            credentials_required_for_smoke_endpoints: false,
+            provider_network_calls_performed_by_smoke_endpoints: false,
+            model_downloads: false,
+            gpu_required: false,
+            browser_auth_required_for_smoke_endpoints: false,
+            host_bind_mounts: false,
+            persistent_data: "named Docker volume mounted at /app/data",
+          },
+        };
+      }
+
+      async function healthPayload() {
+        const init = await routerRequest("/api/init", {
+          headers: { accept: "text/plain" },
+          useLocalHostHeader: true,
+        });
+        const models = await routerJson("/v1/models");
+        const summary = modelSummary(models);
+        const ok = init.ok && summary.ok;
+        const payload = basePayload();
+        payload.ok = ok;
+        payload.status = ok ? "ready" : "unhealthy";
+        payload.router = {
+          init_status: init.status,
+          models: summary,
+        };
+        payload.endpoints = ["/healthz", "/demo", "/v1/models", "/dashboard"];
+        return payload;
+      }
+
+      async function handleHealth(req, res) {
+        const payload = await healthPayload();
+        writeJson(res, payload.ok ? 200 : 503, payload);
+      }
+
+      async function handleDemo(req, res) {
+        const payload = await healthPayload();
+        payload.demo = {
+          type: "deterministic 9Router gateway smoke verification",
+          checks: [
+            "Starts the official decolua/9router Docker image.",
+            "Verifies the public Next.js init route.",
+            "Reads the local OpenAI-compatible /v1/models catalog through the running 9Router process.",
+            "Does not call /v1/chat/completions, external model providers, OAuth flows, or browser login.",
+          ],
+          gateway_capabilities: [
+            "OpenAI-compatible /v1 endpoint for coding tools.",
+            "Provider routing across subscription, API-key, and free-tier providers.",
+            "Fallback model combos and account fallback.",
+            "RTK token saver for tool output compression.",
+          ],
+        };
+        writeJson(res, payload.ok ? 200 : 503, payload);
+      }
+
+      async function handleModels(req, res) {
+        const response = await routerRequest("/v1/models", {
+          headers: { accept: "application/json" },
+          useLocalHostHeader: true,
+        });
+        const contentType = response.headers["content-type"] || "application/json; charset=utf-8";
+        res.writeHead(response.ok ? response.status : 503, {
+          "content-type": contentType,
+          "cache-control": "no-store",
+        });
+        if (response.ok) {
+          res.end(response.body);
+        } else {
+          res.end(JSON.stringify({
+            error: "router_models_unavailable",
+            status: response.status,
+            message: response.error || response.body.toString("utf8"),
+          }) + "\n");
+        }
+      }
+
+      function proxyRequest(req, res) {
+        const url = routerUrl(req.url || "/");
+        const headers = {};
+        for (const entry of Object.entries(req.headers)) {
+          const key = entry[0].toLowerCase();
+          if (!HOP_BY_HOP_HEADERS.has(key)) {
+            headers[entry[0]] = entry[1];
+          }
+        }
+        headers.host = req.headers.host || "localhost";
+        headers["x-forwarded-host"] = req.headers.host || "";
+        headers["x-forwarded-proto"] = req.headers["x-forwarded-proto"] || "http";
+        headers["x-forwarded-for"] = req.socket.remoteAddress || "";
+
+        const upstream = transportFor(url).request(
+          {
+            hostname: url.hostname,
+            port: url.port || (url.protocol === "https:" ? 443 : 80),
+            path: url.pathname + url.search,
+            method: req.method,
+            headers,
+          },
+          (upstreamRes) => {
+            const responseHeaders = {};
+            for (const entry of Object.entries(upstreamRes.headers)) {
+              const key = entry[0].toLowerCase();
+              if (!HOP_BY_HOP_HEADERS.has(key)) {
+                responseHeaders[entry[0]] = entry[1];
+              }
+            }
+            res.writeHead(upstreamRes.statusCode || 502, responseHeaders);
+            upstreamRes.pipe(res);
+          },
+        );
+        upstream.on("error", (error) => {
+          writeJson(res, 502, {
+            error: "router_proxy_error",
+            message: error.name + ": " + error.message,
+          });
+        });
+        req.pipe(upstream);
+      }
+
+      function normalizePathname(pathname) {
+        let path = pathname || "/";
+        while (path.length > 1 && path.endsWith("/")) {
+          path = path.slice(0, -1);
+        }
+        return path;
+      }
+
+      const server = http.createServer(async (req, res) => {
+        const parsed = new URL(req.url || "/", "http://127.0.0.1");
+        const path = normalizePathname(parsed.pathname);
+        try {
+          if (req.method === "GET" && path === "/healthz") {
+            await handleHealth(req, res);
+            return;
+          }
+          if (req.method === "GET" && path === "/demo") {
+            await handleDemo(req, res);
+            return;
+          }
+          if (req.method === "GET" && path === "/v1/models") {
+            await handleModels(req, res);
+            return;
+          }
+          proxyRequest(req, res);
+        } catch (error) {
+          writeJson(res, 500, {
+            error: "internal_error",
+            message: error.name + ": " + error.message,
+          });
+        }
+      });
+
+      server.listen(PORT, "0.0.0.0", () => {
+        console.log(JSON.stringify({
+          event: "startup",
+          service: "9router-phala-verifier",
+          port: PORT,
+          router_base_url: ROUTER_BASE_URL,
+        }));
+      });
+
+volumes:
+  9router_data:

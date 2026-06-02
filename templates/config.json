@@ -4894,5 +4894,83 @@
       "diskSize": 10
     },
     "tags": ["Business Apps", "AI Agents", "Data & Storage"]
+  },
+{
+    "id": "9router",
+    "name": "decolua/9router",
+    "description": "Unlimited FREE AI coding. Connect Claude Code, Codex, Cursor, Cline, Copilot, Antigravity to FREE Claude/GPT/Gemini via 40+ providers. Auto-fallback, RTK -40% tokens, never hit limits.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/9router",
+    "author": "decolua",
+    "icon": "9router.svg",
+    "envs": [
+      {
+        "key": "INITIAL_PASSWORD",
+        "required": true,
+        "description": "Initial dashboard login password. Set a long random value before using 9Router with real provider accounts."
+      },
+      {
+        "key": "JWT_SECRET",
+        "required": true,
+        "description": "Long random secret used to sign dashboard session cookies. Generate with openssl rand -hex 32."
+      },
+      {
+        "key": "API_KEY_SECRET",
+        "required": true,
+        "description": "Long random secret used by 9Router to generate and validate endpoint API keys. Generate with openssl rand -hex 32."
+      },
+      {
+        "key": "MACHINE_ID_SALT",
+        "required": true,
+        "description": "Long random salt for stable machine/API-key identity hashing. Generate with openssl rand -hex 32."
+      },
+      {
+        "key": "ROUTER_IMAGE_TAG",
+        "required": false,
+        "default": "latest",
+        "description": "Upstream decolua/9router Docker image tag used by Docker Compose."
+      },
+      {
+        "key": "AUTH_COOKIE_SECURE",
+        "required": false,
+        "default": "false",
+        "description": "Set to true when the dashboard is exposed only through HTTPS."
+      },
+      {
+        "key": "ENABLE_REQUEST_LOGS",
+        "required": false,
+        "default": "false",
+        "description": "Enables upstream request/translator logs. Keep false unless debugging sensitive traffic."
+      },
+      {
+        "key": "BASE_URL",
+        "required": false,
+        "default": "http://localhost:20128",
+        "description": "Server-side base URL used by internal 9Router cloud-sync jobs."
+      },
+      {
+        "key": "CLOUD_URL",
+        "required": false,
+        "default": "https://9router.com",
+        "description": "Server-side cloud-sync endpoint base URL."
+      },
+      {
+        "key": "NEXT_PUBLIC_BASE_URL",
+        "required": false,
+        "default": "http://localhost:20128",
+        "description": "Public/base URL value used by upstream UI compatibility paths."
+      },
+      {
+        "key": "NEXT_PUBLIC_CLOUD_URL",
+        "required": false,
+        "default": "https://9router.com",
+        "description": "Public cloud-sync endpoint base URL used by the upstream UI."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["LLM Inference & Model Serving", "Infrastructure", "Developer Tools"]
   }
 ]
