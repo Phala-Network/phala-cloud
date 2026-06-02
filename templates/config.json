@@ -4994,5 +4994,33 @@
       "diskSize": 20
     },
     "tags": ["AI Agents", "Developer Tools"]
-  }
+  },
+{
+  "id": "aitoearn",
+  "name": "yikart/AiToEarn",
+  "description": "Let's use AI to Earn!",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/aitoearn",
+  "author": "yikart",
+  "icon": "aitoearn.png",
+  "envs": [
+    {
+      "key": "AITOEARN_REF",
+      "required": false,
+      "default": "74e884f0e250b902097c355bf8fb55a9ed2c79a5",
+      "description": "Git branch, tag, or commit downloaded from yikart/AiToEarn at startup. Defaults to the upstream main HEAD inspected for this template."
+    },
+    {
+      "key": "PORT",
+      "required": false,
+      "default": "8080",
+      "description": "HTTP port listened on inside the verifier container and published by the Compose file."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": ["Automation", "Web Apps", "AI Agents"]
+}
 ]
