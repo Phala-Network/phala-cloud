@@ -4754,5 +4754,33 @@
     "diskSize": 30
   },
   "tags": ["Media & Design", "Automation", "AI Agents"]
+},
+{
+  "id": "dograh",
+  "name": "dograh-hq/dograh",
+  "description": "Open source voice AI platform. Self-hosted alternative to Vapi and Retell. On Prem, BYOK across Speech to Speech or LLM/STT/TTS, with a visual workflow builder, MCP native and telephony support.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/dograh",
+  "author": "dograh-hq",
+  "icon": "dograh.svg",
+  "envs": [
+    {
+      "key": "DOGRAH_SDK_VERSION",
+      "required": false,
+      "default": "0.1.6",
+      "description": "Pinned Dograh Python SDK package version installed by the demo service at container startup."
+    },
+    {
+      "key": "DOGRAH_DEMO_TITLE",
+      "required": false,
+      "default": "Phala Cloud Dograh SDK demo",
+      "description": "Title returned by the /demo endpoint."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": ["Media & Design", "AI Agents", "Developer Tools"]
 }
 ]

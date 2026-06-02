@@ -1,0 +1,381 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8000"
+    environment:
+      APP_PORT: "8000"
+      DOGRAH_SDK_VERSION: ${DOGRAH_SDK_VERSION:-0.1.6}
+      DOGRAH_DEMO_TITLE: ${DOGRAH_DEMO_TITLE:-Phala Cloud Dograh SDK demo}
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+      PYTHONUNBUFFERED: "1"
+      UV_SYSTEM_PYTHON: "1"
+    configs:
+      - source: dograh_demo_app
+        target: /opt/dograh-demo/main.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache "dograh-sdk==$${DOGRAH_SDK_VERSION}"
+        exec python /opt/dograh-demo/main.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8000'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+          reverse_proxy app:8000
+      }
+
+  dograh_demo_app:
+    content: |
+      import importlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "dograh-sdk"
+      MODULE_NAME = "dograh_sdk"
+      SPEC_VERSION = "local-phala-demo-2026-05-30"
+
+
+      def property_spec(name, property_type, display_name, description, **extra):
+          spec = {
+              "name": name,
+              "type": property_type,
+              "display_name": display_name,
+              "description": description,
+          }
+          spec.update(extra)
+          return spec
+
+
+      NODE_SPECS = {
+          "startCall": {
+              "name": "startCall",
+              "display_name": "Start Call",
+              "description": "Entry point for a Dograh voice workflow.",
+              "category": "call_node",
+              "icon": "phone-call",
+              "version": "1.0.0",
+              "properties": [
+                  property_spec("name", "string", "Name", "Node name.", required=True),
+                  property_spec("prompt", "mention_textarea", "Prompt", "Opening instructions.", required=True),
+                  property_spec(
+                      "greeting_type",
+                      "options",
+                      "Greeting Type",
+                      "How Dograh should greet the caller.",
+                      default="text",
+                      options=[
+                          {"value": "text", "label": "Text"},
+                          {"value": "audio", "label": "Audio"},
+                      ],
+                  ),
+                  property_spec("greeting", "string", "Greeting", "Text greeting for the caller."),
+                  property_spec("allow_interrupt", "boolean", "Allow Interrupt", "Whether the caller can interrupt.", default=False),
+                  property_spec("add_global_prompt", "boolean", "Add Global Prompt", "Append the global prompt.", default=True),
+              ],
+          },
+          "agentNode": {
+              "name": "agentNode",
+              "display_name": "Agent Node",
+              "description": "LLM-driven conversation step in a Dograh voice workflow.",
+              "category": "call_node",
+              "icon": "bot",
+              "version": "1.0.0",
+              "properties": [
+                  property_spec("name", "string", "Name", "Node name.", required=True),
+                  property_spec("prompt", "mention_textarea", "Prompt", "Agent instructions.", required=True),
+                  property_spec("allow_interrupt", "boolean", "Allow Interrupt", "Whether the caller can interrupt.", default=True),
+                  property_spec("add_global_prompt", "boolean", "Add Global Prompt", "Append the global prompt.", default=True),
+                  property_spec("tool_uuids", "tool_refs", "Tools", "Dograh tool UUIDs exposed to this node.", default=[]),
+                  property_spec("document_uuids", "document_refs", "Documents", "Dograh knowledge-base document UUIDs.", default=[]),
+              ],
+          },
+          "endCall": {
+              "name": "endCall",
+              "display_name": "End Call",
+              "description": "Terminal node that closes a Dograh voice workflow.",
+              "category": "call_node",
+              "icon": "phone-off",
+              "version": "1.0.0",
+              "properties": [
+                  property_spec("name", "string", "Name", "Node name.", required=True),
+                  property_spec("prompt", "mention_textarea", "Prompt", "Final instructions before ending the call.", required=True),
+                  property_spec("allow_interrupt", "boolean", "Allow Interrupt", "Whether the caller can interrupt.", default=False),
+                  property_spec("add_global_prompt", "boolean", "Add Global Prompt", "Append the global prompt.", default=True),
+              ],
+          },
+      }
+
+
+      def import_checks():
+          result = {
+              "package": PACKAGE_NAME,
+              "distribution_version": None,
+              "module_version": None,
+              "import_ok": False,
+              "symbols": {},
+              "error": None,
+          }
+          try:
+              result["distribution_version"] = importlib.metadata.version(PACKAGE_NAME)
+              dograh_sdk = importlib.import_module(MODULE_NAME)
+              result["module_version"] = getattr(dograh_sdk, "__version__", None)
+              for symbol in ("DograhClient", "Workflow", "NodeRef", "ValidationError"):
+                  result["symbols"][symbol] = hasattr(dograh_sdk, symbol)
+              result["import_ok"] = bool(result["distribution_version"]) and all(result["symbols"].values())
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      def build_demo():
+          from dograh_sdk import Workflow
+          from dograh_sdk._generated_models import NodeSpec, NodeTypesResponse
+
+          class LocalSpecClient:
+              def __init__(self):
+                  self.spec_version = SPEC_VERSION
+
+              def get_node_type(self, name):
+                  if name not in NODE_SPECS:
+                      raise KeyError(f"Unknown local Dograh demo node type: {name}")
+                  return NodeSpec.model_validate(NODE_SPECS[name])
+
+              def list_node_types(self):
+                  return NodeTypesResponse(
+                      spec_version=self.spec_version,
+                      node_types=[
+                          NodeSpec.model_validate(NODE_SPECS[name])
+                          for name in sorted(NODE_SPECS)
+                      ],
+                  )
+
+          client = LocalSpecClient()
+          workflow = Workflow(client=client, name="phala_cloud_no_secret_demo")
+          greeting = workflow.add(
+              type="startCall",
+              name="greeting",
+              prompt="Greet the caller and explain this is a local Dograh SDK verifier.",
+              greeting_type="text",
+              greeting="Hello, this is the Dograh SDK smoke test running on Phala Cloud.",
+              position=(0, 0),
+          )
+          qualify = workflow.add(
+              type="agentNode",
+              name="qualify",
+              prompt=(
+                  "Ask one deterministic question about the deployment target, "
+                  "then continue to the closing node. Do not call external tools."
+              ),
+              tool_uuids=[],
+              document_uuids=[],
+              position=(320, 0),
+          )
+          done = workflow.add(
+              type="endCall",
+              name="done",
+              prompt="Thank the caller and end the verification call.",
+              position=(640, 0),
+          )
+          workflow.edge(
+              greeting,
+              qualify,
+              label="ready",
+              condition="The greeting has finished.",
+          )
+          workflow.edge(
+              qualify,
+              done,
+              label="verified",
+              condition="The local SDK workflow builder completed successfully.",
+          )
+
+          payload = workflow.to_json()
+          roundtrip = Workflow.from_json(payload, client=client, name=workflow.name)
+          roundtrip_payload = roundtrip.to_json()
+          node_types = [node["type"] for node in payload["nodes"]]
+          node_names = [node["data"]["name"] for node in payload["nodes"]]
+
+          return {
+              "title": os.environ.get("DOGRAH_DEMO_TITLE", "Phala Cloud Dograh SDK demo"),
+              "workflow_name": workflow.name,
+              "spec_version": client.spec_version,
+              "node_types": node_types,
+              "node_names": node_names,
+              "edge_labels": [edge["data"]["label"] for edge in payload["edges"]],
+              "node_count": len(payload["nodes"]),
+              "edge_count": len(payload["edges"]),
+              "roundtrip_ok": roundtrip_payload == payload,
+              "workflow": payload,
+              "credentials_required": False,
+              "provider_calls": False,
+              "model_downloads": False,
+              "telephony_calls": False,
+          }
+
+
+      IMPORT_STATUS = import_checks()
+      try:
+          DEMO_STATUS = build_demo() if IMPORT_STATUS["import_ok"] else None
+          DEMO_ERROR = None
+      except Exception as exc:
+          DEMO_STATUS = None
+          DEMO_ERROR = f"{type(exc).__name__}: {exc}"
+
+
+      def response_body(path):
+          uptime_seconds = round(time.time() - STARTED_AT, 3)
+          ok = IMPORT_STATUS["import_ok"] and DEMO_STATUS is not None and DEMO_STATUS["roundtrip_ok"]
+
+          if path == "/healthz":
+              return HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE, {
+                  "status": "ok" if ok else "unhealthy",
+                  "uptime_seconds": uptime_seconds,
+                  "dograh_sdk": IMPORT_STATUS,
+                  "demo_error": DEMO_ERROR,
+              }
+
+          if path == "/demo":
+              return HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE, {
+                  "service": "dograh-sdk-local-workflow-demo",
+                  "upstream": "https://github.com/dograh-hq/dograh",
+                  "description": (
+                      "Builds a deterministic Dograh voice workflow with the real "
+                      "dograh-sdk package and local node specs. It does not call "
+                      "LLM, STT, TTS, telephony, browser-auth, or hosted Dograh APIs."
+                  ),
+                  "uptime_seconds": uptime_seconds,
+                  "dograh_sdk": IMPORT_STATUS,
+                  "demo": DEMO_STATUS,
+                  "demo_error": DEMO_ERROR,
+              }
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "dograh-sdk/local-workflow-demo",
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "dograh-hq",
+                          "description": (
+                              "Metadata-only placeholder. The default template "
+                              "does not host or call an LLM, STT, or TTS model."
+                          ),
+                      }
+                  ],
+              }
+
+          if path == "/":
+              return HTTPStatus.OK, {
+                  "service": "dograh-sdk-local-workflow-demo",
+                  "endpoints": ["/healthz", "/demo", "/v1/models"],
+                  "python": sys.version.split()[0],
+                  "platform": platform.platform(),
+                  "dograh_sdk_import_ok": IMPORT_STATUS["import_ok"],
+                  "demo_ok": ok,
+              }
+
+          return HTTPStatus.NOT_FOUND, {
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "dograh-sdk-demo"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+              status, payload = response_body(path)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8000"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "dograh_sdk": IMPORT_STATUS,
+                      "demo_ok": DEMO_STATUS is not None,
+                      "provider_calls": False,
+                      "model_downloads": False,
+                      "telephony_calls": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+
+networks:
+  internal:
+    driver: bridge
