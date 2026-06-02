@@ -1,0 +1,384 @@
+services:
+  app:
+    image: node:24-bookworm-slim
+    restart: unless-stopped
+    init: true
+    working_dir: /opt/twenty-demo
+    ports:
+      - "8080:8080"
+    environment:
+      APP_PORT: "8080"
+      TWENTY_SDK_VERSION: ${TWENTY_SDK_VERSION:-2.8.0}
+      TWENTY_CLIENT_SDK_VERSION: ${TWENTY_CLIENT_SDK_VERSION:-2.8.0}
+      NODE_ENV: production
+      NPM_CONFIG_AUDIT: "false"
+      NPM_CONFIG_FUND: "false"
+    configs:
+      - source: twenty_demo_server
+        target: /opt/twenty-demo/server.mjs
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        npm install --no-save --omit=dev --no-audit --no-fund "twenty-sdk@$${TWENTY_SDK_VERSION}" "twenty-client-sdk@$${TWENTY_CLIENT_SDK_VERSION}"
+        exec node /opt/twenty-demo/server.mjs
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"const port = process.env.APP_PORT || '8080'; fetch('http://127.0.0.1:' + port + '/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+configs:
+  twenty_demo_server:
+    content: |
+      import { createRequire } from "node:module";
+      import { existsSync, readFileSync } from "node:fs";
+      import http from "node:http";
+      import os from "node:os";
+      import path from "node:path";
+      import process from "node:process";
+
+
+      const STARTED_AT = Date.now();
+      const UPSTREAM_REPO = "https://github.com/twentyhq/twenty";
+      const require = createRequire(import.meta.url);
+
+      const REQUIRED_DEFINE_EXPORTS = [
+        "defineApplication",
+        "defineObject",
+        "defineSkill",
+        "defineAgent",
+        "FieldType",
+        "validateFields",
+      ];
+
+      const SAMPLE_CRM_STATE = {
+        companies: [
+          {
+            name: "Acme Privacy Labs",
+            domain: "acme.example",
+            employees: 84,
+            segment: "AI infrastructure",
+          },
+        ],
+        opportunities: [
+          {
+            name: "Confidential CRM rollout",
+            company: "Acme Privacy Labs",
+            stage: "Qualified",
+            amount_usd: 120000,
+            owner: "Demo AE",
+          },
+        ],
+        tasks: [
+          {
+            title: "Prepare self-hosting checklist",
+            due_in_days: 3,
+            related_to: "Confidential CRM rollout",
+          },
+        ],
+      };
+
+
+      function findPackageInfo(exportPath) {
+        const resolved = require.resolve(exportPath);
+        let dir = path.dirname(resolved);
+        const root = path.parse(dir).root;
+
+        while (dir !== root) {
+          const candidate = path.join(dir, "package.json");
+          if (existsSync(candidate)) {
+            const packageJson = JSON.parse(readFileSync(candidate, "utf8"));
+            return {
+              name: packageJson.name,
+              version: packageJson.version,
+              license: packageJson.license,
+              export_path: exportPath,
+              resolved_from: resolved,
+              exported_paths: Object.keys(packageJson.exports || {}),
+            };
+          }
+          dir = path.dirname(dir);
+        }
+
+        throw new Error("Unable to locate package.json for " + exportPath);
+      }
+
+
+      function deterministicSummary() {
+        const company = SAMPLE_CRM_STATE.companies[0];
+        const opportunity = SAMPLE_CRM_STATE.opportunities[0];
+        const task = SAMPLE_CRM_STATE.tasks[0];
+
+        return {
+          headline: opportunity.company + " has a " + opportunity.stage.toLowerCase() + " opportunity worth $" + opportunity.amount_usd + ".",
+          next_action: task.title + " in " + task.due_in_days + " days.",
+          crm_health: "ready-for-follow-up",
+          external_calls: 0,
+          model_calls: 0,
+          facts_used: {
+            company: company.name,
+            segment: company.segment,
+            opportunity: opportunity.name,
+            owner: opportunity.owner,
+          },
+        };
+      }
+
+
+      async function loadTwentyStatus() {
+        const status = {
+          ok: false,
+          upstream: UPSTREAM_REPO,
+          requested_versions: {
+            twenty_sdk: process.env.TWENTY_SDK_VERSION || "2.8.0",
+            twenty_client_sdk: process.env.TWENTY_CLIENT_SDK_VERSION || "2.8.0",
+          },
+          packages: {},
+          imports: {},
+          definitions: {},
+          client_sdk: {},
+          error: null,
+        };
+
+        try {
+          const define = await import("twenty-sdk/define");
+          const core = await import("twenty-client-sdk/core");
+          const metadata = await import("twenty-client-sdk/metadata");
+
+          status.packages.twenty_sdk = findPackageInfo("twenty-sdk/define");
+          status.packages.twenty_client_sdk = findPackageInfo("twenty-client-sdk/core");
+
+          for (const name of REQUIRED_DEFINE_EXPORTS) {
+            status.imports[name] = Object.prototype.hasOwnProperty.call(define, name);
+          }
+
+          const objectUniversalIdentifier = "42c51336-34cf-4637-9e1c-f9e1dbf32001";
+          const nameFieldUniversalIdentifier = "42c51336-34cf-4637-9e1c-f9e1dbf32002";
+          const statusFieldUniversalIdentifier = "42c51336-34cf-4637-9e1c-f9e1dbf32003";
+
+          const application = define.defineApplication({
+            universalIdentifier: "42c51336-34cf-4637-9e1c-f9e1dbf32000",
+            displayName: "Twenty Phala CRM verifier",
+            description: "A local deterministic Twenty SDK verifier for Phala Cloud.",
+            author: "twentyhq",
+            category: "AI Apps & Workflows",
+            websiteUrl: "https://twenty.com",
+            issueReportUrl: "https://github.com/twentyhq/twenty/issues",
+          });
+
+          const crmObject = define.defineObject({
+            universalIdentifier: objectUniversalIdentifier,
+            nameSingular: "phalaDeal",
+            namePlural: "phalaDeals",
+            labelSingular: "Phala Deal",
+            labelPlural: "Phala Deals",
+            description: "A deterministic CRM object for local Twenty SDK verification.",
+            icon: "IconBriefcase",
+            labelIdentifierFieldMetadataUniversalIdentifier: nameFieldUniversalIdentifier,
+            fields: [
+              {
+                universalIdentifier: nameFieldUniversalIdentifier,
+                name: "name",
+                type: define.FieldType.TEXT,
+                label: "Name",
+                description: "Deal name.",
+                icon: "IconAbc",
+              },
+              {
+                universalIdentifier: statusFieldUniversalIdentifier,
+                name: "status",
+                type: define.FieldType.SELECT,
+                label: "Status",
+                description: "Local deterministic pipeline status.",
+                icon: "IconProgress",
+                defaultValue: "'QUALIFIED'",
+                options: [
+                  { value: "NEW", label: "New", position: 0, color: "blue" },
+                  { value: "QUALIFIED", label: "Qualified", position: 1, color: "green" },
+                  { value: "WON", label: "Won", position: 2, color: "purple" },
+                ],
+              },
+            ],
+          });
+
+          const skill = define.defineSkill({
+            universalIdentifier: "42c51336-34cf-4637-9e1c-f9e1dbf32004",
+            name: "crm-summary",
+            label: "CRM Summary",
+            description: "Summarize CRM records from structured fields.",
+            icon: "IconBrain",
+            content: "Return a concise CRM summary from provided structured fields. Do not call external services.",
+          });
+
+          const agent = define.defineAgent({
+            universalIdentifier: "42c51336-34cf-4637-9e1c-f9e1dbf32005",
+            name: "sales-assistant",
+            label: "Sales Assistant",
+            description: "A manifest-only sales assistant definition for local verification.",
+            icon: "IconRobot",
+            prompt: "Use CRM fields to draft deterministic next-step recommendations. Do not call external tools.",
+          });
+
+          const fieldErrors = define.validateFields(crmObject.config.fields);
+          const metadataSchemaKeys = Object.keys(metadata.MetadataSchema || {});
+
+          status.definitions = {
+            application,
+            object: crmObject,
+            skill,
+            agent,
+            field_errors: fieldErrors,
+          };
+          status.client_sdk = {
+            core_exports: Object.keys(core).sort(),
+            metadata_schema_enum_count: metadataSchemaKeys.filter((key) => key.startsWith("enum")).length,
+            metadata_schema_sample: metadataSchemaKeys.slice(0, 12),
+          };
+          status.ok = (
+            Object.values(status.imports).every(Boolean) &&
+            application.success &&
+            crmObject.success &&
+            skill.success &&
+            agent.success &&
+            fieldErrors.length === 0 &&
+            status.packages.twenty_sdk.version === status.requested_versions.twenty_sdk &&
+            status.packages.twenty_client_sdk.version === status.requested_versions.twenty_client_sdk
+          );
+        } catch (error) {
+          status.error = error.name + ": " + error.message;
+        }
+
+        return status;
+      }
+
+
+      const TWENTY_STATUS = await loadTwentyStatus();
+
+
+      function basePayload() {
+        return {
+          service: "twenty-sdk-verifier",
+          upstream: UPSTREAM_REPO,
+          python_required: false,
+          node: process.version,
+          platform: os.type() + " " + os.release() + " " + os.arch(),
+          uptime_seconds: Number(((Date.now() - STARTED_AT) / 1000).toFixed(3)),
+          twenty: TWENTY_STATUS,
+        };
+      }
+
+
+      function responseForPath(pathname) {
+        if (pathname === "/healthz") {
+          const payload = basePayload();
+          payload.status = TWENTY_STATUS.ok ? "ready" : "import_failed";
+          payload.ok = TWENTY_STATUS.ok;
+          return [TWENTY_STATUS.ok ? 200 : 503, payload];
+        }
+
+        if (pathname === "/demo") {
+          const payload = basePayload();
+          payload.ok = TWENTY_STATUS.ok;
+          payload.credentials_required = false;
+          payload.browser_auth_required = false;
+          payload.external_provider_calls = false;
+          payload.model_downloads = false;
+          payload.demo = {
+            sdk_exercise: "defineApplication, defineObject, defineSkill, defineAgent, validateFields, and twenty-client-sdk metadata import",
+            sample_crm_state: SAMPLE_CRM_STATE,
+            deterministic_summary: deterministicSummary(),
+            validated_manifests: TWENTY_STATUS.definitions,
+          };
+          return [TWENTY_STATUS.ok ? 200 : 503, payload];
+        }
+
+        if (pathname === "/v1/models") {
+          return [200, {
+            object: "list",
+            data: [
+              {
+                id: "twenty-sdk-local-verifier",
+                object: "model",
+                created: 0,
+                owned_by: "twentyhq",
+                description: "OpenAI-style metadata endpoint for smoke checks. This template does not host or call an LLM.",
+              },
+            ],
+          }];
+        }
+
+        if (pathname === "/upstream") {
+          return [200, {
+            upstream_repo: UPSTREAM_REPO,
+            upstream_docs: "https://docs.twenty.com",
+            self_host_docs: "https://docs.twenty.com/developers/self-host/capabilities/docker-compose",
+            sdk_docs: "https://docs.twenty.com/developers/extend/apps/getting-started",
+            packages: TWENTY_STATUS.packages,
+            production_note: "The full Twenty CRM server needs Postgres, Redis, SERVER_URL, ENCRYPTION_KEY, and a durable Postgres password. This verifier intentionally avoids that production path.",
+          }];
+        }
+
+        if (pathname === "/") {
+          return [200, {
+            service: "twenty-sdk-verifier",
+            ok: TWENTY_STATUS.ok,
+            endpoints: ["/healthz", "/demo", "/v1/models", "/upstream"],
+          }];
+        }
+
+        return [404, {
+          ok: false,
+          error: "not_found",
+          endpoints: ["/healthz", "/demo", "/v1/models", "/upstream"],
+        }];
+      }
+
+
+      function sendJson(response, statusCode, payload) {
+        const body = JSON.stringify(payload, null, 2);
+        response.writeHead(statusCode, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Content-Length": Buffer.byteLength(body),
+          "X-Content-Type-Options": "nosniff",
+        });
+        response.end(body);
+      }
+
+
+      const server = http.createServer((request, response) => {
+        const requestUrl = new URL(request.url || "/", "http://localhost");
+
+        if (request.method !== "GET") {
+          sendJson(response, 405, {
+            ok: false,
+            error: "method_not_allowed",
+            allowed_methods: ["GET"],
+          });
+          return;
+        }
+
+        const pathname = requestUrl.pathname.replace(/\/+$/, "") || "/";
+        const [statusCode, payload] = responseForPath(pathname);
+        sendJson(response, statusCode, payload);
+      });
+
+      const port = Number.parseInt(process.env.APP_PORT || "8080", 10);
+      server.listen(port, "0.0.0.0", () => {
+        console.log(JSON.stringify({
+          event: "startup",
+          port,
+          ok: TWENTY_STATUS.ok,
+          upstream: UPSTREAM_REPO,
+          packages: TWENTY_STATUS.packages,
+          external_provider_calls: false,
+          model_downloads: false,
+        }));
+      });

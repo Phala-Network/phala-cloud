@@ -4506,5 +4506,33 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools"]
+  },
+{
+    "id": "twenty",
+    "name": "twentyhq/twenty",
+    "description": "The open alternative to Salesforce, designed for AI.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/twenty",
+    "author": "twentyhq",
+    "icon": "twenty.svg",
+    "envs": [
+      {
+        "key": "TWENTY_SDK_VERSION",
+        "required": false,
+        "default": "2.8.0",
+        "description": "Version of the twenty-sdk NPM package installed by the local verifier at container startup."
+      },
+      {
+        "key": "TWENTY_CLIENT_SDK_VERSION",
+        "required": false,
+        "default": "2.8.0",
+        "description": "Version of the twenty-client-sdk NPM package installed by the local verifier at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["Business Apps", "Web Apps", "Automation"]
   }
 ]
