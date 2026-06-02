@@ -4872,5 +4872,27 @@
     "diskSize": 10
   },
   "tags": ["Media & Design", "AI Agents", "Developer Tools"]
-}
+},
+{
+    "id": "financial-services",
+    "name": "anthropics/financial-services",
+    "description": "Claude financial-services reference agents, skills, commands, connectors, and managed-agent cookbooks. This CPU-safe HTTP verifier downloads the real upstream source artifact and exposes deterministic inventory endpoints without Anthropic credentials, MCP provider calls, browser auth, model downloads, or GPU.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/financial-services",
+    "author": "anthropics",
+    "icon": "financial-services.png",
+    "envs": [
+      {
+        "key": "FINANCIAL_SERVICES_REF",
+        "required": false,
+        "default": "120a31dcede4affa1d771cbf286a63ee331f92a4",
+        "description": "Upstream git commit, branch, or tag used to download the anthropics/financial-services source tarball at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["Business Apps", "AI Agents", "Data & Storage"]
+  }
 ]
