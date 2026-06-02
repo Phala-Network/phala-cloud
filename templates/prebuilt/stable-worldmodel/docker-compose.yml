@@ -1,0 +1,429 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.11-bookworm-slim
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8000"
+    environment:
+      APP_PORT: "8000"
+      STABLE_WORLDMODEL_VERSION: ${STABLE_WORLDMODEL_VERSION:-0.1.0}
+      PYTORCH_CPU_VERSION: ${PYTORCH_CPU_VERSION:-2.7.1+cpu}
+      TORCHVISION_CPU_VERSION: ${TORCHVISION_CPU_VERSION:-0.22.1+cpu}
+      OPENCV_PYTHON_HEADLESS_VERSION: ${OPENCV_PYTHON_HEADLESS_VERSION:-4.12.0.88}
+      IMAGEIO_VERSION: ${IMAGEIO_VERSION:-2.37.0}
+      CUDA_VISIBLE_DEVICES: ""
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      STABLEWM_HOME: /tmp/stable_worldmodel
+      WANDB_DISABLED: "true"
+      WANDB_MODE: offline
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      UV_SYSTEM_PYTHON: "1"
+    configs:
+      - source: stable_worldmodel_demo_app
+        target: /opt/stable-worldmodel-demo/main.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache --index-url https://download.pytorch.org/whl/cpu "torch==$${PYTORCH_CPU_VERSION}" "torchvision==$${TORCHVISION_CPU_VERSION}"
+        uv pip install --system --no-cache "stable-worldmodel==$${STABLE_WORLDMODEL_VERSION}" "opencv-python-headless==$${OPENCV_PYTHON_HEADLESS_VERSION}" "imageio==$${IMAGEIO_VERSION}"
+        exec python /opt/stable-worldmodel-demo/main.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8000'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+          reverse_proxy app:8000
+      }
+
+  stable_worldmodel_demo_app:
+    content: |
+      import contextlib
+      import importlib
+      import importlib.metadata
+      import io
+      import json
+      import os
+      import platform
+      import subprocess
+      import sys
+      import time
+      import warnings
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+
+      SERVICE = "stable-worldmodel-demo"
+      PACKAGE_NAME = "stable-worldmodel"
+      MODULE_NAME = "stable_worldmodel"
+      UPSTREAM = "https://github.com/galilai-group/stable-worldmodel"
+      STARTED_AT = time.time()
+
+
+      def package_version(name):
+          try:
+              return importlib.metadata.version(name)
+          except Exception as exc:
+              return f"unavailable: {type(exc).__name__}: {exc}"
+
+
+      def runtime_flags():
+          return {
+              "credentials_required": False,
+              "provider_api_calls": False,
+              "model_downloads": False,
+              "checkpoint_downloads": False,
+              "checkpoint_loaded": False,
+              "dataset_downloads": False,
+              "environment_rollouts": False,
+              "training_started": False,
+              "evaluation_started": False,
+              "gpu_or_cuda_required": False,
+          }
+
+
+      def import_package_status():
+          result = {
+              "package": PACKAGE_NAME,
+              "distribution_version": package_version(PACKAGE_NAME),
+              "module_version": None,
+              "import_ok": False,
+              "checks": {},
+              "environment_registry": {},
+              "dependencies": {},
+              "error": None,
+          }
+
+          try:
+              warnings.filterwarnings(
+                  "ignore",
+                  message="ale-py not found.*",
+                  category=UserWarning,
+              )
+              swm = importlib.import_module(MODULE_NAME)
+              torch = importlib.import_module("torch")
+              torchvision = importlib.import_module("torchvision")
+              numpy = importlib.import_module("numpy")
+              cv2 = importlib.import_module("cv2")
+              imageio = importlib.import_module("imageio")
+
+              from stable_worldmodel.policy import PlanConfig
+              from stable_worldmodel.solver import CEMSolver
+
+              worlds = sorted(getattr(swm.envs, "WORLDS", []))
+              result["module_version"] = getattr(swm, "__version__", None)
+              result["environment_registry"] = {
+                  "registered_worlds": len(worlds),
+                  "sample_worlds": worlds[:8],
+                  "rollouts_started": False,
+              }
+              result["dependencies"] = {
+                  "torch": getattr(torch, "__version__", None),
+                  "torchvision": getattr(torchvision, "__version__", None),
+                  "numpy": getattr(numpy, "__version__", None),
+                  "opencv_python": getattr(cv2, "__version__", None),
+                  "imageio": getattr(imageio, "__version__", None),
+                  "lancedb": package_version("lancedb"),
+                  "pyarrow": package_version("pyarrow"),
+              }
+              result["checks"] = {
+                  "top_level_import": swm is not None,
+                  "world_api_present": hasattr(swm, "World"),
+                  "spaces_module_present": hasattr(swm, "spaces"),
+                  "policy_plan_config_present": isinstance(PlanConfig, type),
+                  "cem_solver_present": isinstance(CEMSolver, type),
+                  "world_registry_nonempty": len(worlds) > 0,
+                  "torch_cuda_available": bool(torch.cuda.is_available()),
+                  "torch_cuda_required": False,
+              }
+              result["import_ok"] = (
+                  result["checks"]["top_level_import"]
+                  and result["checks"]["world_api_present"]
+                  and result["checks"]["spaces_module_present"]
+                  and result["checks"]["policy_plan_config_present"]
+                  and result["checks"]["cem_solver_present"]
+                  and result["checks"]["world_registry_nonempty"]
+                  and not result["checks"]["torch_cuda_required"]
+              )
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+
+          return result
+
+
+      IMPORT_STATUS = import_package_status()
+
+
+      def run_demo_checks():
+          if not IMPORT_STATUS["import_ok"]:
+              return {
+                  "ok": False,
+                  "error": IMPORT_STATUS["error"] or "stable-worldmodel import checks failed",
+                  "runtime": runtime_flags(),
+              }
+
+          result = {
+              "ok": False,
+              "checks": {},
+              "spaces_demo": None,
+              "solver_demo": None,
+              "cli_demo": None,
+              "runtime": runtime_flags(),
+              "error": None,
+          }
+
+          try:
+              import numpy as np
+              import stable_worldmodel as swm
+              import torch
+              from gymnasium import spaces as gym_spaces
+              from stable_worldmodel.policy import PlanConfig
+              from stable_worldmodel.solver import CEMSolver
+
+              discrete = swm.spaces.Discrete(
+                  6,
+                  init_value=2,
+                  constrain_fn=lambda value: int(value) % 2 == 0,
+              )
+              rgb = swm.spaces.RGBBox(
+                  init_value=np.array([64, 128, 192], dtype=np.uint8),
+              )
+              variation_space = swm.spaces.Dict(
+                  {
+                      "mode": discrete,
+                      "color": rgb,
+                  },
+                  sampling_order=["mode", "color"],
+              )
+              variation_space.seed(1234)
+              discrete_sample = discrete.sample(max_tries=50)
+
+              class QuadraticCostModel:
+                  def get_cost(self, info_dict, action_candidates):
+                      return action_candidates.pow(2).sum(dim=(-1, -2))
+
+              solver = CEMSolver(
+                  model=QuadraticCostModel(),
+                  batch_size=1,
+                  num_samples=12,
+                  n_steps=2,
+                  topk=4,
+                  seed=7,
+              )
+              action_space = gym_spaces.Box(
+                  low=-1,
+                  high=1,
+                  shape=(1, 2),
+                  dtype=np.float32,
+              )
+              plan_config = PlanConfig(horizon=3, receding_horizon=1)
+              solver.configure(
+                  action_space=action_space,
+                  n_envs=1,
+                  config=plan_config,
+              )
+              stdout_buffer = io.StringIO()
+              with contextlib.redirect_stdout(stdout_buffer):
+                  solver_output = solver({"state": torch.zeros(1, 1, 2)})
+              actions = solver_output["actions"].detach().cpu().numpy()
+
+              cli_env = dict(os.environ)
+              cli_env["PYTHONWARNINGS"] = "ignore:ale-py not found:UserWarning"
+              cli = subprocess.run(
+                  [sys.executable, "-m", "stable_worldmodel.cli", "--version"],
+                  env=cli_env,
+                  text=True,
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.PIPE,
+                  timeout=30,
+                  check=False,
+              )
+
+              result["spaces_demo"] = {
+                  "variation_names": variation_space.names(),
+                  "sampling_order": variation_space.sampling_order,
+                  "initial_value": {
+                      "mode": int(variation_space.init_value["mode"]),
+                      "color": variation_space.init_value["color"].tolist(),
+                  },
+                  "sampled_even_mode": int(discrete_sample),
+                  "check_ok": bool(variation_space.check(debug=True)),
+              }
+              result["solver_demo"] = {
+                  "solver": "CEMSolver",
+                  "cost_model": "local quadratic cost fixture",
+                  "plan_config": {
+                      "horizon": plan_config.horizon,
+                      "receding_horizon": plan_config.receding_horizon,
+                      "history_len": plan_config.history_len,
+                      "action_block": plan_config.action_block,
+                      "plan_len": plan_config.plan_len,
+                  },
+                  "action_shape": list(actions.shape),
+                  "actions": actions.round(4).tolist(),
+                  "costs": [float(value) for value in solver_output["costs"]],
+                  "stdout": stdout_buffer.getvalue().strip(),
+              }
+              result["cli_demo"] = {
+                  "command": "python -m stable_worldmodel.cli --version",
+                  "returncode": cli.returncode,
+                  "stdout": cli.stdout.strip(),
+                  "stderr": cli.stderr.strip(),
+              }
+              result["checks"] = {
+                  "spaces_check_ok": result["spaces_demo"]["check_ok"],
+                  "solver_actions_shape_ok": result["solver_demo"]["action_shape"] == [1, 3, 2],
+                  "cli_version_ok": cli.returncode == 0 and package_version(PACKAGE_NAME) in cli.stdout,
+                  "no_cuda_required": not result["runtime"]["gpu_or_cuda_required"],
+                  "no_remote_runtime_work": not any(result["runtime"].values()),
+              }
+              result["ok"] = all(result["checks"].values())
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+
+          return result
+
+
+      def base_payload():
+          return {
+              "service": SERVICE,
+              "upstream": UPSTREAM,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "package": IMPORT_STATUS,
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "stable-worldmodel-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              path = urlparse(self.path).path
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  payload.update(
+                      {
+                          "ok": IMPORT_STATUS["import_ok"],
+                          "status": "ready" if IMPORT_STATUS["import_ok"] else "unhealthy",
+                          "runtime": runtime_flags(),
+                          "endpoints": ["/healthz", "/demo", "/v1/models"],
+                      }
+                  )
+                  status = HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+                  self.respond_json(status, payload)
+                  return
+
+              if path == "/demo":
+                  demo = run_demo_checks()
+                  payload = base_payload()
+                  payload.update(
+                      {
+                          "ok": demo["ok"],
+                          "name": "stable-worldmodel local package and solver verifier",
+                          "description": (
+                              "Installs and imports the real stable-worldmodel package, "
+                              "checks local variation-space primitives, runs a tiny CEM "
+                              "solver against a deterministic in-memory cost fixture, "
+                              "and verifies the CLI version without datasets, model "
+                              "weights, provider calls, or environment rollouts."
+                          ),
+                          "demo": demo,
+                      }
+                  )
+                  status = HTTPStatus.OK if demo["ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+                  self.respond_json(status, payload)
+                  return
+
+              if path == "/v1/models":
+                  self.respond_json(
+                      HTTPStatus.OK,
+                      {
+                          "object": "list",
+                          "data": [
+                              {
+                                  "id": "stable-worldmodel/no-model-download-demo",
+                                  "object": "model",
+                                  "created": 0,
+                                  "owned_by": "galilai-group",
+                                  "description": (
+                                      "Metadata placeholder for the CPU-safe stable-worldmodel "
+                                      "verifier. The default template does not host, download, "
+                                      "train, evaluate, or load a world model."
+                                  ),
+                              }
+                          ],
+                      },
+                  )
+                  return
+
+              self.respond_json(
+                  HTTPStatus.NOT_FOUND,
+                  {
+                      "error": "not_found",
+                      "endpoints": ["/healthz", "/demo", "/v1/models"],
+                  },
+              )
+
+
+      def main():
+          port = int(os.environ.get("APP_PORT", "8000"))
+          server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+          print(f"{SERVICE} listening on 0.0.0.0:{port}", flush=True)
+          server.serve_forever()
+
+
+      if __name__ == "__main__":
+          main()
+
+networks:
+  internal:
+    driver: bridge
