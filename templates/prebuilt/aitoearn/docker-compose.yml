@@ -1,0 +1,504 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: ${PORT:-8080}
+      AITOEARN_REF: ${AITOEARN_REF:-74e884f0e250b902097c355bf8fb55a9ed2c79a5}
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - aitoearn-cache:/opt/aitoearn
+    configs:
+      - source: aitoearn_bootstrap
+        target: /opt/aitoearn-demo/bootstrap.py
+        mode: 0444
+      - source: aitoearn_server
+        target: /opt/aitoearn-demo/server.py
+        mode: 0444
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        python /opt/aitoearn-demo/bootstrap.py
+        exec python /opt/aitoearn-demo/server.py
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\", \"8080\")}/healthz', timeout=5).read()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    security_opt:
+      - no-new-privileges:true
+
+configs:
+  aitoearn_bootstrap:
+    content: |
+      import io
+      import json
+      import os
+      import shutil
+      import tarfile
+      import time
+      import urllib.parse
+      import urllib.request
+      from datetime import datetime, timezone
+      from pathlib import Path
+
+
+      ROOT = Path("/opt/aitoearn")
+      SOURCE_DIR = ROOT / "source"
+      STATE_FILE = ROOT / "state.json"
+      REF_FILE = ROOT / ".source-ref"
+      UPSTREAM = "https://github.com/yikart/AiToEarn"
+      DEFAULT_REF = "74e884f0e250b902097c355bf8fb55a9ed2c79a5"
+
+      REQUIRED_FILES = [
+          "README_EN.md",
+          "DOCKER_DEPLOYMENT_EN.md",
+          "docker-compose.yml",
+          "project/aitoearn-backend/package.json",
+          "project/aitoearn-backend/apps/aitoearn-ai/package.json",
+          "project/aitoearn-backend/apps/aitoearn-server/package.json",
+          "project/aitoearn-web/package.json",
+          "project/aitoearn-electron/package.json",
+          "project/aitoearn-backend/libs/aitoearn-ai-shared/src/dtos/chat.dto.ts",
+          "project/aitoearn-backend/libs/aitoearn-ai-shared/src/dtos/draft-generation.dto.ts",
+      ]
+
+
+      def log(event, **fields):
+          print(json.dumps({"event": event, **fields}, sort_keys=True), flush=True)
+
+
+      def current_ref():
+          return os.environ.get("AITOEARN_REF", DEFAULT_REF).strip() or DEFAULT_REF
+
+
+      def source_is_ready(ref):
+          return (
+              REF_FILE.is_file()
+              and REF_FILE.read_text(encoding="utf-8").strip() == ref
+              and all(SOURCE_DIR.joinpath(path).is_file() for path in REQUIRED_FILES)
+          )
+
+
+      def safe_extract(data, destination):
+          tmp_dir = ROOT / ".source-tmp"
+          shutil.rmtree(tmp_dir, ignore_errors=True)
+          tmp_dir.mkdir(parents=True, exist_ok=True)
+          top_dir = None
+
+          with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+              for member in archive.getmembers():
+                  parts = Path(member.name).parts
+                  if len(parts) < 2:
+                      if parts:
+                          top_dir = top_dir or parts[0]
+                      continue
+
+                  top_dir = top_dir or parts[0]
+                  relative = Path(*parts[1:])
+                  if relative.is_absolute() or ".." in relative.parts:
+                      raise RuntimeError(f"unsafe tar path: {member.name}")
+
+                  target = tmp_dir / relative
+                  if member.isdir():
+                      target.mkdir(parents=True, exist_ok=True)
+                  elif member.isfile():
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      with archive.extractfile(member) as src, open(target, "wb") as dst:
+                          if src is None:
+                              raise RuntimeError(f"cannot read tar member: {member.name}")
+                          shutil.copyfileobj(src, dst)
+                      if member.mode:
+                          target.chmod(member.mode & 0o777)
+
+          shutil.rmtree(destination, ignore_errors=True)
+          tmp_dir.rename(destination)
+          return top_dir
+
+
+      def download_source(ref):
+          encoded_ref = urllib.parse.quote(ref, safe="")
+          url = f"https://api.github.com/repos/yikart/AiToEarn/tarball/{encoded_ref}"
+          request = urllib.request.Request(url, headers={"User-Agent": "phala-cloud-aitoearn-template/1.0"})
+          started = time.time()
+          log("download_source", ref=ref, url=url)
+          with urllib.request.urlopen(request, timeout=120) as response:
+              data = response.read()
+          top_dir = safe_extract(data, SOURCE_DIR)
+          REF_FILE.write_text(ref + "\n", encoding="utf-8")
+          return {
+              "source_ref": ref,
+              "source_url": url,
+              "source_tree": top_dir,
+              "downloaded_bytes": len(data),
+              "download_seconds": round(time.time() - started, 3),
+          }
+
+
+      def main():
+          ROOT.mkdir(parents=True, exist_ok=True)
+          ref = current_ref()
+          state = {}
+          if STATE_FILE.is_file():
+              try:
+                  state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+              except Exception:
+                  state = {}
+
+          if source_is_ready(ref):
+              log("source_cached", ref=ref, source_dir=str(SOURCE_DIR))
+              state.update({"source_ref": ref, "source_dir": str(SOURCE_DIR)})
+          else:
+              state.update(download_source(ref))
+
+          state.update({
+              "upstream": UPSTREAM,
+              "source_dir": str(SOURCE_DIR),
+              "bootstrapped_at": datetime.now(timezone.utc).isoformat(),
+          })
+          STATE_FILE.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+          log("bootstrap_complete", ref=ref, source_dir=str(SOURCE_DIR))
+
+
+      if __name__ == "__main__":
+          main()
+
+  aitoearn_server:
+    content: |
+      import json
+      import os
+      import platform
+      import re
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      ROOT = Path("/opt/aitoearn")
+      SOURCE_DIR = ROOT / "source"
+      STATE_FILE = ROOT / "state.json"
+      UPSTREAM = "https://github.com/yikart/AiToEarn"
+      PUBLIC_ENDPOINTS = ["/healthz", "/demo", "/v1/models", "/upstream"]
+
+      REQUIRED_FILES = [
+          "README_EN.md",
+          "DOCKER_DEPLOYMENT_EN.md",
+          "docker-compose.yml",
+          "project/aitoearn-backend/package.json",
+          "project/aitoearn-backend/apps/aitoearn-ai/package.json",
+          "project/aitoearn-backend/apps/aitoearn-server/package.json",
+          "project/aitoearn-web/package.json",
+          "project/aitoearn-electron/package.json",
+          "project/aitoearn-backend/libs/aitoearn-ai-shared/src/dtos/chat.dto.ts",
+          "project/aitoearn-backend/libs/aitoearn-ai-shared/src/dtos/draft-generation.dto.ts",
+      ]
+
+
+      def read_text(relative_path):
+          return SOURCE_DIR.joinpath(relative_path).read_text(encoding="utf-8", errors="replace")
+
+
+      def load_json(relative_path):
+          try:
+              return json.loads(read_text(relative_path))
+          except Exception as exc:
+              return {"error": f"{type(exc).__name__}: {exc}"}
+
+
+      def load_state():
+          try:
+              return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+          except Exception as exc:
+              return {"error": f"{type(exc).__name__}: {exc}"}
+
+
+      def package_summary(relative_path):
+          data = load_json(relative_path)
+          dependencies = data.get("dependencies") or {}
+          dev_dependencies = data.get("devDependencies") or {}
+          return {
+              "path": relative_path,
+              "name": data.get("name"),
+              "version": data.get("version"),
+              "private": data.get("private"),
+              "package_manager": data.get("packageManager"),
+              "scripts": sorted((data.get("scripts") or {}).keys())[:12],
+              "dependency_count": len(dependencies),
+              "dev_dependency_count": len(dev_dependencies),
+              "selected_dependencies": {
+                  key: dependencies[key]
+                  for key in sorted(dependencies)
+                  if key in {
+                      "ai",
+                      "axios",
+                      "express",
+                      "next",
+                      "openai",
+                      "react",
+                      "zod",
+                      "@modelcontextprotocol/sdk",
+                      "@nestjs/core",
+                      "@yikart/aitoearn-ai-shared",
+                  }
+              },
+              "error": data.get("error"),
+          }
+
+
+      def supported_channels():
+          text = read_text("README_EN.md")
+          match = re.search(r"Supported Channels:\s*\n([^\n]+)", text)
+          if not match:
+              return []
+          return [item.strip() for item in match.group(1).split(",") if item.strip()]
+
+
+      def official_compose_services():
+          text = read_text("docker-compose.yml")
+          services = []
+          in_services = False
+          for line in text.splitlines():
+              if line.strip() == "services:":
+                  in_services = True
+                  continue
+              if in_services and line and not line.startswith(" "):
+                  break
+              match = re.match(r"^  ([A-Za-z0-9_-]+):\s*$", line)
+              if in_services and match:
+                  services.append(match.group(1))
+          return services
+
+
+      def route_summary():
+          routes = []
+          for source_root in [
+              SOURCE_DIR / "project/aitoearn-backend/apps/aitoearn-ai/src",
+              SOURCE_DIR / "project/aitoearn-backend/apps/aitoearn-server/src",
+          ]:
+              for path in source_root.rglob("*.ts"):
+                  try:
+                      text = path.read_text(encoding="utf-8", errors="replace")
+                  except Exception:
+                      continue
+                  controller_match = re.search(r"@Controller\(([^)]*)\)", text)
+                  if not controller_match:
+                      continue
+                  controller = controller_match.group(1).strip().strip("'\"`") or "/"
+                  for method_match in re.finditer(r"@(Get|Post|Put|Patch|Delete|All)\(([^)]*)\)", text):
+                      route_path = method_match.group(2).strip().strip("'\"`") or "/"
+                      routes.append({
+                          "method": method_match.group(1).upper(),
+                          "controller": controller,
+                          "path": route_path,
+                          "source": str(path.relative_to(SOURCE_DIR)),
+                      })
+          routes.sort(key=lambda item: (item["controller"], item["path"], item["method"]))
+          return {
+              "count": len(routes),
+              "samples": routes[:12],
+          }
+
+
+      def shared_dto_summary():
+          files = [
+              "project/aitoearn-backend/libs/aitoearn-ai-shared/src/dtos/chat.dto.ts",
+              "project/aitoearn-backend/libs/aitoearn-ai-shared/src/dtos/draft-generation.dto.ts",
+              "project/aitoearn-backend/libs/aitoearn-ai-shared/src/vos/models-config.vo.ts",
+              "project/aitoearn-backend/libs/aitoearn-server-shared/src/enums/publish.enum.ts",
+              "project/aitoearn-backend/libs/aitoearn-server-shared/src/enums/content.enum.ts",
+          ]
+          result = []
+          for relative_path in files:
+              text = read_text(relative_path)
+              result.append({
+                  "path": relative_path,
+                  "exports": sorted(set(re.findall(r"export (?:const|class|enum|type) ([A-Za-z0-9_]+)", text)))[:12],
+                  "zod_references": len(re.findall(r"\bz\.", text)),
+                  "enum_members": len(re.findall(r"^\s+[A-Za-z0-9_]+\s*=", text, flags=re.MULTILINE)),
+              })
+          return result
+
+
+      def source_checks():
+          files = {path: SOURCE_DIR.joinpath(path).is_file() for path in REQUIRED_FILES}
+          return {
+              "required_files": files,
+              "required_files_ok": all(files.values()),
+              "source_file_count": sum(1 for path in SOURCE_DIR.rglob("*") if path.is_file()),
+          }
+
+
+      def upstream_caveats():
+          compose_text = read_text("docker-compose.yml")
+          readme_text = read_text("README_EN.md")
+          deploy_text = read_text("DOCKER_DEPLOYMENT_EN.md")
+          return {
+              "official_services": official_compose_services(),
+              "full_stack_memory_recommendation": "4GB+ recommended" in deploy_text,
+              "official_compose_uses_host_source_files": "./project/" in compose_text or "./scripts/" in compose_text,
+              "official_compose_default_passwords": "password" in compose_text,
+              "official_compose_placeholder_ai_keys": "sk-placeholder" in compose_text,
+              "api_key_documented_for_relay_mcp_and_docker": "API Key" in readme_text and "RELAY_API_KEY" in deploy_text,
+              "social_oauth_documented": "Third-Party OAuth" in deploy_text,
+          }
+
+
+      def base_payload():
+          checks = source_checks()
+          return {
+              "service": "aitoearn-source-verifier",
+              "ok": checks["required_files_ok"],
+              "upstream": UPSTREAM,
+              "state": load_state(),
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "endpoints": PUBLIC_ENDPOINTS,
+              "source": checks,
+          }
+
+
+      def demo_payload():
+          channels = supported_channels()
+          return {
+              **base_payload(),
+              "description": "Deterministic AiToEarn source verifier; no provider calls or social platform authentication are performed.",
+              "runtime_guards": {
+                  "credentials_required": False,
+                  "llm_provider_calls": False,
+                  "social_platform_calls": False,
+                  "browser_auth": False,
+                  "model_downloaded": False,
+                  "gpu_required": False,
+              },
+              "upstream_caveats": upstream_caveats(),
+              "supported_channels_from_readme": {
+                  "count": len(channels),
+                  "channels": channels,
+              },
+              "packages": [
+                  package_summary("project/aitoearn-backend/package.json"),
+                  package_summary("project/aitoearn-backend/apps/aitoearn-ai/package.json"),
+                  package_summary("project/aitoearn-backend/apps/aitoearn-server/package.json"),
+                  package_summary("project/aitoearn-web/package.json"),
+                  package_summary("project/aitoearn-electron/package.json"),
+              ],
+              "nestjs_routes": route_summary(),
+              "shared_source_primitives": shared_dto_summary(),
+              "deterministic_workflow": [
+                  "download pinned upstream source tarball",
+                  "verify required AiToEarn docs, compose file, package manifests, and shared DTO files",
+                  "extract package metadata, declared dependencies, supported channels, and NestJS route samples",
+                  "return source-level readiness without starting the credentialed production stack",
+              ],
+          }
+
+
+      def models_payload():
+          return {
+              "object": "list",
+              "data": [
+                  {
+                      "id": "aitoearn/no-llm-source-verifier",
+                      "object": "model",
+                      "created": 0,
+                      "owned_by": "yikart",
+                      "description": "Compatibility metadata endpoint. The default template verifies AiToEarn source and does not host or call an AI model.",
+                  }
+              ],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "aitoearn-source-verifier"
+
+          def log_message(self, fmt, *args):
+              print(json.dumps({
+                  "ts": time.time(),
+                  "client": self.client_address[0],
+                  "request": self.requestline,
+                  "message": fmt % args,
+              }), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  status = HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+                  self.respond_json(status, payload)
+                  return
+
+              if path == "/demo":
+                  payload = demo_payload()
+                  status = HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+                  self.respond_json(status, payload)
+                  return
+
+              if path == "/v1/models":
+                  self.respond_json(HTTPStatus.OK, models_payload())
+                  return
+
+              if path == "/upstream":
+                  self.respond_json(HTTPStatus.OK, {
+                      "upstream": UPSTREAM,
+                      "ref": os.environ.get("AITOEARN_REF", ""),
+                      "inspected_docs": [
+                          "README_EN.md",
+                          "DOCKER_DEPLOYMENT_EN.md",
+                          "docker-compose.yml",
+                          "project/aitoearn-backend/package.json",
+                          "project/aitoearn-web/package.json",
+                          "project/aitoearn-electron/package.json",
+                      ],
+                      "source": source_checks(),
+                      "caveats": upstream_caveats(),
+                  })
+                  return
+
+              self.respond_json(HTTPStatus.NOT_FOUND, {
+                  "ok": False,
+                  "error": "not_found",
+                  "endpoints": PUBLIC_ENDPOINTS,
+              })
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("PORT", "8080"))
+          print(json.dumps({
+              "event": "startup",
+              "service": "aitoearn-source-verifier",
+              "port": port,
+              "upstream": UPSTREAM,
+              "source": source_checks(),
+          }, sort_keys=True), flush=True)
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+
+volumes:
+  aitoearn-cache:
