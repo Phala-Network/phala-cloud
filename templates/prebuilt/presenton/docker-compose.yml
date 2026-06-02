@@ -1,0 +1,85 @@
+services:
+  presenton:
+    image: ghcr.io/presenton/presenton:latest
+    restart: unless-stopped
+    init: true
+    expose:
+      - "80"
+    environment:
+      APP_DATA_DIRECTORY: /app_data
+      TEMP_DIRECTORY: /tmp/presenton
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+      MIGRATE_DATABASE_ON_STARTUP: "true"
+      START_OLLAMA: "false"
+      CAN_CHANGE_KEYS: "${CAN_CHANGE_KEYS:-true}"
+      DISABLE_IMAGE_GENERATION: "${DISABLE_IMAGE_GENERATION:-true}"
+      DISABLE_ANONYMOUS_TRACKING: "${DISABLE_ANONYMOUS_TRACKING:-true}"
+      MEM0_ENABLED: "${MEM0_ENABLED:-false}"
+      LITEPARSE_NUM_WORKERS: "${LITEPARSE_NUM_WORKERS:-1}"
+      LITEPARSE_DPI: "${LITEPARSE_DPI:-120}"
+      AUTH_USERNAME: "${AUTH_USERNAME:-}"
+      AUTH_PASSWORD: "${AUTH_PASSWORD:-}"
+    volumes:
+      - presenton_app_data:/app_data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://127.0.0.1/api/v1/auth/status >/dev/null
+      interval: 30s
+      timeout: 10s
+      retries: 8
+      start_period: 180s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      presenton:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+
+          handle /healthz {
+              rewrite * /api/v1/auth/status
+              reverse_proxy presenton:80
+          }
+
+          handle /demo {
+              header Content-Type application/json
+              respond `{"ok":true,"service":"presenton","mode":"no-secret-smoke","upstream":"https://github.com/presenton/presenton","official_image":"ghcr.io/presenton/presenton:latest","default_behavior":{"cpu_only":true,"provider_calls":false,"model_downloads":false,"image_generation_disabled":true,"mem0_disabled":true},"ui":"/","auth_status":"/api/v1/auth/status","production_api":"/api/v1/ppt/presentation/generate","notes":["Open the web UI to create the first admin user or preseed AUTH_USERNAME/AUTH_PASSWORD.","Configure LLM and image providers in the Presenton UI before calling the production generation API."]}` 200
+          }
+
+          handle /v1/models {
+              header Content-Type application/json
+              respond `{"object":"list","data":[{"id":"presenton/no-provider-smoke","object":"model","created":0,"owned_by":"presenton","metadata":{"description":"Metadata-only smoke endpoint. The default template does not host, download, or call a model.","upstream":"https://github.com/presenton/presenton"}}]}` 200
+          }
+
+          handle {
+              reverse_proxy presenton:80
+          }
+      }
+
+volumes:
+  presenton_app_data:
+
+networks:
+  internal:
+    driver: bridge
