@@ -4804,5 +4804,45 @@
       "diskSize": 20
     },
     "tags": ["AI Agents", "Developer Tools"]
-  }
+  },
+{
+  "id": "ccx",
+  "name": "BenedictKing/ccx",
+  "description": "Claude / Codex / Gemini API Proxy - CCX",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/ccx",
+  "author": "BenedictKing",
+  "icon": "ccx.svg",
+  "envs": [
+    {
+      "key": "PROXY_ACCESS_KEY",
+      "required": true,
+      "default": "ccx-demo-proxy-key",
+      "description": "Placeholder client proxy key for CCX /v1/* routes. Replace with a long random value before real use."
+    },
+    {
+      "key": "ADMIN_ACCESS_KEY",
+      "required": true,
+      "default": "ccx-demo-admin-key",
+      "description": "Placeholder admin key for the CCX web UI and /api/* routes. Replace with a long random value before real use."
+    },
+    {
+      "key": "APP_UI_LANGUAGE",
+      "required": false,
+      "default": "en",
+      "description": "CCX web UI language, such as en, id, or zh-CN."
+    },
+    {
+      "key": "LOG_LEVEL",
+      "required": false,
+      "default": "warn",
+      "description": "CCX log level: error, warn, info, or debug."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": ["LLM Inference & Model Serving", "Infrastructure", "Developer Tools"]
+}
 ]

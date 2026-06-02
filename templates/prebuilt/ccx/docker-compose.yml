@@ -1,0 +1,82 @@
+services:
+  ccx:
+    image: crpi-i19l8zl0ugidq97v.cn-hangzhou.personal.cr.aliyuncs.com/bene/ccx:latest
+    restart: unless-stopped
+    init: true
+    expose:
+      - "3000"
+    environment:
+      PORT: "3000"
+      ENV: production
+      ENABLE_WEB_UI: "true"
+      APP_UI_LANGUAGE: ${APP_UI_LANGUAGE:-en}
+      PROXY_ACCESS_KEY: ${PROXY_ACCESS_KEY:-ccx-demo-proxy-key}
+      ADMIN_ACCESS_KEY: ${ADMIN_ACCESS_KEY:-ccx-demo-admin-key}
+      LOG_LEVEL: ${LOG_LEVEL:-warn}
+      ENABLE_REQUEST_LOGS: "false"
+      ENABLE_RESPONSE_LOGS: "false"
+      QUIET_POLLING_LOGS: "true"
+      METRICS_PERSISTENCE_ENABLED: "true"
+    volumes:
+      - ccx_config:/app/.config
+      - ccx_logs:/app/logs
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/health || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      ccx:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+
+          handle /healthz {
+              rewrite * /health
+              reverse_proxy ccx:3000
+          }
+
+          handle /demo {
+              header Content-Type "application/json; charset=utf-8"
+              respond `{"service":"ccx","upstream":"https://github.com/BenedictKing/ccx","description":"CCX API proxy smoke endpoint. The upstream CCX service is running behind this proxy; no external LLM provider calls are made by this endpoint.","endpoints":["/healthz","/demo","/","/health","/v1/models"],"default_provider_calls":false,"credentials_required_for_real_proxy_routes":["PROXY_ACCESS_KEY"],"production_note":"Replace the demo access keys and configure upstream channels in the web UI before routing real traffic."}` 200
+          }
+
+          handle {
+              reverse_proxy ccx:3000
+          }
+      }
+
+volumes:
+  ccx_config:
+  ccx_logs:
+
+networks:
+  internal:
+    driver: bridge
