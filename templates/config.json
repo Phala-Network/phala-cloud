@@ -4844,5 +4844,33 @@
     "diskSize": 10
   },
   "tags": ["LLM Inference & Model Serving", "Infrastructure", "Developer Tools"]
+},
+{
+  "id": "vimax",
+  "name": "HKUDS/ViMax",
+  "description": "ViMax: Agentic Video Generation (Director, Screenwriter, Producer, and Video Generator All-in-One)",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/vimax",
+  "author": "HKUDS",
+  "icon": "vimax.png",
+  "envs": [
+    {
+      "key": "VIMAX_REF",
+      "required": false,
+      "default": "d653f20483907e0aec6e4f20554eca222486294d",
+      "description": "Git branch, tag, or commit downloaded from HKUDS/ViMax at startup. Defaults to the upstream main HEAD inspected for this template."
+    },
+    {
+      "key": "PORT",
+      "required": false,
+      "default": "8080",
+      "description": "HTTP port listened on inside the verifier container."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": ["Media & Design", "AI Agents", "Developer Tools"]
 }
 ]
