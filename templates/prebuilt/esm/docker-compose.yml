@@ -1,0 +1,277 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    ports:
+      - "8080:8080"
+    environment:
+      - ESM_SOURCE_REF=${ESM_SOURCE_REF:-975722d72d20104261b33e2e9cce98f30c031037}
+      - ESM_DEMO_SEQUENCE=${ESM_DEMO_SEQUENCE:-MSKGEELFTGVVPILVELDGDVNGHK}
+      - PIP_DISABLE_PIP_VERSION_CHECK=1
+      - PIP_NO_CACHE_DIR=1
+      - PIP_ROOT_USER_ACTION=ignore
+      - PORT=8080
+      - PYTHONUNBUFFERED=1
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        python -m pip install --no-cache-dir cloudpathlib
+        python -m pip install --no-cache-dir --no-deps "https://github.com/Biohub/esm/archive/$${ESM_SOURCE_REF}.tar.gz"
+        exec python /server.py
+    configs:
+      - source: server_py
+        target: /server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    restart: unless-stopped
+
+configs:
+  server_py:
+    content: |
+      import ast
+      import hashlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path
+      from urllib.parse import parse_qs, urlparse
+
+      STARTED_AT = time.time()
+      SOURCE_REF = os.environ.get("ESM_SOURCE_REF", "unknown")
+      DEFAULT_SEQUENCE = os.environ.get("ESM_DEMO_SEQUENCE", "MSKGEELFTGVVPILVELDGDVNGHK")
+      STANDARD_AA = "ACDEFGHIKLMNPQRSTVWY"
+      IMPORT_ERROR = None
+      PACKAGE = {}
+      SOURCE_CHECKS = {}
+      MODEL_CATALOG = []
+
+      try:
+          import esm
+          from esm.utils.constants import models as model_constants
+          from esm.utils.types import FunctionAnnotation
+
+          api_path = Path(esm.__file__).resolve().parent / "sdk" / "api.py"
+          api_source = api_path.read_text()
+          api_tree = ast.parse(api_source)
+          api_classes = [
+              node.name for node in api_tree.body if isinstance(node, ast.ClassDef)
+          ]
+          api_hash = hashlib.sha256(api_source.encode("utf-8")).hexdigest()
+
+          dist = importlib.metadata.distribution("esm")
+          direct_url = dist.read_text("direct_url.json")
+          if direct_url:
+              direct_url = json.loads(direct_url)
+
+          PACKAGE = {
+              "module": "esm",
+              "module_version": getattr(esm, "__version__", "unknown"),
+              "distribution_version": importlib.metadata.version("esm"),
+              "source_ref": SOURCE_REF,
+              "direct_url": direct_url,
+              "python_requires": ">=3.12,<3.13",
+              "install_mode": "upstream source archive with --no-deps",
+          }
+          SOURCE_CHECKS = {
+              "api_sha256": api_hash,
+              "api_class_count": len(api_classes),
+              "required_api_classes_present": {
+                  "ESMProtein": "ESMProtein" in api_classes,
+                  "GenerationConfig": "GenerationConfig" in api_classes,
+                  "LogitsConfig": "LogitsConfig" in api_classes,
+                  "FoldingConfig": "FoldingConfig" in api_classes,
+              },
+          }
+          MODEL_CATALOG = [
+              {
+                  "name": model_constants.normalize_model_name("esm3-sm-open-v1"),
+                  "alias": "esm3-sm-open-v1",
+                  "locally_supported_by_package": model_constants.model_is_locally_supported(
+                      "esm3-sm-open-v1"
+                  ),
+              },
+              {
+                  "name": model_constants.ESMC_300M,
+                  "alias": "Biohub/ESMC-300M",
+                  "locally_supported_by_package": model_constants.model_is_locally_supported(
+                      model_constants.ESMC_300M
+                  ),
+              },
+              {
+                  "name": model_constants.ESMC_600M,
+                  "alias": "Biohub/ESMC-600M",
+                  "locally_supported_by_package": model_constants.model_is_locally_supported(
+                      model_constants.ESMC_600M
+                  ),
+              },
+              {
+                  "name": model_constants.ESMC_6B,
+                  "alias": "Biohub/ESMC-6B",
+                  "locally_supported_by_package": model_constants.model_is_locally_supported(
+                      model_constants.ESMC_6B
+                  ),
+              },
+              {
+                  "name": model_constants.ESMFOLD2_FAST,
+                  "alias": "Biohub Platform ESMFold2 fast",
+                  "locally_supported_by_package": model_constants.model_is_locally_supported(
+                      model_constants.ESMFOLD2_FAST
+                  ),
+              },
+          ]
+      except Exception as exc:
+          IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+
+
+      def protein_stats(sequence):
+          raw = sequence[:1024]
+          normalized = "".join(ch for ch in raw.upper() if ch in STANDARD_AA)
+          ignored = len(raw) - len(normalized)
+          if not normalized:
+              normalized = "MSKGEELFTGVVPILVELDGDVNGHK"
+
+          counts = {aa: normalized.count(aa) for aa in STANDARD_AA if aa in normalized}
+          hydrophobic = sum(counts.get(aa, 0) for aa in "AILMFWVY")
+          charged = sum(counts.get(aa, 0) for aa in "DEKRH")
+          annotation = FunctionAnnotation(
+              "template:deterministic-sequence-check",
+              1,
+              min(len(normalized), 10),
+          )
+
+          return {
+              "input_length": len(raw),
+              "normalized_sequence": normalized,
+              "normalized_length": len(normalized),
+              "ignored_characters": ignored,
+              "composition": counts,
+              "hydrophobic_fraction": round(hydrophobic / len(normalized), 4),
+              "charged_fraction": round(charged / len(normalized), 4),
+              "function_annotation_tuple": annotation.to_tuple(),
+          }
+
+
+      def base_payload():
+          return {
+              "service": "biohub-esm-source-verifier",
+              "upstream": "https://github.com/Biohub/esm",
+              "source_ref": SOURCE_REF,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "package": PACKAGE,
+              "source_checks": SOURCE_CHECKS,
+              "cpu_only": True,
+              "remote_model_calls": False,
+              "model_downloaded": False,
+          }
+
+
+      def demo_payload(sequence):
+          if IMPORT_ERROR is not None:
+              raise RuntimeError(IMPORT_ERROR)
+
+          payload = base_payload()
+          payload["ok"] = True
+          payload["demo"] = {
+              "sequence_report": protein_stats(sequence),
+              "model_catalog": MODEL_CATALOG,
+              "verifier": {
+                  "imports": [
+                      "esm",
+                      "esm.utils.types.FunctionAnnotation",
+                      "esm.utils.constants.models",
+                  ],
+                  "skipped_by_design": [
+                      "Biohub Platform API requests",
+                      "Hugging Face authentication",
+                      "model weight downloads",
+                      "GPU or CUDA checks",
+                  ],
+              },
+          }
+          return payload
+
+
+      class Handler(BaseHTTPRequestHandler):
+          def send_json(self, status, payload):
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              parsed = urlparse(self.path)
+
+              if parsed.path in {"/", "/healthz"}:
+                  status = 200 if IMPORT_ERROR is None else 503
+                  payload = base_payload()
+                  payload["ok"] = IMPORT_ERROR is None
+                  if IMPORT_ERROR is not None:
+                      payload["error"] = IMPORT_ERROR
+                  self.send_json(status, payload)
+                  return
+
+              if parsed.path == "/demo":
+                  query = parse_qs(parsed.query)
+                  sequence = query.get("sequence", [DEFAULT_SEQUENCE])[0]
+                  try:
+                      self.send_json(200, demo_payload(sequence))
+                  except Exception as exc:
+                      self.send_json(
+                          500,
+                          {
+                              "ok": False,
+                              "error": f"{type(exc).__name__}: {exc}",
+                              **base_payload(),
+                          },
+                      )
+                  return
+
+              if parsed.path == "/v1/models":
+                  payload = {
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "biohub-esm-source-verifier",
+                              "object": "model",
+                              "created": 0,
+                              "owned_by": "Biohub",
+                              "root": "Biohub/esm",
+                              "parent": None,
+                              "permission": [],
+                              "metadata": {
+                                  "source_ref": SOURCE_REF,
+                                  "cpu_only": True,
+                                  "remote_model_calls": False,
+                                  "model_downloaded": False,
+                                  "upstream_models": MODEL_CATALOG,
+                              },
+                          }
+                      ],
+                  }
+                  self.send_json(200, payload)
+                  return
+
+              self.send_json(404, {"ok": False, "error": "not found"})
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+
+      port = int(os.environ.get("PORT", "8080"))
+      ThreadingHTTPServer(("", port), Handler).serve_forever()

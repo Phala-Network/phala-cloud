@@ -4608,5 +4608,33 @@
       "diskSize": 20
     },
     "tags": ["AI Agents", "Developer Tools", "Media & Design"]
+  },
+{
+    "id": "esm",
+    "name": "Biohub/esm",
+    "description": "CPU-safe Biohub ESM source/package verifier for protein biology SDK primitives, with health, demo, and model-list endpoints that avoid Biohub credentials, Hugging Face login, hosted model calls, model downloads, GPU, and heavy inference dependencies by default.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/esm",
+    "author": "Biohub",
+    "icon": "esm.png",
+    "envs": [
+      {
+        "key": "ESM_SOURCE_REF",
+        "required": false,
+        "default": "975722d72d20104261b33e2e9cce98f30c031037",
+        "description": "Upstream Biohub/esm commit, tag, or simple branch name installed from the GitHub source archive at container startup."
+      },
+      {
+        "key": "ESM_DEMO_SEQUENCE",
+        "required": false,
+        "default": "MSKGEELFTGVVPILVELDGDVNGHK",
+        "description": "Short amino-acid sequence summarized by the deterministic demo endpoint when no query parameter is provided."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["LLM Inference & Model Serving", "Developer Tools", "Data & Storage"]
   }
 ]
