@@ -1,0 +1,359 @@
+services:
+  app:
+    image: node:24-bookworm-slim
+    ports:
+      - "8080:8080"
+    environment:
+      - CODEGRAPH_PACKAGE_VERSION=${CODEGRAPH_PACKAGE_VERSION:-0.9.7}
+      - CODEGRAPH_DEMO_QUERY=${CODEGRAPH_DEMO_QUERY:-cart checkout flow}
+      - NODE_ENV=production
+      - NPM_CONFIG_AUDIT=false
+      - NPM_CONFIG_FUND=false
+      - NPM_CONFIG_UPDATE_NOTIFIER=false
+      - NO_COLOR=1
+      - PORT=8080
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        npm install --global --omit=dev "@colbymchenry/codegraph@$${CODEGRAPH_PACKAGE_VERSION}"
+        exec node /app/server.mjs
+    configs:
+      - source: server_mjs
+        target: /app/server.mjs
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch("http://127.0.0.1:8080/healthz").then((r) => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1))
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+    restart: unless-stopped
+
+configs:
+  server_mjs:
+    content: |
+      import { execFile } from "node:child_process";
+      import { createServer } from "node:http";
+      import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+      import path from "node:path";
+      import process from "node:process";
+
+      const STARTED_AT = Date.now();
+      const UPSTREAM_REPO = "https://github.com/colbymchenry/codegraph";
+      const PACKAGE_NAME = "@colbymchenry/codegraph";
+      const REQUESTED_VERSION = process.env.CODEGRAPH_PACKAGE_VERSION || "0.9.7";
+      const DEMO_QUERY = process.env.CODEGRAPH_DEMO_QUERY || "cart checkout flow";
+      const PORT = Number(process.env.PORT || "8080");
+      const PROJECT_DIR = "/workspace/codegraph-demo";
+
+      let bootStatus = {
+        ok: false,
+        error: null,
+        packageVersion: null,
+        status: null,
+        bootDurationMs: null,
+      };
+
+      function projectFile(relativePath, lines) {
+        const fullPath = path.join(PROJECT_DIR, relativePath);
+        mkdirSync(path.dirname(fullPath), { recursive: true });
+        writeFileSync(fullPath, lines.join("\n") + "\n", "utf8");
+      }
+
+      function prepareDemoProject() {
+        rmSync(PROJECT_DIR, { recursive: true, force: true });
+        mkdirSync(PROJECT_DIR, { recursive: true });
+
+        projectFile("package.json", [
+          "{",
+          "  \"name\": \"codegraph-phala-demo\",",
+          "  \"private\": true,",
+          "  \"type\": \"module\",",
+          "  \"scripts\": {",
+          "    \"test\": \"node --test test/checkout.test.ts\"",
+          "  }",
+          "}",
+        ]);
+
+        projectFile("src/cart.ts", [
+          "export type CartItem = {",
+          "  sku: string;",
+          "  quantity: number;",
+          "  priceCents: number;",
+          "};",
+          "",
+          "export class Cart {",
+          "  private items: CartItem[] = [];",
+          "",
+          "  addItem(item: CartItem) {",
+          "    this.items.push(item);",
+          "  }",
+          "",
+          "  subtotalCents() {",
+          "    return this.items.reduce((sum, item) => sum + item.priceCents * item.quantity, 0);",
+          "  }",
+          "",
+          "  itemCount() {",
+          "    return this.items.length;",
+          "  }",
+          "}",
+        ]);
+
+        projectFile("src/pricing.ts", [
+          "export function priceForSku(sku: string) {",
+          "  const catalog: Record<string, number> = {",
+          "    hoodie: 6400,",
+          "    tee: 2800,",
+          "  };",
+          "  return catalog[sku] || 0;",
+          "}",
+          "",
+          "export function applyTax(subtotalCents: number) {",
+          "  return Math.round(subtotalCents * 1.0825);",
+          "}",
+        ]);
+
+        projectFile("src/checkout.ts", [
+          "import { Cart } from \"./cart\";",
+          "import { applyTax, priceForSku } from \"./pricing\";",
+          "",
+          "export function createCheckoutSummary() {",
+          "  const cart = new Cart();",
+          "  cart.addItem({ sku: \"hoodie\", quantity: 1, priceCents: priceForSku(\"hoodie\") });",
+          "  cart.addItem({ sku: \"tee\", quantity: 2, priceCents: priceForSku(\"tee\") });",
+          "  const subtotalCents = cart.subtotalCents();",
+          "  return {",
+          "    itemCount: cart.itemCount(),",
+          "    subtotalCents,",
+          "    totalCents: applyTax(subtotalCents),",
+          "  };",
+          "}",
+        ]);
+
+        projectFile("test/checkout.test.ts", [
+          "import assert from \"node:assert/strict\";",
+          "import { createCheckoutSummary } from \"../src/checkout\";",
+          "",
+          "const summary = createCheckoutSummary();",
+          "assert.equal(summary.itemCount, 2);",
+          "assert.equal(summary.subtotalCents, 12000);",
+        ]);
+      }
+
+      function runCodeGraph(args, options = {}) {
+        return new Promise((resolve, reject) => {
+          execFile("codegraph", args, {
+            cwd: options.cwd || PROJECT_DIR,
+            timeout: options.timeout || 30000,
+            maxBuffer: 10 * 1024 * 1024,
+            env: {
+              ...process.env,
+              CI: "1",
+              CODEGRAPH_NO_DAEMON: "1",
+              CODEGRAPH_NO_WATCH: "1",
+              NO_COLOR: "1",
+              TERM: "dumb",
+            },
+          }, (error, stdout, stderr) => {
+            const result = {
+              command: ["codegraph", ...args].join(" "),
+              stdout: stdout.trim(),
+              stderr: stderr.trim(),
+            };
+
+            if (error) {
+              const message = result.stderr || error.message || "command failed";
+              const wrapped = new Error(result.command + " failed: " + message);
+              wrapped.result = result;
+              reject(wrapped);
+              return;
+            }
+
+            resolve(result);
+          });
+        });
+      }
+
+      async function runJson(args) {
+        const result = await runCodeGraph(args);
+        try {
+          return JSON.parse(result.stdout);
+        } catch (error) {
+          throw new Error("Failed to parse JSON from " + result.command + ": " + error.message);
+        }
+      }
+
+      async function bootstrap() {
+        const started = Date.now();
+        try {
+          prepareDemoProject();
+          const version = await runCodeGraph(["--version"], { cwd: "/workspace" });
+          await runCodeGraph(["init", "-i"], { timeout: 90000 });
+          const status = await runJson(["status", "--json"]);
+          bootStatus = {
+            ok: true,
+            error: null,
+            packageVersion: version.stdout,
+            status,
+            bootDurationMs: Date.now() - started,
+          };
+        } catch (error) {
+          bootStatus = {
+            ok: false,
+            error: error.message,
+            packageVersion: null,
+            status: null,
+            bootDurationMs: Date.now() - started,
+          };
+          console.error(error);
+        }
+      }
+
+      function basePayload() {
+        return {
+          service: "codegraph-local-verifier",
+          upstream: UPSTREAM_REPO,
+          package: PACKAGE_NAME,
+          requestedVersion: REQUESTED_VERSION,
+          packageVersion: bootStatus.packageVersion,
+          projectPath: PROJECT_DIR,
+          uptimeSeconds: Math.round((Date.now() - STARTED_AT) / 10) / 100,
+          credentialsRequired: false,
+          cpuOnly: true,
+          remoteModelCalls: false,
+          modelDownloaded: false,
+        };
+      }
+
+      function writeJson(response, statusCode, payload) {
+        const body = JSON.stringify(payload, null, 2) + "\n";
+        response.writeHead(statusCode, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Content-Length": Buffer.byteLength(body),
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+        });
+        response.end(body);
+      }
+
+      function notReady(response) {
+        writeJson(response, 500, {
+          ...basePayload(),
+          ok: false,
+          status: "boot_failed",
+          error: bootStatus.error,
+          bootDurationMs: bootStatus.bootDurationMs,
+        });
+      }
+
+      async function handleDemo(response) {
+        if (!bootStatus.ok) {
+          notReady(response);
+          return;
+        }
+
+        const status = await runJson(["status", "--json"]);
+        const files = await runJson(["files", "--json"]);
+        const query = await runJson(["query", "Cart", "--json"]);
+        const callers = await runJson(["callers", "addItem", "--json"]);
+        const callees = await runJson(["callees", "createCheckoutSummary", "--json"]);
+        const impact = await runJson(["impact", "priceForSku", "--json"]);
+        const context = await runCodeGraph(["context", DEMO_QUERY, "--max-nodes", "5"]);
+
+        writeJson(response, 200, {
+          ...basePayload(),
+          ok: true,
+          check: "CodeGraph CLI indexes and queries a local TypeScript project",
+          demoQuery: DEMO_QUERY,
+          status,
+          files,
+          symbolSearch: {
+            search: "Cart",
+            resultCount: Array.isArray(query) ? query.length : 0,
+            topResult: Array.isArray(query) && query.length > 0 ? query[0] : null,
+          },
+          callers,
+          callees,
+          impact,
+          contextPreview: {
+            characters: context.stdout.length,
+            containsCheckoutSummary: context.stdout.includes("createCheckoutSummary"),
+            markdown: context.stdout.slice(0, 1600),
+          },
+        });
+      }
+
+      function handleModels(response) {
+        writeJson(response, 200, {
+          object: "list",
+          data: [
+            {
+              id: "codegraph-local-knowledge-graph",
+              object: "model",
+              created: Math.floor(STARTED_AT / 1000),
+              owned_by: "colbymchenry/codegraph",
+              capabilities: [
+                "local-code-index",
+                "symbol-search",
+                "call-graph",
+                "impact-analysis",
+                "mcp-server",
+              ],
+            },
+          ],
+          credentialsRequired: false,
+          remoteModelCalls: false,
+        });
+      }
+
+      async function route(request, response) {
+        const url = new URL(request.url || "/", "http://127.0.0.1");
+
+        if (request.method !== "GET") {
+          writeJson(response, 405, { ok: false, error: "method_not_allowed" });
+          return;
+        }
+
+        if (url.pathname === "/" || url.pathname === "/healthz") {
+          writeJson(response, bootStatus.ok ? 200 : 500, {
+            ...basePayload(),
+            ok: bootStatus.ok,
+            status: bootStatus.ok ? "ready" : "boot_failed",
+            bootDurationMs: bootStatus.bootDurationMs,
+            codegraphStatus: bootStatus.status,
+            error: bootStatus.error,
+          });
+          return;
+        }
+
+        if (url.pathname === "/demo") {
+          await handleDemo(response);
+          return;
+        }
+
+        if (url.pathname === "/v1/models") {
+          handleModels(response);
+          return;
+        }
+
+        writeJson(response, 404, { ok: false, error: "not_found" });
+      }
+
+      await bootstrap();
+
+      createServer((request, response) => {
+        route(request, response).catch((error) => {
+          console.error(error);
+          writeJson(response, 500, {
+            ...basePayload(),
+            ok: false,
+            error: error.message,
+          });
+        });
+      }).listen(PORT, "0.0.0.0", () => {
+        console.log("CodeGraph verifier listening on port " + PORT);
+      });
