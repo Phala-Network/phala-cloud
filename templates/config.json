@@ -4534,5 +4534,33 @@
       "diskSize": 20
     },
     "tags": ["Business Apps", "Web Apps", "Automation"]
+  },
+{
+    "id": "liteparse",
+    "name": "run-llama/liteparse",
+    "description": "A fast, helpful, and open-source document parser",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/liteparse",
+    "author": "run-llama",
+    "icon": "liteparse.png",
+    "envs": [
+      {
+        "key": "LITEPARSE_SERVER_IMAGE",
+        "required": false,
+        "default": "ghcr.io/run-llama/liteparse-server:main",
+        "description": "Upstream LiteParse server image used by the template. Pin to a digest or known tag for stricter production reproducibility."
+      },
+      {
+        "key": "LITEPARSE_DEMO_TEXT",
+        "required": false,
+        "default": "LiteParse Phala Cloud demo",
+        "description": "Text embedded in the generated demo PDF and checked by the /demo endpoint."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["Developer Tools", "Data & Storage", "AI Agents"]
   }
 ]
