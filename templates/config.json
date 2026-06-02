@@ -5044,5 +5044,33 @@
     "diskSize": 10
   },
   "tags": ["Media & Design", "Automation", "AI Agents"]
-}
+},
+{
+    "id": "tradingagents",
+    "name": "TauricResearch/TradingAgents",
+    "description": "TradingAgents: Multi-Agents LLM Financial Trading Framework. This template runs a CPU-safe deterministic HTTP verifier that installs the real upstream source and exercises local structured-output and signal-processing primitives without LLM provider credentials.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/tradingagents",
+    "author": "TauricResearch",
+    "icon": "tradingagents.png",
+    "envs": [
+      {
+        "key": "TRADINGAGENTS_REF",
+        "required": false,
+        "default": "main",
+        "description": "Upstream TradingAgents branch, tag, or commit archive ref installed by the verifier service at container startup."
+      },
+      {
+        "key": "APP_PORT",
+        "required": false,
+        "default": "8000",
+        "description": "Internal HTTP port used by the demo service behind the public 8080 mapping."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["AI Agents", "Business Apps", "Developer Tools"]
+  }
 ]

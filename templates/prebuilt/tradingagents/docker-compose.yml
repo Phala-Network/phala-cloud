@@ -1,0 +1,342 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:${APP_PORT:-8000}"
+    environment:
+      APP_PORT: ${APP_PORT:-8000}
+      TRADINGAGENTS_REF: ${TRADINGAGENTS_REF:-main}
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+      PIP_ROOT_USER_ACTION: ignore
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      TRADINGAGENTS_CACHE_DIR: /tmp/tradingagents/cache
+      TRADINGAGENTS_MEMORY_LOG_PATH: /tmp/tradingagents/memory/trading_memory.md
+      TRADINGAGENTS_RESULTS_DIR: /tmp/tradingagents/logs
+      UV_SYSTEM_PYTHON: "1"
+    configs:
+      - source: tradingagents_demo_app
+        target: /opt/tradingagents-demo/main.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache "tradingagents @ https://github.com/TauricResearch/TradingAgents/archive/$${TRADINGAGENTS_REF}.tar.gz"
+        exec python /opt/tradingagents-demo/main.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8000'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+configs:
+  tradingagents_demo_app:
+    content: |
+      import importlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "tradingagents"
+      UPSTREAM_REPO = "https://github.com/TauricResearch/TradingAgents"
+      FRAMEWORK = {}
+
+
+      def model_to_dict(value):
+          if hasattr(value, "model_dump"):
+              return value.model_dump(mode="json")
+          return value.dict()
+
+
+      def load_framework():
+          result = {
+              "package": PACKAGE_NAME,
+              "distribution_version": None,
+              "module_version": None,
+              "module_file": None,
+              "import_ok": False,
+              "symbols": {},
+              "known_providers": [],
+              "default_config": {},
+              "error": None,
+          }
+
+          try:
+              tradingagents = importlib.import_module(PACKAGE_NAME)
+              result["distribution_version"] = importlib.metadata.version(PACKAGE_NAME)
+              result["module_version"] = getattr(tradingagents, "__version__", None)
+              result["module_file"] = getattr(tradingagents, "__file__", None)
+
+              from tradingagents.agents.schemas import (
+                  PortfolioDecision,
+                  PortfolioRating,
+                  ResearchPlan,
+                  TraderAction,
+                  TraderProposal,
+                  render_pm_decision,
+                  render_research_plan,
+                  render_trader_proposal,
+              )
+              from tradingagents.agents.utils.rating import parse_rating
+              from tradingagents.default_config import DEFAULT_CONFIG
+              from tradingagents.graph.signal_processing import SignalProcessor
+              from tradingagents.llm_clients.model_catalog import get_known_models
+
+              FRAMEWORK.update({
+                  "PortfolioDecision": PortfolioDecision,
+                  "PortfolioRating": PortfolioRating,
+                  "ResearchPlan": ResearchPlan,
+                  "SignalProcessor": SignalProcessor,
+                  "TraderAction": TraderAction,
+                  "TraderProposal": TraderProposal,
+                  "get_known_models": get_known_models,
+                  "parse_rating": parse_rating,
+                  "render_pm_decision": render_pm_decision,
+                  "render_research_plan": render_research_plan,
+                  "render_trader_proposal": render_trader_proposal,
+              })
+
+              for symbol in FRAMEWORK:
+                  result["symbols"][symbol] = True
+
+              known_models = get_known_models()
+              result["known_providers"] = sorted(known_models.keys())
+              result["default_config"] = {
+                  "llm_provider": DEFAULT_CONFIG.get("llm_provider"),
+                  "deep_think_llm": DEFAULT_CONFIG.get("deep_think_llm"),
+                  "quick_think_llm": DEFAULT_CONFIG.get("quick_think_llm"),
+                  "max_debate_rounds": DEFAULT_CONFIG.get("max_debate_rounds"),
+                  "max_risk_discuss_rounds": DEFAULT_CONFIG.get("max_risk_discuss_rounds"),
+                  "checkpoint_enabled": DEFAULT_CONFIG.get("checkpoint_enabled"),
+                  "data_vendors": DEFAULT_CONFIG.get("data_vendors"),
+              }
+              result["import_ok"] = all(result["symbols"].values())
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+
+          return result
+
+
+      IMPORT_STATUS = load_framework()
+
+
+      def base_payload():
+          return {
+              "service": "tradingagents-demo",
+              "upstream": UPSTREAM_REPO,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "tradingagents_ref": os.environ.get("TRADINGAGENTS_REF", "main"),
+              "credentials_required": False,
+              "llm_provider_calls": False,
+              "market_data_calls": False,
+              "model_downloaded": False,
+              "gpu_required": False,
+          }
+
+
+      def run_demo():
+          if not IMPORT_STATUS["import_ok"]:
+              raise RuntimeError(IMPORT_STATUS["error"] or "TradingAgents import failed")
+
+          PortfolioDecision = FRAMEWORK["PortfolioDecision"]
+          PortfolioRating = FRAMEWORK["PortfolioRating"]
+          ResearchPlan = FRAMEWORK["ResearchPlan"]
+          SignalProcessor = FRAMEWORK["SignalProcessor"]
+          TraderAction = FRAMEWORK["TraderAction"]
+          TraderProposal = FRAMEWORK["TraderProposal"]
+          get_known_models = FRAMEWORK["get_known_models"]
+          parse_rating = FRAMEWORK["parse_rating"]
+          render_pm_decision = FRAMEWORK["render_pm_decision"]
+          render_research_plan = FRAMEWORK["render_research_plan"]
+          render_trader_proposal = FRAMEWORK["render_trader_proposal"]
+
+          research_plan = ResearchPlan(
+              recommendation=PortfolioRating.HOLD,
+              rationale=(
+                  "The deterministic verifier uses a synthetic ticker and does "
+                  "not fetch market data, so the balanced local rating is Hold."
+              ),
+              strategic_actions=(
+                  "Keep the position unchanged until real LLM and data-provider "
+                  "credentials are configured for a production run."
+              ),
+          )
+          trader_proposal = TraderProposal(
+              action=TraderAction.HOLD,
+              reasoning=(
+                  "No live analyst reports or prices are consulted in this "
+                  "CPU-only smoke path."
+              ),
+              position_sizing="0% change",
+          )
+          portfolio_decision = PortfolioDecision(
+              rating=PortfolioRating.HOLD,
+              executive_summary=(
+                  "This is a local framework verification result, not a trade "
+                  "recommendation."
+              ),
+              investment_thesis=(
+                  "The demo validates TradingAgents structured-output models, "
+                  "markdown renderers, and signal parsing without calling an "
+                  "LLM provider or market-data API."
+              ),
+              time_horizon="demo only",
+          )
+
+          rendered_research = render_research_plan(research_plan)
+          rendered_trader = render_trader_proposal(trader_proposal)
+          rendered_portfolio = render_pm_decision(portfolio_decision)
+          signal = SignalProcessor().process_signal(rendered_portfolio)
+          known_models = get_known_models()
+
+          return {
+              "ticker": "DEMO",
+              "analysis_date": "2026-01-15",
+              "agent_roles": [
+                  "fundamentals_analyst",
+                  "sentiment_analyst",
+                  "news_analyst",
+                  "technical_analyst",
+                  "research_manager",
+                  "trader",
+                  "portfolio_manager",
+              ],
+              "structured_outputs": {
+                  "research_plan": model_to_dict(research_plan),
+                  "trader_proposal": model_to_dict(trader_proposal),
+                  "portfolio_decision": model_to_dict(portfolio_decision),
+              },
+              "rendered_markdown": {
+                  "research_plan": rendered_research,
+                  "trader_proposal": rendered_trader,
+                  "portfolio_decision": rendered_portfolio,
+              },
+              "signal_processor_rating": signal,
+              "parse_rating_result": parse_rating(rendered_portfolio),
+              "known_provider_count": len(known_models),
+              "sample_providers": sorted(known_models.keys())[:8],
+              "remote_calls": False,
+              "financial_advice": False,
+          }
+
+
+      def response_body(path):
+          payload = base_payload()
+
+          if path in ("/", "/healthz"):
+              payload.update({
+                  "status": "ready" if IMPORT_STATUS["import_ok"] else "import_failed",
+                  "ok": IMPORT_STATUS["import_ok"],
+                  "tradingagents": IMPORT_STATUS,
+              })
+              return (
+                  HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE,
+                  payload,
+              )
+
+          if path == "/demo":
+              payload.update({
+                  "ok": IMPORT_STATUS["import_ok"],
+                  "cpu_only": True,
+                  "check": (
+                      "TradingAgents structured-output schemas, render helpers, "
+                      "model catalog metadata, and deterministic signal parsing"
+                  ),
+              })
+              if not IMPORT_STATUS["import_ok"]:
+                  payload["error"] = IMPORT_STATUS["error"]
+                  return HTTPStatus.SERVICE_UNAVAILABLE, payload
+              try:
+                  payload["demo"] = run_demo()
+                  return HTTPStatus.OK, payload
+              except Exception as exc:
+                  payload["ok"] = False
+                  payload["error"] = f"{type(exc).__name__}: {exc}"
+                  return HTTPStatus.INTERNAL_SERVER_ERROR, payload
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "tradingagents/no-llm-local-demo",
+                          "object": "model",
+                          "created": 1704067200,
+                          "owned_by": "TauricResearch",
+                          "description": (
+                              "Local deterministic TradingAgents verifier. No "
+                              "LLM model is loaded or called by the template."
+                          ),
+                      }
+                  ],
+                  "tradingagents": IMPORT_STATUS,
+              }
+
+          return HTTPStatus.NOT_FOUND, {
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "tradingagents-demo"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+              status, payload = response_body(path)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8000"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "tradingagents": IMPORT_STATUS,
+                      "llm_provider_calls": False,
+                      "market_data_calls": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
