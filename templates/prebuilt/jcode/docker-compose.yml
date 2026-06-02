@@ -1,0 +1,318 @@
+services:
+  app:
+    image: node:22-bookworm-slim
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      JCODE_VERSION: ${JCODE_VERSION:-v0.16.0}
+      JCODE_NO_TELEMETRY: "1"
+      DO_NOT_TRACK: "1"
+      HOME: /tmp/jcode-home
+      XDG_CONFIG_HOME: /tmp/jcode-config
+      NO_COLOR: "1"
+      PORT: "8080"
+    configs:
+      - source: jcode_demo_server
+        target: /opt/jcode-demo/server.mjs
+    volumes:
+      - jcode_bin:/opt/jcode
+    tmpfs:
+      - /tmp
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        apt-get update
+        apt-get install -y --no-install-recommends ca-certificates curl tar
+        rm -rf /var/lib/apt/lists/*
+
+        mkdir -p /opt/jcode "$$HOME" "$$XDG_CONFIG_HOME"
+        arch="$$(uname -m)"
+        case "$$arch" in
+          x86_64|amd64) asset="jcode-linux-x86_64" ;;
+          aarch64|arm64) asset="jcode-linux-aarch64" ;;
+          *) echo "Unsupported architecture: $$arch" >&2; exit 1 ;;
+        esac
+
+        marker="/opt/jcode/.installed-$${JCODE_VERSION}-$${asset}"
+        if [ ! -x /opt/jcode/jcode ] || [ ! -f "$$marker" ]; then
+          rm -rf /opt/jcode/*
+          mkdir -p /tmp/jcode-extract
+          url="https://github.com/1jehuang/jcode/releases/download/$${JCODE_VERSION}/$${asset}.tar.gz"
+          curl -fsSL "$$url" -o /tmp/jcode.tar.gz
+          tar -xzf /tmp/jcode.tar.gz -C /tmp/jcode-extract
+          cp -f /tmp/jcode-extract/"$$asset" /opt/jcode/jcode
+          cp -f /tmp/jcode-extract/"$$asset".bin /opt/jcode/"$$asset".bin
+          find /tmp/jcode-extract -maxdepth 1 -type f \( -name 'libssl.so*' -o -name 'libcrypto.so*' \) -exec cp -f {} /opt/jcode/ \;
+          chmod +x /opt/jcode/jcode /opt/jcode/"$$asset".bin
+          touch "$$marker"
+        fi
+
+        exec node /opt/jcode-demo/server.mjs
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - |
+          fetch('http://127.0.0.1:8080/healthz').then(function (response) { process.exit(response.ok ? 0 : 1); }).catch(function () { process.exit(1); });
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+
+configs:
+  jcode_demo_server:
+    content: |
+      import http from "node:http";
+      import os from "node:os";
+      import { execFile } from "node:child_process";
+      import { promisify } from "node:util";
+
+      const execFileAsync = promisify(execFile);
+      const startedAt = Date.now();
+      const port = Number.parseInt(process.env.PORT || "8080", 10);
+      const upstreamRepo = "https://github.com/1jehuang/jcode";
+      const iconSource = "https://github.com/1jehuang/jcode/blob/master/assets/app-icons/Jcode.icns";
+      const releaseVersion = process.env.JCODE_VERSION || "v0.16.0";
+
+      function safeCommandEnv() {
+        return {
+          PATH: "/opt/jcode:" + (process.env.PATH || "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"),
+          HOME: process.env.HOME || "/tmp/jcode-home",
+          XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME || "/tmp/jcode-config",
+          JCODE_NO_TELEMETRY: "1",
+          DO_NOT_TRACK: "1",
+          JCODE_GLIBC_ARENA_MAX: "2",
+          NO_COLOR: "1",
+          TERM: "dumb",
+        };
+      }
+
+      function configuredProviderEnv() {
+        return {
+          openai_api_key_configured: Boolean(process.env.OPENAI_API_KEY),
+          anthropic_api_key_configured: Boolean(process.env.ANTHROPIC_API_KEY),
+          openrouter_api_key_configured: Boolean(process.env.OPENROUTER_API_KEY),
+        };
+      }
+
+      function cleanText(value) {
+        return String(value || "")
+          .replace(/\u001b\[[0-9;]*m/g, "")
+          .trim()
+          .slice(0, 4000);
+      }
+
+      async function runJcode(args, timeoutMs = 15000) {
+        const started = Date.now();
+        try {
+          const result = await execFileAsync("jcode", args, {
+            env: safeCommandEnv(),
+            timeout: timeoutMs,
+            maxBuffer: 1024 * 1024,
+          });
+          return {
+            ok: true,
+            command: ["jcode"].concat(args).join(" "),
+            stdout: cleanText(result.stdout),
+            stdout_raw: result.stdout,
+            stderr: cleanText(result.stderr),
+            duration_ms: Date.now() - started,
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            command: ["jcode"].concat(args).join(" "),
+            stdout: cleanText(error.stdout),
+            stdout_raw: error.stdout || "",
+            stderr: cleanText(error.stderr),
+            code: error.code || null,
+            signal: error.signal || null,
+            message: error.message,
+            duration_ms: Date.now() - started,
+          };
+        }
+      }
+
+      function parseJsonCommand(result) {
+        if (!result.ok || !result.stdout) {
+          return null;
+        }
+
+        try {
+          return JSON.parse(result.stdout_raw || result.stdout);
+        } catch {
+          return null;
+        }
+      }
+
+      function commandSummary(result) {
+        return {
+          ok: result.ok,
+          command: result.command,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exit_code: result.code || 0,
+          error: result.ok ? null : result.message,
+          duration_ms: result.duration_ms,
+        };
+      }
+
+      async function inspectJcode() {
+        const version = await runJcode(["--no-update", "--no-selfdev", "version", "--json"]);
+        const help = await runJcode(["--no-update", "--no-selfdev", "--help"]);
+        const providers = await runJcode(["--no-update", "--no-selfdev", "provider", "list", "--json"]);
+
+        const versionJson = parseJsonCommand(version);
+        const providersJson = parseJsonCommand(providers);
+        const providerItems = providersJson && Array.isArray(providersJson.providers)
+          ? providersJson.providers
+          : [];
+        const providerCatalogOk = providers.ok && providerItems.length > 0;
+        const recommendedProviders = providerItems
+          .filter((provider) => provider.recommended)
+          .map((provider) => ({
+            id: provider.id,
+            display_name: provider.display_name,
+            auth_kind: provider.auth_kind,
+          }));
+
+        return {
+          ok: version.ok && help.ok && Boolean(versionJson) && providerCatalogOk,
+          version: {
+            ok: version.ok && Boolean(versionJson),
+            data: versionJson,
+            command: commandSummary(version),
+          },
+          help: {
+            ok: help.ok && help.stdout.includes("Commands:") && help.stdout.includes("provider"),
+            command: help.command,
+            includes_provider_command: help.stdout.includes("provider"),
+            includes_auth_test_command: help.stdout.includes("auth-test"),
+          },
+          provider_catalog: {
+            ok: providerCatalogOk,
+            provider_count: providerItems.length,
+            recommended_providers: recommendedProviders,
+            command: {
+              ok: providers.ok,
+              command: providers.command,
+              stderr: providers.stderr,
+              duration_ms: providers.duration_ms,
+            },
+          },
+        };
+      }
+
+      const startupChecksPromise = inspectJcode();
+
+      function basePayload(checks) {
+        return {
+          ok: checks.ok,
+          service: "jcode-local-cli-verifier",
+          upstream: upstreamRepo,
+          upstream_release: releaseVersion,
+          icon_source: iconSource,
+          platform: os.platform() + "/" + os.arch(),
+          node: process.version,
+          uptime_seconds: Math.round((Date.now() - startedAt) / 100) / 10,
+          credentials_required: false,
+          cpu_only: true,
+          remote_model_calls: false,
+          browser_auth_started: false,
+          model_weights_downloaded: false,
+          telemetry_disabled: true,
+          configured_provider_env: configuredProviderEnv(),
+        };
+      }
+
+      function writeJson(response, status, payload) {
+        const body = Buffer.from(JSON.stringify(payload, null, 2) + "\n", "utf8");
+        response.writeHead(status, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Content-Length": String(body.length),
+          "Cache-Control": "no-store",
+        });
+        response.end(body);
+      }
+
+      async function responseFor(path) {
+        const checks = await startupChecksPromise;
+
+        if (path === "/" || path === "/healthz") {
+          return {
+            status: checks.ok ? 200 : 503,
+            body: {
+              ...basePayload(checks),
+              status: checks.ok ? "ok" : "unhealthy",
+              checks,
+              endpoints: ["/healthz", "/demo", "/v1/models"],
+            },
+          };
+        }
+
+        if (path === "/demo") {
+          return {
+            status: checks.ok ? 200 : 503,
+            body: {
+              ...basePayload(checks),
+              name: "jcode local CLI verifier",
+              description: "Installs the upstream jcode release binary and verifies local CLI metadata plus the built-in provider catalog without credentials or model calls.",
+              demo_operations: [
+                "jcode --no-update --no-selfdev version --json",
+                "jcode --no-update --no-selfdev --help",
+                "jcode --no-update --no-selfdev provider list --json",
+              ],
+              checks,
+            },
+          };
+        }
+
+        if (path === "/v1/models") {
+          return {
+            status: 200,
+            body: {
+              object: "list",
+              data: [
+                {
+                  id: "jcode/local-cli-verifier",
+                  object: "model",
+                  created: 0,
+                  owned_by: "1jehuang",
+                  description: "Metadata-only OpenAI-compatible response for the local jcode verifier. No model is hosted and no provider API is called.",
+                },
+              ],
+            },
+          };
+        }
+
+        return {
+          status: 404,
+          body: {
+            error: "not_found",
+            endpoints: ["/healthz", "/demo", "/v1/models"],
+          },
+        };
+      }
+
+      const server = http.createServer(async (request, response) => {
+        if (request.method !== "GET") {
+          writeJson(response, 405, { error: "method_not_allowed" });
+          return;
+        }
+
+        const url = new URL(request.url || "/", "http://127.0.0.1");
+        const result = await responseFor(url.pathname);
+        writeJson(response, result.status, result.body);
+      });
+
+      server.listen(port, "0.0.0.0", () => {
+        console.log("jcode verifier listening on " + port);
+      });
+
+volumes:
+  jcode_bin:

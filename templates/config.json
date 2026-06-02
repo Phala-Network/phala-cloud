@@ -5072,5 +5072,27 @@
       "diskSize": 20
     },
     "tags": ["AI Agents", "Business Apps", "Developer Tools"]
+  },
+{
+    "id": "jcode",
+    "name": "1jehuang/jcode",
+    "description": "Coding Agent Harness",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/jcode",
+    "author": "1jehuang",
+    "icon": "jcode.png",
+    "envs": [
+      {
+        "key": "JCODE_VERSION",
+        "required": false,
+        "default": "v0.16.0",
+        "description": "Upstream jcode GitHub release tag downloaded by the verifier at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools", "Automation"]
   }
 ]
