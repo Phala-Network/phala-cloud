@@ -1,6 +1,8 @@
 import { z } from "zod";
-import { defineAction } from "../../utils/define-action";
+import { type Client, type SafeResult } from "../../client";
+import type { ApiVersion } from "../../types/client";
 import { CvmIdSchema, type CvmIdInput } from "../../types/cvm_id";
+import type { CheckCvmIsAllowedResponse } from "../../types/version-mappings";
 
 const IsAllowedResultBaseSchema = z.object({
   app_contract_address: z.string(),
@@ -41,6 +43,11 @@ export const CheckCvmIsAllowedRequestSchema = CheckCvmIsAllowedInputSchema;
 
 export type CheckCvmIsAllowedRequest = z.infer<typeof CheckCvmIsAllowedInputSchema>;
 
+function getSchemaForVersion(version: ApiVersion) {
+  if (version === "2026-01-21") return IsAllowedResultV20260121Schema;
+  return IsAllowedResultV20260522Schema;
+}
+
 /**
  * Check if a CVM deployment is allowed by its on-chain DStack App contract.
  *
@@ -52,13 +59,40 @@ export type CheckCvmIsAllowedRequest = z.infer<typeof CheckCvmIsAllowedInputSche
  * @param request.device_id - Optional device ID override
  * @returns On-chain allowance check result
  */
-const { action: checkCvmIsAllowed, safeAction: safeCheckCvmIsAllowed } = defineAction<
-  CheckCvmIsAllowedRequest,
-  typeof IsAllowedResultSchema,
-  IsAllowedResult
->(IsAllowedResultSchema, async (client, request) => {
+export function checkCvmIsAllowed<V extends ApiVersion>(
+  client: Client<V>,
+  request: CheckCvmIsAllowedRequest,
+): Promise<CheckCvmIsAllowedResponse<V>>;
+export async function checkCvmIsAllowed<V extends ApiVersion>(
+  client: Client<V>,
+  request: CheckCvmIsAllowedRequest,
+): Promise<CheckCvmIsAllowedResponse<V>> {
   const { cvmId, ...body } = CheckCvmIsAllowedRequestSchema.parse(request);
-  return await client.post(`/cvms/${cvmId}/is-allowed`, body);
-});
+  const response = await client.post(`/cvms/${cvmId}/is-allowed`, body);
+  return getSchemaForVersion(client.config.version).parse(response) as CheckCvmIsAllowedResponse<V>;
+}
 
-export { checkCvmIsAllowed, safeCheckCvmIsAllowed };
+export function safeCheckCvmIsAllowed<V extends ApiVersion>(
+  client: Client<V>,
+  request: CheckCvmIsAllowedRequest,
+): Promise<SafeResult<CheckCvmIsAllowedResponse<V>>>;
+export async function safeCheckCvmIsAllowed<V extends ApiVersion>(
+  client: Client<V>,
+  request: CheckCvmIsAllowedRequest,
+): Promise<SafeResult<CheckCvmIsAllowedResponse<V>>> {
+  try {
+    const data = await checkCvmIsAllowed(client, request);
+    return { success: true, data };
+  } catch (error) {
+    if (error && typeof error === "object" && ("status" in error || "issues" in error)) {
+      return { success: false, error } as SafeResult<CheckCvmIsAllowedResponse<V>>;
+    }
+    return {
+      success: false,
+      error: {
+        name: "Error",
+        message: error instanceof Error ? error.message : String(error),
+      },
+    } as SafeResult<CheckCvmIsAllowedResponse<V>>;
+  }
+}

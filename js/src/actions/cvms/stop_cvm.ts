@@ -1,6 +1,7 @@
+import { type Client, type SafeResult } from "../../client";
+import type { ApiVersion } from "../../types/client";
 import { CvmIdSchema, type CvmIdInput } from "../../types/cvm_id";
-import { defineAction } from "../../utils/define-action";
-import { VMSchema } from "../../types/cvm_info";
+import { getVMSchemaForVersion, type VMForVersion } from "../../types/cvm_info";
 
 /**
  * Force stop a CVM (Confidential Virtual Machine)
@@ -35,12 +36,40 @@ export const StopCvmRequestSchema = CvmIdSchema;
 
 export type StopCvmRequest = CvmIdInput;
 
-const { action: stopCvm, safeAction: safeStopCvm } = defineAction<StopCvmRequest, typeof VMSchema>(
-  VMSchema,
-  async (client, request) => {
-    const { cvmId } = StopCvmRequestSchema.parse(request);
-    return await client.post(`/cvms/${cvmId}/stop`);
-  },
-);
+export function stopCvm<V extends ApiVersion>(
+  client: Client<V>,
+  request: StopCvmRequest,
+): Promise<VMForVersion<V>>;
+export async function stopCvm<V extends ApiVersion>(
+  client: Client<V>,
+  request: StopCvmRequest,
+): Promise<VMForVersion<V>> {
+  const { cvmId } = StopCvmRequestSchema.parse(request);
+  const response = await client.post(`/cvms/${cvmId}/stop`);
+  return getVMSchemaForVersion(client.config.version).parse(response) as VMForVersion<V>;
+}
 
-export { stopCvm, safeStopCvm };
+export function safeStopCvm<V extends ApiVersion>(
+  client: Client<V>,
+  request: StopCvmRequest,
+): Promise<SafeResult<VMForVersion<V>>>;
+export async function safeStopCvm<V extends ApiVersion>(
+  client: Client<V>,
+  request: StopCvmRequest,
+): Promise<SafeResult<VMForVersion<V>>> {
+  try {
+    const data = await stopCvm(client, request);
+    return { success: true, data };
+  } catch (error) {
+    if (error && typeof error === "object" && ("status" in error || "issues" in error)) {
+      return { success: false, error } as SafeResult<VMForVersion<V>>;
+    }
+    return {
+      success: false,
+      error: {
+        name: "Error",
+        message: error instanceof Error ? error.message : String(error),
+      },
+    } as SafeResult<VMForVersion<V>>;
+  }
+}

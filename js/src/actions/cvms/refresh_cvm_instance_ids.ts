@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { defineAction } from "../../utils/define-action";
+import { type Client, type SafeResult } from "../../client";
+import type { ApiVersion } from "../../types/client";
+import type { RefreshCvmInstanceIdsVersionedResponse } from "../../types/version-mappings";
 import {
-  InstanceIdRefreshResultSchema,
   InstanceIdRefreshResultV20260121Schema,
   InstanceIdRefreshResultV20260522Schema,
 } from "./refresh_cvm_instance_id";
@@ -47,18 +48,55 @@ export type RefreshCvmInstanceIdsResponseV20260522 = z.infer<
 
 export const RefreshCvmInstanceIdsResponseAnySchema =
   RefreshCvmInstanceIdsResponseBaseSchema.extend({
-    items: z.array(InstanceIdRefreshResultSchema),
+    items: z.array(
+      z.union([InstanceIdRefreshResultV20260121Schema, InstanceIdRefreshResultV20260522Schema]),
+    ),
   });
 
 export const RefreshCvmInstanceIdsResponseSchema = RefreshCvmInstanceIdsResponseV20260522Schema;
 export type RefreshCvmInstanceIdsResponse = z.infer<typeof RefreshCvmInstanceIdsResponseSchema>;
 
-const { action: refreshCvmInstanceIds, safeAction: safeRefreshCvmInstanceIds } = defineAction<
-  RefreshCvmInstanceIdsRequest,
-  typeof RefreshCvmInstanceIdsResponseSchema
->(RefreshCvmInstanceIdsResponseSchema, async (client, request) => {
-  const parsed = RefreshCvmInstanceIdsRequestSchema.parse(request);
-  return await client.patch("/cvms/instance-ids", parsed);
-});
+function getSchemaForVersion(version: ApiVersion) {
+  if (version === "2026-01-21") return RefreshCvmInstanceIdsResponseV20260121Schema;
+  return RefreshCvmInstanceIdsResponseV20260522Schema;
+}
 
-export { refreshCvmInstanceIds, safeRefreshCvmInstanceIds };
+export function refreshCvmInstanceIds<V extends ApiVersion>(
+  client: Client<V>,
+  request: RefreshCvmInstanceIdsRequest,
+): Promise<RefreshCvmInstanceIdsVersionedResponse<V>>;
+export async function refreshCvmInstanceIds<V extends ApiVersion>(
+  client: Client<V>,
+  request: RefreshCvmInstanceIdsRequest,
+): Promise<RefreshCvmInstanceIdsVersionedResponse<V>> {
+  const parsed = RefreshCvmInstanceIdsRequestSchema.parse(request);
+  const response = await client.patch("/cvms/instance-ids", parsed);
+  return getSchemaForVersion(client.config.version).parse(
+    response,
+  ) as RefreshCvmInstanceIdsVersionedResponse<V>;
+}
+
+export function safeRefreshCvmInstanceIds<V extends ApiVersion>(
+  client: Client<V>,
+  request: RefreshCvmInstanceIdsRequest,
+): Promise<SafeResult<RefreshCvmInstanceIdsVersionedResponse<V>>>;
+export async function safeRefreshCvmInstanceIds<V extends ApiVersion>(
+  client: Client<V>,
+  request: RefreshCvmInstanceIdsRequest,
+): Promise<SafeResult<RefreshCvmInstanceIdsVersionedResponse<V>>> {
+  try {
+    const data = await refreshCvmInstanceIds(client, request);
+    return { success: true, data };
+  } catch (error) {
+    if (error && typeof error === "object" && ("status" in error || "issues" in error)) {
+      return { success: false, error } as SafeResult<RefreshCvmInstanceIdsVersionedResponse<V>>;
+    }
+    return {
+      success: false,
+      error: {
+        name: "Error",
+        message: error instanceof Error ? error.message : String(error),
+      },
+    } as SafeResult<RefreshCvmInstanceIdsVersionedResponse<V>>;
+  }
+}

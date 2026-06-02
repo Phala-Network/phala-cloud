@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { type Client, type SafeResult } from "../../client";
+import type { ApiVersion } from "../../types/client";
 import { CvmIdSchema, CvmIdObjectSchema, refineCvmId } from "../../types/cvm_id";
-import { defineAction } from "../../utils/define-action";
-import { VMSchema } from "../../types/cvm_info";
+import { getVMSchemaForVersion, type VMForVersion } from "../../types/cvm_info";
 
 /**
  * Replicate (scale up) a CVM by creating a new replica
@@ -43,14 +44,42 @@ export const ReplicateCvmRequestSchema = refineCvmId(
 
 export type ReplicateCvmRequest = z.infer<typeof ReplicateCvmRequestSchema>;
 
-const { action: replicateCvm, safeAction: safeReplicateCvm } = defineAction<
-  ReplicateCvmRequest,
-  typeof VMSchema
->(VMSchema, async (client, request) => {
+export function replicateCvm<V extends ApiVersion>(
+  client: Client<V>,
+  request: ReplicateCvmRequest,
+): Promise<VMForVersion<V>>;
+export async function replicateCvm<V extends ApiVersion>(
+  client: Client<V>,
+  request: ReplicateCvmRequest,
+): Promise<VMForVersion<V>> {
   const parsed = ReplicateCvmRequestSchema.parse(request);
   const { cvmId } = CvmIdSchema.parse(parsed);
   const { node_id } = parsed;
-  return await client.post(`/cvms/${cvmId}/replicas`, { node_id });
-});
+  const response = await client.post(`/cvms/${cvmId}/replicas`, { node_id });
+  return getVMSchemaForVersion(client.config.version).parse(response) as VMForVersion<V>;
+}
 
-export { replicateCvm, safeReplicateCvm };
+export function safeReplicateCvm<V extends ApiVersion>(
+  client: Client<V>,
+  request: ReplicateCvmRequest,
+): Promise<SafeResult<VMForVersion<V>>>;
+export async function safeReplicateCvm<V extends ApiVersion>(
+  client: Client<V>,
+  request: ReplicateCvmRequest,
+): Promise<SafeResult<VMForVersion<V>>> {
+  try {
+    const data = await replicateCvm(client, request);
+    return { success: true, data };
+  } catch (error) {
+    if (error && typeof error === "object" && ("status" in error || "issues" in error)) {
+      return { success: false, error } as SafeResult<VMForVersion<V>>;
+    }
+    return {
+      success: false,
+      error: {
+        name: "Error",
+        message: error instanceof Error ? error.message : String(error),
+      },
+    } as SafeResult<VMForVersion<V>>;
+  }
+}
