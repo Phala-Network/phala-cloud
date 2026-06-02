@@ -4698,5 +4698,61 @@
       "diskSize": 10
     },
     "tags": ["MCP Servers", "Developer Tools", "AI Agents"]
-  }
+  },
+{
+  "id": "presenton",
+  "name": "presenton/presenton",
+  "description": "Open-Source AI Presentation Generator and API (Gamma, Beautiful AI, Decktopus Alternative)",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/presenton",
+  "author": "presenton",
+  "icon": "presenton.png",
+  "envs": [
+    {
+      "key": "CAN_CHANGE_KEYS",
+      "required": false,
+      "default": "true",
+      "description": "Keeps Presenton's UI-based provider configuration enabled. If set to false, provide complete upstream provider environment variables before startup."
+    },
+    {
+      "key": "DISABLE_IMAGE_GENERATION",
+      "required": false,
+      "default": "true",
+      "description": "Disables slide image generation for the default no-secret smoke deployment."
+    },
+    {
+      "key": "MEM0_ENABLED",
+      "required": false,
+      "default": "false",
+      "description": "Disables optional Presenton Mem0 presentation memory in the default deployment."
+    },
+    {
+      "key": "LITEPARSE_NUM_WORKERS",
+      "required": false,
+      "default": "1",
+      "description": "Document parsing worker count for small CPU deployments."
+    },
+    {
+      "key": "LITEPARSE_DPI",
+      "required": false,
+      "default": "120",
+      "description": "OCR and document-render DPI used by upstream LiteParse."
+    },
+    {
+      "key": "AUTH_USERNAME",
+      "required": false,
+      "description": "Optional first-boot Presenton admin username. If omitted, create the first admin user in the web UI."
+    },
+    {
+      "key": "AUTH_PASSWORD",
+      "required": false,
+      "description": "Optional first-boot Presenton admin password with at least 6 characters. If omitted, create the first admin user in the web UI."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 2,
+    "memory": 4096,
+    "diskSize": 30
+  },
+  "tags": ["Media & Design", "Automation", "AI Agents"]
+}
 ]
