@@ -273,9 +273,31 @@ jobs:
         working-directory: go
         run: go test -count=1 ./...
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate changelog
+        run: |
+          npm install -g conventional-changelog-cli conventional-changelog-conventionalcommits
+
+          conventional-changelog -p conventionalcommits \
+            --commit-path "go" \
+            -i "go/CHANGELOG.md" \
+            -s \
+            -n changelog.config.js \
+            --tag-prefix "sdks/go/v"
+
+          conventional-changelog -p conventionalcommits \
+            --commit-path "go" \
+            -o "go/RELEASE_NOTES.md" \
+            -n changelog.config.js \
+            --tag-prefix "sdks/go/v"
+
       - name: Commit version change
         run: |
-          git add go/version.go
+          git add go/version.go go/CHANGELOG.md
           if git diff --cached --quiet; then
             echo "No changes to commit"
             exit 1
@@ -318,7 +340,11 @@ jobs:
         run: |
           MODULE_PATH="github.com/Phala-Network/phala-cloud/sdks/go"
           {
-            echo "Release Go SDK v${NEW_VERSION}"
+            if [ -s "go/RELEASE_NOTES.md" ]; then
+              cat "go/RELEASE_NOTES.md"
+            else
+              echo "Release Go SDK v${NEW_VERSION}"
+            fi
             echo ""
             echo "---"
             echo ""
