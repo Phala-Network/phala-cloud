@@ -26,12 +26,15 @@
 * **js:** stop rewriting node_id to teepod_id on provision ([c267fec](https://github.com/Phala-Network/phala-cloud/commit/c267fece644b054990260edf0286d9f7adaca5c4)), closes [#1449](https://github.com/Phala-Network/phala-cloud/issues/1449)
 * **js:** surface friendly error for request timeouts ([8c367fd](https://github.com/Phala-Network/phala-cloud/commit/8c367fdd327945b2f944802455591614c6f24665))
 * use hashed CVM IDs in schemas ([0268fa0](https://github.com/Phala-Network/phala-cloud/commit/0268fa0bf24d2d7449e2e338e42a484973bd46f2))
+
 ## [0.2.9](https://github.com/Phala-Network/phala-cloud/compare/js-v0.2.8...js-v0.2.9) (2026-04-17)
 
 ### feat
 
 * **sdk,cli:** add POST /apps/{app_id}/instances support ([80498ab](https://github.com/Phala-Network/phala-cloud/commit/80498ab02f56610a21cbbc807b92d878304a1eb2))
+
 ## [0.2.8](https://github.com/Phala-Network/phala-cloud/compare/js-v0.2.7...js-v0.2.8) (2026-04-10)
+
 ## [0.2.7](https://github.com/Phala-Network/phala-cloud/compare/js-v0.2.6...js-v0.2.7) (2026-04-10)
 
 ### feat
@@ -48,6 +51,7 @@
 ### refactor
 
 * add transaction progress logging and RPC transport timeouts ([29849a2](https://github.com/Phala-Network/phala-cloud/commit/29849a283025fe74543254e75afae888ab29f848))
+
 ## [0.2.6](https://github.com/Phala-Network/phala-cloud/compare/js-v0.2.5...js-v0.2.6) (2026-03-27)
 
 ### feat
@@ -66,6 +70,7 @@
 * **js:** handle FormData Content-Type in post/put/patch methods ([68d77ef](https://github.com/Phala-Network/phala-cloud/commit/68d77ef29a865c4cf8fb8dd91afc703064dac416))
 * **js:** send empty body in confirmCvmPatch instead of undefined ([a228001](https://github.com/Phala-Network/phala-cloud/commit/a22800121b6d4db6fa719864f8775cd70c28801d))
 * **js:** use toMatchObject for viem Chain comparisons in tests ([5b5d00c](https://github.com/Phala-Network/phala-cloud/commit/5b5d00c0b8f32d8147e2d784e9a10ad7fcaf152e))
+
 ## [0.2.5](https://github.com/Phala-Network/phala-cloud/compare/js-v0.2.4...js-v0.2.5) (2026-03-14)
 
 ### docs
@@ -96,12 +101,14 @@
 ### perf
 
 * use multicall for batch device allowlist checks ([4fb338f](https://github.com/Phala-Network/phala-cloud/commit/4fb338f0f7e383fdfee016e02712075c22ae3af0))
+
 ## [0.2.4](https://github.com/Phala-Network/phala-cloud/compare/js-v0.2.3...js-v0.2.4) (2026-02-25)
 
 ### feat
 
 * **sdk+cli:** add SSH key and CVM runtime-config commands ([692321a](https://github.com/Phala-Network/phala-cloud/commit/692321a05bacdbc4da9bcfbc9b82ab8fcfc9d25a))
 * **sdk:** add create, delete, and sync SSH key actions ([a688f29](https://github.com/Phala-Network/phala-cloud/commit/a688f2909932500be88ac238d5fcb894f7af98d6))
+
 ## [0.2.3](https://github.com/Phala-Network/phala-cloud/compare/js-v0.2.2...js-v0.2.3) (2026-02-07)
 
 ### feat
@@ -117,6 +124,7 @@
 ### refactor
 
 * **js:** add revision_id to app revisions and use revisionId for detail ([8d72149](https://github.com/Phala-Network/phala-cloud/commit/8d72149e69a71bfc11eb35c2240753b4ecc014b7))
+
 ## [0.2.2](https://github.com/Phala-Network/phala-cloud/compare/js-v0.2.1...js-v0.2.2) (2026-01-31)
 
 ### feat
@@ -127,6 +135,7 @@
 ### refactor
 
 * sync NodeRef schema from backend ([f699002](https://github.com/Phala-Network/phala-cloud/commit/f699002fc24785c58cfa0452c0ab151d6c661117))
+
 ## [0.2.1](https://github.com/Phala-Network/phala-cloud/compare/js-v0.2.1-beta.4...js-v0.2.1) (2026-01-31)
 
 ### feat
@@ -162,14 +171,6 @@
 * **cli:** unify error handling with SDK's ResourceError ([fd815b1](https://github.com/Phala-Network/phala-cloud/commit/fd815b13a241a1c22d0c59ae24f99cfec8828712))
 * extract auth schemas into credentials module and fix CLI type safety ([21a545b](https://github.com/Phala-Network/phala-cloud/commit/21a545b3901c80a203372195358cbcb37dcfad5f))
 * **js:** simplify versioned response types and add withVersion method ([b952770](https://github.com/Phala-Network/phala-cloud/commit/b9527706568c288ba36e5d14e159503dac75c5f0))
-## [0.2.1-beta.4](https://github.com/Phala-Network/phala-cloud/compare/js-v0.2.1-beta.4...js-v0.2.1-beta.4) (2025-11-28)
-
-### feat
-
-* add standalone patch api for docker compose & prelaunch script ([efc9a05](https://github.com/Phala-Network/phala-cloud/commit/efc9a052c2fb0b4cf6eedce628c81ef86826fa4d))
-* add validate rule to cvm name when creating cvm ([92138c0](https://github.com/Phala-Network/phala-cloud/commit/92138c0de0021aa06e597aa321c9a293bb078e2a))
-* unify name convention across cli & sdk ([9f0d1e5](https://github.com/Phala-Network/phala-cloud/commit/9f0d1e5d5f7b600a1c963816ce38bd1b402885ef))
-* update cvm_id ([a66bc1f](https://github.com/Phala-Network/phala-cloud/commit/a66bc1fe4a42dd01ef3f1548e54562eb5541e193))
 
 ## [0.2.1-beta.4](https://github.com/Phala-Network/phala-cloud/compare/js-v0.2.1-beta.2...js-v0.2.1-beta.4) (2025-11-12)
 
