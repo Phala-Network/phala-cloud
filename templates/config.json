@@ -5094,5 +5094,33 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools", "Automation"]
-  }
+  },
+{
+  "id": "local-deep-research",
+  "name": "LearningCircuit/local-deep-research",
+  "description": "~95% on SimpleQA (e.g. Qwen3.6-27B on a 3090). Supports all local and cloud LLMs (llama.cpp, Ollama, Google, ...). 10+ search engines - arXiv, PubMed, your private documents. Everything Local & Encrypted. This template runs a CPU-safe verifier/demo by default without model/provider calls.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/local-deep-research",
+  "author": "LearningCircuit",
+  "icon": "local-deep-research.png",
+  "envs": [
+    {
+      "key": "LDR_DEMO_MAX_SOURCES",
+      "required": false,
+      "description": "Number of bundled local demo source summaries returned by /demo. Values are clamped from 1 to 5.",
+      "default": "3"
+    },
+    {
+      "key": "LDR_VERIFY_TIMEOUT_SECONDS",
+      "required": false,
+      "description": "Timeout in seconds for each public GitHub or PyPI metadata verification request.",
+      "default": "8"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": ["RAG", "AI Agents", "Web Data & Search"]
+}
 ]

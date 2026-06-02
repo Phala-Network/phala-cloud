@@ -1,0 +1,477 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    user: "65532:65532"
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      LDR_UPSTREAM: https://github.com/LearningCircuit/local-deep-research
+      LDR_COMMIT: b0d5dd236f717a25c837e549a3b893311755d819
+      LDR_COMMIT_DATE: "2026-05-29T22:54:14+02:00"
+      LDR_SOURCE_VERSION: "1.7.0"
+      LDR_PYPI_VERSION: "1.6.13"
+      LDR_PYPI_WHEEL_SHA256: e14ba31921671d770d57f5fbb2e5ed803cffc0f5c6e6695a136d708d200b4cb1
+      LDR_DEMO_MAX_SOURCES: ${LDR_DEMO_MAX_SOURCES:-3}
+      LDR_VERIFY_TIMEOUT_SECONDS: ${LDR_VERIFY_TIMEOUT_SECONDS:-8}
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    configs:
+      - source: server_py
+        target: /server.py
+        mode: 0444
+    command:
+      - python
+      - /server.py
+    working_dir: /tmp
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+configs:
+  server_py:
+    content: |
+      import copy
+      import hashlib
+      import json
+      import os
+      import platform
+      import re
+      import sys
+      import threading
+      import time
+      import urllib.request
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import parse_qs, urlparse
+
+      STARTED_AT = time.time()
+      UPSTREAM = os.environ.get("LDR_UPSTREAM", "https://github.com/LearningCircuit/local-deep-research")
+      COMMIT = os.environ.get("LDR_COMMIT", "b0d5dd236f717a25c837e549a3b893311755d819")
+      COMMIT_DATE = os.environ.get("LDR_COMMIT_DATE", "2026-05-29T22:54:14+02:00")
+      SOURCE_VERSION = os.environ.get("LDR_SOURCE_VERSION", "1.7.0")
+      PYPI_VERSION = os.environ.get("LDR_PYPI_VERSION", "1.6.13")
+      PYPI_WHEEL_SHA256 = os.environ.get(
+          "LDR_PYPI_WHEEL_SHA256",
+          "e14ba31921671d770d57f5fbb2e5ed803cffc0f5c6e6695a136d708d200b4cb1",
+      )
+
+      FILES = {
+          "README.md": {
+              "sha256": "e21e40ca6b9f46a27b4338c49404c72ff9c5e7cbe396682f99aedce859463bf6",
+              "markers": [
+                  "Qwen3.6-27B",
+                  "SearXNG",
+                  "SQLCipher",
+                  "arXiv",
+                  "PubMed",
+                  "llama.cpp",
+              ],
+          },
+          "pyproject.toml": {
+              "sha256": "856e47ec52f90d5e8eab8748c7ef87412f04f5bd992771d607d83ab132e9666a",
+              "markers": [
+                  'name = "local-deep-research"',
+                  'requires-python = ">=3.12,<3.15"',
+                  "langchain-ollama",
+                  "duckduckgo-search",
+                  "sqlcipher3-binary",
+              ],
+          },
+          "docker-compose.yml": {
+              "sha256": "9353cd983967b031f75e59d0918f2632b4d2ac96d115f82ae62e04831a32f678",
+              "markers": [
+                  "localdeepresearch/local-deep-research",
+                  "ollama/ollama",
+                  "searxng/searxng",
+                  "LDR_WEB_PORT=5000",
+                  "LDR_DATA_DIR=/data",
+              ],
+          },
+          "docs/docker-compose-guide.md": {
+              "sha256": "9968f6ef471d2dac52bceec3ef167eee329a1d3ab74a6497244fb9f6bdd3e088",
+              "markers": [
+                  "CPU-Only",
+                  "local-deep-research",
+                  "ollama",
+                  "searxng",
+              ],
+          },
+          "docs/api-quickstart.md": {
+              "sha256": "a217f99d0f2e222859baf6cc48144855d15b7850fa7a341ccb19d5c26fc96d52",
+              "markers": [
+                  "Authentication Required",
+                  "per-user encrypted databases",
+                  "/api/start_research",
+                  "CSRF",
+              ],
+          },
+          "src/local_deep_research/web_search_engines/search_engines_config.py": {
+              "sha256": "83b20dde382d910db400419037e21b4175ed4a12164e5e757162d93f7fe1a69b",
+              "markers": [
+                  "def search_config",
+                  "ENGINE_REGISTRY",
+                  "retriever_registry",
+                  "LibraryRAGSearchEngine",
+              ],
+          },
+          "src/local_deep_research/__version__.py": {
+              "sha256": "944131e65c229d46f2f98365ef0f9514651c8dc89bb09f44bb3809d96ee872b5",
+              "markers": [
+                  '__version__ = "1.7.0"',
+              ],
+          },
+      }
+
+      DOCS = [
+          {
+              "id": "research-workflow",
+              "title": "Agentic research workflow",
+              "text": (
+                  "Local Deep Research plans multi-step research, searches web and academic sources, "
+                  "then synthesizes cited reports. The LangGraph agent strategy lets the LLM choose "
+                  "specialized engines such as arXiv, PubMed, Semantic Scholar, and web search."
+              ),
+          },
+          {
+              "id": "local-llms",
+              "title": "Local and cloud LLM providers",
+              "text": (
+                  "Production LDR can connect to Ollama, llama.cpp, LM Studio, OpenAI-compatible "
+                  "endpoints, Google Gemini, Anthropic, and other providers. The default Phala demo "
+                  "does not call any provider or download model weights."
+              ),
+          },
+          {
+              "id": "private-library",
+              "title": "Private documents and encrypted storage",
+              "text": (
+                  "LDR can build a searchable knowledge base from uploaded documents and research "
+                  "outputs. Upstream uses per-user SQLCipher databases so research history, API keys, "
+                  "and private library data are encrypted at rest."
+              ),
+          },
+          {
+              "id": "deployment-shape",
+              "title": "Upstream deployment shape",
+              "text": (
+                  "The upstream Docker Compose stack runs the LDR web app with Ollama and SearXNG "
+                  "sidecars. Full research use still requires selecting a model, configuring search, "
+                  "and sizing storage for databases, indexes, documents, and downloaded model files."
+              ),
+          },
+          {
+              "id": "benchmarks",
+              "title": "Benchmark context",
+              "text": (
+                  "The upstream README reports roughly 95 percent SimpleQA with Qwen3.6-27B on a "
+                  "single RTX 3090 using the langgraph-agent strategy and local Ollama."
+              ),
+          },
+      ]
+
+      VERIFY_LOCK = threading.Lock()
+      VERIFY_STATE = {
+          "status": "starting",
+          "checked_at": None,
+          "files": {},
+          "pypi": {},
+          "errors": [],
+      }
+
+
+      def timeout_seconds():
+          try:
+              return max(1.0, float(os.environ.get("LDR_VERIFY_TIMEOUT_SECONDS", "8")))
+          except ValueError:
+              return 8.0
+
+
+      def max_sources():
+          try:
+              return max(1, min(5, int(os.environ.get("LDR_DEMO_MAX_SOURCES", "3"))))
+          except ValueError:
+              return 3
+
+
+      def now_iso():
+          return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+      def fetch_bytes(url):
+          request = urllib.request.Request(
+              url,
+              headers={"User-Agent": "phala-cloud-local-deep-research-template/1.0"},
+          )
+          with urllib.request.urlopen(request, timeout=timeout_seconds()) as response:
+              return response.read()
+
+
+      def raw_url(path):
+          return f"https://raw.githubusercontent.com/LearningCircuit/local-deep-research/{COMMIT}/{path}"
+
+
+      def verify_file(path, expected):
+          data = fetch_bytes(raw_url(path))
+          text = data.decode("utf-8", errors="replace")
+          digest = hashlib.sha256(data).hexdigest()
+          marker_results = {marker: marker in text for marker in expected["markers"]}
+          return {
+              "url": raw_url(path),
+              "bytes": len(data),
+              "sha256": digest,
+              "sha256_expected": expected["sha256"],
+              "sha256_ok": digest == expected["sha256"],
+              "markers_ok": marker_results,
+              "ok": digest == expected["sha256"] and all(marker_results.values()),
+          }
+
+
+      def verify_pypi():
+          url = f"https://pypi.org/pypi/local-deep-research/{PYPI_VERSION}/json"
+          data = json.loads(fetch_bytes(url).decode("utf-8"))
+          info = data.get("info", {})
+          urls = data.get("urls", [])
+          wheel = next(
+              (item for item in urls if item.get("packagetype") == "bdist_wheel"),
+              {},
+          )
+          wheel_sha = wheel.get("digests", {}).get("sha256")
+          return {
+              "url": url,
+              "name": info.get("name"),
+              "version": info.get("version"),
+              "requires_python": info.get("requires_python"),
+              "home_page": info.get("home_page"),
+              "wheel": wheel.get("filename"),
+              "wheel_sha256": wheel_sha,
+              "wheel_sha256_expected": PYPI_WHEEL_SHA256,
+              "ok": (
+                  info.get("name") == "local-deep-research"
+                  and info.get("version") == PYPI_VERSION
+                  and info.get("requires_python") == "<3.15,>=3.12"
+                  and wheel_sha == PYPI_WHEEL_SHA256
+              ),
+          }
+
+
+      def run_verification():
+          state = {
+              "status": "running",
+              "checked_at": now_iso(),
+              "files": {},
+              "pypi": {},
+              "errors": [],
+          }
+          with VERIFY_LOCK:
+              VERIFY_STATE.update(copy.deepcopy(state))
+
+          for path, expected in FILES.items():
+              try:
+                  state["files"][path] = verify_file(path, expected)
+              except Exception as exc:
+                  state["files"][path] = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+                  state["errors"].append(f"{path}: {type(exc).__name__}: {exc}")
+
+          try:
+              state["pypi"] = verify_pypi()
+          except Exception as exc:
+              state["pypi"] = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+              state["errors"].append(f"pypi: {type(exc).__name__}: {exc}")
+
+          checks = [item.get("ok") for item in state["files"].values()]
+          checks.append(state["pypi"].get("ok", False))
+          state["status"] = "passed" if all(checks) else "failed"
+          with VERIFY_LOCK:
+              VERIFY_STATE.update(copy.deepcopy(state))
+
+
+      def get_verify_state():
+          with VERIFY_LOCK:
+              return copy.deepcopy(VERIFY_STATE)
+
+
+      def verification_summary():
+          state = get_verify_state()
+          file_results = state.get("files", {})
+          passed_files = sum(1 for item in file_results.values() if item.get("ok"))
+          total_files = len(FILES)
+          return {
+              "status": state.get("status"),
+              "checked_at": state.get("checked_at"),
+              "source_artifact": f"{UPSTREAM}/tree/{COMMIT}",
+              "source_files_passed": passed_files,
+              "source_files_total": total_files,
+              "pypi_ok": state.get("pypi", {}).get("ok"),
+              "errors": state.get("errors", []),
+          }
+
+
+      def tokenize(text):
+          return set(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+      def search_demo_docs(query):
+          query_terms = tokenize(query) or {"research"}
+          scored = []
+          for doc in DOCS:
+              terms = tokenize(doc["title"] + " " + doc["text"])
+              overlap = sorted(query_terms & terms)
+              score = len(overlap)
+              scored.append((score, doc["id"], overlap, doc))
+          scored.sort(key=lambda item: (-item[0], item[1]))
+          selected = []
+          for score, _doc_id, overlap, doc in scored[:max_sources()]:
+              item = dict(doc)
+              item["score"] = score
+              item["matched_terms"] = overlap
+              selected.append(item)
+          return selected
+
+
+      def build_demo(query):
+          selected = search_demo_docs(query)
+          titles = [item["title"] for item in selected]
+          return {
+              "mode": "deterministic local demo",
+              "query": query,
+              "research_plan": [
+                  "parse the user question",
+                  "retrieve fixed local context records",
+                  "rank context by token overlap",
+                  "return a cited synthesis without provider calls",
+              ],
+              "selected_sources": selected,
+              "answer": (
+                  "This demo does not run a full Local Deep Research job. It uses a fixed local "
+                  "corpus to show the shape of a research response. Relevant context: "
+                  + "; ".join(titles)
+                  + "."
+              ),
+              "citations": [item["id"] for item in selected],
+              "external_llm_calls": False,
+              "external_search_calls": False,
+              "browser_automation": False,
+              "model_downloaded": False,
+              "gpu_required": False,
+          }
+
+
+      def base_payload():
+          return {
+              "service": "local-deep-research-demo",
+              "upstream": UPSTREAM,
+              "pinned_commit": COMMIT,
+              "pinned_commit_date": COMMIT_DATE,
+              "source_version": SOURCE_VERSION,
+              "pypi_version": PYPI_VERSION,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "local-deep-research-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              parsed = urlparse(self.path)
+              path = parsed.path
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  payload.update({
+                      "ok": True,
+                      "status": "ready",
+                      "credentials_required": False,
+                      "cpu_only": True,
+                      "provider_calls": False,
+                      "model_downloaded": False,
+                      "upstream_verification": verification_summary(),
+                      "endpoints": ["/healthz", "/demo", "/v1/models", "/upstream"],
+                  })
+                  self.respond_json(200, payload)
+                  return
+
+              if path == "/demo":
+                  query = parse_qs(parsed.query).get(
+                      "query",
+                      ["How does Local Deep Research support private local research?"],
+                  )[0]
+                  payload = base_payload()
+                  payload.update({
+                      "ok": True,
+                      "cpu_only": True,
+                      "credential_free_by_default": True,
+                      "uses_upstream_source_artifact": True,
+                      "upstream_verification": verification_summary(),
+                      "demo": build_demo(query),
+                  })
+                  self.respond_json(200, payload)
+                  return
+
+              if path == "/v1/models":
+                  self.respond_json(200, {
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "local-deep-research/no-llm-demo",
+                              "object": "model",
+                              "created": 0,
+                              "owned_by": "LearningCircuit",
+                              "description": (
+                                  "Metadata-only smoke endpoint. The default template "
+                                  "does not host or call an LLM."
+                              ),
+                          }
+                      ],
+                  })
+                  return
+
+              if path == "/upstream":
+                  payload = base_payload()
+                  payload.update({
+                      "ok": True,
+                      "verification": get_verify_state(),
+                      "source_files": sorted(FILES.keys()),
+                  })
+                  self.respond_json(200, payload)
+                  return
+
+              self.respond_json(404, {
+                  "ok": False,
+                  "error": "not found",
+                  "endpoints": ["/healthz", "/demo", "/v1/models", "/upstream"],
+              })
+
+
+      if __name__ == "__main__":
+          threading.Thread(target=run_verification, daemon=True).start()
+          port = int(os.environ.get("PORT", "8080"))
+          server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+          print(f"local-deep-research demo server listening on 0.0.0.0:{port}", flush=True)
+          server.serve_forever()
