@@ -4972,5 +4972,27 @@
       "diskSize": 20
     },
     "tags": ["LLM Inference & Model Serving", "Infrastructure", "Developer Tools"]
+  },
+{
+    "id": "ruflo",
+    "name": "ruvnet/ruflo",
+    "description": "🌊 The leading agent orchestration platform for Claude. Deploy intelligent multi-agent swarms, coordinate autonomous workflows, and build conversational AI systems. Features enterprise-grade architecture, self-learning swarm intelligence, RAG integration, and native Claude Code / Codex Integration",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/ruflo",
+    "author": "ruvnet",
+    "icon": "ruflo.svg",
+    "envs": [
+      {
+        "key": "RUFLO_VERSION",
+        "required": false,
+        "default": "3.10.24",
+        "description": "Ruflo npm package version installed by the verifier service at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["AI Agents", "Developer Tools"]
   }
 ]

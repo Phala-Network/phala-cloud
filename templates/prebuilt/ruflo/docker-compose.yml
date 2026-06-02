@@ -1,0 +1,384 @@
+services:
+  app:
+    image: node:20-bookworm-slim
+    ports:
+      - "8080:8080"
+    environment:
+      RUFLO_VERSION: ${RUFLO_VERSION:-3.10.24}
+      RUFLO_INSTALL_DIR: /opt/ruflo
+      NODE_ENV: production
+      NO_COLOR: "1"
+      NPM_CONFIG_AUDIT: "false"
+      NPM_CONFIG_FUND: "false"
+      NPM_CONFIG_OMIT: optional
+      NPM_CONFIG_UPDATE_NOTIFIER: "false"
+      PORT: "8080"
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        mkdir -p "$${RUFLO_INSTALL_DIR}"
+        if ! node -e "const fs = require('fs'); const p = process.env.RUFLO_INSTALL_DIR + '/node_modules/ruflo/package.json'; if (!fs.existsSync(p)) process.exit(1); const pkg = require(p); process.exit(pkg.version === process.env.RUFLO_VERSION ? 0 : 1);"; then
+          rm -rf "$${RUFLO_INSTALL_DIR}/node_modules" "$${RUFLO_INSTALL_DIR}/package.json" "$${RUFLO_INSTALL_DIR}/package-lock.json"
+          npm --prefix "$${RUFLO_INSTALL_DIR}" install --no-audit --no-fund --omit=dev --omit=optional --ignore-scripts "ruflo@$${RUFLO_VERSION}"
+        fi
+        exec node /app/server.mjs
+    configs:
+      - source: server_mjs
+        target: /app/server.mjs
+    volumes:
+      - ruflo-npm:/opt/ruflo
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - 'fetch("http://127.0.0.1:8080/healthz").then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 150s
+    restart: unless-stopped
+
+configs:
+  server_mjs:
+    content: |
+      import { spawnSync } from "node:child_process";
+      import { createServer } from "node:http";
+      import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+      import { join } from "node:path";
+      import { tmpdir } from "node:os";
+
+      const SERVICE = "ruflo-local-verifier";
+      const UPSTREAM = "https://github.com/ruvnet/ruflo";
+      const STARTED_AT = Date.now();
+      const PORT = Number(process.env.PORT || "8080");
+      const INSTALL_DIR = process.env.RUFLO_INSTALL_DIR || "/opt/ruflo";
+      const REQUESTED_VERSION = process.env.RUFLO_VERSION || "3.10.24";
+      const RUFLO_BIN = join(INSTALL_DIR, "node_modules", ".bin", "ruflo");
+      const PROVIDER_ENV_KEYS = [
+        "ANTHROPIC_API_KEY",
+        "CLAUDE_API_KEY",
+        "GOOGLE_API_KEY",
+        "OPENAI_API_KEY",
+        "OPENROUTER_API_KEY",
+      ];
+
+      function basePayload() {
+        return {
+          service: SERVICE,
+          upstream: UPSTREAM,
+          uptime_seconds: Math.round((Date.now() - STARTED_AT) / 100) / 10,
+          requested_ruflo_version: REQUESTED_VERSION,
+          credentials_required: false,
+          cpu_only: true,
+          model_downloaded: false,
+          model_loaded: false,
+          remote_calls: false,
+        };
+      }
+
+      function readPackage() {
+        const packagePath = join(INSTALL_DIR, "node_modules", "ruflo", "package.json");
+        if (!existsSync(packagePath)) {
+          return {
+            ok: false,
+            error: "ruflo package.json not found at " + packagePath,
+          };
+        }
+        try {
+          const pkg = JSON.parse(readFileSync(packagePath, "utf8"));
+          return {
+            ok: true,
+            package: {
+              name: pkg.name,
+              version: pkg.version,
+              description: pkg.description,
+              bin: pkg.bin,
+              repository: pkg.repository,
+              dependency_claude_flow_cli: pkg.dependencies ? pkg.dependencies["@claude-flow/cli"] : null,
+              engines: pkg.engines,
+            },
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            error: String(error && error.message ? error.message : error),
+          };
+        }
+      }
+
+      function commandEnv() {
+        const env = { ...process.env, CI: "true", NO_COLOR: "1" };
+        for (const key of PROVIDER_ENV_KEYS) {
+          env[key] = "";
+        }
+        return env;
+      }
+
+      function runCli(args, options = {}) {
+        const started = Date.now();
+        const result = spawnSync(RUFLO_BIN, args, {
+          cwd: options.cwd || "/tmp",
+          env: commandEnv(),
+          encoding: "utf8",
+          timeout: options.timeoutMs || 10000,
+          maxBuffer: 1024 * 1024 * 8,
+        });
+        const elapsed = Date.now() - started;
+        const stdout = result.stdout || "";
+        const stderr = result.stderr || "";
+        const error = result.error
+          ? String(result.error && result.error.message ? result.error.message : result.error)
+          : null;
+        return {
+          ok: !error && result.status === 0,
+          exit_code: result.status,
+          signal: result.signal,
+          duration_ms: elapsed,
+          stdout,
+          stderr,
+          error,
+        };
+      }
+
+      function parseJsonFromText(text) {
+        const trimmed = (text || "").trim();
+        if (!trimmed) {
+          return null;
+        }
+        try {
+          return JSON.parse(trimmed);
+        } catch {
+          // Continue below. Some Ruflo CLI commands print status lines before JSON.
+        }
+        const starts = [];
+        for (let i = 0; i < trimmed.length; i += 1) {
+          if (trimmed[i] === "{" || trimmed[i] === "[") {
+            starts.push(i);
+          }
+        }
+        for (let i = starts.length - 1; i >= 0; i -= 1) {
+          try {
+            return JSON.parse(trimmed.slice(starts[i]));
+          } catch {
+            // Try the next candidate start.
+          }
+        }
+        return null;
+      }
+
+      function compactCommand(command, result, parsedSummary = undefined) {
+        const payload = {
+          command,
+          ok: result.ok,
+          exit_code: result.exit_code,
+          duration_ms: result.duration_ms,
+        };
+        if (parsedSummary !== undefined) {
+          payload.parsed = parsedSummary;
+        }
+        if (!result.ok) {
+          payload.stderr = result.stderr.trim();
+          payload.stdout = result.stdout.trim().slice(0, 2000);
+          payload.error = result.error;
+        }
+        return payload;
+      }
+
+      function summarizeTools(tools) {
+        const counts = {};
+        const sampleNames = [];
+        for (const tool of tools) {
+          const category = tool.category || "uncategorized";
+          counts[category] = (counts[category] || 0) + 1;
+          if (
+            ["agent_spawn", "agent_list", "swarm_init", "memory_store", "hooks_route"].includes(tool.name)
+            && sampleNames.length < 5
+          ) {
+            sampleNames.push(tool.name);
+          }
+        }
+        return {
+          total: tools.length,
+          categories: counts,
+          sample_tools: sampleNames,
+        };
+      }
+
+      function runDemo() {
+        const packageInfo = readPackage();
+        const versionCommand = runCli(["--version"], { timeoutMs: 5000 });
+        const toolsCommand = runCli(["mcp", "tools", "--format", "json", "--no-color"], { timeoutMs: 10000 });
+        const tools = parseJsonFromText(toolsCommand.stdout);
+        const toolSummary = Array.isArray(tools) ? summarizeTools(tools) : null;
+
+        const workdir = mkdtempSync(join(tmpdir(), "ruflo-demo-"));
+        let stateFileExists = false;
+        let stateFileSummary = null;
+        let swarmPayload = null;
+        let agentPayload = null;
+        let swarmCommand;
+        let agentListCommand;
+
+        try {
+          const swarmParams = JSON.stringify({
+            topology: "mesh",
+            maxAgents: 2,
+            strategy: "specialized",
+          });
+          swarmCommand = runCli(
+            ["mcp", "exec", "-t", "swarm_init", "-p", swarmParams, "--format", "json", "--no-color"],
+            { cwd: workdir, timeoutMs: 10000 },
+          );
+          swarmPayload = parseJsonFromText(swarmCommand.stdout);
+
+          const statePath = join(workdir, ".claude-flow", "swarm", "swarm-state.json");
+          stateFileExists = existsSync(statePath);
+          if (stateFileExists) {
+            const state = JSON.parse(readFileSync(statePath, "utf8"));
+            stateFileSummary = {
+              swarm_count: Array.isArray(state.swarms) ? state.swarms.length : undefined,
+              active_swarm_id: state.activeSwarmId || null,
+              has_state_file: true,
+            };
+          }
+
+          agentListCommand = runCli(["agent", "list", "--format", "json", "--no-color"], {
+            cwd: workdir,
+            timeoutMs: 10000,
+          });
+          agentPayload = parseJsonFromText(agentListCommand.stdout);
+        } finally {
+          rmSync(workdir, { recursive: true, force: true });
+        }
+
+        const ok =
+          packageInfo.ok
+          && versionCommand.ok
+          && toolsCommand.ok
+          && Array.isArray(tools)
+          && tools.length > 0
+          && Boolean(swarmPayload && swarmPayload.result && swarmPayload.result.success)
+          && stateFileExists
+          && Boolean(agentPayload && Array.isArray(agentPayload.agents));
+
+        return {
+          ...basePayload(),
+          ok,
+          status: ok ? "ready" : "failed",
+          package: packageInfo.package || null,
+          package_error: packageInfo.error || null,
+          cli_version: versionCommand.stdout.trim(),
+          check: "Installs the real ruflo npm package, lists Ruflo MCP tools, and initializes a local two-slot mesh swarm in an ephemeral workspace.",
+          commands: [
+            compactCommand("ruflo --version", versionCommand, { output: versionCommand.stdout.trim() }),
+            compactCommand("ruflo mcp tools --format json", toolsCommand, toolSummary),
+            compactCommand(
+              "ruflo mcp exec -t swarm_init -p '{\"topology\":\"mesh\",\"maxAgents\":2,\"strategy\":\"specialized\"}'",
+              swarmCommand,
+              swarmPayload
+                ? {
+                    success: Boolean(swarmPayload.result && swarmPayload.result.success),
+                    topology: swarmPayload.result ? swarmPayload.result.topology : null,
+                    max_agents: swarmPayload.result ? swarmPayload.result.maxAgents : null,
+                    persisted: Boolean(swarmPayload.result && swarmPayload.result.persisted),
+                  }
+                : null,
+            ),
+            compactCommand("ruflo agent list --format json", agentListCommand, agentPayload),
+          ],
+          demo: {
+            mcp_tools: toolSummary,
+            swarm: swarmPayload ? swarmPayload.result : null,
+            state_file: stateFileSummary,
+            agents: agentPayload,
+          },
+        };
+      }
+
+      function modelsPayload() {
+        return {
+          object: "list",
+          data: [
+            {
+              id: "ruflo-local-verifier",
+              object: "model",
+              created: 0,
+              owned_by: "ruvnet",
+              description: "CPU-only Ruflo CLI and MCP verifier. It is not an LLM and does not load model weights.",
+              capabilities: ["cli-version", "mcp-tools", "swarm-init", "agent-list"],
+              credentials_required: false,
+              remote_calls: false,
+            },
+          ],
+        };
+      }
+
+      function respondJson(response, statusCode, payload) {
+        const body = JSON.stringify(payload, null, 2) + "\n";
+        response.writeHead(statusCode, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Content-Length": Buffer.byteLength(body),
+        });
+        response.end(body);
+      }
+
+      const server = createServer((request, response) => {
+        const url = new URL(request.url || "/", "http://localhost");
+
+        if (request.method !== "GET") {
+          respondJson(response, 405, { ...basePayload(), ok: false, error: "method_not_allowed" });
+          return;
+        }
+
+        if (url.pathname === "/" || url.pathname === "/healthz") {
+          const packageInfo = readPackage();
+          const versionCommand = runCli(["--version"], { timeoutMs: 5000 });
+          const versionOutput = versionCommand.stdout.trim();
+          const ok =
+            packageInfo.ok
+            && versionCommand.ok
+            && versionOutput.includes("ruflo")
+            && versionOutput.includes(packageInfo.package.version);
+          respondJson(response, ok ? 200 : 500, {
+            ...basePayload(),
+            ok,
+            status: ok ? "ready" : "failed",
+            package: packageInfo.package || null,
+            package_error: packageInfo.error || null,
+            cli_version: versionOutput,
+            cli_error: versionCommand.ok ? null : versionCommand.stderr.trim() || versionCommand.error,
+          });
+          return;
+        }
+
+        if (url.pathname === "/demo") {
+          try {
+            const payload = runDemo();
+            respondJson(response, payload.ok ? 200 : 500, payload);
+          } catch (error) {
+            respondJson(response, 500, {
+              ...basePayload(),
+              ok: false,
+              status: "failed",
+              error: String(error && error.message ? error.message : error),
+            });
+          }
+          return;
+        }
+
+        if (url.pathname === "/v1/models") {
+          respondJson(response, 200, modelsPayload());
+          return;
+        }
+
+        respondJson(response, 404, { ...basePayload(), ok: false, error: "not_found" });
+      });
+
+      server.listen(PORT, "0.0.0.0", () => {
+        console.log(SERVICE + " listening on port " + PORT);
+      });
+
+volumes:
+  ruflo-npm:
