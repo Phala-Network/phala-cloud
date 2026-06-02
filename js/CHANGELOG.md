@@ -1,3 +1,9 @@
+## [0.3.0](https://github.com/Phala-Network/phala-cloud/compare/js-v0.2.10...js-v0.3.0) (2026-06-02)
+
+### fix
+
+* **js:** add version-based schema selection for versioned action responses ([d96f402](https://github.com/Phala-Network/phala-cloud/commit/d96f402353cbbd6557c14908c6d2ba795dab28b7))
+* **js:** regenerate CHANGELOG with correct per-package path filter ([bdbcf9c](https://github.com/Phala-Network/phala-cloud/commit/bdbcf9c029e251944eff43823de555a37b436f46))
 ## [0.2.10](https://github.com/Phala-Network/phala-cloud/compare/js-v0.2.9...js-v0.2.10) (2026-06-02)
 
 ### feat
