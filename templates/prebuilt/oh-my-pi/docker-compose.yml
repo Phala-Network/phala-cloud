@@ -1,0 +1,371 @@
+services:
+  app:
+    image: oven/bun:1.3.14-slim
+    restart: unless-stopped
+    init: true
+    user: "0:0"
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: ${PORT:-8080}
+      OH_MY_PI_VERSION: ${OH_MY_PI_VERSION:-15.6.0}
+      OH_MY_PI_PACKAGE: "@oh-my-pi/pi-coding-agent"
+      OH_MY_PI_APP_DIR: /home/bun/oh-my-pi-app
+      HOME: /home/bun
+      XDG_CONFIG_HOME: /home/bun/.config
+      XDG_CACHE_HOME: /home/bun/.cache
+      PI_CODING_AGENT_DIR: /home/bun/.omp/agent
+      PI_NO_TITLE: "1"
+      PI_NO_PTY: "1"
+      PI_AUTH_NO_BORROW: "1"
+      PI_FORCE_IMAGE_PROTOCOL: "none"
+      PI_PYTHON_SKIP_CHECK: "1"
+      CI: "true"
+      NO_COLOR: "1"
+      TERM: "dumb"
+      BUN_INSTALL_CACHE_DIR: /home/bun/.bun/install/cache
+      BUN_RUNTIME_TRANSPILER_CACHE_PATH: /home/bun/.cache/bun/transpiler
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+    working_dir: /home/bun/oh-my-pi-app
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        app_dir="$${OH_MY_PI_APP_DIR:-/home/bun/oh-my-pi-app}"
+        requested_version="$${OH_MY_PI_VERSION:-15.6.0}"
+        mkdir -p "$$app_dir" "$$HOME" "$$XDG_CONFIG_HOME" "$$XDG_CACHE_HOME" "$$PI_CODING_AGENT_DIR" "$$BUN_INSTALL_CACHE_DIR" "$$BUN_RUNTIME_TRANSPILER_CACHE_PATH"
+        cd "$$app_dir"
+
+        installed_version="$$(cat .oh-my-pi-version 2>/dev/null || true)"
+        if [ ! -x node_modules/.bin/omp ] || [ "$$installed_version" != "$$requested_version" ]; then
+          rm -rf node_modules bun.lock bun.lockb package.json .oh-my-pi-version
+          printf '%s\n' '{"type":"module","private":true,"dependencies":{}}' > package.json
+          bun add --exact "$${OH_MY_PI_PACKAGE}@$${requested_version}"
+          printf '%s\n' "$$requested_version" > .oh-my-pi-version
+        fi
+
+        export PATH="$$app_dir/node_modules/.bin:$$PATH"
+        exec bun /opt/oh-my-pi-demo/server.js
+    configs:
+      - source: oh_my_pi_demo_server
+        target: /opt/oh-my-pi-demo/server.js
+      - source: oh_my_pi_sample
+        target: /opt/oh-my-pi-demo/sample.md
+    volumes:
+      - oh_my_pi_app:/home/bun/oh-my-pi-app
+      - oh_my_pi_config:/home/bun/.omp
+      - oh_my_pi_bun_cache:/home/bun/.bun/install/cache
+      - oh_my_pi_transpiler_cache:/home/bun/.cache/bun
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - -e
+        - 'fetch("http://127.0.0.1:" + (Bun.env.PORT || "8080") + "/healthz").then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 240s
+
+volumes:
+  oh_my_pi_app:
+  oh_my_pi_config:
+  oh_my_pi_bun_cache:
+  oh_my_pi_transpiler_cache:
+
+configs:
+  oh_my_pi_sample:
+    content: |
+      # Oh My Pi local verifier sample
+
+      This file is read by `omp read` during the Phala Cloud smoke demo. The
+      verifier uses local package and CLI primitives only; it does not call an
+      LLM provider, open a browser session, or download model weights.
+  oh_my_pi_demo_server:
+    content: |
+      import { spawnSync } from "node:child_process";
+      import fs from "node:fs";
+      import http from "node:http";
+      import os from "node:os";
+      import path from "node:path";
+
+      const STARTED_AT = Date.now();
+      const PORT = Number.parseInt(process.env.PORT || "8080", 10);
+      const PACKAGE_NAME = "@oh-my-pi/pi-coding-agent";
+      const REQUESTED_VERSION = process.env.OH_MY_PI_VERSION || "15.6.0";
+      const APP_DIR = process.env.OH_MY_PI_APP_DIR || "/home/bun/oh-my-pi-app";
+      const PACKAGE_ROOT = path.join(APP_DIR, "node_modules", "@oh-my-pi", "pi-coding-agent");
+      const SAMPLE_PATH = "/opt/oh-my-pi-demo/sample.md";
+      const UPSTREAM = "https://github.com/can1357/oh-my-pi";
+      const ENDPOINTS = ["/healthz", "/demo", "/v1/models"];
+      const PROVIDER_ENV_KEYS = [
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "GEMINI_API_KEY",
+        "OPENROUTER_API_KEY",
+      ];
+
+      function cleanText(value) {
+        return String(value || "")
+          .replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "")
+          .trim()
+          .slice(0, 4000);
+      }
+
+      function safeCommandEnv() {
+        const home = process.env.HOME || "/home/bun";
+        return {
+          PATH: path.join(APP_DIR, "node_modules", ".bin") + ":" + (process.env.PATH || "/usr/local/bin:/usr/bin:/bin"),
+          HOME: home,
+          XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME || path.join(home, ".config"),
+          XDG_CACHE_HOME: process.env.XDG_CACHE_HOME || path.join(home, ".cache"),
+          PI_CODING_AGENT_DIR: process.env.PI_CODING_AGENT_DIR || path.join(home, ".omp", "agent"),
+          PI_NO_TITLE: "1",
+          PI_NO_PTY: "1",
+          PI_AUTH_NO_BORROW: "1",
+          PI_FORCE_IMAGE_PROTOCOL: "none",
+          PI_PYTHON_SKIP_CHECK: "1",
+          BUN_INSTALL_CACHE_DIR: process.env.BUN_INSTALL_CACHE_DIR || path.join(home, ".bun", "install", "cache"),
+          BUN_RUNTIME_TRANSPILER_CACHE_PATH: process.env.BUN_RUNTIME_TRANSPILER_CACHE_PATH || path.join(home, ".cache", "bun", "transpiler"),
+          CI: "true",
+          NO_COLOR: "1",
+          TERM: "dumb",
+        };
+      }
+
+      function runCommand(command, args, timeoutMs) {
+        const started = Date.now();
+        const result = spawnSync(command, args, {
+          cwd: APP_DIR,
+          encoding: "utf8",
+          env: safeCommandEnv(),
+          timeout: timeoutMs,
+          maxBuffer: 1024 * 1024,
+        });
+        const timedOut = Boolean(result.error && result.error.code === "ETIMEDOUT");
+        const exitCode = timedOut ? 124 : result.status;
+        return {
+          ok: exitCode === 0 && !timedOut,
+          command: [command].concat(args).join(" "),
+          exit_code: exitCode,
+          stdout: cleanText(result.stdout),
+          stderr: cleanText(result.stderr),
+          timed_out: timedOut,
+          error: result.error ? result.error.name + ": " + result.error.message : null,
+          duration_ms: Date.now() - started,
+        };
+      }
+
+      function readJson(filePath) {
+        return JSON.parse(fs.readFileSync(filePath, "utf8"));
+      }
+
+      function packageMetadata() {
+        const packageJsonPath = path.join(PACKAGE_ROOT, "package.json");
+        try {
+          const data = readJson(packageJsonPath);
+          return {
+            ok: data.name === PACKAGE_NAME,
+            package_json_path: packageJsonPath,
+            name: data.name,
+            requested_version: REQUESTED_VERSION,
+            installed_version: data.version || null,
+            description: data.description || null,
+            homepage: data.homepage || null,
+            repository: data.repository || null,
+            bin: data.bin || null,
+            engines: data.engines || null,
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            package_json_path: packageJsonPath,
+            requested_version: REQUESTED_VERSION,
+            error: error.name + ": " + error.message,
+          };
+        }
+      }
+
+      function installMetadata() {
+        const appPackagePath = path.join(APP_DIR, "package.json");
+        const markerPath = path.join(APP_DIR, ".oh-my-pi-version");
+        let appPackage = null;
+        let markerVersion = null;
+        let error = null;
+        try {
+          appPackage = readJson(appPackagePath);
+        } catch (exc) {
+          error = exc.name + ": " + exc.message;
+        }
+        try {
+          markerVersion = fs.readFileSync(markerPath, "utf8").trim();
+        } catch {
+          markerVersion = null;
+        }
+        return {
+          ok: Boolean(appPackage && appPackage.dependencies && appPackage.dependencies[PACKAGE_NAME]) && markerVersion === REQUESTED_VERSION,
+          app_dir: APP_DIR,
+          app_package_path: appPackagePath,
+          dependency_spec: appPackage && appPackage.dependencies ? appPackage.dependencies[PACKAGE_NAME] || null : null,
+          marker_version: markerVersion,
+          cli_path: path.join(APP_DIR, "node_modules", ".bin", "omp"),
+          cli_present: fs.existsSync(path.join(APP_DIR, "node_modules", ".bin", "omp")),
+          error,
+        };
+      }
+
+      function providerConfiguration() {
+        const result = {};
+        for (const key of PROVIDER_ENV_KEYS) {
+          result[key.toLowerCase() + "_configured"] = Boolean(process.env[key]);
+        }
+        return result;
+      }
+
+      function inspectHealth() {
+        const pkg = packageMetadata();
+        const install = installMetadata();
+        const version = runCommand("omp", ["--version"], 10000);
+        const versionOutput = version.stdout || version.stderr;
+        return {
+          ok: pkg.ok && install.ok && install.cli_present && version.ok && versionOutput.length > 0,
+          package: pkg,
+          install,
+          cli_version: {
+            ok: version.ok && versionOutput.length > 0,
+            version_output: versionOutput,
+            check: version,
+          },
+        };
+      }
+
+      function inspectDemo() {
+        const health = inspectHealth();
+        const smoke = runCommand("omp", ["--smoke-test"], 20000);
+        const completions = runCommand("omp", ["completions", "bash"], 20000);
+        const readSample = runCommand("omp", ["read", SAMPLE_PATH + ":raw"], 20000);
+        return {
+          ok: health.ok && smoke.ok && completions.ok && completions.stdout.includes("omp") && readSample.ok,
+          health,
+          smoke_test: smoke,
+          completions: {
+            ok: completions.ok && completions.stdout.includes("omp"),
+            command: completions.command,
+            exit_code: completions.exit_code,
+            preview: completions.stdout.slice(0, 1200),
+            stderr: completions.stderr,
+            timed_out: completions.timed_out,
+            duration_ms: completions.duration_ms,
+          },
+          read_sample: readSample,
+        };
+      }
+
+      function basePayload() {
+        return {
+          service: "oh-my-pi-local-verifier",
+          upstream: UPSTREAM,
+          package_name: PACKAGE_NAME,
+          requested_version: REQUESTED_VERSION,
+          endpoints: ENDPOINTS,
+          uptime_seconds: Math.round((Date.now() - STARTED_AT) / 100) / 10,
+          bun: Bun.version,
+          platform: os.platform() + "/" + os.arch(),
+          cpu_only: true,
+          credentials_required_for_health: false,
+          provider_credentials_passed_to_verifier_commands: false,
+          hosted_model_calls_performed: false,
+          browser_auth_performed: false,
+          model_downloaded: false,
+          configured_provider_env: providerConfiguration(),
+        };
+      }
+
+      function modelListPayload() {
+        return {
+          object: "list",
+          data: [
+            {
+              id: "oh-my-pi/local-verifier",
+              object: "model",
+              created: Math.floor(STARTED_AT / 1000),
+              owned_by: "can1357",
+              metadata: {
+                template_id: "oh-my-pi",
+                upstream: UPSTREAM,
+                package_name: PACKAGE_NAME,
+                requested_version: REQUESTED_VERSION,
+                cpu_only: true,
+                not_a_hosted_llm: true,
+                credentials_required: false,
+              },
+            },
+          ],
+        };
+      }
+
+      function writeJson(response, status, payload) {
+        const body = Buffer.from(JSON.stringify(payload, null, 2) + "\n", "utf8");
+        response.writeHead(status, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Content-Length": String(body.length),
+          "Cache-Control": "no-store",
+        });
+        response.end(body);
+      }
+
+      function responseFor(pathname) {
+        if (pathname === "/" || pathname === "/healthz") {
+          const checks = inspectHealth();
+          const payload = basePayload();
+          payload.ok = checks.ok;
+          payload.status = checks.ok ? "ready" : "unhealthy";
+          payload.checks = checks;
+          return [checks.ok ? 200 : 503, payload];
+        }
+
+        if (pathname === "/demo") {
+          const checks = inspectDemo();
+          const payload = basePayload();
+          payload.ok = checks.ok;
+          payload.status = checks.ok ? "ready" : "unhealthy";
+          payload.description = "Installs the real upstream oh-my-pi package and exercises local-only CLI primitives without model provider credentials.";
+          payload.what_ran = [
+            "omp --version",
+            "omp --smoke-test",
+            "omp completions bash",
+            "omp read /opt/oh-my-pi-demo/sample.md:raw",
+          ];
+          payload.verifies = [
+            "The published @oh-my-pi/pi-coding-agent package is installed.",
+            "The omp CLI starts under Bun and reports its version.",
+            "The upstream smoke-test worker path runs locally.",
+            "Completion metadata can be generated from the local command table.",
+            "The read command can inspect a local file without an LLM provider.",
+          ];
+          payload.checks = checks;
+          return [checks.ok ? 200 : 503, payload];
+        }
+
+        if (pathname === "/v1/models") {
+          return [200, modelListPayload()];
+        }
+
+        return [404, { ok: false, error: "not found", endpoints: ENDPOINTS }];
+      }
+
+      const server = http.createServer((request, response) => {
+        const url = new URL(request.url || "/", "http://127.0.0.1");
+        const result = responseFor(url.pathname);
+        writeJson(response, result[0], result[1]);
+      });
+
+      server.listen(PORT, "0.0.0.0", () => {
+        process.stdout.write("oh-my-pi verifier listening on 0.0.0.0:" + String(PORT) + "\n");
+      });
