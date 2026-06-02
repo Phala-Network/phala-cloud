@@ -1,0 +1,504 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.11-bookworm-slim
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: ${PORT:-8080}
+      PIXELLE_VIDEO_REF: ${PIXELLE_VIDEO_REF:-db2e43a121a60b5042f72bec3f2627772dd401d6}
+      PYTHONUNBUFFERED: "1"
+      UV_SYSTEM_PYTHON: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+      PIP_ROOT_USER_ACTION: ignore
+    volumes:
+      - pixelle_video_cache:/opt/pixelle-video
+    configs:
+      - source: pixelle_video_bootstrap
+        target: /opt/pixelle-video-demo/bootstrap.py
+      - source: pixelle_video_server
+        target: /opt/pixelle-video-demo/server.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        python /opt/pixelle-video-demo/bootstrap.py
+        exec python /opt/pixelle-video-demo/server.py
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\", \"8080\")}/healthz', timeout=5).read()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
+
+volumes:
+  pixelle_video_cache:
+
+configs:
+  pixelle_video_bootstrap:
+    content: |
+      import io
+      import json
+      import os
+      import shutil
+      import subprocess
+      import sys
+      import tarfile
+      import time
+      import urllib.parse
+      import urllib.request
+      from datetime import datetime, timezone
+      from pathlib import Path
+
+
+      ROOT = Path("/opt/pixelle-video")
+      SOURCE_DIR = ROOT / "source"
+      STATE_FILE = ROOT / "state.json"
+      REF_FILE = ROOT / ".source-ref"
+      UPSTREAM = "https://github.com/AIDC-AI/Pixelle-Video"
+      DEFAULT_REF = "db2e43a121a60b5042f72bec3f2627772dd401d6"
+
+
+      def log(event, **fields):
+          print(json.dumps({"event": event, **fields}, sort_keys=True), flush=True)
+
+
+      def run(args):
+          log("run", command=args)
+          subprocess.run(args, check=True)
+
+
+      def current_ref():
+          return os.environ.get("PIXELLE_VIDEO_REF", DEFAULT_REF).strip() or DEFAULT_REF
+
+
+      def source_is_ready(ref):
+          return (
+              SOURCE_DIR.joinpath("pyproject.toml").is_file()
+              and SOURCE_DIR.joinpath("pixelle_video", "llm_presets.py").is_file()
+              and SOURCE_DIR.joinpath("pixelle_video", "models", "storyboard.py").is_file()
+              and SOURCE_DIR.joinpath("config.example.yaml").is_file()
+              and REF_FILE.is_file()
+              and REF_FILE.read_text(encoding="utf-8").strip() == ref
+          )
+
+
+      def safe_extract(data, destination):
+          tmp_dir = ROOT / ".source-tmp"
+          shutil.rmtree(tmp_dir, ignore_errors=True)
+          tmp_dir.mkdir(parents=True, exist_ok=True)
+          top_dir = None
+
+          with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+              for member in archive.getmembers():
+                  parts = Path(member.name).parts
+                  if len(parts) < 2:
+                      if parts:
+                          top_dir = top_dir or parts[0]
+                      continue
+                  top_dir = top_dir or parts[0]
+                  relative = Path(*parts[1:])
+                  if relative.is_absolute() or ".." in relative.parts:
+                      raise RuntimeError(f"unsafe tar path: {member.name}")
+                  target = tmp_dir / relative
+                  if member.isdir():
+                      target.mkdir(parents=True, exist_ok=True)
+                  elif member.isfile():
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      with archive.extractfile(member) as src, open(target, "wb") as dst:
+                          if src is None:
+                              raise RuntimeError(f"cannot read tar member: {member.name}")
+                          shutil.copyfileobj(src, dst)
+                      if member.mode:
+                          target.chmod(member.mode & 0o777)
+
+          shutil.rmtree(destination, ignore_errors=True)
+          tmp_dir.rename(destination)
+          return top_dir
+
+
+      def download_source(ref):
+          encoded_ref = urllib.parse.quote(ref, safe="")
+          url = f"https://api.github.com/repos/AIDC-AI/Pixelle-Video/tarball/{encoded_ref}"
+          request = urllib.request.Request(url, headers={"User-Agent": "phala-cloud-template-verifier"})
+          started = time.time()
+          log("download_source", ref=ref, url=url)
+          with urllib.request.urlopen(request, timeout=120) as response:
+              data = response.read()
+          top_dir = safe_extract(data, SOURCE_DIR)
+          REF_FILE.write_text(ref + "\n", encoding="utf-8")
+          return {
+              "source_ref": ref,
+              "source_url": url,
+              "source_tree": top_dir,
+              "downloaded_bytes": len(data),
+              "download_seconds": round(time.time() - started, 3),
+          }
+
+
+      def install_source_package():
+          run([
+              "uv",
+              "pip",
+              "install",
+              "--system",
+              "--no-cache",
+              "hatchling>=1.27.0",
+              "pydantic>=2.0.0",
+              "pyyaml>=6.0.0",
+              "loguru>=0.7.0",
+          ])
+          run([
+              "uv",
+              "pip",
+              "install",
+              "--system",
+              "--no-cache",
+              "--no-deps",
+              str(SOURCE_DIR),
+          ])
+
+
+      def main():
+          ROOT.mkdir(parents=True, exist_ok=True)
+          ref = current_ref()
+          state = {}
+          if STATE_FILE.is_file():
+              try:
+                  state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+              except Exception:
+                  state = {}
+
+          if not source_is_ready(ref):
+              state.update(download_source(ref))
+          else:
+              log("source_cached", ref=ref, source_dir=str(SOURCE_DIR))
+              state.update({"source_ref": ref, "source_dir": str(SOURCE_DIR)})
+
+          install_source_package()
+          state.update({
+              "upstream": UPSTREAM,
+              "source_dir": str(SOURCE_DIR),
+              "bootstrapped_at": datetime.now(timezone.utc).isoformat(),
+              "python": sys.version.split()[0],
+          })
+          STATE_FILE.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+          log("bootstrap_complete", ref=ref, source_dir=str(SOURCE_DIR))
+
+
+      if __name__ == "__main__":
+          main()
+
+  pixelle_video_server:
+    content: |
+      import importlib.metadata
+      import importlib.util
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      import tomllib
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path
+      from urllib.parse import urlparse
+
+      import yaml
+
+
+      STARTED_AT = time.time()
+      ROOT = Path("/opt/pixelle-video")
+      SOURCE_DIR = ROOT / "source"
+      STATE_FILE = ROOT / "state.json"
+      UPSTREAM = "https://github.com/AIDC-AI/Pixelle-Video"
+
+
+      def load_state():
+          try:
+              return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+          except Exception as exc:
+              return {"error": f"{type(exc).__name__}: {exc}"}
+
+
+      def load_source_module(name, relative_path):
+          path = SOURCE_DIR / relative_path
+          spec = importlib.util.spec_from_file_location(name, path)
+          if spec is None or spec.loader is None:
+              raise RuntimeError(f"cannot load module from {path}")
+          module = importlib.util.module_from_spec(spec)
+          sys.modules[name] = module
+          spec.loader.exec_module(module)
+          return module
+
+
+      def read_pyproject():
+          result = {
+              "name": None,
+              "version": None,
+              "description": None,
+              "requires_python": None,
+              "dependency_count": 0,
+              "selected_dependencies": [],
+              "error": None,
+          }
+          try:
+              with SOURCE_DIR.joinpath("pyproject.toml").open("rb") as fp:
+                  data = tomllib.load(fp)
+              project = data.get("project", {})
+              dependencies = project.get("dependencies", [])
+              result.update({
+                  "name": project.get("name"),
+                  "version": project.get("version"),
+                  "description": project.get("description"),
+                  "requires_python": project.get("requires-python"),
+                  "dependency_count": len(dependencies),
+                  "selected_dependencies": dependencies[:10],
+              })
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      def read_example_config():
+          result = {"loaded": False, "top_level_keys": [], "defaults": {}, "error": None}
+          try:
+              data = yaml.safe_load(SOURCE_DIR.joinpath("config.example.yaml").read_text(encoding="utf-8")) or {}
+              comfyui = data.get("comfyui", {})
+              result.update({
+                  "loaded": True,
+                  "top_level_keys": sorted(data.keys()),
+                  "defaults": {
+                      "project_name": data.get("project_name"),
+                      "llm_model": data.get("llm", {}).get("model"),
+                      "comfyui_url": comfyui.get("comfyui_url"),
+                      "image_workflow": comfyui.get("image", {}).get("default_workflow"),
+                      "video_workflow": comfyui.get("video", {}).get("default_workflow"),
+                      "default_template": data.get("template", {}).get("default_template"),
+                  },
+              })
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      def inspect_lightweight_source():
+          result = {
+              "distribution_version": None,
+              "llm_presets": {},
+              "config_schema": {},
+              "storyboard_demo": {},
+              "asset_counts": {},
+              "source_import_ok": False,
+              "errors": [],
+          }
+          try:
+              result["distribution_version"] = importlib.metadata.version("pixelle-video")
+          except Exception as exc:
+              result["errors"].append(f"distribution metadata: {type(exc).__name__}: {exc}")
+
+          try:
+              presets_mod = load_source_module(
+                  "pixelle_video_verifier_llm_presets",
+                  Path("pixelle_video") / "llm_presets.py",
+              )
+              names = list(presets_mod.get_preset_names())
+              result["llm_presets"] = {
+                  "count": len(names),
+                  "names": names,
+                  "openai_compatible": True,
+                  "sample": presets_mod.get_preset(names[0]) if names else {},
+              }
+          except Exception as exc:
+              result["errors"].append(f"llm_presets: {type(exc).__name__}: {exc}")
+
+          try:
+              schema_mod = load_source_module(
+                  "pixelle_video_verifier_config_schema",
+                  Path("pixelle_video") / "config" / "schema.py",
+              )
+              config = schema_mod.PixelleVideoConfig(project_name="Pixelle-Video Phala verifier")
+              result["config_schema"] = {
+                  "project_name": config.project_name,
+                  "llm_configured": config.is_llm_configured(),
+                  "validate_required": config.validate_required(),
+                  "default_comfyui_url": config.comfyui.comfyui_url,
+                  "runninghub_concurrent_limit": config.comfyui.runninghub_concurrent_limit,
+                  "default_template": config.template.default_template,
+              }
+          except Exception as exc:
+              result["errors"].append(f"config_schema: {type(exc).__name__}: {exc}")
+
+          try:
+              storyboard_mod = load_source_module(
+                  "pixelle_video_verifier_storyboard",
+                  Path("pixelle_video") / "models" / "storyboard.py",
+              )
+              config = storyboard_mod.StoryboardConfig(
+                  media_width=1080,
+                  media_height=1920,
+                  n_storyboard=2,
+                  frame_template="1080x1920/static_default.html",
+              )
+              frames = [
+                  storyboard_mod.StoryboardFrame(
+                      index=0,
+                      narration="Pixelle-Video can plan a short-form video workflow.",
+                      image_prompt="Minimal local smoke-test frame; no image model is called.",
+                  ),
+                  storyboard_mod.StoryboardFrame(
+                      index=1,
+                      narration="This verifier exercises source dataclasses only.",
+                      image_prompt="Static metadata endpoint for Phala Cloud.",
+                  ),
+              ]
+              storyboard = storyboard_mod.Storyboard(
+                  title="Phala Cloud Pixelle-Video smoke test",
+                  config=config,
+                  frames=frames,
+              )
+              result["storyboard_demo"] = {
+                  "title": storyboard.title,
+                  "frame_count": len(storyboard.frames),
+                  "media_size": [storyboard.config.media_width, storyboard.config.media_height],
+                  "template": storyboard.config.frame_template,
+                  "is_completed": storyboard.is_completed,
+                  "progress": storyboard.progress,
+                  "first_narration": storyboard.frames[0].narration,
+              }
+          except Exception as exc:
+              result["errors"].append(f"storyboard: {type(exc).__name__}: {exc}")
+
+          try:
+              result["asset_counts"] = {
+                  "html_templates": len(list(SOURCE_DIR.joinpath("templates").rglob("*.html"))),
+                  "workflow_json": len(list(SOURCE_DIR.joinpath("workflows").rglob("*.json"))),
+                  "api_routers": len(list(SOURCE_DIR.joinpath("api", "routers").glob("*.py"))),
+                  "docs_markdown": len(list(SOURCE_DIR.joinpath("docs").rglob("*.md"))),
+              }
+          except Exception as exc:
+              result["errors"].append(f"asset_counts: {type(exc).__name__}: {exc}")
+
+          result["source_import_ok"] = not result["errors"]
+          return result
+
+
+      def runtime_guards():
+          return {
+              "credentials_required": False,
+              "llm_provider_calls": False,
+              "comfyui_calls": False,
+              "runninghub_calls": False,
+              "tts_provider_calls": False,
+              "video_generation_started": False,
+              "model_downloaded": False,
+              "browser_auth": False,
+              "gpu_required": False,
+              "host_bind_mounts": False,
+          }
+
+
+      def base_payload():
+          state = load_state()
+          pyproject = read_pyproject()
+          return {
+              "service": "pixelle-video-source-verifier",
+              "upstream": UPSTREAM,
+              "source_ref": state.get("source_ref") or os.environ.get("PIXELLE_VIDEO_REF"),
+              "source_dir": str(SOURCE_DIR),
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "state": state,
+              "pyproject": pyproject,
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "pixelle-video-verifier/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+
+              if path in ("/", "/healthz"):
+                  source_ok = SOURCE_DIR.joinpath("pyproject.toml").is_file()
+                  payload = base_payload()
+                  payload.update({
+                      "ok": source_ok,
+                      "status": "ready" if source_ok else "source_unavailable",
+                      "runtime_guards": runtime_guards(),
+                      "endpoints": ["/healthz", "/demo", "/v1/models"],
+                  })
+                  self.respond_json(HTTPStatus.OK if source_ok else HTTPStatus.INTERNAL_SERVER_ERROR, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  demo = inspect_lightweight_source()
+                  payload.update({
+                      "ok": demo["source_import_ok"],
+                      "demo": demo,
+                      "example_config": read_example_config(),
+                      "runtime_guards": runtime_guards(),
+                      "note": (
+                          "This deterministic verifier installs the upstream source package and "
+                          "loads lightweight source modules. It does not run Pixelle-Video media generation."
+                      ),
+                  })
+                  self.respond_json(
+                      HTTPStatus.OK if demo["source_import_ok"] else HTTPStatus.INTERNAL_SERVER_ERROR,
+                      payload,
+                  )
+                  return
+
+              if path == "/v1/models":
+                  payload = {
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "pixelle-video/no-llm-source-verifier",
+                              "object": "model",
+                              "created": 0,
+                              "owned_by": "AIDC-AI",
+                              "description": (
+                                  "CPU-safe Pixelle-Video source verifier. This compatibility "
+                                  "endpoint is not an inference model and does not call providers."
+                              ),
+                          }
+                      ],
+                  }
+                  self.respond_json(HTTPStatus.OK, payload)
+                  return
+
+              self.respond_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not found"})
+
+
+      def main():
+          port = int(os.environ.get("PORT", "8080"))
+          server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+          print(f"pixelle-video verifier listening on 0.0.0.0:{port}", flush=True)
+          server.serve_forever()
+
+
+      if __name__ == "__main__":
+          main()

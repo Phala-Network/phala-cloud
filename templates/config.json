@@ -5022,5 +5022,27 @@
     "diskSize": 10
   },
   "tags": ["Automation", "Web Apps", "AI Agents"]
+},
+{
+  "id": "pixelle-video",
+  "name": "AIDC-AI/Pixelle-Video",
+  "description": "🚀 AI 全自动短视频引擎 | AI Fully Automated Short Video Engine",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/pixelle-video",
+  "author": "AIDC-AI",
+  "icon": "pixelle-video.png",
+  "envs": [
+    {
+      "key": "PIXELLE_VIDEO_REF",
+      "required": false,
+      "default": "db2e43a121a60b5042f72bec3f2627772dd401d6",
+      "description": "Git branch, tag, or commit downloaded from AIDC-AI/Pixelle-Video at startup. Defaults to the upstream main HEAD inspected for this template."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": ["Media & Design", "Automation", "AI Agents"]
 }
 ]
