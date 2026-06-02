@@ -1,0 +1,269 @@
+services:
+  app:
+    image: node:22-bookworm-slim
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      APP_PORT: ${APP_PORT:-8080}
+      ECC_PACKAGE_VERSION: ${ECC_PACKAGE_VERSION:-2.0.0-rc.1}
+      ECC_DEMO_PROFILE: ${ECC_DEMO_PROFILE:-minimal}
+      ECC_DEMO_TARGET: ${ECC_DEMO_TARGET:-codex}
+      NODE_ENV: production
+      NPM_CONFIG_AUDIT: "false"
+      NPM_CONFIG_FUND: "false"
+    configs:
+      - source: ecc_demo_server
+        target: /opt/ecc-demo/server.js
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        mkdir -p /opt/ecc-runtime /tmp/ecc-demo-home
+        npm --prefix /opt/ecc-runtime install --omit=dev --ignore-scripts --no-audit --no-fund "ecc-universal@$${ECC_PACKAGE_VERSION}"
+        exec node /opt/ecc-demo/server.js
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"const http = require('http'); const port = process.env.APP_PORT || '8080'; const req = http.get({ host: '127.0.0.1', port, path: '/healthz', timeout: 5000 }, res => process.exit(res.statusCode === 200 ? 0 : 1)); req.on('error', () => process.exit(1)); req.on('timeout', () => { req.destroy(); process.exit(1); });\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+configs:
+  ecc_demo_server:
+    content: |
+      const { spawnSync } = require("child_process");
+      const fs = require("fs");
+      const http = require("http");
+      const os = require("os");
+      const path = require("path");
+
+      const startedAt = Date.now();
+      const packageRoot = process.env.ECC_PACKAGE_ROOT || "/opt/ecc-runtime/node_modules/ecc-universal";
+      const packageBin = path.join(packageRoot, "scripts", "ecc.js");
+      const demoHome = process.env.ECC_DEMO_HOME || "/tmp/ecc-demo-home";
+      const demoProfile = process.env.ECC_DEMO_PROFILE || "minimal";
+      const demoTarget = process.env.ECC_DEMO_TARGET || "codex";
+
+      function fileExists(relativePath) {
+        return fs.existsSync(path.join(packageRoot, relativePath));
+      }
+
+      function readJson(relativePath) {
+        return JSON.parse(fs.readFileSync(path.join(packageRoot, relativePath), "utf8"));
+      }
+
+      function countDirectories(relativePath) {
+        const fullPath = path.join(packageRoot, relativePath);
+        if (!fs.existsSync(fullPath)) {
+          return 0;
+        }
+        return fs.readdirSync(fullPath, { withFileTypes: true }).filter((entry) => entry.isDirectory()).length;
+      }
+
+      function countFiles(relativePath) {
+        const fullPath = path.join(packageRoot, relativePath);
+        if (!fs.existsSync(fullPath)) {
+          return 0;
+        }
+        return fs.readdirSync(fullPath, { withFileTypes: true }).filter((entry) => entry.isFile()).length;
+      }
+
+      function runEcc(args, timeout = 10000) {
+        const result = spawnSync(process.execPath, [packageBin, ...args], {
+          cwd: "/tmp",
+          env: {
+            ...process.env,
+            HOME: demoHome,
+            XDG_CONFIG_HOME: path.join(demoHome, ".config"),
+            XDG_DATA_HOME: path.join(demoHome, ".local", "share"),
+          },
+          encoding: "utf8",
+          maxBuffer: 4 * 1024 * 1024,
+          timeout,
+        });
+
+        return {
+          ok: result.status === 0,
+          status: result.status,
+          signal: result.signal,
+          stdout: result.stdout || "",
+          stderr: result.stderr || "",
+          error: result.error ? result.error.name + ": " + result.error.message : null,
+        };
+      }
+
+      function parseCliJson(run) {
+        if (!run.ok) {
+          return null;
+        }
+        try {
+          return JSON.parse(run.stdout);
+        } catch (error) {
+          return { parse_error: error.name + ": " + error.message };
+        }
+      }
+
+      function basePayload() {
+        let packageJson = null;
+        let packageError = null;
+        try {
+          packageJson = readJson("package.json");
+        } catch (error) {
+          packageError = error.name + ": " + error.message;
+        }
+
+        const requiredFiles = {
+          "package.json": fileExists("package.json"),
+          "scripts/ecc.js": fileExists("scripts/ecc.js"),
+          "manifests/install-profiles.json": fileExists("manifests/install-profiles.json"),
+          "manifests/install-components.json": fileExists("manifests/install-components.json"),
+          ".claude-plugin/plugin.json": fileExists(".claude-plugin/plugin.json"),
+          ".codex-plugin/plugin.json": fileExists(".codex-plugin/plugin.json"),
+          ".codex/AGENTS.md": fileExists(".codex/AGENTS.md"),
+          ".opencode/README.md": fileExists(".opencode/README.md"),
+        };
+
+        return {
+          service: "ecc-demo",
+          upstream: "https://github.com/affaan-m/ECC",
+          package_name: packageJson ? packageJson.name : "ecc-universal",
+          package_version: packageJson ? packageJson.version : null,
+          package_description: packageJson ? packageJson.description : null,
+          package_error: packageError,
+          configured_package_version: process.env.ECC_PACKAGE_VERSION || null,
+          demo_profile: demoProfile,
+          demo_target: demoTarget,
+          uptime_seconds: Number(((Date.now() - startedAt) / 1000).toFixed(3)),
+          node: process.version,
+          platform: os.platform() + " " + os.release() + " " + os.arch(),
+          cpu_only: true,
+          credentials_required: false,
+          remote_model_calls: false,
+          model_downloaded: false,
+          required_files: requiredFiles,
+          local_surface_counts: {
+            agents: countFiles("agents"),
+            skills: countDirectories("skills"),
+            commands: countFiles("commands"),
+            rules: countDirectories("rules"),
+          },
+        };
+      }
+
+      function healthPayload() {
+        const payload = basePayload();
+        const help = runEcc(["--help"], 5000);
+        payload.ok = Boolean(payload.package_version) && Object.values(payload.required_files).every(Boolean) && help.ok;
+        payload.status = payload.ok ? "ready" : "unhealthy";
+        payload.cli_help = {
+          ok: help.ok,
+          status: help.status,
+          stderr: help.stderr.trim(),
+          error: help.error,
+        };
+        return payload;
+      }
+
+      function demoPayload() {
+        const payload = basePayload();
+        const profilesRun = runEcc(["catalog", "profiles", "--json"]);
+        const capabilityRun = runEcc(["catalog", "components", "--family", "capability", "--target", demoTarget, "--json"]);
+        const planRun = runEcc(["plan", "--profile", demoProfile, "--target", demoTarget, "--json"]);
+
+        const profiles = parseCliJson(profilesRun);
+        const capabilities = parseCliJson(capabilityRun);
+        const plan = parseCliJson(planRun);
+
+        payload.ok = profilesRun.ok && capabilityRun.ok && planRun.ok && !profiles?.parse_error && !capabilities?.parse_error && !plan?.parse_error;
+        payload.check = "ECC local catalog and selective-install dry-plan verifier";
+        payload.cli_runs = {
+          profiles: { ok: profilesRun.ok, status: profilesRun.status, stderr: profilesRun.stderr.trim(), error: profilesRun.error },
+          capabilities: { ok: capabilityRun.ok, status: capabilityRun.status, stderr: capabilityRun.stderr.trim(), error: capabilityRun.error },
+          plan: { ok: planRun.ok, status: planRun.status, stderr: planRun.stderr.trim(), error: planRun.error },
+        };
+        payload.demo = {
+          profile_ids: Array.isArray(profiles?.profiles) ? profiles.profiles.map((profile) => profile.id) : [],
+          capability_component_ids: Array.isArray(capabilities?.components) ? capabilities.components.map((component) => component.id) : [],
+          resolved_plan: plan
+            ? {
+                profile_id: plan.profileId,
+                target: plan.target,
+                selected_module_ids: plan.selectedModuleIds || [],
+                skipped_module_ids: plan.skippedModuleIds || [],
+                operation_count: Array.isArray(plan.operations) ? plan.operations.length : 0,
+                scaffold_only: Array.isArray(plan.operations) ? plan.operations.every((operation) => operation.scaffoldOnly === true) : null,
+              }
+            : null,
+        };
+
+        return payload;
+      }
+
+      function modelsPayload() {
+        return {
+          object: "list",
+          data: [
+            {
+              id: "ecc/local-catalog-verifier",
+              object: "model",
+              created: 0,
+              owned_by: "affaan-m",
+              description: "CPU-only ECC package, catalog, and install-plan verifier. It is not an LLM and does not call a model provider.",
+            },
+          ],
+        };
+      }
+
+      function writeJson(response, statusCode, payload) {
+        const body = Buffer.from(JSON.stringify(payload, null, 2));
+        response.writeHead(statusCode, {
+          "Cache-Control": "no-store",
+          "Content-Length": body.length,
+          "Content-Type": "application/json; charset=utf-8",
+        });
+        response.end(body);
+      }
+
+      const server = http.createServer((request, response) => {
+        const pathname = new URL(request.url, "http://127.0.0.1").pathname.replace(/\/+$/, "") || "/";
+
+        try {
+          if (request.method !== "GET") {
+            writeJson(response, 405, { error: "method_not_allowed", allowed_methods: ["GET"] });
+            return;
+          }
+
+          if (pathname === "/" || pathname === "/healthz") {
+            const payload = healthPayload();
+            writeJson(response, payload.ok ? 200 : 503, payload);
+            return;
+          }
+
+          if (pathname === "/demo") {
+            const payload = demoPayload();
+            writeJson(response, payload.ok ? 200 : 500, payload);
+            return;
+          }
+
+          if (pathname === "/v1/models") {
+            writeJson(response, 200, modelsPayload());
+            return;
+          }
+
+          writeJson(response, 404, { error: "not_found", endpoints: ["/healthz", "/demo", "/v1/models"] });
+        } catch (error) {
+          writeJson(response, 500, { error: error.name + ": " + error.message });
+        }
+      });
+
+      const port = Number.parseInt(process.env.APP_PORT || "8080", 10);
+      server.listen(port, "0.0.0.0", () => {
+        console.log(JSON.stringify({ event: "startup", service: "ecc-demo", port, packageRoot, demoProfile, demoTarget }));
+      });

@@ -4636,5 +4636,39 @@
       "diskSize": 10
     },
     "tags": ["LLM Inference & Model Serving", "Developer Tools", "Data & Storage"]
+  },
+{
+    "id": "ecc",
+    "name": "affaan-m/ECC",
+    "description": "The agent harness performance optimization system. Skills, instincts, memory, security, and research-first development for Claude Code, Codex, Opencode, Cursor and beyond.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/ecc",
+    "author": "affaan-m",
+    "icon": "ecc.png",
+    "envs": [
+      {
+        "key": "ECC_PACKAGE_VERSION",
+        "required": false,
+        "default": "2.0.0-rc.1",
+        "description": "Published ecc-universal npm package version installed by the verifier at container startup."
+      },
+      {
+        "key": "ECC_DEMO_PROFILE",
+        "required": false,
+        "default": "minimal",
+        "description": "ECC install profile passed to the dry-plan verifier endpoint."
+      },
+      {
+        "key": "ECC_DEMO_TARGET",
+        "required": false,
+        "default": "codex",
+        "description": "ECC target harness passed to the dry-plan verifier endpoint."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools", "Automation"]
   }
 ]
