@@ -4562,5 +4562,51 @@
       "diskSize": 20
     },
     "tags": ["Developer Tools", "Data & Storage", "AI Agents"]
+  },
+{
+    "id": "stable-worldmodel",
+    "name": "galilai-group/stable-worldmodel",
+    "description": "A platform for reproducible world model research and evaluation",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/stable-worldmodel",
+    "author": "galilai-group",
+    "icon": "stable-worldmodel.png",
+    "envs": [
+      {
+        "key": "STABLE_WORLDMODEL_VERSION",
+        "required": false,
+        "default": "0.1.0",
+        "description": "Pinned stable-worldmodel Python package version installed by the verifier."
+      },
+      {
+        "key": "PYTORCH_CPU_VERSION",
+        "required": false,
+        "default": "2.7.1+cpu",
+        "description": "CPU-only PyTorch wheel version installed from the official PyTorch CPU wheel index before stable-worldmodel."
+      },
+      {
+        "key": "TORCHVISION_CPU_VERSION",
+        "required": false,
+        "default": "0.22.1+cpu",
+        "description": "CPU-only TorchVision wheel version matching the default PyTorch version."
+      },
+      {
+        "key": "OPENCV_PYTHON_HEADLESS_VERSION",
+        "required": false,
+        "default": "4.12.0.88",
+        "description": "Headless OpenCV compatibility package version used because upstream imports visual wrappers at package import time."
+      },
+      {
+        "key": "IMAGEIO_VERSION",
+        "required": false,
+        "default": "2.37.0",
+        "description": "ImageIO compatibility package version used because upstream imports visual wrapper helpers at package import time."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["AI Agents", "Developer Tools", "Media & Design"]
   }
 ]
