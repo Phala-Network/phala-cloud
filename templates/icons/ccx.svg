@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <title>CCX</title>
+  <defs>
+    <linearGradient id="flow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="50%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#10b981" />
+    </linearGradient>
+  </defs>
+  <path d="M 5.5 8.5 L 14 16 L 5.5 23.5" stroke="url(#flow)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 18 8.5 L 27 23.5" stroke="url(#flow)" stroke-width="3.4" stroke-linecap="round"/>
+  <path d="M 27 8.5 L 18 23.5" stroke="url(#flow)" stroke-width="3.4" stroke-linecap="round"/>
+</svg>
