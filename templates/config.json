@@ -4782,5 +4782,27 @@
     "diskSize": 10
   },
   "tags": ["Media & Design", "AI Agents", "Developer Tools"]
-}
+},
+{
+    "id": "agent-governance-toolkit",
+    "name": "microsoft/agent-governance-toolkit",
+    "description": "AI Agent Governance Toolkit — Policy enforcement, zero-trust identity, execution sandboxing, and reliability engineering for autonomous AI agents. Covers 10/10 OWASP Agentic Top 10.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/agent-governance-toolkit",
+    "author": "microsoft",
+    "icon": "agent-governance-toolkit.svg",
+    "envs": [
+      {
+        "key": "AGT_PACKAGE_VERSION",
+        "required": false,
+        "default": "3.7.0",
+        "description": "Published agent-governance-toolkit Python package version installed by the verifier at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["AI Agents", "Developer Tools"]
+  }
 ]
