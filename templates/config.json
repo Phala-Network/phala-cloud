@@ -4670,5 +4670,33 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools", "Automation"]
+  },
+{
+    "id": "codegraph",
+    "name": "colbymchenry/codegraph",
+    "description": "Pre-indexed code knowledge graph for Claude Code, Codex, Gemini, Cursor, OpenCode, AntiGravity, Kiro, and Hermes Agent — fewer tokens, fewer tool calls, 100% local",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/codegraph",
+    "author": "colbymchenry",
+    "icon": "codegraph.svg",
+    "envs": [
+      {
+        "key": "CODEGRAPH_PACKAGE_VERSION",
+        "required": false,
+        "default": "0.9.7",
+        "description": "Pinned @colbymchenry/codegraph npm package version installed by the demo service at container startup."
+      },
+      {
+        "key": "CODEGRAPH_DEMO_QUERY",
+        "required": false,
+        "default": "cart checkout flow",
+        "description": "Task string passed to the local codegraph context command by the /demo endpoint."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 10
+    },
+    "tags": ["MCP Servers", "Developer Tools", "AI Agents"]
   }
 ]
