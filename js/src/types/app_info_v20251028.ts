@@ -17,7 +17,9 @@ export const CvmBasicInfoV20251028Schema = z.object({
   listed: z.boolean().nullable().optional(),
   base_image: z.string().nullable().optional(),
   kms_slug: z.string().nullable().optional(),
+  /** @deprecated Identifies a KMS node, not the on-chain KMS contract. Use kms_contract_id. */
   kms_id: z.string().nullable().optional(),
+  kms_contract_id: z.string().nullable().optional(),
   instance_id: z.string().nullable().optional(),
   machine_info: MachineInfoV20251028Schema.nullable().optional(),
   updated_at: z.string().nullable().optional(),

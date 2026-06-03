@@ -690,10 +690,10 @@ export const buildProvisionPayload = (
 
 	// Always set kms type (defaults to PHALA)
 	payload.kms = kmsType;
-	// Keep kms_id for backward compatibility if provided
-	if (deprecatedKmsId) {
-		payload.kms_id = deprecatedKmsId;
-	}
+	// `--kms-id` is deprecated and now a no-op: the backend identifies the KMS
+	// by its on-chain contract (kms_contract_id), not a single node id. The flag
+	// is retained for one more release to avoid breaking existing invocations.
+	void deprecatedKmsId;
 	if (options.kmsContract) {
 		payload.kms_contract = options.kmsContract;
 	}

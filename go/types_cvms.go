@@ -245,8 +245,11 @@ type ProvisionCVMResponse struct {
 	OSImageHash           string      `json:"os_image_hash,omitempty"`
 	InstanceType          string      `json:"instance_type,omitempty"`
 	NodeID                *int        `json:"node_id,omitempty"`
-	KMSID                 string      `json:"kms_id,omitempty"`
-	ComposeHashRegistered bool        `json:"compose_hash_registered,omitempty"`
+	// Deprecated: KMSID identifies a KMS node, not the on-chain KMS contract.
+	// Use KMSContractID instead.
+	KMSID                 string `json:"kms_id,omitempty"`
+	KMSContractID         string `json:"kms_contract_id,omitempty"`
+	ComposeHashRegistered bool   `json:"compose_hash_registered,omitempty"`
 }
 
 // CommitCVMProvisionRequest is the request for committing a CVM provision.
