@@ -49,6 +49,7 @@ async function runCvmsListCommand(
 			kmsType: input.kmsType,
 			node: input.node,
 			region: input.region,
+			showReplicas: input.showReplicas,
 		});
 
 		if (result.success === false) {
@@ -68,13 +69,22 @@ async function runCvmsListCommand(
 			return 0;
 		}
 
-		const columns = ["APP_ID", "CVM", "STATUS", "UPTIME"] as const;
-		const rows = data.items.map((item) => ({
-			APP_ID: item.appId,
-			CVM: item.cvmName,
-			STATUS: formatStatus(item.status),
-			UPTIME: item.uptime ?? "-",
-		}));
+		const columns = input.showReplicas
+			? (["APP_ID", "CVM", "VM_UUID", "STATUS", "UPTIME", "REPLICAS"] as const)
+			: (["APP_ID", "CVM", "STATUS", "UPTIME", "REPLICAS"] as const);
+		const rows = data.items.map((item) => {
+			const row: Record<string, string> = {
+				APP_ID: item.appId,
+				CVM: item.cvmName,
+				STATUS: formatStatus(item.status),
+				UPTIME: item.uptime ?? "-",
+				REPLICAS: input.showReplicas
+					? `${item.replicaIndex}/${item.replicaCount}`
+					: String(item.replicaCount),
+			};
+			if (input.showReplicas) row.VM_UUID = item.vmUuid;
+			return row;
+		});
 
 		if (rows.length === 0) {
 			logger.info("No CVMs found");
@@ -83,6 +93,14 @@ async function runCvmsListCommand(
 
 		printTable(columns, rows);
 		logger.info(`Page ${data.page}/${data.totalPages} (total ${data.total})`);
+		if (
+			!input.showReplicas &&
+			data.items.some((item) => item.replicaCount > 1)
+		) {
+			logger.info(
+				"Some apps have multiple replicas. Use --show-replicas to list every CVM.",
+			);
+		}
 		return 0;
 	} catch (error) {
 		logger.logDetailedError(error);

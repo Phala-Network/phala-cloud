@@ -79,6 +79,15 @@ export const cvmsListCommandMeta: CommandMeta = {
 			target: "region",
 			group: "basic",
 		},
+		{
+			name: "show-replicas",
+			description:
+				"List every replica CVM (one row per CVM) instead of one row per app",
+			type: "boolean",
+			target: "showReplicas",
+			negatedName: "no-show-replicas",
+			group: "basic",
+		},
 		jsonOption,
 	],
 	examples: [
@@ -99,6 +108,10 @@ export const cvmsListCommandMeta: CommandMeta = {
 			value: "phala cvms ls --status running",
 		},
 		{
+			name: "Show all replica CVMs",
+			value: "phala cvms ls --show-replicas",
+		},
+		{
 			name: "Output as JSON",
 			value: "phala cvms ls --json",
 		},
@@ -116,6 +129,7 @@ export const cvmsListCommandSchema = z.object({
 	kmsType: z.string().optional(),
 	node: z.string().optional(),
 	region: z.string().optional(),
+	showReplicas: z.boolean().default(false),
 	json: z.boolean().default(false),
 });
 

@@ -13,13 +13,98 @@ export interface AppsListWithStatusOptions {
 	readonly kmsType?: string;
 	readonly node?: string;
 	readonly region?: string;
+	// When true, emit one row per replica CVM instead of one row per app.
+	readonly showReplicas?: boolean;
 }
 
 export interface AppCvmRow {
 	readonly appId: string;
 	readonly cvmName: string;
+	readonly vmUuid: string;
 	readonly status: string;
 	readonly uptime?: string | null;
+	// 1-based position of this CVM within its app's replica set.
+	readonly replicaIndex: number;
+	// Total number of CVMs (replicas) belonging to the app.
+	readonly replicaCount: number;
+}
+
+// Structural subset of the app-list payload this module relies on. Kept
+// minimal so the row-selection logic stays pure and unit-testable without
+// depending on a specific API-version schema.
+interface CvmLike {
+	readonly vm_uuid?: string | null;
+	readonly name: string;
+	readonly status?: unknown;
+}
+
+interface AppLike {
+	readonly app_id: string;
+	readonly current_cvm?: CvmLike | null;
+	readonly cvms?: readonly CvmLike[];
+	readonly cvm_count?: number;
+}
+
+export interface DisplayCvmRef {
+	readonly appId: string;
+	readonly cvm: CvmLike;
+	readonly replicaIndex: number;
+	readonly replicaCount: number;
+}
+
+function hasVmUuid(cvm: CvmLike | null | undefined): cvm is CvmLike {
+	return !!cvm && typeof cvm.vm_uuid === "string" && cvm.vm_uuid.length > 0;
+}
+
+/**
+ * Select which CVMs to display for each app.
+ *
+ * The app-list payload already carries every replica CVM in `app.cvms` and a
+ * `app.cvm_count`, but the list view historically rendered only
+ * `app.current_cvm`, silently hiding the other replicas. This resolves the set
+ * of CVMs to show:
+ *   - `showReplicas` off (default): one row per app (the current CVM, falling
+ *     back to the first known CVM), annotated with the true replica count.
+ *   - `showReplicas` on: one row per replica CVM, each with its 1-based index.
+ *
+ * Pure and side-effect free so it can be unit tested directly.
+ */
+export function collectDisplayCvms(
+	apps: readonly AppLike[],
+	showReplicas: boolean,
+): DisplayCvmRef[] {
+	const refs: DisplayCvmRef[] = [];
+	for (const app of apps) {
+		const allCvms = (app.cvms ?? []).filter(hasVmUuid);
+		const fallback = hasVmUuid(app.current_cvm) ? [app.current_cvm] : [];
+		const cvms = allCvms.length > 0 ? allCvms : fallback;
+		if (cvms.length === 0) continue;
+
+		const replicaCount =
+			typeof app.cvm_count === "number" && app.cvm_count > cvms.length
+				? app.cvm_count
+				: cvms.length;
+
+		if (showReplicas) {
+			cvms.forEach((cvm, index) => {
+				refs.push({
+					appId: app.app_id,
+					cvm,
+					replicaIndex: index + 1,
+					replicaCount,
+				});
+			});
+		} else {
+			const primary = hasVmUuid(app.current_cvm) ? app.current_cvm : cvms[0];
+			refs.push({
+				appId: app.app_id,
+				cvm: primary,
+				replicaIndex: 1,
+				replicaCount,
+			});
+		}
+	}
+	return refs;
 }
 
 export interface AppsListWithStatusResult {
@@ -69,20 +154,17 @@ export async function listAppsWithCvmStatus(
 	const appList = appListResult.data;
 	const apps = appList.dstack_apps ?? [];
 
-	// Only include apps which have a current_cvm
-	const appsWithCvm = apps.filter(
-		(app) =>
-			app.current_cvm &&
-			typeof app.current_cvm === "object" &&
-			"vm_uuid" in app.current_cvm &&
-			!!app.current_cvm.vm_uuid,
-	);
+	const refs = collectDisplayCvms(apps, options.showReplicas ?? false);
 
-	const vmUuids = appsWithCvm
-		.map((app) => app.current_cvm?.vm_uuid)
-		.filter(
-			(uuid): uuid is string => typeof uuid === "string" && uuid.length > 0,
-		);
+	const vmUuids = [
+		...new Set(
+			refs
+				.map((ref) => ref.cvm.vm_uuid)
+				.filter(
+					(uuid): uuid is string => typeof uuid === "string" && uuid.length > 0,
+				),
+		),
+	];
 
 	const statusByUuid: Record<
 		string,
@@ -110,25 +192,25 @@ export async function listAppsWithCvmStatus(
 		}
 	}
 
-	const rows: AppCvmRow[] = [];
-	for (const app of appsWithCvm) {
-		const currentCvm = app.current_cvm;
-		if (!currentCvm?.vm_uuid) continue;
-
-		const batch = statusByUuid[currentCvm.vm_uuid];
+	const rows: AppCvmRow[] = refs.map((ref) => {
+		const uuid = ref.cvm.vm_uuid ?? "";
+		const batch = uuid ? statusByUuid[uuid] : undefined;
 		const status = batch
 			? batch.status
-			: typeof currentCvm.status === "string"
-				? currentCvm.status
+			: typeof ref.cvm.status === "string"
+				? ref.cvm.status
 				: "unknown";
 
-		rows.push({
-			appId: app.app_id,
-			cvmName: currentCvm.name,
+		return {
+			appId: ref.appId,
+			cvmName: ref.cvm.name,
+			vmUuid: uuid,
 			status,
 			uptime: batch?.uptime,
-		});
-	}
+			replicaIndex: ref.replicaIndex,
+			replicaCount: ref.replicaCount,
+		};
+	});
 
 	return {
 		success: true,
