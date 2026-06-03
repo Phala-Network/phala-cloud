@@ -30,9 +30,17 @@ type TeepodCapacity struct {
 	SupportOnchainKMS *bool            `json:"support_onchain_kms,omitempty"`
 	FMSPC             *string          `json:"fmspc,omitempty"`
 	DeviceID          *string          `json:"device_id,omitempty"`
+	DeviceIDs         []DeviceIDEntry  `json:"device_ids,omitempty"`
 	RegionIdentifier  *string          `json:"region_identifier,omitempty"`
 	DefaultKMS        *string          `json:"default_kms,omitempty"`
 	KMSList           []string         `json:"kms_list,omitempty"`
+}
+
+// DeviceIDEntry is one of a node's device_ids and the OS images it covers.
+type DeviceIDEntry struct {
+	DeviceID   string `json:"device_id"`
+	OSImageIDs []int  `json:"os_image_ids"`
+	Enabled    bool   `json:"enabled"`
 }
 
 // AvailableImage represents an available OS image on a node.

@@ -139,14 +139,15 @@ type CvmGatewayInfo struct {
 
 // NodeRef is a reference to a node.
 type NodeRef struct {
-	ObjectType string  `json:"object_type"`
-	ID         *int    `json:"id,omitempty"`
-	Name       *string `json:"name,omitempty"`
-	Region     *string `json:"region,omitempty"`
-	DeviceID   *string `json:"device_id,omitempty"`
-	PPID       *string `json:"ppid,omitempty"`
-	Status     *string `json:"status,omitempty"`
-	Version    *string `json:"version,omitempty"`
+	ObjectType string          `json:"object_type"`
+	ID         *int            `json:"id,omitempty"`
+	Name       *string         `json:"name,omitempty"`
+	Region     *string         `json:"region,omitempty"`
+	DeviceID   *string         `json:"device_id,omitempty"`
+	DeviceIDs  []DeviceIDEntry `json:"device_ids,omitempty"`
+	PPID       *string         `json:"ppid,omitempty"`
+	Status     *string         `json:"status,omitempty"`
+	Version    *string         `json:"version,omitempty"`
 }
 
 // UserRef is a reference to a user.

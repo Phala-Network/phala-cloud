@@ -38,6 +38,7 @@ const mockAvailableNodesData: AvailableNodes = {
       support_onchain_kms: false,
       fmspc: null,
       device_id: null,
+      device_ids: [],
       kms_list: [],
     },
   ],

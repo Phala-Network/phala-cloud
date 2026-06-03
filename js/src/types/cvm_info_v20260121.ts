@@ -86,12 +86,21 @@ export const CvmLogUrlsV20260121Schema = z.object({
 });
 export type CvmLogUrlsV20260121 = z.infer<typeof CvmLogUrlsV20260121Schema>;
 
+export const DeviceIdEntrySchema = z.object({
+  device_id: z.string(),
+  os_image_ids: z.array(z.number().int()).default([]),
+  enabled: z.boolean(),
+});
+export type DeviceIdEntry = z.infer<typeof DeviceIdEntrySchema>;
+
 export const NodeRefSchema = z.object({
   object_type: z.literal("node"),
   id: z.number().int().nullable().optional(),
   name: z.string().nullable().optional(),
   region: z.string().nullable().optional(),
+  // Deprecated: resolved single device_id. Use device_ids for the full matrix.
   device_id: z.string().nullable().optional(),
+  device_ids: z.array(DeviceIdEntrySchema).default([]),
   ppid: z.string().nullable().optional(),
   status: z.string().nullable().optional(),
   version: z.string().nullable().optional(),
