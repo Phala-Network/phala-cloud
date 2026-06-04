@@ -88,6 +88,7 @@ export type CvmLogUrlsV20260121 = z.infer<typeof CvmLogUrlsV20260121Schema>;
 
 export const DeviceIdEntrySchema = z.object({
   device_id: z.string(),
+  algorithm_version: z.string(),
   os_image_ids: z.array(z.number().int()).default([]),
   enabled: z.boolean(),
 });

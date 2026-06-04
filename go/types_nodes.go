@@ -38,9 +38,10 @@ type TeepodCapacity struct {
 
 // DeviceIDEntry is one of a node's device_ids and the OS images it covers.
 type DeviceIDEntry struct {
-	DeviceID   string `json:"device_id"`
-	OSImageIDs []int  `json:"os_image_ids"`
-	Enabled    bool   `json:"enabled"`
+	DeviceID         string `json:"device_id"`
+	AlgorithmVersion string `json:"algorithm_version"`
+	OSImageIDs       []int  `json:"os_image_ids"`
+	Enabled          bool   `json:"enabled"`
 }
 
 // AvailableImage represents an available OS image on a node.

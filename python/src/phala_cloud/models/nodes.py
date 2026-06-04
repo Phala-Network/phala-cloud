@@ -15,6 +15,7 @@ class AvailableOSImage(CloudModel):
 
 class DeviceIdEntry(CloudModel):
     device_id: str
+    algorithm_version: str
     os_image_ids: list[int] = Field(default_factory=list)
     enabled: bool
 
