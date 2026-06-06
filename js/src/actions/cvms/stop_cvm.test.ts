@@ -8,6 +8,7 @@ describe("stopCvm", () => {
   beforeEach(() => {
     mockClient = {
       post: vi.fn(),
+      config: { version: "2026-05-22" as const },
     } as unknown as Client;
   });
 

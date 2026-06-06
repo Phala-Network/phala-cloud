@@ -303,9 +303,26 @@ jobs:
             echo "tar_file=$(basename "$tar_file")" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Generate changelog
+        run: |
+          npm install -g conventional-changelog-cli conventional-changelog-conventionalcommits
+
+          conventional-changelog -p conventionalcommits \
+            --commit-path "python" \
+            -i "python/CHANGELOG.md" \
+            -s \
+            -n changelog.config.js \
+            --tag-prefix "python-v"
+
+          conventional-changelog -p conventionalcommits \
+            --commit-path "python" \
+            -o "python/RELEASE_NOTES.md" \
+            -n changelog.config.js \
+            --tag-prefix "python-v"
+
       - name: Commit version change
         run: |
-          git add python/pyproject.toml
+          git add python/pyproject.toml python/CHANGELOG.md
           if git diff --cached --quiet; then
             echo "No changes to commit"
             exit 1
@@ -352,7 +369,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           {
-            echo "Release python v${NEW_VERSION}"
+            if [ -s "python/RELEASE_NOTES.md" ]; then
+              cat "python/RELEASE_NOTES.md"
+            else
+              echo "Release python v${NEW_VERSION}"
+            fi
             echo ""
             echo "---"
             echo ""

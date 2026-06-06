@@ -3,7 +3,7 @@ module github.com/Phala-Network/phala-cloud/sdks/go
 go 1.25.0
 
 require (
-	github.com/Dstack-TEE/dstack/sdk/go v0.0.0-20260318210907-bad8c975c30e
+	github.com/Dstack-TEE/dstack/sdk/go v0.1.0
 	golang.org/x/crypto v0.49.0
 )
 

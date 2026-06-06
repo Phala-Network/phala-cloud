@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { type Client, type SafeResult } from "../../client";
 import type { ApiVersion } from "../../types/client";
+import type { GetAppDeviceAllowlistResponse } from "../../types/version-mappings";
 
 const DeviceAllowlistItemBaseSchema = z.object({
   device_id: z.string(),
@@ -53,6 +54,11 @@ export type DeviceAllowlistItem = z.infer<typeof DeviceAllowlistItemV20260522Sch
 export type DeviceAllowlistResponse = z.infer<typeof DeviceAllowlistResponseSchema>;
 export { DeviceAllowlistItemAnySchema, DeviceAllowlistResponseAnySchema };
 
+function getSchemaForVersion(version: ApiVersion) {
+  if (version === "2026-01-21") return DeviceAllowlistResponseV20260121Schema;
+  return DeviceAllowlistResponseV20260522Schema;
+}
+
 export const GetAppDeviceAllowlistRequestSchema = z
   .object({
     appId: z.string().min(1),
@@ -85,14 +91,16 @@ export type GetAppDeviceAllowlistRequest = z.infer<typeof GetAppDeviceAllowlistR
 export function getAppDeviceAllowlist<V extends ApiVersion>(
   client: Client<V>,
   request: GetAppDeviceAllowlistRequest,
-): Promise<DeviceAllowlistResponse>;
+): Promise<GetAppDeviceAllowlistResponse<V>>;
 export async function getAppDeviceAllowlist<V extends ApiVersion>(
   client: Client<V>,
   request: GetAppDeviceAllowlistRequest,
-): Promise<DeviceAllowlistResponse> {
+): Promise<GetAppDeviceAllowlistResponse<V>> {
   const { appId } = GetAppDeviceAllowlistRequestSchema.parse(request);
   const response = await client.get(`/apps/${appId}/device-allowlist`);
-  return DeviceAllowlistResponseSchema.parse(response);
+  return getSchemaForVersion(client.config.version).parse(
+    response,
+  ) as GetAppDeviceAllowlistResponse<V>;
 }
 
 /**
@@ -101,17 +109,17 @@ export async function getAppDeviceAllowlist<V extends ApiVersion>(
 export function safeGetAppDeviceAllowlist<V extends ApiVersion>(
   client: Client<V>,
   request: GetAppDeviceAllowlistRequest,
-): Promise<SafeResult<DeviceAllowlistResponse>>;
+): Promise<SafeResult<GetAppDeviceAllowlistResponse<V>>>;
 export async function safeGetAppDeviceAllowlist<V extends ApiVersion>(
   client: Client<V>,
   request: GetAppDeviceAllowlistRequest,
-): Promise<SafeResult<DeviceAllowlistResponse>> {
+): Promise<SafeResult<GetAppDeviceAllowlistResponse<V>>> {
   try {
     const data = await getAppDeviceAllowlist(client, request);
     return { success: true, data };
   } catch (error) {
     if (error && typeof error === "object" && ("status" in error || "issues" in error)) {
-      return { success: false, error } as SafeResult<DeviceAllowlistResponse>;
+      return { success: false, error } as SafeResult<GetAppDeviceAllowlistResponse<V>>;
     }
     return {
       success: false,
@@ -119,6 +127,6 @@ export async function safeGetAppDeviceAllowlist<V extends ApiVersion>(
         name: "Error",
         message: error instanceof Error ? error.message : String(error),
       },
-    } as SafeResult<DeviceAllowlistResponse>;
+    } as SafeResult<GetAppDeviceAllowlistResponse<V>>;
   }
 }

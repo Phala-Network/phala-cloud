@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { type Client } from "../../client";
-import { defineAction } from "../../utils/define-action";
+import { type Client, type SafeResult } from "../../client";
+import type { ApiVersion } from "../../types/client";
+import type { CommitCvmProvisionResponse } from "../../types/version-mappings";
 
 /**
  * Commit CVM Provision (Create CVM from provisioned data)
@@ -211,11 +212,46 @@ export const CommitCvmProvisionRequestSchema = z
 
 export type CommitCvmProvisionRequest = z.infer<typeof CommitCvmProvisionRequestSchema>;
 
-const { action: commitCvmProvision, safeAction: safeCommitCvmProvision } = defineAction<
-  CommitCvmProvisionRequest,
-  typeof CommitCvmProvisionSchema
->(CommitCvmProvisionSchema, async (client, payload) => {
-  return await client.post("/cvms", payload);
-});
+function getSchemaForVersion(version: ApiVersion) {
+  if (version === "2026-01-21") return CommitCvmProvisionV20260121Schema;
+  return CommitCvmProvisionV20260522Schema;
+}
 
-export { commitCvmProvision, safeCommitCvmProvision };
+export function commitCvmProvision<V extends ApiVersion>(
+  client: Client<V>,
+  payload: CommitCvmProvisionRequest,
+): Promise<CommitCvmProvisionResponse<V>>;
+export async function commitCvmProvision<V extends ApiVersion>(
+  client: Client<V>,
+  payload: CommitCvmProvisionRequest,
+): Promise<CommitCvmProvisionResponse<V>> {
+  const response = await client.post("/cvms", payload);
+  return getSchemaForVersion(client.config.version).parse(
+    response,
+  ) as CommitCvmProvisionResponse<V>;
+}
+
+export function safeCommitCvmProvision<V extends ApiVersion>(
+  client: Client<V>,
+  payload: CommitCvmProvisionRequest,
+): Promise<SafeResult<CommitCvmProvisionResponse<V>>>;
+export async function safeCommitCvmProvision<V extends ApiVersion>(
+  client: Client<V>,
+  payload: CommitCvmProvisionRequest,
+): Promise<SafeResult<CommitCvmProvisionResponse<V>>> {
+  try {
+    const data = await commitCvmProvision(client, payload);
+    return { success: true, data };
+  } catch (error) {
+    if (error && typeof error === "object" && ("status" in error || "issues" in error)) {
+      return { success: false, error } as SafeResult<CommitCvmProvisionResponse<V>>;
+    }
+    return {
+      success: false,
+      error: {
+        name: "Error",
+        message: error instanceof Error ? error.message : String(error),
+      },
+    } as SafeResult<CommitCvmProvisionResponse<V>>;
+  }
+}

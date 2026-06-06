@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { type Client, type SafeResult } from "../../client";
+import type { ApiVersion } from "../../types/client";
 import { CvmIdSchema, CvmIdObjectSchema, refineCvmId } from "../../types/cvm_id";
-import { defineAction } from "../../utils/define-action";
-import { VMSchema } from "../../types/cvm_info";
+import { getVMSchemaForVersion, type VMForVersion } from "../../types/cvm_info";
 
 /**
  * Restart a CVM (Confidential Virtual Machine)
@@ -43,14 +44,42 @@ export const RestartCvmRequestSchema = refineCvmId(
 
 export type RestartCvmRequest = z.infer<typeof RestartCvmRequestSchema>;
 
-const { action: restartCvm, safeAction: safeRestartCvm } = defineAction<
-  RestartCvmRequest,
-  typeof VMSchema
->(VMSchema, async (client, request) => {
+export function restartCvm<V extends ApiVersion>(
+  client: Client<V>,
+  request: RestartCvmRequest,
+): Promise<VMForVersion<V>>;
+export async function restartCvm<V extends ApiVersion>(
+  client: Client<V>,
+  request: RestartCvmRequest,
+): Promise<VMForVersion<V>> {
   const parsed = RestartCvmRequestSchema.parse(request);
   const { cvmId } = CvmIdSchema.parse(parsed);
   const { force = false } = parsed;
-  return await client.post(`/cvms/${cvmId}/restart`, { force });
-});
+  const response = await client.post(`/cvms/${cvmId}/restart`, { force });
+  return getVMSchemaForVersion(client.config.version).parse(response) as VMForVersion<V>;
+}
 
-export { restartCvm, safeRestartCvm };
+export function safeRestartCvm<V extends ApiVersion>(
+  client: Client<V>,
+  request: RestartCvmRequest,
+): Promise<SafeResult<VMForVersion<V>>>;
+export async function safeRestartCvm<V extends ApiVersion>(
+  client: Client<V>,
+  request: RestartCvmRequest,
+): Promise<SafeResult<VMForVersion<V>>> {
+  try {
+    const data = await restartCvm(client, request);
+    return { success: true, data };
+  } catch (error) {
+    if (error && typeof error === "object" && ("status" in error || "issues" in error)) {
+      return { success: false, error } as SafeResult<VMForVersion<V>>;
+    }
+    return {
+      success: false,
+      error: {
+        name: "Error",
+        message: error instanceof Error ? error.message : String(error),
+      },
+    } as SafeResult<VMForVersion<V>>;
+  }
+}

@@ -376,25 +376,26 @@ jobs:
           rm pack_output.txt
 
       - name: Generate changelog
-        working-directory: ${{ env.PACKAGE }}
         run: |
           npm install -g conventional-changelog-cli conventional-changelog-conventionalcommits
 
           # Update CHANGELOG.md (prepends latest release)
+          # --commit-path must be relative to the repo root so git log filters
+          # to only commits that touched files under that subdirectory.
           conventional-changelog -p conventionalcommits \
-            --commit-path . \
-            -i CHANGELOG.md \
+            --commit-path "${PACKAGE}" \
+            -i "${PACKAGE}/CHANGELOG.md" \
             -s \
-            --pkg-path ./package.json \
-            -n ../changelog.config.js \
+            --pkg-path "${PACKAGE}/package.json" \
+            -n changelog.config.js \
             --tag-prefix "${PACKAGE}-v"
 
           # Generate release notes for GitHub Release body
           conventional-changelog -p conventionalcommits \
-            --commit-path . \
-            -o RELEASE_NOTES.md \
-            --pkg-path ./package.json \
-            -n ../changelog.config.js \
+            --commit-path "${PACKAGE}" \
+            -o "${PACKAGE}/RELEASE_NOTES.md" \
+            --pkg-path "${PACKAGE}/package.json" \
+            -n changelog.config.js \
             --tag-prefix "${PACKAGE}-v"
 
       - name: Commit version change
