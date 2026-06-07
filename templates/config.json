@@ -5378,5 +5378,27 @@
       "diskSize": 20
     },
     "tags": ["RAG", "AI Agents", "Data & Storage"]
+  },
+{
+    "id": "flue",
+    "name": "withastro/flue",
+    "description": "The sandbox agent framework.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/flue",
+    "author": "withastro",
+    "icon": "flue.svg",
+    "envs": [
+      {
+        "key": "FLUE_PACKAGE_VERSION",
+        "required": false,
+        "default": "0.9.1",
+        "description": "Version used for both @flue/runtime and @flue/cli at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["AI Agents", "Developer Tools"]
   }
 ]

@@ -1,0 +1,253 @@
+services:
+  app:
+    image: node:24-bookworm-slim
+    restart: unless-stopped
+    init: true
+    working_dir: /opt/flue-demo
+    ports:
+      - "8080:3000"
+    environment:
+      FLUE_PACKAGE_VERSION: ${FLUE_PACKAGE_VERSION:-0.9.1}
+      NODE_ENV: production
+      NPM_CONFIG_AUDIT: "false"
+      NPM_CONFIG_FUND: "false"
+      NPM_CONFIG_UPDATE_NOTIFIER: "false"
+      PORT: "3000"
+    configs:
+      - source: package_json
+        target: /tmp/flue-package.json
+      - source: tsconfig_json
+        target: /tmp/flue-tsconfig.json
+      - source: flue_config
+        target: /tmp/flue.config.ts
+      - source: app_ts
+        target: /tmp/flue-app.ts
+      - source: sandbox_demo_ts
+        target: /tmp/flue-sandbox-demo.ts
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        mkdir -p .flue/workflows
+        cp /tmp/flue-package.json package.json
+        cp /tmp/flue-tsconfig.json tsconfig.json
+        cp /tmp/flue.config.ts flue.config.ts
+        cp /tmp/flue-app.ts .flue/app.ts
+        cp /tmp/flue-sandbox-demo.ts .flue/workflows/sandbox-demo.ts
+        npm install --no-save "@flue/runtime@$${FLUE_PACKAGE_VERSION}" "@flue/cli@$${FLUE_PACKAGE_VERSION}" "hono@^4.8.3"
+        ./node_modules/.bin/flue build --target node
+        exec node dist/server.mjs
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:' + (process.env.PORT || '3000') + '/healthz').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+configs:
+  package_json:
+    content: |
+      {
+        "name": "phala-flue-demo",
+        "private": true,
+        "type": "module",
+        "scripts": {
+          "build": "flue build --target node",
+          "start": "node dist/server.mjs"
+        }
+      }
+
+  tsconfig_json:
+    content: |
+      {
+        "compilerOptions": {
+          "target": "ES2022",
+          "module": "NodeNext",
+          "moduleResolution": "NodeNext",
+          "strict": true,
+          "skipLibCheck": true
+        },
+        "include": [".flue/**/*.ts", "flue.config.ts"],
+        "exclude": ["dist", "node_modules"]
+      }
+
+  flue_config:
+    content: |
+      import { defineConfig } from '@flue/cli/config';
+
+      export default defineConfig({
+        target: 'node',
+        output: './dist',
+      });
+
+  app_ts:
+    content: |
+      import { flue } from '@flue/runtime/routing';
+      import { Hono } from 'hono';
+
+      const app = new Hono();
+
+      function basePayload() {
+        return {
+          service: 'flue-demo',
+          upstream: 'https://github.com/withastro/flue',
+          packageName: '@flue/runtime',
+          packageVersion: process.env.FLUE_PACKAGE_VERSION ?? '0.9.1',
+          credentialsRequired: false,
+          llmProviderCalls: false,
+          modelDownloads: false,
+          endpoints: ['/healthz', '/demo', '/v1/models', '/workflows/sandbox-demo?wait=result'],
+        };
+      }
+
+      async function runDemo(c) {
+        const url = new URL(c.req.url);
+        url.pathname = '/workflows/sandbox-demo';
+        url.search = '?wait=result';
+
+        const response = await app.fetch(
+          new Request(url, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ source: c.req.method + ' ' + c.req.path }),
+          }),
+          c.env,
+        );
+        const payload = await response.json();
+        const ok = response.ok && payload?.result?.allPassed === true;
+
+        return c.json(
+          {
+            ...basePayload(),
+            ok,
+            demo: payload.result ?? null,
+            flue: {
+              workflow: '/workflows/sandbox-demo',
+              runId: payload?._meta?.runId ?? null,
+            },
+          },
+          ok ? 200 : 500,
+        );
+      }
+
+      app.get('/healthz', (c) =>
+        c.json({
+          ...basePayload(),
+          ok: true,
+          status: 'ready',
+        }),
+      );
+
+      app.get('/demo', runDemo);
+      app.post('/demo', runDemo);
+
+      app.get('/v1/models', (c) =>
+        c.json({
+          object: 'list',
+          data: [
+            {
+              id: 'flue/no-llm-virtual-sandbox-demo',
+              object: 'model',
+              created: 0,
+              owned_by: 'withastro',
+              description:
+                'Metadata placeholder for the deterministic Flue virtual-sandbox verifier. No LLM is loaded or called.',
+            },
+          ],
+        }),
+      );
+
+      app.route('/', flue());
+
+      export default app;
+
+  sandbox_demo_ts:
+    content: |
+      import { createAgent, type FlueContext, type WorkflowRouteHandler } from '@flue/runtime';
+
+      export const route: WorkflowRouteHandler = async (_c, next) => next();
+
+      const verifier = createAgent(() => ({
+        model: false,
+        cwd: '/workspace',
+        instructions: 'No model calls are made by this verifier.',
+      }));
+
+      export async function run({ init, payload }: FlueContext) {
+        const harness = await init(verifier);
+        const session = await harness.session('smoke');
+        const results: Record<string, boolean> = {};
+
+        const check = (name: string, ok: boolean) => {
+          results[name] = ok;
+        };
+
+        await session.fs.mkdir('/workspace', { recursive: true });
+
+        await session.fs.writeFile('/workspace/session.txt', 'session.fs content');
+        const sessionRead = await session.fs.readFile('/workspace/session.txt');
+        check('session.fs writeFile/readFile round-trip', sessionRead === 'session.fs content');
+
+        await harness.fs.writeFile('/workspace/harness.txt', 'harness.fs content');
+        const harnessRead = await harness.fs.readFile('/workspace/harness.txt');
+        check('harness.fs writeFile/readFile round-trip', harnessRead === 'harness.fs content');
+
+        await session.fs.writeFile('/workspace/visible.txt', 'staged by session.fs');
+        const visibleViaShell = await session.shell('cat /workspace/visible.txt');
+        check(
+          'session.fs visible to session.shell',
+          visibleViaShell.exitCode === 0 && visibleViaShell.stdout.trim() === 'staged by session.fs',
+        );
+
+        await harness.fs.writeFile('/workspace/harness-visible.txt', 'staged by harness.fs');
+        const harnessVisibleViaShell = await harness.shell('cat /workspace/harness-visible.txt');
+        check(
+          'harness.fs visible to harness.shell',
+          harnessVisibleViaShell.exitCode === 0 &&
+            harnessVisibleViaShell.stdout.trim() === 'staged by harness.fs',
+        );
+
+        await session.fs.mkdir('/workspace/scratch', { recursive: true });
+        await session.fs.writeFile('/workspace/scratch/a.txt', 'a');
+        await session.fs.writeFile('/workspace/scratch/b.txt', 'b');
+        const entries = (await session.fs.readdir('/workspace/scratch')).sort();
+        check('session.fs readdir', entries.length === 2 && entries[0] === 'a.txt' && entries[1] === 'b.txt');
+
+        const existsBefore = await session.fs.exists('/workspace/scratch/a.txt');
+        await session.fs.rm('/workspace/scratch', { recursive: true, force: true });
+        const existsAfter = await session.fs.exists('/workspace/scratch/a.txt');
+        check('session.fs exists/rm', existsBefore === true && existsAfter === false);
+
+        await session.fs.writeFile('/workspace/stat-target.txt', 'hello');
+        const stat = await session.fs.stat('/workspace/stat-target.txt');
+        check('session.fs stat returns FileStat', stat.isFile === true && stat.size === 5);
+
+        const buffer = await session.fs.readFileBuffer('/workspace/stat-target.txt');
+        check(
+          'session.fs readFileBuffer returns bytes',
+          buffer instanceof Uint8Array && new TextDecoder().decode(buffer) === 'hello',
+        );
+
+        const allPassed = Object.values(results).every(Boolean);
+
+        return {
+          ok: allPassed,
+          allPassed,
+          payload,
+          runtime: {
+            package: '@flue/runtime',
+            packageVersion: process.env.FLUE_PACKAGE_VERSION ?? '0.9.1',
+            target: 'node',
+            sandbox: 'default virtual sandbox',
+          },
+          checks: results,
+          credentialsRequired: false,
+          llmProviderCalls: false,
+          modelDownloads: false,
+        };
+      }
