@@ -5636,5 +5636,27 @@
     "diskSize": 10
   },
   "tags": ["Media & Design", "Developer Tools", "AI Agents"]
-}
+},
+{
+    "id": "herdr",
+    "name": "ogulcancelik/herdr",
+    "description": "Terminal-native agent multiplexer. This template runs a CPU-safe HTTP verifier that downloads the real Herdr Linux release binary and checks local CLI, session, and config commands without provider credentials.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/herdr",
+    "author": "ogulcancelik",
+    "icon": "herdr.svg",
+    "envs": [
+      {
+        "key": "HERDR_VERSION",
+        "required": false,
+        "default": "v0.6.8",
+        "description": "Upstream Herdr GitHub release tag downloaded at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools"]
+  }
 ]

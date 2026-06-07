@@ -1,0 +1,390 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      HERDR_VERSION: ${HERDR_VERSION:-v0.6.8}
+      HOME: /tmp/herdr-home
+      XDG_CONFIG_HOME: /tmp/herdr-config
+      NO_COLOR: "1"
+      TERM: dumb
+      PORT: "8080"
+      PYTHONUNBUFFERED: "1"
+    configs:
+      - source: herdr_demo_server
+        target: /opt/herdr-demo/server.py
+    volumes:
+      - herdr_bin:/opt/herdr
+    tmpfs:
+      - /tmp
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        mkdir -p /opt/herdr "$$HOME" "$$XDG_CONFIG_HOME"
+        exec python /opt/herdr-demo/server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+
+configs:
+  herdr_demo_server:
+    content: |
+      import hashlib
+      import json
+      import os
+      import platform
+      import re
+      import shutil
+      import stat
+      import subprocess
+      import tempfile
+      import time
+      import urllib.request
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+      STARTED_AT = time.time()
+      UPSTREAM_REPO = "https://github.com/ogulcancelik/herdr"
+      ICON_SOURCE = "https://github.com/ogulcancelik/herdr/blob/master/assets/logo.svg"
+      HERDR_VERSION = os.environ.get("HERDR_VERSION", "v0.6.8")
+      INSTALL_DIR = "/opt/herdr"
+      BIN_PATH = os.path.join(INSTALL_DIR, "herdr")
+      PORT = int(os.environ.get("PORT", "8080"))
+      ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+      KNOWN_SHA256 = {
+          "v0.6.8": {
+              "herdr-linux-x86_64": "528d22e889814a6ccf22162801d59690d9dbd5dc64f96d7e1d1c7a8634b25535",
+              "herdr-linux-aarch64": "4cbe45002f86b0500a2f5279cf20a55f22234f88ce71abc2b4051e20281bd629",
+          }
+      }
+
+      INSTALL_RESULT = None
+      INSTALL_ERROR = None
+
+
+      def current_asset():
+          machine = platform.machine().lower()
+          if machine in ("x86_64", "amd64"):
+              return "herdr-linux-x86_64"
+          if machine in ("aarch64", "arm64"):
+              return "herdr-linux-aarch64"
+          raise RuntimeError(f"Unsupported CPU architecture for Herdr release binary: {machine}")
+
+
+      def clean_text(value, limit=4000):
+          return ANSI_RE.sub("", str(value or "")).strip()[:limit]
+
+
+      def install_herdr():
+          asset = current_asset()
+          marker = os.path.join(INSTALL_DIR, f".installed-{HERDR_VERSION}-{asset}")
+          download_url = f"https://github.com/ogulcancelik/herdr/releases/download/{HERDR_VERSION}/{asset}"
+          expected_sha = KNOWN_SHA256.get(HERDR_VERSION, {}).get(asset)
+
+          os.makedirs(INSTALL_DIR, exist_ok=True)
+          if os.path.isfile(marker) and os.path.isfile(BIN_PATH) and os.access(BIN_PATH, os.X_OK):
+              return {
+                  "ok": True,
+                  "asset": asset,
+                  "download_url": download_url,
+                  "version": HERDR_VERSION,
+                  "cached": True,
+                  "sha256_verified": bool(expected_sha),
+                  "sha256": expected_sha,
+              }
+
+          for name in os.listdir(INSTALL_DIR):
+              path = os.path.join(INSTALL_DIR, name)
+              if os.path.isdir(path) and not os.path.islink(path):
+                  shutil.rmtree(path)
+              else:
+                  os.remove(path)
+
+          fd, tmp_path = tempfile.mkstemp(prefix="herdr-", dir="/tmp")
+          os.close(fd)
+          digest = hashlib.sha256()
+          try:
+              with urllib.request.urlopen(download_url, timeout=120) as response, open(tmp_path, "wb") as output:
+                  while True:
+                      chunk = response.read(1024 * 1024)
+                      if not chunk:
+                          break
+                      digest.update(chunk)
+                      output.write(chunk)
+              actual_sha = digest.hexdigest()
+              if expected_sha and actual_sha != expected_sha:
+                  raise RuntimeError(f"Downloaded {asset} SHA256 mismatch: expected {expected_sha}, got {actual_sha}")
+              shutil.move(tmp_path, BIN_PATH)
+              os.chmod(BIN_PATH, os.stat(BIN_PATH).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+              with open(marker, "w", encoding="utf-8") as marker_file:
+                  marker_file.write(actual_sha + "\n")
+              return {
+                  "ok": True,
+                  "asset": asset,
+                  "download_url": download_url,
+                  "version": HERDR_VERSION,
+                  "cached": False,
+                  "sha256_verified": bool(expected_sha),
+                  "sha256": actual_sha,
+              }
+          finally:
+              if os.path.exists(tmp_path):
+                  os.remove(tmp_path)
+
+
+      try:
+          INSTALL_RESULT = install_herdr()
+      except Exception as exc:
+          INSTALL_ERROR = f"{type(exc).__name__}: {exc}"
+          INSTALL_RESULT = {
+              "ok": False,
+              "version": HERDR_VERSION,
+              "error": INSTALL_ERROR,
+          }
+
+
+      def command_env():
+          home = os.environ.get("HOME", "/tmp/herdr-home")
+          xdg_config_home = os.environ.get("XDG_CONFIG_HOME", "/tmp/herdr-config")
+          os.makedirs(home, exist_ok=True)
+          os.makedirs(xdg_config_home, exist_ok=True)
+          env = {
+              "PATH": INSTALL_DIR + ":" + os.environ.get("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"),
+              "HOME": home,
+              "XDG_CONFIG_HOME": xdg_config_home,
+              "NO_COLOR": "1",
+              "TERM": "dumb",
+          }
+          return env
+
+
+      def run_herdr(args, timeout_seconds=15):
+          started = time.time()
+          command = [BIN_PATH] + args
+          if INSTALL_ERROR is not None:
+              return {
+                  "ok": False,
+                  "command": "herdr " + " ".join(args),
+                  "exit_code": None,
+                  "stdout": "",
+                  "stderr": "",
+                  "error": INSTALL_ERROR,
+                  "duration_ms": 0,
+              }
+          try:
+              result = subprocess.run(
+                  command,
+                  cwd="/tmp",
+                  env=command_env(),
+                  text=True,
+                  capture_output=True,
+                  timeout=timeout_seconds,
+                  check=False,
+              )
+              return {
+                  "ok": result.returncode == 0,
+                  "command": "herdr " + " ".join(args),
+                  "exit_code": result.returncode,
+                  "stdout": clean_text(result.stdout),
+                  "stderr": clean_text(result.stderr),
+                  "error": None,
+                  "duration_ms": round((time.time() - started) * 1000),
+              }
+          except subprocess.TimeoutExpired as exc:
+              return {
+                  "ok": False,
+                  "command": "herdr " + " ".join(args),
+                  "exit_code": 124,
+                  "stdout": clean_text(exc.stdout),
+                  "stderr": clean_text(exc.stderr),
+                  "error": "command timed out",
+                  "duration_ms": round((time.time() - started) * 1000),
+              }
+          except Exception as exc:
+              return {
+                  "ok": False,
+                  "command": "herdr " + " ".join(args),
+                  "exit_code": None,
+                  "stdout": "",
+                  "stderr": "",
+                  "error": f"{type(exc).__name__}: {exc}",
+                  "duration_ms": round((time.time() - started) * 1000),
+              }
+
+
+      def parse_session_list(result):
+          if not result["ok"] or not result["stdout"]:
+              return None
+          try:
+              return json.loads(result["stdout"])
+          except Exception:
+              return None
+
+
+      def inspect_herdr():
+          version = run_herdr(["--version"])
+          help_text = run_herdr(["--help"])
+          default_config = run_herdr(["--default-config"])
+          sessions = run_herdr(["session", "list", "--json"])
+          status = run_herdr(["status"])
+          session_json = parse_session_list(sessions)
+          version_match = re.search(r"herdr\s+([0-9][^\s]*)", version["stdout"])
+
+          checks = {
+              "install": INSTALL_RESULT,
+              "version": {
+                  "ok": version["ok"] and bool(version_match),
+                  "installed_version": version_match.group(1) if version_match else None,
+                  "command": version,
+              },
+              "help": {
+                  "ok": help_text["ok"] and "workspace" in help_text["stdout"] and "session" in help_text["stdout"],
+                  "includes_workspace_commands": "workspace <subcommand>" in help_text["stdout"],
+                  "includes_session_commands": "session <subcommand>" in help_text["stdout"],
+                  "command": help_text,
+              },
+              "default_config": {
+                  "ok": default_config["ok"] and "[theme]" in default_config["stdout"] and "[keys]" in default_config["stdout"],
+                  "includes_theme_section": "[theme]" in default_config["stdout"],
+                  "includes_keybindings_section": "[keys]" in default_config["stdout"],
+                  "excerpt": "\n".join(default_config["stdout"].splitlines()[:24]),
+                  "command": {
+                      "ok": default_config["ok"],
+                      "command": default_config["command"],
+                      "exit_code": default_config["exit_code"],
+                      "stderr": default_config["stderr"],
+                      "duration_ms": default_config["duration_ms"],
+                  },
+              },
+              "session_list": {
+                  "ok": sessions["ok"] and isinstance(session_json, dict) and isinstance(session_json.get("sessions"), list),
+                  "data": session_json,
+                  "command": sessions,
+              },
+              "status": {
+                  "ok": status["ok"] and "server:" in status["stdout"],
+                  "command": status,
+              },
+          }
+          checks["ok"] = all(
+              checks[name]["ok"]
+              for name in ("install", "version", "help", "default_config", "session_list", "status")
+          )
+          return checks
+
+
+      def base_payload(checks):
+          return {
+              "ok": checks["ok"],
+              "status": "ready" if checks["ok"] else "unhealthy",
+              "service": "herdr-cli-verifier",
+              "upstream": UPSTREAM_REPO,
+              "upstream_release": HERDR_VERSION,
+              "icon_source": ICON_SOURCE,
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "platform": platform.platform(),
+              "python": platform.python_version(),
+              "cpu_only": True,
+              "credentials_required": False,
+              "hosted_model_calls_performed": False,
+              "browser_auth_performed": False,
+              "model_weights_downloaded": False,
+              "interactive_tui_started": False,
+              "checks": checks,
+          }
+
+
+      def models_payload(checks):
+          installed_version = checks.get("version", {}).get("installed_version")
+          return {
+              "object": "list",
+              "data": [
+                  {
+                      "id": "herdr/local-cli-verifier",
+                      "object": "model",
+                      "created": 0,
+                      "owned_by": "ogulcancelik",
+                      "description": "Metadata-only local verifier for the Herdr terminal agent multiplexer. No LLM is hosted and no provider call is made.",
+                  }
+              ],
+              "service": "herdr-cli-verifier",
+              "upstream": UPSTREAM_REPO,
+              "upstream_release": HERDR_VERSION,
+              "installed_herdr_version": installed_version,
+              "hosted_model_calls_performed": False,
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "herdr-cli-verifier/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def write_json(self, status, payload):
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Content-Length", str(len(body)))
+              self.send_header("Cache-Control", "no-store")
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              path = urlparse(self.path).path
+              checks = inspect_herdr()
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload(checks)
+                  self.write_json(200 if checks["ok"] else 500, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload(checks)
+                  payload["demo"] = {
+                      "what_ran": [
+                          "herdr --version",
+                          "herdr --help",
+                          "herdr --default-config",
+                          "herdr session list --json",
+                          "herdr status",
+                      ],
+                      "purpose": "Verify the real Herdr release binary, local CLI help, default configuration, session metadata, and socket-aware status without starting an interactive TUI or contacting model providers.",
+                      "safe_defaults": {
+                          "no_credentials": True,
+                          "no_browser_auth": True,
+                          "no_model_download": True,
+                          "no_hosted_llm_call": True,
+                          "no_interactive_tui": True,
+                      },
+                  }
+                  self.write_json(200 if checks["ok"] else 500, payload)
+                  return
+
+              if path == "/v1/models":
+                  self.write_json(200 if checks["ok"] else 500, models_payload(checks))
+                  return
+
+              self.write_json(404, {"ok": False, "error": "not found", "endpoints": ["/healthz", "/demo", "/v1/models"]})
+
+
+      if __name__ == "__main__":
+          server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+          print(f"herdr-cli-verifier listening on port {PORT}", flush=True)
+          server.serve_forever()
+
+volumes:
+  herdr_bin:
