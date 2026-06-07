@@ -1,0 +1,550 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8000"
+    environment:
+      APP_PORT: ${APP_PORT:-8000}
+      OPENAI_PLUGINS_REF: ${OPENAI_PLUGINS_REF:-2cb26e7b390c98465211b3083e84d23945c1ae3e}
+      OPENAI_PLUGINS_SOURCE_DIR: /opt/openai-plugins-src
+      PYTHONUNBUFFERED: "1"
+    configs:
+      - source: openai_plugins_verifier
+        target: /opt/openai-plugins-verifier/main.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        exec python /opt/openai-plugins-verifier/main.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8000'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+          reverse_proxy app:8000
+      }
+
+  openai_plugins_verifier:
+    content: |
+      import collections
+      import json
+      import os
+      import platform
+      import shutil
+      import sys
+      import tarfile
+      import time
+      import urllib.error
+      import urllib.parse
+      import urllib.request
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path
+      from urllib.parse import parse_qs, urlparse
+
+
+      STARTED_AT = time.time()
+      UPSTREAM_REPO = "https://github.com/openai/plugins"
+      PHALA_TEMPLATE = "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/plugins"
+      DEFAULT_REF = "2cb26e7b390c98465211b3083e84d23945c1ae3e"
+      SOURCE_REF = os.environ.get("OPENAI_PLUGINS_REF", DEFAULT_REF).strip() or DEFAULT_REF
+      SOURCE_DIR = Path(os.environ.get("OPENAI_PLUGINS_SOURCE_DIR", "/opt/openai-plugins-src"))
+      APP_PORT = int(os.environ.get("APP_PORT", "8000"))
+      HIGHLIGHTED = [
+          "figma",
+          "notion",
+          "build-ios-apps",
+          "build-macos-apps",
+          "build-web-apps",
+          "expo",
+          "netlify",
+          "remotion",
+          "google-slides",
+      ]
+      ICON_SOURCE = (
+          "https://raw.githubusercontent.com/openai/plugins/"
+          + SOURCE_REF
+          + "/plugins/openai-developers/assets/openai-platform.png"
+      )
+
+
+      def source_tarball_url():
+          ref = urllib.parse.quote(SOURCE_REF, safe="")
+          return f"https://codeload.github.com/openai/plugins/tar.gz/{ref}"
+
+
+      def open_source_archive():
+          retryable_statuses = {429, 500, 502, 503, 504}
+          for attempt in range(1, 6):
+              request = urllib.request.Request(
+                  source_tarball_url(),
+                  headers={
+                      "User-Agent": "phala-cloud-openai-plugins-verifier/1.0",
+                  },
+              )
+              try:
+                  return urllib.request.urlopen(request, timeout=120)
+              except urllib.error.HTTPError as exc:
+                  if exc.code not in retryable_statuses or attempt == 5:
+                      raise
+                  delay = min(45, 2 ** attempt)
+                  print(
+                      json.dumps({
+                          "event": "source_download_retry",
+                          "attempt": attempt,
+                          "status": exc.code,
+                          "delay_seconds": delay,
+                      }),
+                      flush=True,
+                  )
+                  time.sleep(delay)
+              except urllib.error.URLError as exc:
+                  if attempt == 5:
+                      raise
+                  delay = min(45, 2 ** attempt)
+                  print(
+                      json.dumps({
+                          "event": "source_download_retry",
+                          "attempt": attempt,
+                          "error": f"{type(exc).__name__}: {exc}",
+                          "delay_seconds": delay,
+                      }),
+                      flush=True,
+                  )
+                  time.sleep(delay)
+
+
+      def is_relative_to(child, parent):
+          try:
+              child.resolve().relative_to(parent.resolve())
+              return True
+          except ValueError:
+              return False
+
+
+      def extract_source_archive():
+          if SOURCE_DIR.exists():
+              shutil.rmtree(SOURCE_DIR)
+          SOURCE_DIR.mkdir(parents=True, exist_ok=True)
+
+          with open_source_archive() as response:
+              with tarfile.open(fileobj=response, mode="r|gz") as archive:
+                  for member in archive:
+                      parts = Path(member.name).parts
+                      if len(parts) <= 1:
+                          continue
+                      relative = Path(*parts[1:])
+                      target = SOURCE_DIR / relative
+                      if not is_relative_to(target, SOURCE_DIR):
+                          raise RuntimeError(f"Unsafe archive path: {member.name}")
+                      if member.isdir():
+                          target.mkdir(parents=True, exist_ok=True)
+                      elif member.isfile():
+                          target.parent.mkdir(parents=True, exist_ok=True)
+                          source = archive.extractfile(member)
+                          if source is None:
+                              continue
+                          with target.open("wb") as output:
+                              shutil.copyfileobj(source, output)
+
+
+      def read_json(path):
+          try:
+              return json.loads(path.read_text("utf-8"))
+          except Exception as exc:
+              return {
+                  "_error": f"{type(exc).__name__}: {exc}",
+              }
+
+
+      def author_name(value):
+          if isinstance(value, dict):
+              return value.get("name") or value.get("url") or "unknown"
+          if isinstance(value, str) and value:
+              return value
+          return "unknown"
+
+
+      def list_surface(plugin_dir, manifest):
+          return {
+              "skills": bool(manifest.get("skills")) and (plugin_dir / "skills").is_dir(),
+              "apps": bool(manifest.get("apps")) and (plugin_dir / ".app.json").is_file(),
+              "mcp_servers": bool(manifest.get("mcpServers")) and (plugin_dir / ".mcp.json").is_file(),
+              "agents": (plugin_dir / "agents").is_dir(),
+              "commands": (plugin_dir / "commands").is_dir(),
+              "hooks": (plugin_dir / "hooks.json").is_file(),
+              "assets": (plugin_dir / "assets").is_dir(),
+          }
+
+
+      def summarize_manifest(plugin_dir, manifest):
+          interface = manifest.get("interface") if isinstance(manifest.get("interface"), dict) else {}
+          return {
+              "id": plugin_dir.name,
+              "name": manifest.get("name"),
+              "version": manifest.get("version"),
+              "description": manifest.get("description"),
+              "author": author_name(manifest.get("author")),
+              "license": manifest.get("license"),
+              "homepage": manifest.get("homepage"),
+              "repository": manifest.get("repository"),
+              "interface": {
+                  "display_name": interface.get("displayName"),
+                  "developer_name": interface.get("developerName"),
+                  "category": interface.get("category"),
+                  "capabilities": interface.get("capabilities") or [],
+                  "logo": interface.get("logo"),
+                  "composer_icon": interface.get("composerIcon"),
+              },
+              "surfaces": list_surface(plugin_dir, manifest),
+          }
+
+
+      def scan_source():
+          root_readme = SOURCE_DIR / "README.md"
+          plugins_dir = SOURCE_DIR / "plugins"
+          direct_plugins = sorted(
+              [entry for entry in plugins_dir.iterdir() if entry.is_dir()],
+              key=lambda entry: entry.name,
+          ) if plugins_dir.is_dir() else []
+
+          plugins = []
+          invalid_manifests = []
+          missing_manifests = []
+          for plugin_dir in direct_plugins:
+              manifest_path = plugin_dir / ".codex-plugin" / "plugin.json"
+              if not manifest_path.is_file():
+                  missing_manifests.append(plugin_dir.name)
+                  continue
+              manifest = read_json(manifest_path)
+              if "_error" in manifest:
+                  invalid_manifests.append({
+                      "plugin": plugin_dir.name,
+                      "error": manifest["_error"],
+                  })
+                  continue
+              plugins.append(summarize_manifest(plugin_dir, manifest))
+
+          categories = collections.Counter(
+              plugin["interface"]["category"] or "Uncategorized" for plugin in plugins
+          )
+          authors = collections.Counter(plugin["author"] for plugin in plugins)
+          licenses = collections.Counter(plugin["license"] or "Unspecified" for plugin in plugins)
+          capabilities = collections.Counter(
+              capability
+              for plugin in plugins
+              for capability in plugin["interface"]["capabilities"]
+          )
+          surface_counts = {
+              surface: sum(1 for plugin in plugins if plugin["surfaces"].get(surface))
+              for surface in ["skills", "apps", "mcp_servers", "agents", "commands", "hooks", "assets"]
+          }
+          highlighted = [plugin for plugin in plugins if plugin["id"] in HIGHLIGHTED]
+          openai_examples = [
+              plugin for plugin in plugins if plugin["author"] in ("OpenAI", "OpenAI Codex")
+          ]
+          sample_ids = {
+              "openai-developers",
+              "plugin-eval",
+              "build-web-apps",
+              "figma",
+              "notion",
+              "expo",
+              "netlify",
+          }
+          sample_plugins = [plugin for plugin in plugins if plugin["id"] in sample_ids]
+
+          return {
+              "ok": root_readme.is_file()
+              and plugins_dir.is_dir()
+              and len(plugins) > 0
+              and not invalid_manifests
+              and not missing_manifests,
+              "source_dir": str(SOURCE_DIR),
+              "root_readme_present": root_readme.is_file(),
+              "top_level_plugin_dirs": len(direct_plugins),
+              "top_level_manifest_count": len(plugins),
+              "missing_manifest_dirs": missing_manifests,
+              "invalid_manifests": invalid_manifests,
+              "fixture_manifest_count": len(
+                  list((SOURCE_DIR / "plugins" / "plugin-eval" / "fixtures").glob("*/.codex-plugin/plugin.json"))
+              ),
+              "summaries": {
+                  "categories": categories.most_common(20),
+                  "authors": authors.most_common(12),
+                  "licenses": licenses.most_common(12),
+                  "capabilities": capabilities.most_common(20),
+                  "surfaces": surface_counts,
+              },
+              "highlighted_examples": highlighted,
+              "openai_authored_count": len(openai_examples),
+              "openai_authored_sample": openai_examples[:12],
+              "sample_plugins": sorted(sample_plugins, key=lambda plugin: plugin["id"]),
+          }
+
+
+      def load_status():
+          status = {
+              "ok": False,
+              "download_ok": False,
+              "error": None,
+              "download_seconds": None,
+              "inventory": None,
+          }
+          started = time.time()
+          try:
+              extract_source_archive()
+              status["download_ok"] = True
+              status["download_seconds"] = round(time.time() - started, 3)
+              inventory = scan_source()
+              status["inventory"] = inventory
+              status["ok"] = inventory["ok"]
+          except Exception as exc:
+              status["error"] = f"{type(exc).__name__}: {exc}"
+              status["download_seconds"] = round(time.time() - started, 3)
+          return status
+
+
+      STATUS = load_status()
+
+
+      def safety():
+          return {
+              "cpu_only": True,
+              "credentials_required": False,
+              "model_provider_calls": False,
+              "hosted_model_calls": False,
+              "model_downloads": False,
+              "browser_auth": False,
+              "gpu_required": False,
+              "external_database_required": False,
+              "host_bind_mounts": False,
+              "docker_socket": False,
+              "source_artifact": "GitHub source tarball pinned by OPENAI_PLUGINS_REF",
+          }
+
+
+      def endpoint_list():
+          return {
+              "/healthz": "Readiness status for source download and manifest scan.",
+              "/demo": "Deterministic local inventory verifier for upstream Codex plugin manifests.",
+              "/v1/models": "OpenAI-shaped metadata-only model list for smoke checks.",
+              "/plugins": "Top-level plugin manifest summaries. Optional ?limit= and ?offset= query params.",
+              "/upstream": "Upstream attribution, source ref, icon source, and safety notes.",
+          }
+
+
+      def base_payload():
+          return {
+              "service": "openai-plugins-verifier",
+              "ok": STATUS["ok"],
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "upstream": {
+                  "repo": UPSTREAM_REPO,
+                  "source_ref": SOURCE_REF,
+                  "tarball": source_tarball_url(),
+                  "icon_source": ICON_SOURCE,
+                  "phala_template": PHALA_TEMPLATE,
+              },
+              "safety": safety(),
+          }
+
+
+      def int_query(params, key, default, minimum, maximum):
+          try:
+              value = int((params.get(key) or [default])[0])
+          except Exception:
+              value = default
+          return max(minimum, min(maximum, value))
+
+
+      def response_body(path, params):
+          inventory = STATUS.get("inventory") or {}
+
+          if path in ("", "/", "/healthz"):
+              payload = base_payload()
+              payload.update({
+                  "status": "ready" if STATUS["ok"] else "unhealthy",
+                  "download_ok": STATUS["download_ok"],
+                  "download_seconds": STATUS["download_seconds"],
+                  "error": STATUS["error"],
+                  "inventory": {
+                      "top_level_plugin_dirs": inventory.get("top_level_plugin_dirs", 0),
+                      "top_level_manifest_count": inventory.get("top_level_manifest_count", 0),
+                      "root_readme_present": inventory.get("root_readme_present", False),
+                      "missing_manifest_dirs": inventory.get("missing_manifest_dirs", []),
+                      "invalid_manifest_count": len(inventory.get("invalid_manifests", [])),
+                  },
+                  "endpoints": endpoint_list(),
+              })
+              return (HTTPStatus.OK if STATUS["ok"] else HTTPStatus.SERVICE_UNAVAILABLE), payload
+
+          if path == "/demo":
+              payload = base_payload()
+              payload.update({
+                  "mode": "local-deterministic-codex-plugin-manifest-scan",
+                  "description": (
+                      "Downloads the real openai/plugins source artifact and scans top-level "
+                      ".codex-plugin/plugin.json manifests without installing plugins into a "
+                      "user profile, authenticating to browser apps, calling providers, or "
+                      "loading models."
+                  ),
+                  "download_ok": STATUS["download_ok"],
+                  "download_seconds": STATUS["download_seconds"],
+                  "error": STATUS["error"],
+                  "inventory": inventory,
+                  "checks": {
+                      "source_artifact_downloaded": STATUS["download_ok"],
+                      "root_readme_present": inventory.get("root_readme_present", False),
+                      "top_level_manifests_scanned": inventory.get("top_level_manifest_count", 0),
+                      "fixture_manifests_ignored": inventory.get("fixture_manifest_count", 0),
+                      "invalid_manifest_count": len(inventory.get("invalid_manifests", [])),
+                      "missing_manifest_dir_count": len(inventory.get("missing_manifest_dirs", [])),
+                      "provider_credentials_read": False,
+                      "provider_request_attempted": False,
+                      "plugin_installation_attempted": False,
+                  },
+              })
+              return (HTTPStatus.OK if STATUS["ok"] else HTTPStatus.SERVICE_UNAVAILABLE), payload
+
+          if path == "/plugins":
+              plugins = inventory.get("sample_plugins", [])
+              all_plugins = []
+              if STATUS["ok"] and SOURCE_DIR.joinpath("plugins").is_dir():
+                  for plugin_dir in sorted(SOURCE_DIR.joinpath("plugins").iterdir(), key=lambda entry: entry.name):
+                      manifest_path = plugin_dir / ".codex-plugin" / "plugin.json"
+                      if plugin_dir.is_dir() and manifest_path.is_file():
+                          manifest = read_json(manifest_path)
+                          if "_error" not in manifest:
+                              all_plugins.append(summarize_manifest(plugin_dir, manifest))
+              if all_plugins:
+                  plugins = all_plugins
+              limit = int_query(params, "limit", 50, 1, 200)
+              offset = int_query(params, "offset", 0, 0, max(0, len(plugins)))
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "total": len(plugins),
+                  "limit": limit,
+                  "offset": offset,
+                  "data": plugins[offset:offset + limit],
+              }
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "openai-plugins/no-model-source-verifier",
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "openai",
+                          "description": (
+                              "Metadata-only compatibility entry for the local openai/plugins "
+                              "source verifier. No model is hosted, loaded, downloaded, or called."
+                          ),
+                      }
+                  ],
+              }
+
+          if path == "/upstream":
+              payload = base_payload()
+              payload.update({
+                  "readme_summary": (
+                      "The upstream README describes a curated collection of Codex plugin "
+                      "examples. Each plugin lives under plugins/<name>/ with a required "
+                      ".codex-plugin/plugin.json manifest and optional skills, app, MCP, "
+                      "agent, command, hook, asset, and support files."
+                  ),
+                  "inspected_commit": DEFAULT_REF,
+                  "runtime_ref": SOURCE_REF,
+                  "icon_source": ICON_SOURCE,
+                  "production_notes": [
+                      "The default service is a verifier, not a Codex plugin marketplace or hosted agent runtime.",
+                      "Real plugin use happens in Codex or another supported agent environment.",
+                      "Credentialed plugins may require browser or service authentication when installed for real use.",
+                      "Pin OPENAI_PLUGINS_REF to a reviewed commit for reproducible production checks.",
+                  ],
+              })
+              return HTTPStatus.OK, payload
+
+          return HTTPStatus.NOT_FOUND, {
+              "ok": False,
+              "error": "not_found",
+              "endpoints": endpoint_list(),
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "openai-plugins-verifier/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              parsed = urlparse(self.path)
+              status, payload = response_body(parsed.path, parse_qs(parsed.query))
+              self.respond_json(status.value, payload)
+
+
+      if __name__ == "__main__":
+          server = ThreadingHTTPServer(("0.0.0.0", APP_PORT), Handler)
+          print(
+              json.dumps({
+                  "event": "server_started",
+                  "port": APP_PORT,
+                  "ok": STATUS["ok"],
+                  "source_ref": SOURCE_REF,
+                  "download_seconds": STATUS["download_seconds"],
+                  "error": STATUS["error"],
+              }),
+              flush=True,
+          )
+          server.serve_forever()
+
+networks:
+  internal:
