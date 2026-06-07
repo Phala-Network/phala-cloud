@@ -5186,5 +5186,35 @@
       "diskSize": 20
     },
     "tags": ["LLM Inference & Model Serving", "Infrastructure", "Developer Tools"]
+  },
+{
+    "id": "open-notebook",
+    "name": "lfnovo/open-notebook",
+    "description": "An Open Source implementation of Notebook LM with more flexibility and features",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/open-notebook",
+    "author": "lfnovo",
+    "icon": "open-notebook.png",
+    "envs": [
+      {
+        "key": "OPEN_NOTEBOOK_PACKAGE_URL",
+        "required": false,
+        "default": "https://github.com/lfnovo/open-notebook/archive/refs/tags/v1.9.0.tar.gz",
+        "description": "Upstream Open Notebook source archive installed by the verifier at container startup."
+      },
+      {
+        "key": "OPEN_NOTEBOOK_CHUNK_SIZE",
+        "required": false,
+        "default": "120",
+        "description": "Token chunk size used by the upstream chunking utility in the deterministic verifier."
+      },
+      {
+        "key": "OPEN_NOTEBOOK_MIN_CHUNK_SIZE",
+        "required": false,
+        "default": "0",
+        "description": "Minimum chunk-size filter for the verifier's deterministic chunking sample."
+      }
+    ],
+    "defaultResource": { "vCPU": 1, "memory": 2048, "diskSize": 20 },
+    "tags": ["RAG", "Web Apps", "AI Agents"]
   }
 ]

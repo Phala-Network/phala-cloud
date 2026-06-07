@@ -1,0 +1,293 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    restart: unless-stopped
+    init: true
+    working_dir: /opt/open-notebook-demo
+    ports:
+      - "8080:8080"
+    environment:
+      OPEN_NOTEBOOK_PACKAGE_URL: ${OPEN_NOTEBOOK_PACKAGE_URL:-https://github.com/lfnovo/open-notebook/archive/refs/tags/v1.9.0.tar.gz}
+      OPEN_NOTEBOOK_CHUNK_SIZE: ${OPEN_NOTEBOOK_CHUNK_SIZE:-120}
+      OPEN_NOTEBOOK_MIN_CHUNK_SIZE: ${OPEN_NOTEBOOK_MIN_CHUNK_SIZE:-0}
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+      PIP_ROOT_USER_ACTION: ignore
+      PORT: "8080"
+      PYTHONUNBUFFERED: "1"
+      TIKTOKEN_CACHE_DIR: /tmp/tiktoken-cache
+    configs:
+      - source: open_notebook_demo_app
+        target: /opt/open-notebook-demo/server.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        python -m pip install --no-cache-dir --no-deps "$${OPEN_NOTEBOOK_PACKAGE_URL}"
+        python -m pip install --no-cache-dir cryptography langchain-text-splitters loguru numpy packaging requests tiktoken tomli
+        exec python /opt/open-notebook-demo/server.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('PORT', '8080'); response = urllib.request.urlopen('http://127.0.0.1:' + port + '/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+configs:
+  open_notebook_demo_app:
+    content: |
+      import importlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "open-notebook"
+      UPSTREAM_REPO = "https://github.com/lfnovo/open-notebook"
+
+
+      def package_version(name):
+          try:
+              return importlib.metadata.version(name)
+          except Exception as exc:
+              return f"unavailable: {type(exc).__name__}: {exc}"
+
+
+      def import_checks():
+          result = {
+              "distribution": PACKAGE_NAME,
+              "distribution_version": None,
+              "import_ok": False,
+              "symbols": {},
+              "error": None,
+          }
+          try:
+              importlib.import_module("open_notebook")
+              exceptions_module = importlib.import_module("open_notebook.exceptions")
+              chunking_module = importlib.import_module("open_notebook.utils.chunking")
+              text_module = importlib.import_module("open_notebook.utils.text_utils")
+              token_module = importlib.import_module("open_notebook.utils.token_utils")
+
+              result["distribution_version"] = package_version(PACKAGE_NAME)
+              checks = {
+                  "InvalidInputError": hasattr(exceptions_module, "InvalidInputError"),
+                  "detect_content_type": hasattr(chunking_module, "detect_content_type"),
+                  "chunk_text": hasattr(chunking_module, "chunk_text"),
+                  "parse_thinking_content": hasattr(text_module, "parse_thinking_content"),
+                  "extract_text_content": hasattr(text_module, "extract_text_content"),
+                  "token_count": hasattr(token_module, "token_count"),
+              }
+              result["symbols"] = checks
+              result["import_ok"] = all(checks.values())
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      IMPORT_STATUS = import_checks()
+
+
+      def run_local_demo():
+          if not IMPORT_STATUS["import_ok"]:
+              raise RuntimeError(IMPORT_STATUS["error"] or "Open Notebook import check failed")
+
+          from open_notebook.exceptions import InvalidInputError
+          from open_notebook.utils.chunking import chunk_text, detect_content_type
+          from open_notebook.utils.text_utils import extract_text_content, parse_thinking_content
+          from open_notebook.utils.token_utils import token_count
+
+          markdown = """
+          # Phala Cloud Open Notebook Verifier
+
+          Open Notebook organizes notebooks, sources, notes, provider credentials,
+          transformations, chat sessions, and podcast workflows around local domain
+          objects. This verifier constructs those objects and runs local text
+          processing utilities from the real upstream package.
+
+          ## Smoke Scope
+
+          The default path avoids browser login, SurrealDB writes, provider API calls,
+          embedding requests, text-to-speech requests, and model downloads. Production
+          deployments should run the official Open Notebook web application with a
+          persistent database and a stable encryption key.
+          """.strip()
+
+          content_type = detect_content_type(markdown, file_path="README.md")
+          chunks = chunk_text(markdown, content_type=content_type, file_path="README.md")
+          structured_message = [
+              {"type": "text", "text": "Open Notebook verifier "},
+              {"type": "text", "text": "processed local markdown."},
+          ]
+          thinking, cleaned = parse_thinking_content(
+              "<think>Use only local Open Notebook utilities.</think>Verifier response is ready."
+          )
+          extracted = extract_text_content(structured_message)
+
+          validation_error = None
+          try:
+              if not "   ".strip():
+                  raise InvalidInputError("Notebook name cannot be empty")
+          except InvalidInputError as exc:
+              validation_error = str(exc)
+
+          notebook_payload = {
+              "id": "notebook:phala_demo",
+              "name": "Phala verifier notebook",
+              "description": "Deterministic Open Notebook smoke-test payload",
+              "sources": [
+                  {
+                      "id": "source:phala_demo_readme",
+                      "title": "Open Notebook verifier source",
+                      "asset": {"url": UPSTREAM_REPO},
+                      "topics": ["self-hosted-notebook", "rag", "phala-cloud"],
+                      "content_type": content_type.value,
+                      "token_count": token_count(markdown),
+                      "chunk_count": len(chunks),
+                  }
+              ],
+              "notes": [
+                  {
+                      "id": "note:phala_demo_note",
+                      "title": "Verifier note",
+                      "note_type": "human",
+                      "content": extracted,
+                  }
+              ],
+          }
+
+          return {
+              "ok": True,
+              "demo_type": "deterministic local Open Notebook source-utility smoke test",
+              "notebook_payload": notebook_payload,
+              "text_processing": {
+                  "content_type": content_type.value,
+                  "chunk_count": len(chunks),
+                  "chunk_lengths": [len(chunk) for chunk in chunks],
+                  "first_chunk": chunks[0] if chunks else None,
+                  "thinking_content": thinking,
+                  "cleaned_content": cleaned,
+                  "extracted_text_content": extracted,
+              },
+              "validation": {
+                  "invalid_input_error_class_works": validation_error is not None,
+                  "error": validation_error,
+              },
+              "credentials_required": False,
+              "browser_auth_required": False,
+              "database_required_for_demo": False,
+              "llm_provider_calls": False,
+              "remote_model_calls": False,
+              "model_downloaded": False,
+              "model_loaded": False,
+          }
+
+
+      def demo_result():
+          try:
+              return run_local_demo()
+          except Exception as exc:
+              return {
+                  "ok": False,
+                  "error": f"{type(exc).__name__}: {exc}",
+                  "credentials_required": False,
+                  "llm_provider_calls": False,
+                  "remote_model_calls": False,
+                  "model_downloaded": False,
+                  "model_loaded": False,
+              }
+
+
+      def base_payload():
+          return {
+              "service": "open-notebook-demo",
+              "upstream": UPSTREAM_REPO,
+              "package_url": os.environ.get("OPEN_NOTEBOOK_PACKAGE_URL"),
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "open_notebook": IMPORT_STATUS,
+          }
+
+
+      def response_body(path):
+          if path in ("/", "/healthz"):
+              demo = demo_result()
+              ok = IMPORT_STATUS["import_ok"] and demo["ok"]
+              payload = base_payload()
+              payload.update(
+                  {
+                      "status": "ready" if ok else "unhealthy",
+                      "ok": ok,
+                      "cpu_only": True,
+                      "demo": demo,
+                  }
+              )
+              return HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/demo":
+              demo = demo_result()
+              payload = base_payload()
+              payload.update(demo)
+              return HTTPStatus.OK if demo["ok"] else HTTPStatus.INTERNAL_SERVER_ERROR, payload
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "open-notebook-local-source-utility-verifier",
+                          "object": "model",
+                          "created": 1704067200,
+                          "owned_by": "lfnovo-open-notebook-template",
+                          "description": (
+                              "Local deterministic Open Notebook verifier endpoint; "
+                              "no LLM, embedding, or TTS model is loaded."
+                          ),
+                      }
+                  ],
+                  "open_notebook": IMPORT_STATUS,
+              }
+
+          return HTTPStatus.NOT_FOUND, {"ok": False, "error": "not found"}
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "open-notebook-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(int(status))
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              status, payload = response_body(urlparse(self.path).path)
+              self.respond_json(status, payload)
+
+
+      def main():
+          port = int(os.environ.get("PORT", "8080"))
+          server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+          print(f"Open Notebook demo listening on 0.0.0.0:{port}", flush=True)
+          server.serve_forever()
+
+
+      if __name__ == "__main__":
+          main()
