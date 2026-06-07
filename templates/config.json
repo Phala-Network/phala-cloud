@@ -5164,5 +5164,27 @@
       "diskSize": 20
     },
     "tags": ["AI Agents", "Developer Tools", "Automation"]
+  },
+{
+    "id": "headroom",
+    "name": "chopratejas/headroom",
+    "description": "Compress tool outputs, logs, files, and RAG chunks before they reach the LLM. 60-95% fewer tokens, same answers. Library, proxy, MCP server.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/headroom",
+    "author": "chopratejas",
+    "icon": "headroom.jpg",
+    "envs": [
+      {
+        "key": "HEADROOM_AI_VERSION",
+        "required": false,
+        "default": "0.23.0",
+        "description": "Pinned headroom-ai Python package version installed by the local compression verifier image."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["LLM Inference & Model Serving", "Infrastructure", "Developer Tools"]
   }
 ]
