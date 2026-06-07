@@ -5428,5 +5428,27 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools", "Automation"]
+  },
+{
+    "id": "trivy",
+    "name": "aquasecurity/trivy",
+    "description": "Find vulnerabilities, misconfigurations, secrets, SBOM in containers, Kubernetes, code repositories, clouds and more",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/trivy",
+    "author": "aquasecurity",
+    "icon": "trivy.png",
+    "envs": [
+      {
+        "key": "TRIVY_VERSION",
+        "required": false,
+        "default": "0.71.0",
+        "description": "Pinned Trivy release version downloaded from the upstream GitHub release archive at startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["Developer Tools", "Infrastructure"]
   }
 ]
