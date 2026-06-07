@@ -1,0 +1,505 @@
+services:
+  app:
+    image: node:22-bookworm-slim
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      APP_PORT: ${APP_PORT:-8080}
+      NODE_ENV: production
+      NPM_CONFIG_UPDATE_NOTIFIER: "false"
+      NPM_CONFIG_FUND: "false"
+      NPM_CONFIG_AUDIT: "false"
+      SUPERMEMORY_SDK_VERSION: ${SUPERMEMORY_SDK_VERSION:-4.24.12}
+      SUPERMEMORY_TOOLS_VERSION: ${SUPERMEMORY_TOOLS_VERSION:-2.0.0}
+      SUPERMEMORY_DEMO_CONTAINER_TAG: ${SUPERMEMORY_DEMO_CONTAINER_TAG:-phala-template}
+      SUPERMEMORY_DEMO_QUERY: ${SUPERMEMORY_DEMO_QUERY:-What does this Supermemory verifier prove?}
+    configs:
+      - source: supermemory_demo_app
+        target: /opt/supermemory-verifier/server.mjs
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        mkdir -p /opt/supermemory-verifier
+        npm --prefix /opt/supermemory-verifier install --omit=dev --no-audit --no-fund \
+          "supermemory@$${SUPERMEMORY_SDK_VERSION}" \
+          "@supermemory/tools@$${SUPERMEMORY_TOOLS_VERSION}"
+        exec node /opt/supermemory-verifier/server.mjs
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"const port = process.env.APP_PORT || '8080'; fetch('http://127.0.0.1:' + port + '/healthz').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+
+configs:
+  supermemory_demo_app:
+    content: |
+      import http from "node:http";
+      import os from "node:os";
+      import path from "node:path";
+      import { createRequire } from "node:module";
+      import { readFileSync } from "node:fs";
+
+      const require = createRequire(import.meta.url);
+      const STARTED_AT = Date.now();
+      const SERVICE = "supermemory-sdk-verifier";
+      const UPSTREAM_REPO = "https://github.com/supermemoryai/supermemory";
+      const DOCS_URL = "https://supermemory.ai/docs";
+      const API_BASE_URL = "https://api.supermemory.ai";
+      const DEMO_API_KEY = "sm_demo_placeholder_not_secret";
+      const DEFAULT_CONTAINER_TAG = cleanInput(
+        process.env.SUPERMEMORY_DEMO_CONTAINER_TAG,
+        "phala-template",
+        96,
+      );
+      const DEFAULT_QUERY = cleanInput(
+        process.env.SUPERMEMORY_DEMO_QUERY,
+        "What does this Supermemory verifier prove?",
+        160,
+      );
+
+      let moduleCache;
+
+      function cleanInput(value, fallback, maxLength) {
+        const normalized = String(value || "")
+          .replace(/\s+/g, " ")
+          .trim();
+        return (normalized || fallback).slice(0, maxLength);
+      }
+
+      function packageMetadata(specifier) {
+        const resolved = require.resolve(specifier);
+        const packagePath =
+          path.basename(resolved) === "package.json"
+            ? resolved
+            : findPackageJson(path.dirname(resolved));
+        const pkg = JSON.parse(readFileSync(packagePath, "utf8"));
+        return {
+          name: pkg.name,
+          version: pkg.version,
+          description: pkg.description || null,
+          repository: normalizeRepository(pkg.repository),
+        };
+      }
+
+      function findPackageJson(startDir) {
+        let current = startDir;
+        while (true) {
+          const candidate = path.join(current, "package.json");
+          try {
+            readFileSync(candidate, "utf8");
+            return candidate;
+          } catch {
+            const parent = path.dirname(current);
+            if (parent === current) {
+              throw new Error(`package.json not found above $${startDir}`);
+            }
+            current = parent;
+          }
+        }
+      }
+
+      function normalizeRepository(repository) {
+        if (!repository) {
+          return null;
+        }
+        if (typeof repository === "string") {
+          return repository;
+        }
+        return {
+          type: repository.type || null,
+          url: repository.url || null,
+          directory: repository.directory || null,
+        };
+      }
+
+      async function loadModules() {
+        if (moduleCache) {
+          return moduleCache;
+        }
+
+        const result = {
+          ok: false,
+          imports: {},
+          packages: {},
+          error: null,
+        };
+
+        try {
+          const sdkModule = await import("supermemory");
+          const toolsModule = await import("@supermemory/tools/ai-sdk");
+          result.imports = {
+            supermemory_default: typeof sdkModule.default === "function",
+            toFile: typeof sdkModule.toFile === "function",
+            api_error: typeof sdkModule.APIError === "function",
+            tools_supermemoryTools: typeof toolsModule.supermemoryTools === "function",
+            tools_searchMemoriesTool: typeof toolsModule.searchMemoriesTool === "function",
+            tools_addMemoryTool: typeof toolsModule.addMemoryTool === "function",
+          };
+          result.packages = {
+            supermemory: packageMetadata("supermemory"),
+            supermemory_tools: packageMetadata("@supermemory/tools/package.json"),
+          };
+          result.modules = {
+            sdkModule,
+            toolsModule,
+          };
+          result.ok = Object.values(result.imports).every(Boolean);
+        } catch (error) {
+          result.error = `$${error?.constructor?.name || "Error"}: $${error?.message || String(error)}`;
+        }
+
+        moduleCache = result;
+        return moduleCache;
+      }
+
+      function blockedFetch(events) {
+        return async (url, init = {}) => {
+          const requestUrl = typeof url === "string" ? url : url?.url || String(url);
+          events.push({
+            method: init.method || "GET",
+            url: requestUrl.replace(DEMO_API_KEY, "[redacted-demo-placeholder]"),
+            blocked_before_network: true,
+          });
+          throw new Error("supermemory verifier mock fetch blocked outbound API request");
+        };
+      }
+
+      function requestBlueprints(query, containerTag) {
+        const conversation = [
+          { role: "assistant", content: "What are you building?" },
+          {
+            role: "user",
+            content:
+              "A Phala Cloud template that verifies Supermemory SDK primitives without credentials.",
+          },
+        ];
+        const content = conversation.map((message) => `$${message.role}: $${message.content}`).join("\n");
+
+        return {
+          add: {
+            content,
+            containerTag,
+            metadata: {
+              template: "supermemory",
+              demo: true,
+            },
+          },
+          profile: {
+            containerTag,
+            q: query,
+          },
+          search_memories: {
+            q: query,
+            containerTag,
+            searchMode: "memories",
+            limit: 3,
+          },
+          search_documents: {
+            q: query,
+            containerTags: [containerTag],
+            limit: 3,
+            includeFullDocs: false,
+          },
+        };
+      }
+
+      function summarizeTool(tool) {
+        let jsonSchema = null;
+        let schemaError = null;
+        try {
+          if (typeof tool?.inputSchema?.toJSONSchema === "function") {
+            jsonSchema = tool.inputSchema.toJSONSchema();
+          }
+        } catch (error) {
+          schemaError = `$${error?.constructor?.name || "Error"}: $${error?.message || String(error)}`;
+        }
+
+        return {
+          description: tool?.description || null,
+          has_execute_function: typeof tool?.execute === "function",
+          input_schema_type: tool?.inputSchema?.type || tool?.inputSchema?.def?.type || null,
+          input_schema: jsonSchema,
+          input_schema_error: schemaError,
+          executed: false,
+        };
+      }
+
+      async function inspectSdk(query, containerTag) {
+        const loaded = await loadModules();
+        if (!loaded.ok) {
+          return {
+            ok: false,
+            module_status: {
+              imports: loaded.imports,
+              packages: loaded.packages,
+              error: loaded.error,
+            },
+          };
+        }
+
+        const { default: Supermemory, toFile } = loaded.modules.sdkModule;
+        const { supermemoryTools } = loaded.modules.toolsModule;
+        const blockedRequests = [];
+        const client = new Supermemory({
+          apiKey: DEMO_API_KEY,
+          baseURL: API_BASE_URL,
+          fetch: blockedFetch(blockedRequests),
+          maxRetries: 0,
+          timeout: 1000,
+          logLevel: "off",
+        });
+        const blueprints = requestBlueprints(query, containerTag);
+        const uploadFile = await toFile(
+          Buffer.from(`supermemory verifier sample for $${containerTag}\n`, "utf8"),
+          "supermemory-demo.txt",
+          { type: "text/plain" },
+        );
+
+        let blockedRequestProof = null;
+        try {
+          await client.search.memories(blueprints.search_memories, {
+            maxRetries: 0,
+            timeout: 1000,
+          });
+        } catch (error) {
+          blockedRequestProof = {
+            error_type: error?.constructor?.name || "Error",
+            message: error?.message || String(error),
+            blocked_request_count: blockedRequests.length,
+            first_blocked_request: blockedRequests[0] || null,
+          };
+        }
+
+        const tools = supermemoryTools(DEMO_API_KEY, {
+          containerTags: [containerTag],
+        });
+        const toolSummaries = Object.fromEntries(
+          Object.entries(tools).map(([name, tool]) => [name, summarizeTool(tool)]),
+        );
+
+        return {
+          ok:
+            loaded.ok &&
+            client.constructor.name === "Supermemory" &&
+            typeof client.add === "function" &&
+            typeof client.profile === "function" &&
+            typeof client.search?.memories === "function" &&
+            typeof client.documents?.uploadFile === "function" &&
+            uploadFile.name === "supermemory-demo.txt" &&
+            blockedRequestProof?.blocked_request_count === 1 &&
+            Object.keys(toolSummaries).includes("searchMemories"),
+          module_status: {
+            imports: loaded.imports,
+            packages: loaded.packages,
+            error: loaded.error,
+          },
+          client: {
+            class_name: client.constructor.name,
+            base_url: client.baseURL,
+            top_level_methods: ["add", "profile", "get", "post", "patch", "put", "delete"].filter(
+              (name) => typeof client[name] === "function",
+            ),
+            resources: {
+              search: ["documents", "execute", "memories"].filter(
+                (name) => typeof client.search?.[name] === "function",
+              ),
+              documents: [
+                "add",
+                "batchAdd",
+                "delete",
+                "deleteBulk",
+                "get",
+                "list",
+                "listProcessing",
+                "update",
+                "uploadFile",
+              ].filter((name) => typeof client.documents?.[name] === "function"),
+              memories: ["forget", "updateMemory"].filter(
+                (name) => typeof client.memories?.[name] === "function",
+              ),
+              settings: ["get", "update"].filter((name) => typeof client.settings?.[name] === "function"),
+              connections: [
+                "configure",
+                "create",
+                "deleteByID",
+                "deleteByProvider",
+                "getByID",
+                "getByTag",
+                "import",
+                "list",
+                "listDocuments",
+                "resources",
+              ].filter((name) => typeof client.connections?.[name] === "function"),
+            },
+          },
+          local_sdk_helpers: {
+            to_file: {
+              name: uploadFile.name,
+              type: uploadFile.type,
+              size: uploadFile.size,
+              constructor: uploadFile.constructor?.name || null,
+            },
+          },
+          deterministic_demo_inputs: {
+            container_tag: containerTag,
+            query,
+            request_blueprints: blueprints,
+          },
+          ai_sdk_tools: {
+            package: loaded.packages.supermemory_tools,
+            tool_names: Object.keys(toolSummaries),
+            tools: toolSummaries,
+            executed_network_backed_tools: false,
+          },
+          blocked_request_proof: blockedRequestProof,
+          no_remote_call_evidence: {
+            credentials_required: false,
+            demo_api_key_is_placeholder: true,
+            outbound_api_request_performed: false,
+            outbound_api_request_blocked_by_mock_fetch: true,
+            hosted_model_call_attempted: false,
+            browser_auth_attempted: false,
+            model_weights_downloaded: false,
+            gpu_required: false,
+            external_database_required: false,
+          },
+        };
+      }
+
+      function basePayload() {
+        return {
+          service: SERVICE,
+          upstream: UPSTREAM_REPO,
+          docs: DOCS_URL,
+          runtime: {
+            node: process.version,
+            platform: process.platform,
+            arch: process.arch,
+            hostname: os.hostname(),
+          },
+          uptime_seconds: Math.round((Date.now() - STARTED_AT) / 1000),
+        };
+      }
+
+      async function payloadFor(request) {
+        const url = new URL(request.url || "/", "http://127.0.0.1");
+        const query = cleanInput(url.searchParams.get("q"), DEFAULT_QUERY, 160);
+        const containerTag = cleanInput(
+          url.searchParams.get("containerTag"),
+          DEFAULT_CONTAINER_TAG,
+          96,
+        );
+
+        if (request.method !== "GET") {
+          return [
+            405,
+            {
+              error: "method_not_allowed",
+              allowed_methods: ["GET"],
+              endpoints: ["/healthz", "/demo", "/v1/models"],
+            },
+          ];
+        }
+
+        if (url.pathname === "/" || url.pathname === "/healthz") {
+          const sdk = await inspectSdk(DEFAULT_QUERY, DEFAULT_CONTAINER_TAG);
+          return [
+            sdk.ok ? 200 : 503,
+            {
+              ...basePayload(),
+              ok: sdk.ok,
+              status: sdk.ok ? "ready" : "sdk_import_or_local_verifier_failed",
+              sdk: {
+                imports: sdk.module_status.imports,
+                packages: sdk.module_status.packages,
+                error: sdk.module_status.error,
+              },
+              no_remote_call_evidence: sdk.no_remote_call_evidence || null,
+              endpoints: ["/healthz", "/demo", "/v1/models"],
+            },
+          ];
+        }
+
+        if (url.pathname === "/demo") {
+          const sdk = await inspectSdk(query, containerTag);
+          return [
+            sdk.ok ? 200 : 503,
+            {
+              ...basePayload(),
+              ok: sdk.ok,
+              demo: sdk,
+            },
+          ];
+        }
+
+        if (url.pathname === "/v1/models") {
+          const sdk = await inspectSdk(DEFAULT_QUERY, DEFAULT_CONTAINER_TAG);
+          return [
+            200,
+            {
+              object: "list",
+              data: [
+                {
+                  id: "supermemory/no-model-sdk-verifier",
+                  object: "model",
+                  created: 0,
+                  owned_by: "supermemory-template",
+                  description:
+                    "Metadata-only compatibility entry for a local Supermemory SDK and tools verifier. No model is hosted, loaded, downloaded, or called.",
+                },
+              ],
+              demo: {
+                sdk_import_ok: sdk.ok,
+                credentials_required: false,
+                hosted_model_call_attempted: false,
+                model_weights_downloaded: false,
+              },
+            },
+          ];
+        }
+
+        return [
+          404,
+          {
+            error: "not_found",
+            endpoints: ["/healthz", "/demo", "/v1/models"],
+          },
+        ];
+      }
+
+      function writeJson(response, status, payload) {
+        const body = JSON.stringify(payload, null, 2);
+        response.writeHead(status, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Content-Length": Buffer.byteLength(body),
+        });
+        response.end(body);
+      }
+
+      const port = Number.parseInt(process.env.APP_PORT || "8080", 10);
+      const server = http.createServer(async (request, response) => {
+        try {
+          const [status, payload] = await payloadFor(request);
+          writeJson(response, status, payload);
+        } catch (error) {
+          writeJson(response, 500, {
+            ...basePayload(),
+            ok: false,
+            error: `$${error?.constructor?.name || "Error"}: $${error?.message || String(error)}`,
+          });
+        }
+      });
+
+      server.listen(port, "0.0.0.0", () => {
+        console.log(`$${SERVICE} listening on 0.0.0.0:$${port}`);
+      });
