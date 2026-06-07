@@ -5344,5 +5344,39 @@
       "diskSize": 10
     },
     "tags": ["Developer Tools", "Automation", "AI Agents"]
+  },
+{
+    "id": "mempalace",
+    "name": "MemPalace/mempalace",
+    "description": "The best-benchmarked open-source AI memory system. And it's free.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/mempalace",
+    "author": "MemPalace",
+    "icon": "mempalace.png",
+    "envs": [
+      {
+        "key": "MEMPALACE_REF",
+        "required": false,
+        "default": "9694e2cb572bbc15fb5f88e4a4c52125acb77fe3",
+        "description": "GitHub archive ref installed by the verifier at container startup. Defaults to the inspected upstream MemPalace commit."
+      },
+      {
+        "key": "MEMPALACE_DEMO_TOP_K",
+        "required": false,
+        "default": "2",
+        "description": "Default number of local demo memory hits returned by /demo."
+      },
+      {
+        "key": "MEMPALACE_DATA_DIR",
+        "required": false,
+        "default": "/data",
+        "description": "Internal named-volume backed data root used for the demo palace and knowledge graph."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["RAG", "AI Agents", "Data & Storage"]
   }
 ]

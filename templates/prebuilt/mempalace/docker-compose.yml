@@ -1,0 +1,417 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    ports:
+      - "8080:8080"
+    environment:
+      - HOME=/data
+      - MEMPALACE_REF=${MEMPALACE_REF:-9694e2cb572bbc15fb5f88e4a4c52125acb77fe3}
+      - MEMPALACE_DATA_DIR=/data
+      - MEMPALACE_DEMO_TOP_K=${MEMPALACE_DEMO_TOP_K:-2}
+      - PIP_DISABLE_PIP_VERSION_CHECK=1
+      - PIP_NO_CACHE_DIR=1
+      - PIP_ROOT_USER_ACTION=ignore
+      - PORT=8080
+      - PYTHONUNBUFFERED=1
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        mkdir -p /data/.cache /data/mempalace-demo
+        python -m pip install --no-cache-dir "mempalace @ https://github.com/MemPalace/mempalace/archive/$${MEMPALACE_REF}.tar.gz"
+        exec python /server.py
+    configs:
+      - source: server_py
+        target: /server.py
+    volumes:
+      - mempalace-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import os, urllib.request; urllib.request.urlopen("http://127.0.0.1:%s/healthz" % os.environ.get("PORT", "8080"), timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+    restart: unless-stopped
+
+volumes:
+  mempalace-data:
+
+configs:
+  server_py:
+    content: |
+      import importlib.metadata
+      import json
+      import math
+      import os
+      import platform
+      import re
+      import sys
+      import time
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import parse_qs, urlparse
+
+      STARTED_AT = time.time()
+      DATA_DIR = os.environ.get("MEMPALACE_DATA_DIR", "/data")
+      PALACE_PATH = os.path.join(DATA_DIR, "mempalace-demo", "palace")
+      KG_PATH = os.path.join(DATA_DIR, "mempalace-demo", "knowledge_graph.sqlite3")
+      COLLECTION_NAME = "mempalace_drawers"
+      UPSTREAM = "https://github.com/MemPalace/mempalace"
+
+      IMPORT_ERROR = None
+      RUNTIME_ERROR = None
+      PACKAGE = {}
+      INIT_DETAILS = {}
+      BACKEND = None
+      COLLECTION = None
+      KG = None
+      DIALECT_SAMPLE = {}
+
+      try:
+          import mempalace
+          from mempalace.backends.base import PalaceRef
+          from mempalace.backends.sqlite_exact import SQLiteExactBackend
+          from mempalace.dialect import Dialect
+          from mempalace.knowledge_graph import KnowledgeGraph
+
+          PACKAGE = {
+              "distribution": "mempalace",
+              "version": importlib.metadata.version("mempalace"),
+              "module": mempalace.__name__,
+              "backend": "sqlite_exact",
+              "knowledge_graph_class": KnowledgeGraph.__name__,
+              "dialect_class": Dialect.__name__,
+          }
+      except Exception as exc:
+          IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+
+      VOCAB = (
+          "mempalace",
+          "memory",
+          "verbatim",
+          "local",
+          "semantic",
+          "search",
+          "phala",
+          "cloud",
+          "confidential",
+          "docker",
+          "compose",
+          "mcp",
+          "stdio",
+          "cli",
+          "sqlite",
+          "knowledge",
+          "graph",
+          "embedding",
+          "model",
+          "credential",
+          "api",
+      )
+
+      DEMO_DOCS = [
+          {
+              "id": "drawer-001",
+              "text": (
+                  "MemPalace stores verbatim memories locally and retrieves them "
+                  "with semantic search while the core workflow needs no API key."
+              ),
+              "metadata": {
+                  "wing": "mempalace",
+                  "room": "local_memory",
+                  "source_file": "phala-demo.md",
+              },
+          },
+          {
+              "id": "drawer-002",
+              "text": (
+                  "Phala Cloud runs Docker Compose workloads in confidential VMs "
+                  "and exposes HTTP services through public endpoints."
+              ),
+              "metadata": {
+                  "wing": "phala_cloud",
+                  "room": "deployment",
+                  "source_file": "phala-demo.md",
+              },
+          },
+          {
+              "id": "drawer-003",
+              "text": (
+                  "Production MemPalace can run as an MCP stdio server or CLI. "
+                  "Embedding model caches are only needed for real mining and search."
+              ),
+              "metadata": {
+                  "wing": "mempalace",
+                  "room": "production",
+                  "source_file": "phala-demo.md",
+              },
+          },
+      ]
+
+
+      def tokenize(text):
+          return re.findall(r"[a-z0-9]+", text.lower())
+
+
+      def embed_text(text):
+          tokens = tokenize(text)
+          values = []
+          for term in VOCAB:
+              values.append(float(sum(1 for token in tokens if token == term)))
+          norm = math.sqrt(sum(value * value for value in values)) or 1.0
+          return [value / norm for value in values]
+
+
+      def parse_top_k(params):
+          raw = params.get("top_k", [os.environ.get("MEMPALACE_DEMO_TOP_K", "2")])[0]
+          try:
+              value = int(raw)
+          except (TypeError, ValueError):
+              value = 2
+          return max(1, min(value, len(DEMO_DOCS)))
+
+
+      def initialize_runtime():
+          global BACKEND, COLLECTION, KG, DIALECT_SAMPLE
+          if IMPORT_ERROR:
+              return {}
+
+          os.makedirs(PALACE_PATH, exist_ok=True)
+          BACKEND = SQLiteExactBackend()
+          palace = PalaceRef(id="phala-mempalace-demo", local_path=PALACE_PATH)
+          COLLECTION = BACKEND.get_collection(
+              palace=palace,
+              collection_name=COLLECTION_NAME,
+              create=True,
+          )
+          COLLECTION.upsert(
+              documents=[item["text"] for item in DEMO_DOCS],
+              ids=[item["id"] for item in DEMO_DOCS],
+              metadatas=[item["metadata"] for item in DEMO_DOCS],
+              embeddings=[embed_text(item["text"]) for item in DEMO_DOCS],
+          )
+
+          KG = KnowledgeGraph(KG_PATH)
+          KG.add_entity("MemPalace", entity_type="project", properties={"upstream": UPSTREAM})
+          KG.add_entity("Phala Cloud", entity_type="platform")
+          KG.add_triple(
+              "MemPalace",
+              "stores",
+              "verbatim memories",
+              valid_from="2026-06-06",
+              source_closet="phala-demo",
+              source_file="phala-demo.md",
+          )
+          KG.add_triple(
+              "MemPalace",
+              "runs_on",
+              "Phala Cloud",
+              valid_from="2026-06-06",
+              source_closet="phala-demo",
+              source_file="phala-demo.md",
+          )
+
+          dialect = Dialect(entities={"MemPalace": "MEM", "Phala Cloud": "PHA"})
+          sample_text = DEMO_DOCS[0]["text"]
+          compressed = dialect.compress(
+              sample_text,
+              metadata={
+                  "wing": "mempalace",
+                  "room": "local_memory",
+                  "source_file": "phala-demo.md",
+              },
+          )
+          DIALECT_SAMPLE = {
+              "input": sample_text,
+              "aaak": compressed,
+              "stats": dialect.compression_stats(sample_text, compressed),
+          }
+
+          health = COLLECTION.health()
+          return {
+              "collection": COLLECTION_NAME,
+              "documents_seeded": COLLECTION.count(),
+              "sqlite_exact_health": {"ok": health.ok, "detail": health.detail},
+              "knowledge_graph": KG.stats(),
+              "aaak_sample_ready": bool(compressed),
+          }
+
+
+      try:
+          INIT_DETAILS = initialize_runtime()
+      except Exception as exc:
+          RUNTIME_ERROR = f"{type(exc).__name__}: {exc}"
+
+
+      def base_payload():
+          return {
+              "service": "mempalace-local-demo",
+              "upstream": UPSTREAM,
+              "source_ref": os.environ.get("MEMPALACE_REF"),
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "package": PACKAGE,
+              "init": INIT_DETAILS,
+              "cpu_safe": True,
+              "credentials_required": False,
+              "external_model_called": False,
+              "model_downloaded": False,
+              "hosted_backend_called": False,
+              "data_dir": DATA_DIR,
+          }
+
+
+      def ensure_ready():
+          if IMPORT_ERROR:
+              raise RuntimeError(IMPORT_ERROR)
+          if RUNTIME_ERROR:
+              raise RuntimeError(RUNTIME_ERROR)
+          if COLLECTION is None or KG is None:
+              raise RuntimeError("MemPalace demo runtime is not initialized")
+
+
+      def run_demo(query, top_k):
+          ensure_ready()
+          vector_result = COLLECTION.query(
+              query_embeddings=[embed_text(query)],
+              n_results=top_k,
+              include=["documents", "metadatas", "distances"],
+          )
+          vector_hits = []
+          for doc_id, document, metadata, distance in zip(
+              vector_result.ids[0],
+              vector_result.documents[0],
+              vector_result.metadatas[0],
+              vector_result.distances[0],
+          ):
+              vector_hits.append(
+                  {
+                      "id": doc_id,
+                      "text": document,
+                      "metadata": metadata,
+                      "distance": round(float(distance), 6),
+                      "similarity": round(1.0 - float(distance), 6),
+                  }
+              )
+
+          lexical = COLLECTION.lexical_search(query=query, n_results=top_k)
+          lexical_hits = [
+              {
+                  "id": hit.id,
+                  "text": hit.document,
+                  "metadata": hit.metadata,
+                  "score": round(float(hit.score), 6),
+              }
+              for hit in lexical.hits
+          ]
+
+          return {
+              "query": query,
+              "top_k": top_k,
+              "backend": "sqlite_exact",
+              "embedding": "local deterministic keyword vector",
+              "vector_hits": vector_hits,
+              "lexical_hits": lexical_hits,
+              "knowledge_graph": {
+                  "facts": KG.query_entity("MemPalace", direction="both"),
+                  "timeline": KG.timeline("MemPalace"),
+                  "stats": KG.stats(),
+              },
+              "aaak_dialect": DIALECT_SAMPLE,
+              "external_model_called": False,
+              "credentials_required": False,
+              "model_downloaded": False,
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "mempalace-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              parsed = urlparse(self.path)
+              params = parse_qs(parsed.query)
+
+              if parsed.path in ("/", "/healthz"):
+                  payload = base_payload()
+                  try:
+                      ensure_ready()
+                      check = run_demo("local memory", 1)
+                      payload.update(
+                          {
+                              "ok": True,
+                              "status": "ready",
+                              "endpoints": ["/healthz", "/demo", "/v1/models"],
+                              "demo_check": check["vector_hits"][0]["id"] if check["vector_hits"] else None,
+                          }
+                      )
+                      self.respond_json(200, payload)
+                  except Exception as exc:
+                      payload.update(
+                          {
+                              "ok": False,
+                              "status": "failed",
+                              "error": f"{type(exc).__name__}: {exc}",
+                          }
+                      )
+                      self.respond_json(500, payload)
+                  return
+
+              if parsed.path == "/demo":
+                  query = params.get("q", ["local verbatim memory"])[0].strip()
+                  query = query[:200] or "local verbatim memory"
+                  top_k = parse_top_k(params)
+                  payload = base_payload()
+                  try:
+                      payload.update(
+                          {
+                              "ok": True,
+                              "mode": "deterministic-local-mempalace-demo",
+                              "demo": run_demo(query, top_k),
+                          }
+                      )
+                      self.respond_json(200, payload)
+                  except Exception as exc:
+                      payload.update({"ok": False, "error": f"{type(exc).__name__}: {exc}"})
+                      self.respond_json(500, payload)
+                  return
+
+              if parsed.path == "/v1/models":
+                  payload = {
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "mempalace-sqlite-exact-demo",
+                              "object": "model",
+                              "created": 0,
+                              "owned_by": "MemPalace",
+                              "permission": [],
+                              "root": "mempalace-sqlite-exact-demo",
+                              "parent": None,
+                          }
+                      ],
+                  }
+                  self.respond_json(200, payload)
+                  return
+
+              self.respond_json(404, {"ok": False, "error": "not found"})
+
+
+      port = int(os.environ.get("PORT", "8080"))
+      server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+      print(f"mempalace demo server listening on 0.0.0.0:{port}", flush=True)
+      server.serve_forever()
