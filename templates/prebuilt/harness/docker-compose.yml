@@ -1,0 +1,462 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      APP_PORT: "8080"
+      HARNESS_SOURCE_REF: ${HARNESS_SOURCE_REF:-b8fb858ea9209d6b0d9000e551d3dedbbacb88aa}
+      HARNESS_DEMO_DOMAIN: ${HARNESS_DEMO_DOMAIN:-fintech risk-assessment team}
+      PYTHONUNBUFFERED: "1"
+    configs:
+      - source: harness_demo_server
+        target: /opt/harness-demo/server.py
+    command:
+      - python
+      - /opt/harness-demo/server.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5).read()\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+configs:
+  harness_demo_server:
+    content: |
+      import io
+      import json
+      import os
+      import platform
+      import re
+      import shutil
+      import sys
+      import tarfile
+      import tempfile
+      import time
+      import urllib.parse
+      import urllib.request
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path, PurePosixPath
+      from urllib.parse import urlparse
+
+
+      SERVICE = "harness-source-verifier"
+      UPSTREAM = "https://github.com/revfactory/harness"
+      DEFAULT_SOURCE_REF = "b8fb858ea9209d6b0d9000e551d3dedbbacb88aa"
+      SOURCE_REF = os.environ.get("HARNESS_SOURCE_REF", DEFAULT_SOURCE_REF)
+      DEMO_DOMAIN = os.environ.get("HARNESS_DEMO_DOMAIN", "fintech risk-assessment team")
+      SOURCE_DIR = Path("/opt/harness-source")
+      STARTED_AT = time.time()
+      EXPECTED_PATTERNS = [
+          "Pipeline",
+          "Fan-out/Fan-in",
+          "Expert Pool",
+          "Producer-Reviewer",
+          "Supervisor",
+          "Hierarchical Delegation",
+      ]
+      TARGET_FILES = [
+          "README.md",
+          ".claude-plugin/plugin.json",
+          ".claude-plugin/marketplace.json",
+          "docs/quickstart.md",
+          "docs/experimental-dependency.md",
+          "skills/harness/SKILL.md",
+          "skills/harness/references/agent-design-patterns.md",
+          "skills/harness/references/orchestrator-template.md",
+          "skills/harness/references/qa-agent-guide.md",
+          "skills/harness/references/skill-testing-guide.md",
+          "skills/harness/references/skill-writing-guide.md",
+          "skills/harness/references/team-examples.md",
+      ]
+
+
+      def clean_ref(value):
+          if not re.fullmatch(r"[A-Za-z0-9._/\-]+", value or ""):
+              raise ValueError("HARNESS_SOURCE_REF contains unsupported characters")
+          if ".." in value.split("/"):
+              raise ValueError("HARNESS_SOURCE_REF must not contain path traversal")
+          return value
+
+
+      def archive_url(source_ref):
+          quoted = urllib.parse.quote(clean_ref(source_ref), safe="/._-")
+          return f"https://codeload.github.com/revfactory/harness/tar.gz/{quoted}"
+
+
+      def safe_archive_url(source_ref):
+          try:
+              return archive_url(source_ref)
+          except Exception:
+              return None
+
+
+      def member_relative_name(member_name):
+          parts = PurePosixPath(member_name).parts
+          if len(parts) < 2:
+              return None
+          return PurePosixPath(*parts[1:]).as_posix()
+
+
+      def extract_target_files(archive_bytes, destination):
+          selected = set(TARGET_FILES)
+          found = set()
+          with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as archive:
+              for member in archive.getmembers():
+                  if not member.isfile():
+                      continue
+                  relative_name = member_relative_name(member.name)
+                  if relative_name not in selected:
+                      continue
+                  target_path = destination / relative_name
+                  target_path.parent.mkdir(parents=True, exist_ok=True)
+                  source = archive.extractfile(member)
+                  if source is None:
+                      continue
+                  with source, target_path.open("wb") as output:
+                      shutil.copyfileobj(source, output)
+                  found.add(relative_name)
+          return found
+
+
+      def load_source():
+          temp_root = Path(tempfile.mkdtemp(prefix="harness-source-"))
+          try:
+              with urllib.request.urlopen(archive_url(SOURCE_REF), timeout=60) as response:
+                  archive_bytes = response.read()
+              found = extract_target_files(archive_bytes, temp_root)
+              missing = sorted(set(TARGET_FILES) - found)
+              if missing:
+                  raise RuntimeError("missing files in upstream archive: " + ", ".join(missing))
+              if SOURCE_DIR.exists():
+                  shutil.rmtree(SOURCE_DIR)
+              shutil.move(str(temp_root), str(SOURCE_DIR))
+              (SOURCE_DIR / ".source-ref").write_text(SOURCE_REF + "\n", encoding="utf-8")
+              return {
+                  "ok": True,
+                  "source_ref": SOURCE_REF,
+                  "source_url": archive_url(SOURCE_REF),
+                  "downloaded_bytes": len(archive_bytes),
+                  "files_loaded": sorted(found),
+                  "error": None,
+              }
+          except Exception as exc:
+              shutil.rmtree(temp_root, ignore_errors=True)
+              return {
+                  "ok": False,
+                  "source_ref": SOURCE_REF,
+                  "source_url": safe_archive_url(SOURCE_REF) if SOURCE_REF else None,
+                  "downloaded_bytes": 0,
+                  "files_loaded": [],
+                  "error": f"{type(exc).__name__}: {exc}",
+              }
+
+
+      SOURCE_STATUS = load_source()
+
+
+      def read_text(relative_path):
+          return (SOURCE_DIR / relative_path).read_text(encoding="utf-8")
+
+
+      def read_json(relative_path):
+          return json.loads(read_text(relative_path))
+
+
+      def parse_frontmatter(markdown):
+          if not markdown.startswith("---\n"):
+              return {}
+          _, frontmatter, _ = markdown.split("---", 2)
+          data = {}
+          for line in frontmatter.splitlines():
+              if ":" not in line:
+                  continue
+              key, value = line.split(":", 1)
+              data[key.strip()] = value.strip().strip('"')
+          return data
+
+
+      def source_metadata():
+          if not SOURCE_STATUS["ok"]:
+              return {
+                  "source": SOURCE_STATUS,
+                  "manifest": None,
+                  "skill": None,
+                  "reference_files": {},
+                  "pattern_checks": {},
+              }
+
+          manifest_error = None
+          manifest = None
+          skill_meta = None
+          reference_files = {}
+          pattern_checks = {}
+
+          try:
+              manifest = read_json(".claude-plugin/plugin.json")
+          except Exception as exc:
+              manifest_error = f"{type(exc).__name__}: {exc}"
+
+          try:
+              skill_body = read_text("skills/harness/SKILL.md")
+              skill_meta = parse_frontmatter(skill_body)
+          except Exception as exc:
+              skill_meta = {"error": f"{type(exc).__name__}: {exc}"}
+
+          for relative_path in TARGET_FILES:
+              if relative_path.startswith("skills/harness/references/"):
+                  path = SOURCE_DIR / relative_path
+                  reference_files[Path(relative_path).name] = {
+                      "present": path.exists(),
+                      "bytes": path.stat().st_size if path.exists() else 0,
+                  }
+
+          combined_text = ""
+          for relative_path in (
+              "README.md",
+              ".claude-plugin/plugin.json",
+              "skills/harness/references/agent-design-patterns.md",
+          ):
+              try:
+                  combined_text += "\n" + read_text(relative_path)
+              except Exception:
+                  pass
+
+          for pattern in EXPECTED_PATTERNS:
+              pattern_checks[pattern] = pattern in combined_text
+
+          return {
+              "source": SOURCE_STATUS,
+              "manifest": {
+                  "ok": bool(manifest and manifest.get("name") == "harness"),
+                  "name": manifest.get("name") if manifest else None,
+                  "version": manifest.get("version") if manifest else None,
+                  "description": manifest.get("description") if manifest else None,
+                  "author": manifest.get("author") if manifest else None,
+                  "repository": manifest.get("repository") if manifest else None,
+                  "license": manifest.get("license") if manifest else None,
+                  "keywords": manifest.get("keywords", []) if manifest else [],
+                  "error": manifest_error,
+              },
+              "skill": {
+                  "ok": bool(skill_meta and skill_meta.get("name") == "harness"),
+                  "frontmatter": skill_meta,
+              },
+              "reference_files": reference_files,
+              "pattern_checks": pattern_checks,
+          }
+
+
+      def base_payload():
+          metadata = source_metadata()
+          reference_files = metadata["reference_files"]
+          manifest = metadata["manifest"] or {}
+          ok = (
+              metadata["source"]["ok"]
+              and manifest.get("ok") is True
+              and metadata["skill"].get("ok") is True
+              and all(item["present"] and item["bytes"] > 0 for item in reference_files.values())
+              and all(metadata["pattern_checks"].values())
+          )
+          return {
+              "ok": ok,
+              "service": SERVICE,
+              "status": "ready" if ok else "unhealthy",
+              "upstream": UPSTREAM,
+              "configured_source_ref": SOURCE_REF,
+              "demo_domain": DEMO_DOMAIN,
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "cpu_only": True,
+              "credentials_required": False,
+              "remote_model_calls": False,
+              "model_downloaded": False,
+              "claude_code_invoked": False,
+              "source_artifact": metadata["source"],
+              "manifest": manifest,
+              "skill": metadata["skill"],
+              "reference_files": reference_files,
+              "pattern_checks": metadata["pattern_checks"],
+          }
+
+
+      def slug_words(value):
+          words = re.findall(r"[A-Za-z0-9]+", value.lower())
+          return words or ["generic", "domain"]
+
+
+      def choose_pattern(domain):
+          lowered = domain.lower()
+          if any(word in lowered for word in ("research", "assessment", "audit", "review", "due diligence")):
+              return "Fan-out/Fan-in"
+          if any(word in lowered for word in ("pipeline", "release", "migration", "etl")):
+              return "Pipeline"
+          if any(word in lowered for word in ("qa", "quality", "editorial", "copy")):
+              return "Producer-Reviewer"
+          if any(word in lowered for word in ("support", "triage", "router", "classification")):
+              return "Expert Pool"
+          return "Supervisor"
+
+
+      def demo_payload():
+          payload = base_payload()
+          words = slug_words(DEMO_DOMAIN)
+          prefix = "-".join(words[:3])
+          pattern = choose_pattern(DEMO_DOMAIN)
+          agents = [
+              {
+                  "name": f"{prefix}-analyst",
+                  "role": "Map domain requirements, constraints, and success criteria.",
+                  "skills": [f"{prefix}-domain-analysis"],
+              },
+              {
+                  "name": f"{prefix}-architect",
+                  "role": "Select the team pattern and define data handoff contracts.",
+                  "skills": [f"{prefix}-team-design"],
+              },
+              {
+                  "name": f"{prefix}-reviewer",
+                  "role": "Check generated agents and skills for drift, omissions, and trigger quality.",
+                  "skills": [f"{prefix}-validation"],
+              },
+          ]
+          skills = [
+              {
+                  "name": f"{prefix}-domain-analysis",
+                  "purpose": "Turn the user domain sentence into task families and constraints.",
+              },
+              {
+                  "name": f"{prefix}-team-design",
+                  "purpose": "Apply Harness reference patterns to choose agent boundaries and collaboration mode.",
+              },
+              {
+                  "name": f"{prefix}-validation",
+                  "purpose": "Run structure, trigger, and dry-run checks before using the generated harness.",
+              },
+          ]
+          payload.update(
+              {
+                  "check": "Harness upstream source verifier and deterministic team-blueprint demo",
+                  "selected_pattern": pattern,
+                  "demo": {
+                      "domain": DEMO_DOMAIN,
+                      "source_used": [
+                          ".claude-plugin/plugin.json",
+                          "skills/harness/SKILL.md",
+                          "skills/harness/references/agent-design-patterns.md",
+                          "skills/harness/references/skill-writing-guide.md",
+                          "skills/harness/references/skill-testing-guide.md",
+                      ],
+                      "generated_artifact_preview": {
+                          "agents_directory": ".claude/agents/",
+                          "skills_directory": ".claude/skills/",
+                          "claude_pointer_file": "CLAUDE.md",
+                          "agents": agents,
+                          "skills": skills,
+                          "orchestration": [
+                              "Audit existing agents, skills, and CLAUDE.md pointers.",
+                              f"Use the {pattern} pattern for the initial team shape.",
+                              "Write agent definitions as Markdown files before invoking them.",
+                              "Write skills with frontmatter descriptions and optional references.",
+                              "Run structure, trigger, and dry-run validation.",
+                          ],
+                      },
+                  },
+              }
+          )
+          return payload
+
+
+      def models_payload():
+          return {
+              "object": "list",
+              "data": [
+                  {
+                      "id": "harness/source-verifier",
+                      "object": "model",
+                      "created": 0,
+                      "owned_by": "revfactory",
+                      "description": "CPU-only Harness source verifier and deterministic blueprint demo. It is not an LLM and does not call model providers.",
+                  }
+              ],
+          }
+
+
+      def write_json(response, status_code, payload):
+          body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+          response.send_response(status_code)
+          response.send_header("Cache-Control", "no-store")
+          response.send_header("Content-Type", "application/json; charset=utf-8")
+          response.send_header("Content-Length", str(len(body)))
+          response.end_headers()
+          response.wfile.write(body)
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "harness-source-verifier"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  write_json(self, HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload)
+                  return
+
+              if path == "/demo":
+                  payload = demo_payload()
+                  write_json(self, HTTPStatus.OK if payload["ok"] else HTTPStatus.INTERNAL_SERVER_ERROR, payload)
+                  return
+
+              if path == "/v1/models":
+                  write_json(self, HTTPStatus.OK, models_payload())
+                  return
+
+              write_json(
+                  self,
+                  HTTPStatus.NOT_FOUND,
+                  {
+                      "ok": False,
+                      "error": "not_found",
+                      "endpoints": ["/healthz", "/demo", "/v1/models"],
+                  },
+              )
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8080"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "service": SERVICE,
+                      "port": port,
+                      "upstream": UPSTREAM,
+                      "source": SOURCE_STATUS,
+                      "remote_model_calls": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
