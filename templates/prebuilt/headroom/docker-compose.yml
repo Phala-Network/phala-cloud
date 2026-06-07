@@ -1,0 +1,347 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        HEADROOM_AI_VERSION: ${HEADROOM_AI_VERSION:-0.23.0}
+      dockerfile_inline: |
+        FROM python:3.12-slim-bookworm
+        ARG HEADROOM_AI_VERSION=0.23.0
+        ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+            PIP_NO_CACHE_DIR=1 \
+            PIP_ROOT_USER_ACTION=ignore \
+            PYTHONDONTWRITEBYTECODE=1 \
+            PYTHONUNBUFFERED=1
+        RUN python -m pip install --no-cache-dir --upgrade pip \
+            && python -m pip install --no-cache-dir "fastapi==0.115.12" "uvicorn==0.34.0" "headroom-ai==$${HEADROOM_AI_VERSION}"
+        RUN useradd --create-home --uid 10001 app
+        WORKDIR /app
+        USER app
+        EXPOSE 8080
+        CMD ["python", "-m", "uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8080"]
+    image: phala-headroom-demo:${HEADROOM_AI_VERSION:-0.23.0}
+    pull_policy: build
+    environment:
+      HEADROOM_AI_VERSION: ${HEADROOM_AI_VERSION:-0.23.0}
+      HEADROOM_TELEMETRY: "off"
+      HOME: /home/app
+      PYTHONUNBUFFERED: "1"
+      XDG_CACHE_HOME: /tmp/.cache
+    ports:
+      - "8080:8080"
+    configs:
+      - source: server_py
+        target: /app/server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+
+configs:
+  server_py:
+    content: |
+      import hashlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from typing import Any
+
+      from fastapi import FastAPI, HTTPException
+      from fastapi.responses import JSONResponse
+      from pydantic import BaseModel, Field
+
+      SERVICE = "headroom-local-compression-demo"
+      UPSTREAM = "https://github.com/chopratejas/headroom"
+      PACKAGE = "headroom-ai"
+      STARTED_AT = time.time()
+      REQUESTED_VERSION = os.environ.get("HEADROOM_AI_VERSION", "0.23.0")
+      LOCAL_MODEL_ID = "headroom-local-smartcrusher"
+
+      IMPORT_ERROR = None
+      headroom = None
+      compress = None
+      CompressConfig = None
+
+      try:
+          import headroom as _headroom
+          from headroom import CompressConfig as _CompressConfig
+          from headroom import compress as _compress
+
+          headroom = _headroom
+          compress = _compress
+          CompressConfig = _CompressConfig
+      except Exception as exc:
+          IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+
+
+      class CompressRequest(BaseModel):
+          messages: list[dict[str, Any]] | None = Field(
+              default=None,
+              description="OpenAI/Anthropic-style messages to compress locally.",
+          )
+          content: str | None = Field(
+              default=None,
+              description="Plain text fallback. Used only when messages is omitted.",
+          )
+          model: str = Field(default="gpt-4o-mini")
+          model_limit: int = Field(default=4000, ge=256, le=200000)
+          min_tokens_to_compress: int = Field(default=50, ge=1, le=10000)
+          target_ratio: float | None = Field(default=None, ge=0.05, le=1.0)
+
+
+      app = FastAPI(
+          title="Phala Headroom Local Compression Demo",
+          version="1.0.0",
+          docs_url=None,
+          redoc_url=None,
+      )
+
+
+      def installed_version() -> str | None:
+          try:
+              return importlib.metadata.version(PACKAGE)
+          except Exception:
+              return None
+
+
+      def base_payload() -> dict[str, Any]:
+          return {
+              "service": SERVICE,
+              "ok": IMPORT_ERROR is None,
+              "upstream": UPSTREAM,
+              "package": PACKAGE,
+              "requested_version": REQUESTED_VERSION,
+              "installed_version": installed_version(),
+              "module_version": getattr(headroom, "__version__", None) if headroom else None,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "remote_model_calls": False,
+              "provider_credentials_required": False,
+              "model_downloaded": False,
+              "telemetry": os.environ.get("HEADROOM_TELEMETRY", "off"),
+          }
+
+
+      def sample_messages() -> list[dict[str, Any]]:
+          records = []
+          for i in range(240):
+              level = "FATAL" if i in (17, 131) else ("ERROR" if i % 19 == 0 else "INFO")
+              service = "checkout-api" if i % 7 else "gateway"
+              records.append(
+                  {
+                      "ts": f"2026-06-06T12:{i % 60:02d}:00Z",
+                      "service": service,
+                      "level": level,
+                      "trace_id": f"trace-{i:04d}-9f2b7c",
+                      "message": (
+                          "database pool exhausted while creating invoice"
+                          if level == "FATAL"
+                          else "request completed normally with repeated diagnostic fields"
+                      ),
+                      "latency_ms": 120 + i % 37,
+                      "path": "/v1/orders",
+                      "details": {
+                          "attempt": i % 5,
+                          "region": "iad",
+                          "node": f"worker-{i % 12}",
+                          "retryable": level != "FATAL",
+                      },
+                  }
+              )
+
+          return [
+              {
+                  "role": "system",
+                  "content": "Find fatal incidents and summarize the affected service.",
+              },
+              {
+                  "role": "tool",
+                  "tool_call_id": "call_logs",
+                  "content": json.dumps({"logs": records}),
+              },
+              {
+                  "role": "user",
+                  "content": "Which service has fatal events and what should be checked first?",
+              },
+          ]
+
+
+      def require_headroom() -> None:
+          if IMPORT_ERROR is not None or compress is None or CompressConfig is None:
+              raise HTTPException(
+                  status_code=503,
+                  detail={"error": "headroom import failed", "import_error": IMPORT_ERROR},
+              )
+
+
+      def compact_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+          compacted = []
+          for message in messages:
+              clone = dict(message)
+              content = clone.get("content")
+              if isinstance(content, str) and len(content) > 1200:
+                  digest = hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+                  clone["content_preview"] = content[:1200]
+                  clone["content_sha256_prefix"] = digest
+                  clone["content_chars"] = len(content)
+                  clone["content"] = content[:1200] + "...[truncated]"
+              compacted.append(clone)
+          return compacted
+
+
+      def run_compression(
+          messages: list[dict[str, Any]],
+          *,
+          model: str = "gpt-4o-mini",
+          model_limit: int = 4000,
+          min_tokens_to_compress: int = 50,
+          target_ratio: float | None = None,
+      ) -> dict[str, Any]:
+          require_headroom()
+          config = CompressConfig(
+              compress_user_messages=False,
+              protect_recent=0,
+              min_tokens_to_compress=min_tokens_to_compress,
+              target_ratio=target_ratio,
+              kompress_model="disabled",
+          )
+          before_chars = sum(len(str(message.get("content", ""))) for message in messages)
+          result = compress(
+              messages,
+              model=model,
+              model_limit=model_limit,
+              config=config,
+          )
+          after_chars = sum(len(str(message.get("content", ""))) for message in result.messages)
+          compressed_text = "\n".join(str(message.get("content", "")) for message in result.messages)
+
+          return {
+              "ok": True,
+              "model": model,
+              "model_limit": model_limit,
+              "compression_config": {
+                  "compress_user_messages": False,
+                  "protect_recent": 0,
+                  "min_tokens_to_compress": min_tokens_to_compress,
+                  "target_ratio": target_ratio,
+                  "kompress_model": "disabled",
+              },
+              "tokens_before": result.tokens_before,
+              "tokens_after": result.tokens_after,
+              "tokens_saved": result.tokens_saved,
+              "compression_ratio": result.compression_ratio,
+              "input_chars": before_chars,
+              "output_chars": after_chars,
+              "transforms_applied": result.transforms_applied,
+              "fatal_marker_preserved": "FATAL" in compressed_text,
+              "provider_credentials_required": False,
+              "remote_model_calls": False,
+              "model_downloaded": False,
+              "messages": compact_messages(result.messages),
+          }
+
+
+      @app.get("/")
+      def index() -> JSONResponse:
+          payload = base_payload()
+          payload["endpoints"] = {
+              "health": "/healthz",
+              "demo": "/demo",
+              "models": "/v1/models",
+              "compress": "/v1/compress",
+              "upstream": "/upstream",
+          }
+          return JSONResponse(payload)
+
+
+      @app.get("/healthz")
+      def healthz() -> JSONResponse:
+          payload = base_payload()
+          payload["checks"] = {
+              "headroom_import": IMPORT_ERROR is None,
+              "compress_callable": callable(compress),
+              "compress_config_available": CompressConfig is not None,
+          }
+          status_code = 200 if payload["ok"] else 503
+          return JSONResponse(payload, status_code=status_code)
+
+
+      @app.get("/demo")
+      def demo() -> JSONResponse:
+          payload = base_payload()
+          payload["demo"] = run_compression(sample_messages())
+          payload["sample"] = {
+              "records": 240,
+              "fatal_records": 2,
+              "content_type": "json-tool-output",
+              "purpose": "local deterministic SmartCrusher compression smoke test",
+          }
+          return JSONResponse(payload)
+
+
+      @app.post("/v1/compress")
+      def v1_compress(request: CompressRequest) -> JSONResponse:
+          messages = request.messages
+          if not messages:
+              if not request.content:
+                  raise HTTPException(
+                      status_code=400,
+                      detail="Provide either messages or content.",
+                  )
+              messages = [{"role": "tool", "tool_call_id": "local_content", "content": request.content}]
+
+          payload = base_payload()
+          payload["compression"] = run_compression(
+              messages,
+              model=request.model,
+              model_limit=request.model_limit,
+              min_tokens_to_compress=request.min_tokens_to_compress,
+              target_ratio=request.target_ratio,
+          )
+          return JSONResponse(payload)
+
+
+      @app.get("/v1/models")
+      def v1_models() -> JSONResponse:
+          return JSONResponse(
+              {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": LOCAL_MODEL_ID,
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "chopratejas/headroom",
+                          "description": (
+                              "Local Headroom compression verifier. It compresses "
+                              "messages before an LLM but does not host or call an LLM."
+                          ),
+                      }
+                  ],
+              }
+          )
+
+
+      @app.get("/upstream")
+      def upstream() -> JSONResponse:
+          payload = base_payload()
+          payload["upstream_metadata"] = {
+              "repository": UPSTREAM,
+              "docs": "https://headroom-docs.vercel.app/docs",
+              "package_index": "https://pypi.org/project/headroom-ai/",
+              "docker_image": "ghcr.io/chopratejas/headroom",
+              "default_template_mode": "local package compression verifier",
+              "icon_source": "GitHub owner avatar fallback: https://github.com/chopratejas.png",
+          }
+          return JSONResponse(payload)
