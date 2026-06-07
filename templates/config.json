@@ -5238,5 +5238,33 @@
       "diskSize": 10
     },
     "tags": ["LLM Inference & Model Serving", "Web Data & Search", "AI Agents"]
+  },
+{
+    "id": "eliza",
+    "name": "elizaOS/eliza",
+    "description": "Open-source agentic operating system and TypeScript agent runtime. This CPU-safe template installs real ElizaOS core and bootstrap packages, verifies deterministic local runtime primitives, and exposes health/demo/model-list endpoints without provider credentials, hosted LLM calls, model downloads, or GPU requirements.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/eliza",
+    "author": "elizaOS",
+    "icon": "eliza.png",
+    "envs": [
+      {
+        "key": "ELIZAOS_PACKAGE_VERSION",
+        "required": false,
+        "default": "1.7.2",
+        "description": "Version used for both @elizaos/core and @elizaos/plugin-bootstrap at container startup."
+      },
+      {
+        "key": "APP_PORT",
+        "required": false,
+        "default": "8000",
+        "description": "Internal verifier HTTP port. Caddy publishes the public 8080 endpoint and proxies to this port."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["AI Agents", "Developer Tools", "Automation"]
   }
 ]

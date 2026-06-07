@@ -1,0 +1,146 @@
+# ElizaOS on Phala Cloud
+#
+# Beginner edit path:
+# 1. Keep `proxy` as the public entrypoint on 80:80.
+# 2. Replace the `app` service with your real ElizaOS image/command.
+# 3. Keep the app internal with `expose`, then point Caddy to the app port.
+
+services:
+  app:
+    image: node:22-bookworm-slim
+    restart: unless-stopped
+    init: true
+    working_dir: /opt/elizaos-demo
+    expose:
+      - "8000"
+    environment:
+      APP_PORT: ${APP_PORT:-8000}
+      ELIZAOS_PACKAGE_VERSION: ${ELIZAOS_PACKAGE_VERSION:-1.7.2}
+      NODE_ENV: production
+      NO_COLOR: "1"
+      NPM_CONFIG_AUDIT: "false"
+      NPM_CONFIG_FUND: "false"
+      NPM_CONFIG_UPDATE_NOTIFIER: "false"
+    configs:
+      - source: elizaos_demo_app
+        target: /opt/elizaos-demo/server.mjs
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        npm init -y >/dev/null 2>&1
+        npm install --omit=dev --no-audit --no-fund \
+          "@elizaos/core@$${ELIZAOS_PACKAGE_VERSION}" \
+          "@elizaos/plugin-bootstrap@$${ELIZAOS_PACKAGE_VERSION}"
+        exec node /opt/elizaos-demo/server.mjs
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"const http=require('node:http'); const port=process.env.APP_PORT||8000; const req=http.get({hostname:'127.0.0.1', port, path:'/healthz', timeout:5000}, (res)=>process.exit(res.statusCode===200?0:1)); req.on('timeout',()=>{req.destroy(); process.exit(1)}); req.on('error',()=>process.exit(1));\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 360s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+          reverse_proxy app:8000
+      }
+
+  # Default demo verifier. Real ElizaOS apps can replace the app service above.
+  elizaos_demo_app:
+    content: |
+      import { createRequire } from 'node:module';
+      import { readFileSync } from 'node:fs';
+      import http from 'node:http';
+      import os from 'node:os';
+
+      const require = createRequire(import.meta.url);
+      const startedAt = Date.now();
+      const port = Number(process.env.APP_PORT || 8000);
+
+      function packageInfo(name) {
+        const path = require.resolve(name + '/package.json');
+        const pkg = JSON.parse(readFileSync(path, 'utf8'));
+        return { name: pkg.name, version: pkg.version };
+      }
+
+      async function verify() {
+        const result = { package_version_requested: process.env.ELIZAOS_PACKAGE_VERSION || '1.7.2', import_ok: false };
+        try {
+          const core = await import('@elizaos/core');
+          const bootstrap = await import('@elizaos/plugin-bootstrap');
+          const checks = {
+            AgentRuntime: typeof core.AgentRuntime === 'function',
+            ModelType: Boolean(core.ModelType),
+            composePrompt: typeof core.composePrompt === 'function',
+            createUniqueUuid: typeof core.createUniqueUuid === 'function',
+            TEEMode: Boolean(core.TEEMode?.LOCAL && core.TEEMode?.DOCKER && core.TEEMode?.PRODUCTION),
+            bootstrapPlugin: Array.isArray(bootstrap.bootstrapPlugin?.actions),
+            replyAction: bootstrap.replyAction?.name === 'REPLY',
+            shouldRespond: typeof bootstrap.shouldRespond === 'function',
+          };
+          Object.assign(result, {
+            import_ok: Object.values(checks).every(Boolean),
+            packages: [packageInfo('@elizaos/core'), packageInfo('@elizaos/plugin-bootstrap')],
+            checks,
+            demo: {
+              uuid: core.createUniqueUuid({ agentId: '00000000-0000-0000-0000-000000000001', string: 'phala-elizaos-smoke' }),
+              prompt: core.composePrompt({ state: { agent: 'ElizaOS', runtime: 'Phala Cloud' }, template: '{{agent}} package verifier on {{runtime}}.' }),
+              model_types: Object.keys(core.ModelType).slice(0, 8),
+              tee_modes: Object.keys(core.TEEMode),
+              bootstrap_actions: bootstrap.bootstrapPlugin.actions.map((action) => action.name).slice(0, 8),
+            },
+          });
+        } catch (error) {
+          result.error = error.name + ': ' + error.message;
+        }
+        return result;
+      }
+
+      const elizaos = await verify();
+      const base = () => ({ service: 'elizaos-demo', uptime_seconds: Math.round((Date.now() - startedAt) / 1000), node: process.version, platform: os.platform() + ' ' + os.arch() });
+      const routes = {
+        '/': () => [200, { ...base(), endpoints: ['/healthz', '/demo', '/v1/models'] }],
+        '/healthz': () => [elizaos.import_ok ? 200 : 503, { ...base(), status: elizaos.import_ok ? 'ok' : 'unhealthy', elizaos }],
+        '/demo': () => [elizaos.import_ok ? 200 : 503, { ...base(), external_llm_calls: false, credentials_required: false, gpu_required: false, model_downloaded: false, elizaos }],
+        '/v1/models': () => [200, { object: 'list', data: [{ id: 'elizaos/no-llm-demo', object: 'model', owned_by: 'elizaOS' }] }],
+      };
+
+      http.createServer((req, res) => {
+        const path = new URL(req.url || '/', 'http://localhost').pathname.replace(/\/$/, '') || '/';
+        const [status, body] = (routes[path] || (() => [404, { error: 'not_found' }]))();
+        res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify(body, null, 2));
+      }).listen(port, '0.0.0.0', () => console.log(JSON.stringify({ event: 'ready', port, import_ok: elizaos.import_ok })));
+
+networks:
+  internal:
+    driver: bridge
