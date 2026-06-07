@@ -1,0 +1,472 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      OPEN_LLM_VTUBER_SOURCE_REF: ${OPEN_LLM_VTUBER_SOURCE_REF:-992309c0aa19845960228f880013d4685fde93b5}
+      OPEN_LLM_VTUBER_DEMO_TEXT: ${OPEN_LLM_VTUBER_DEMO_TEXT:-Hello from Phala Cloud}
+      PYTHONUNBUFFERED: "1"
+      UV_SYSTEM_PYTHON: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+      PIP_ROOT_USER_ACTION: ignore
+    volumes:
+      - open_llm_vtuber_cache:/opt/open-llm-vtuber
+    configs:
+      - source: open_llm_vtuber_bootstrap
+        target: /opt/open-llm-vtuber-demo/bootstrap.py
+      - source: open_llm_vtuber_server
+        target: /opt/open-llm-vtuber-demo/server.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        python /opt/open-llm-vtuber-demo/bootstrap.py
+        uv pip install --system --no-cache "setuptools>=68" "wheel"
+        uv pip install --system --no-cache --no-deps --editable /opt/open-llm-vtuber/source
+        exec python /opt/open-llm-vtuber-demo/server.py
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5).read()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+volumes:
+  open_llm_vtuber_cache:
+
+configs:
+  open_llm_vtuber_bootstrap:
+    content: |
+      import io
+      import json
+      import os
+      import shutil
+      import sys
+      import tarfile
+      import time
+      import urllib.parse
+      import urllib.request
+      from datetime import datetime, timezone
+      from pathlib import Path
+
+
+      ROOT = Path("/opt/open-llm-vtuber")
+      SOURCE_DIR = ROOT / "source"
+      STATE_FILE = ROOT / "state.json"
+      REF_FILE = ROOT / ".source-ref"
+      UPSTREAM = "https://github.com/Open-LLM-VTuber/Open-LLM-VTuber"
+      DEFAULT_REF = "992309c0aa19845960228f880013d4685fde93b5"
+
+
+      def log(event, **fields):
+          print(json.dumps({"event": event, **fields}, sort_keys=True), flush=True)
+
+
+      def current_ref():
+          return os.environ.get("OPEN_LLM_VTUBER_SOURCE_REF", DEFAULT_REF).strip() or DEFAULT_REF
+
+
+      def source_is_ready(ref):
+          required = [
+              "README.md",
+              "pyproject.toml",
+              "dockerfile",
+              "run_server.py",
+              "config_templates/conf.default.yaml",
+              "src/open_llm_vtuber/agent/input_types.py",
+              "src/open_llm_vtuber/agent/output_types.py",
+          ]
+          return (
+              REF_FILE.is_file()
+              and REF_FILE.read_text(encoding="utf-8").strip() == ref
+              and all(SOURCE_DIR.joinpath(path).is_file() for path in required)
+          )
+
+
+      def safe_extract(data, destination):
+          tmp_dir = ROOT / ".source-tmp"
+          shutil.rmtree(tmp_dir, ignore_errors=True)
+          tmp_dir.mkdir(parents=True, exist_ok=True)
+          top_dir = None
+
+          with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+              for member in archive.getmembers():
+                  parts = Path(member.name).parts
+                  if len(parts) < 2:
+                      if parts:
+                          top_dir = top_dir or parts[0]
+                      continue
+                  top_dir = top_dir or parts[0]
+                  relative = Path(*parts[1:])
+                  if relative.is_absolute() or ".." in relative.parts:
+                      raise RuntimeError(f"unsafe tar path: {member.name}")
+                  target = tmp_dir / relative
+                  if member.isdir():
+                      target.mkdir(parents=True, exist_ok=True)
+                  elif member.isfile():
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      src = archive.extractfile(member)
+                      if src is None:
+                          raise RuntimeError(f"cannot read tar member: {member.name}")
+                      with src, open(target, "wb") as dst:
+                          shutil.copyfileobj(src, dst)
+                      if member.mode:
+                          target.chmod(member.mode & 0o777)
+
+          shutil.rmtree(destination, ignore_errors=True)
+          tmp_dir.rename(destination)
+          return top_dir
+
+
+      def download_source(ref):
+          encoded_ref = urllib.parse.quote(ref, safe="")
+          url = f"https://api.github.com/repos/Open-LLM-VTuber/Open-LLM-VTuber/tarball/{encoded_ref}"
+          request = urllib.request.Request(url, headers={"User-Agent": "phala-cloud-template-open-llm-vtuber"})
+          started = time.time()
+          log("download_source", ref=ref, url=url)
+          with urllib.request.urlopen(request, timeout=120) as response:
+              data = response.read()
+          top_dir = safe_extract(data, SOURCE_DIR)
+          REF_FILE.write_text(ref + "\n", encoding="utf-8")
+          return {
+              "source_ref": ref,
+              "source_url": url,
+              "source_tree": top_dir,
+              "downloaded_bytes": len(data),
+              "download_seconds": round(time.time() - started, 3),
+          }
+
+
+      def main():
+          ROOT.mkdir(parents=True, exist_ok=True)
+          ref = current_ref()
+          state = {}
+          if STATE_FILE.is_file():
+              try:
+                  state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+              except Exception:
+                  state = {}
+
+          if not source_is_ready(ref):
+              state.update(download_source(ref))
+          else:
+              log("source_cached", ref=ref, source_dir=str(SOURCE_DIR))
+              state.update({"source_ref": ref, "source_dir": str(SOURCE_DIR)})
+
+          state.update({
+              "upstream": UPSTREAM,
+              "source_dir": str(SOURCE_DIR),
+              "bootstrapped_at": datetime.now(timezone.utc).isoformat(),
+              "python": sys.version.split()[0],
+          })
+          STATE_FILE.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+          log("bootstrap_complete", ref=ref, source_dir=str(SOURCE_DIR))
+
+
+      if __name__ == "__main__":
+          main()
+
+  open_llm_vtuber_server:
+    content: |
+      import asyncio
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      import tomllib
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path
+      from urllib.parse import parse_qs, urlparse
+
+
+      STARTED_AT = time.time()
+      ROOT = Path("/opt/open-llm-vtuber")
+      SOURCE_DIR = ROOT / "source"
+      STATE_FILE = ROOT / "state.json"
+      UPSTREAM = "https://github.com/Open-LLM-VTuber/Open-LLM-VTuber"
+      DEFAULT_DEMO_TEXT = "Hello from Phala Cloud"
+
+
+      def load_state():
+          try:
+              return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+          except Exception as exc:
+              return {"error": f"{type(exc).__name__}: {exc}"}
+
+
+      def read_pyproject():
+          result = {
+              "name": None,
+              "version": None,
+              "description": None,
+              "requires_python": None,
+              "dependency_count": 0,
+              "selected_dependencies": [],
+              "error": None,
+          }
+          try:
+              with SOURCE_DIR.joinpath("pyproject.toml").open("rb") as fp:
+                  data = tomllib.load(fp)
+              project = data.get("project", {})
+              dependencies = project.get("dependencies", [])
+              result.update({
+                  "name": project.get("name"),
+                  "version": project.get("version"),
+                  "description": project.get("description"),
+                  "requires_python": project.get("requires-python"),
+                  "dependency_count": len(dependencies),
+                  "selected_dependencies": dependencies[:12],
+              })
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      def import_checks():
+          result = {
+              "distribution": "open-llm-vtuber",
+              "distribution_version": None,
+              "modules": {},
+              "exports": {},
+              "import_ok": False,
+              "error": None,
+          }
+          try:
+              result["distribution_version"] = importlib.metadata.version("open-llm-vtuber")
+              import open_llm_vtuber.agent.input_types as input_types
+              import open_llm_vtuber.agent.output_types as output_types
+
+              result["modules"] = {
+                  "open_llm_vtuber.agent.input_types": input_types.__file__,
+                  "open_llm_vtuber.agent.output_types": output_types.__file__,
+              }
+              for symbol in ("BatchInput", "TextData", "TextSource", "ImageData", "ImageSource"):
+                  result["exports"][symbol] = hasattr(input_types, symbol)
+              for symbol in ("Actions", "DisplayText", "SentenceOutput", "AudioOutput"):
+                  result["exports"][symbol] = hasattr(output_types, symbol)
+              result["import_ok"] = bool(result["distribution_version"]) and all(result["exports"].values())
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      IMPORT_STATUS = import_checks()
+      PYPROJECT = read_pyproject()
+
+
+      def base_payload():
+          return {
+              "service": "open-llm-vtuber-verifier",
+              "upstream": UPSTREAM,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "source": load_state(),
+              "pyproject": PYPROJECT,
+              "package": IMPORT_STATUS,
+          }
+
+
+      def input_to_dict(batch_input):
+          return {
+              "texts": [
+                  {
+                      "source": item.source.value,
+                      "content": item.content,
+                      "from_name": item.from_name,
+                  }
+                  for item in batch_input.texts
+              ],
+              "images": batch_input.images or [],
+              "files": batch_input.files or [],
+              "metadata": batch_input.metadata or {},
+          }
+
+
+      async def sentence_output_to_dict(sentence_output):
+          chunks = []
+          async for display_text, tts_text, actions in sentence_output:
+              chunks.append({
+                  "display_text": display_text.to_dict(),
+                  "tts_text": tts_text,
+                  "actions": actions.to_dict(),
+              })
+          return chunks
+
+
+      def run_demo(text):
+          if not IMPORT_STATUS["import_ok"]:
+              raise RuntimeError(IMPORT_STATUS["error"] or "upstream import checks failed")
+
+          from open_llm_vtuber.agent.input_types import BatchInput, TextData, TextSource
+          from open_llm_vtuber.agent.output_types import Actions, DisplayText, SentenceOutput
+
+          batch_input = BatchInput(
+              texts=[TextData(source=TextSource.INPUT, content=text, from_name="operator")],
+              metadata={
+                  "proactive_speak": False,
+                  "skip_memory": True,
+                  "skip_history": True,
+                  "voice_interruption_simulated": True,
+              },
+          )
+          sentence_output = SentenceOutput(
+              display_text=DisplayText(
+                  text="Local verifier response from Open-LLM-VTuber source primitives.",
+                  name="Open-LLM-VTuber",
+                  avatar="shizuku",
+              ),
+              tts_text="Local verifier response. No speech audio is generated.",
+              actions=Actions(expressions=["neutral"]),
+          )
+          return {
+              "input": input_to_dict(batch_input),
+              "output_stream": asyncio.run(sentence_output_to_dict(sentence_output)),
+              "interruption_event": {
+                  "heard_response": "Local verifier response.",
+                  "handled_locally": True,
+                  "provider_call_required": False,
+              },
+              "primitives_used": [
+                  "BatchInput",
+                  "TextData",
+                  "TextSource",
+                  "SentenceOutput",
+                  "DisplayText",
+                  "Actions",
+              ],
+          }
+
+
+      def response_body(path, query):
+          if path == "/healthz":
+              payload = base_payload()
+              payload.update({
+                  "ok": IMPORT_STATUS["import_ok"],
+                  "status": "ready" if IMPORT_STATUS["import_ok"] else "import_failed",
+                  "credentials_required": False,
+                  "llm_provider_calls": False,
+                  "model_downloaded": False,
+              })
+              status = HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+              return status, payload
+
+          if path == "/demo":
+              payload = base_payload()
+              if not IMPORT_STATUS["import_ok"]:
+                  payload.update({"ok": False, "error": IMPORT_STATUS["error"]})
+                  return HTTPStatus.SERVICE_UNAVAILABLE, payload
+              text = query.get("text", [os.environ.get("OPEN_LLM_VTUBER_DEMO_TEXT", DEFAULT_DEMO_TEXT)])[0]
+              try:
+                  demo = run_demo(text)
+              except Exception as exc:
+                  payload.update({"ok": False, "error": f"{type(exc).__name__}: {exc}"})
+                  return HTTPStatus.SERVICE_UNAVAILABLE, payload
+              payload.update({
+                  "ok": True,
+                  "cpu_only": True,
+                  "credentials_required": False,
+                  "llm_provider_calls": False,
+                  "browser_auth_required": False,
+                  "model_downloaded": False,
+                  "model_loaded": False,
+                  "audio_generated": False,
+                  "full_vtuber_server_started": False,
+                  "live2d_runtime_loaded": False,
+                  "demo": demo,
+              })
+              return HTTPStatus.OK, payload
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "open-llm-vtuber/local-source-verifier",
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "Open-LLM-VTuber",
+                          "description": (
+                              "OpenAI-style smoke endpoint for the local source verifier. "
+                              "It is not an inference model and does not call LLM, ASR, or TTS providers."
+                          ),
+                      }
+                  ],
+              }
+
+          if path == "/":
+              payload = base_payload()
+              payload.update({
+                  "ok": IMPORT_STATUS["import_ok"],
+                  "endpoints": ["/healthz", "/demo", "/v1/models"],
+                  "default_model": "open-llm-vtuber/local-source-verifier",
+              })
+              status = HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+              return status, payload
+
+          return HTTPStatus.NOT_FOUND, {
+              "ok": False,
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "open-llm-vtuber-verifier"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      },
+                      sort_keys=True,
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              parsed = urlparse(self.path)
+              path = parsed.path.rstrip("/") or "/"
+              status, payload = response_body(path, parse_qs(parsed.query))
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": 8080,
+                      "upstream": UPSTREAM,
+                      "import_ok": IMPORT_STATUS["import_ok"],
+                      "llm_provider_calls": False,
+                  },
+                  sort_keys=True,
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
