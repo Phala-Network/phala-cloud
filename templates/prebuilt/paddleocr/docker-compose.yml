@@ -1,0 +1,408 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        PADDLEOCR_VERSION: ${PADDLEOCR_VERSION:-3.6.0}
+      dockerfile_inline: |
+        # syntax=docker/dockerfile:1.9
+        FROM python:3.11-slim-bookworm
+
+        ARG PADDLEOCR_VERSION=3.6.0
+
+        ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+            PIP_NO_CACHE_DIR=1 \
+            PIP_ROOT_USER_ACTION=ignore \
+            PYTHONDONTWRITEBYTECODE=1 \
+            PYTHONUNBUFFERED=1
+
+        RUN apt-get update \
+            && apt-get install -y --no-install-recommends \
+                ca-certificates \
+                libgl1 \
+                libglib2.0-0 \
+                libgomp1 \
+            && rm -rf /var/lib/apt/lists/*
+
+        RUN python -m pip install --upgrade pip \
+            && python -m pip install "paddleocr==$${PADDLEOCR_VERSION}" \
+            && python - <<'PY'
+        import importlib.metadata
+        import paddleocr
+
+        print("Installed paddleocr", importlib.metadata.version("paddleocr"))
+        print("Verified PaddleOCR module", getattr(paddleocr, "__version__", "unknown"))
+        print("Verified symbols", paddleocr.PaddleOCR.__name__, paddleocr.OCROptions.__name__, paddleocr.Model.PP_OCRV5.value)
+        PY
+
+        RUN groupadd --system app \
+            && useradd --system --create-home --home-dir /app --gid app app
+
+        WORKDIR /app
+        USER app
+
+        EXPOSE 8080
+    image: phala-paddleocr-demo:${PADDLEOCR_VERSION:-3.6.0}
+    pull_policy: build
+    restart: unless-stopped
+    environment:
+      PADDLEOCR_VERSION: ${PADDLEOCR_VERSION:-3.6.0}
+      PORT: "8080"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "8080:8080"
+    configs:
+      - source: server_py
+        target: /app/server.py
+        mode: 0444
+    command:
+      - python
+      - /app/server.py
+    tmpfs:
+      - /tmp:size=128m
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import json, urllib.request; data = json.load(urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5)); assert data["ok"] is True
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+configs:
+  server_py:
+    content: |
+      import importlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from dataclasses import asdict, is_dataclass
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import parse_qs, urlparse
+
+      STARTED_AT = time.time()
+      SERVICE = "paddleocr-package-verifier"
+      UPSTREAM = "https://github.com/PaddlePaddle/PaddleOCR"
+      PACKAGE = "paddleocr"
+      REQUESTED_VERSION = os.environ.get("PADDLEOCR_VERSION", "3.6.0")
+      DEFAULT_PORT = int(os.environ.get("PORT", "8080"))
+      ICON_SOURCE = "https://raw.githubusercontent.com/PaddlePaddle/PaddleOCR/main/docs/version3.x/logo.jpg"
+
+      IMPORT_ERROR = None
+      PACKAGE_INFO = {}
+      SYMBOL_CHECKS = {}
+      DEMO_CACHE = None
+
+      try:
+          import paddleocr
+          from paddleocr import (
+              Model,
+              OCROptions,
+              PaddleOCRClient,
+              PaddleOCRVLOptions,
+              PPStructureV3Options,
+          )
+          from paddleocr._api_client.models import (
+              is_document_parsing_model,
+              is_ocr_model,
+              is_vl_model,
+          )
+          from paddleocr._pipelines.utils import create_config_from_structure
+
+          metadata = importlib.metadata.metadata(PACKAGE)
+          PACKAGE_INFO = {
+              "distribution": PACKAGE,
+              "version": importlib.metadata.version(PACKAGE),
+              "module_version": getattr(paddleocr, "__version__", "unknown"),
+              "summary": metadata.get("Summary", ""),
+              "requires_python": metadata.get("Requires-Python", ""),
+              "homepage": metadata.get("Home-page") or metadata.get("Project-URL", ""),
+              "requested_version": REQUESTED_VERSION,
+          }
+          SYMBOL_CHECKS = {
+              "PaddleOCR": hasattr(paddleocr, "PaddleOCR"),
+              "PPStructureV3": hasattr(paddleocr, "PPStructureV3"),
+              "PaddleOCRVL": hasattr(paddleocr, "PaddleOCRVL"),
+              "PaddleOCRClient": PaddleOCRClient.__name__ == "PaddleOCRClient",
+              "OCROptions": OCROptions.__name__ == "OCROptions",
+              "PPStructureV3Options": PPStructureV3Options.__name__ == "PPStructureV3Options",
+              "PaddleOCRVLOptions": PaddleOCRVLOptions.__name__ == "PaddleOCRVLOptions",
+          }
+      except Exception as exc:
+          IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+
+
+      def package_version(name):
+          try:
+              return importlib.metadata.version(name)
+          except Exception as exc:
+              return f"unavailable: {type(exc).__name__}: {exc}"
+
+
+      def public_payload():
+          ok = IMPORT_ERROR is None and all(SYMBOL_CHECKS.values())
+          return {
+              "ok": ok,
+              "service": SERVICE,
+              "upstream": UPSTREAM,
+              "package": PACKAGE_INFO,
+              "symbol_checks": SYMBOL_CHECKS,
+              "import_error": IMPORT_ERROR,
+              "runtime": {
+                  "python": sys.version.split()[0],
+                  "implementation": platform.python_implementation(),
+                  "platform": platform.platform(),
+                  "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              },
+              "safety": {
+                  "cpu_only_default": True,
+                  "credentials_required": False,
+                  "inference_engine_loaded": False,
+                  "ocr_inference_attempted": False,
+                  "model_weights_downloaded": False,
+                  "hosted_model_call_attempted": False,
+              },
+          }
+
+
+      def dataclass_payload(value):
+          return asdict(value) if is_dataclass(value) else value
+
+
+      def build_demo():
+          if IMPORT_ERROR is not None:
+              raise RuntimeError(IMPORT_ERROR)
+
+          ocr_options = OCROptions(
+              use_doc_orientation_classify=False,
+              use_doc_unwarping=False,
+              use_textline_orientation=False,
+              text_det_limit_side_len=960,
+              text_det_limit_type="max",
+              text_det_thresh=0.3,
+              text_det_box_thresh=0.6,
+              text_det_unclip_ratio=1.5,
+              text_rec_score_thresh=0.0,
+              visualize=False,
+          )
+          structure_options = PPStructureV3Options(
+              use_doc_orientation_classify=False,
+              use_doc_unwarping=False,
+              use_textline_orientation=False,
+              use_table_recognition=True,
+              use_formula_recognition=False,
+              use_chart_recognition=False,
+              prettify_markdown=True,
+              visualize=False,
+          )
+          vl_options = PaddleOCRVLOptions(
+              use_doc_orientation_classify=False,
+              use_doc_unwarping=False,
+              use_layout_detection=True,
+              temperature=0.0,
+              top_p=0.9,
+              max_new_tokens=256,
+              merge_layout_blocks=True,
+              prettify_markdown=True,
+              visualize=False,
+          )
+          pipeline_config = create_config_from_structure(
+              {
+                  "Global.device": "cpu",
+                  "Pipeline.name": "OCR",
+                  "Pipeline.use_doc_orientation_classify": False,
+                  "Pipeline.use_doc_unwarping": False,
+                  "Pipeline.use_textline_orientation": False,
+                  "Serving.host": "0.0.0.0",
+                  "Serving.port": DEFAULT_PORT,
+                  "Serving.return_urls": False,
+              }
+          )
+          catalog = []
+          for model in Model:
+              catalog.append(
+                  {
+                      "id": model.value,
+                      "object": "model",
+                      "owned_by": "PaddlePaddle/PaddleOCR",
+                      "loaded": False,
+                      "ocr_model": is_ocr_model(model),
+                      "document_parsing_model": is_document_parsing_model(model),
+                      "vl_model": is_vl_model(model),
+                  }
+              )
+
+          return {
+              "ok": True,
+              "package": PACKAGE_INFO,
+              "demo": {
+                  "description": "Deterministic package/API verifier. It does not run OCR inference.",
+                  "credentials_required": False,
+                  "inference_engine_loaded": False,
+                  "model_weights_downloaded": False,
+                  "ocr_inference_attempted": False,
+                  "hosted_model_call_attempted": False,
+                  "api_option_payloads": {
+                      "ocr": ocr_options.to_payload(),
+                      "pp_structure_v3": structure_options.to_payload(),
+                      "paddleocr_vl": vl_options.to_payload(),
+                  },
+                  "api_option_dataclasses": {
+                      "ocr": dataclass_payload(ocr_options),
+                      "pp_structure_v3": dataclass_payload(structure_options),
+                      "paddleocr_vl": dataclass_payload(vl_options),
+                  },
+                  "paddlex_pipeline_config_preview": pipeline_config,
+                  "structured_document_sample": {
+                      "source": "bundled deterministic sample, not OCR output",
+                      "input_type": "image_or_pdf",
+                      "language_hint": "en",
+                      "pages": [
+                          {
+                              "page_number": 1,
+                              "blocks": [
+                                  {
+                                      "type": "title",
+                                      "text": "PaddleOCR Phala Cloud verifier",
+                                      "bbox": [64, 64, 640, 120],
+                                  },
+                                  {
+                                      "type": "paragraph",
+                                      "text": "This endpoint verifies package primitives without downloading model weights.",
+                                      "bbox": [64, 144, 920, 214],
+                                  },
+                              ],
+                          }
+                      ],
+                  },
+                  "model_catalog": catalog,
+              },
+          }
+
+
+      def model_payload():
+          if IMPORT_ERROR is not None:
+              raise RuntimeError(IMPORT_ERROR)
+
+          data = []
+          for model in Model:
+              data.append(
+                  {
+                      "id": model.value,
+                      "object": "model",
+                      "created": 0,
+                      "owned_by": "PaddlePaddle/PaddleOCR",
+                      "loaded": False,
+                      "requires_model_weights": True,
+                      "available_in_default_template": False,
+                      "metadata": {
+                          "ocr_model": is_ocr_model(model),
+                          "document_parsing_model": is_document_parsing_model(model),
+                          "vl_model": is_vl_model(model),
+                      },
+                  }
+              )
+          return {
+              "object": "list",
+              "data": data,
+              "note": "This OpenAI-shaped endpoint is metadata only; the template does not load or serve OCR models by default.",
+          }
+
+
+      def upstream_payload():
+          return {
+              "service": SERVICE,
+              "upstream_repository": UPSTREAM,
+              "package_index": "https://pypi.org/project/paddleocr/",
+              "documentation": {
+                  "installation": "https://github.com/PaddlePaddle/PaddleOCR/blob/main/docs/version3.x/installation.en.md",
+                  "ocr_pipeline": "https://github.com/PaddlePaddle/PaddleOCR/blob/main/docs/version3.x/pipeline_usage/OCR.en.md",
+                  "serving": "https://github.com/PaddlePaddle/PaddleOCR/blob/main/docs/version3.x/inference_deployment/serving/serving.en.md",
+              },
+              "icon_source": ICON_SOURCE,
+              "upstream_author": "PaddlePaddle",
+              "package": PACKAGE_INFO,
+              "endpoints": ["/healthz", "/demo", "/v1/models", "/upstream"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "paddleocr-template/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - - [%s] %s" % (self.address_string(), self.log_date_time_string(), fmt % args), flush=True)
+
+          def send_json(self, status, payload):
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Content-Length", str(len(body)))
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("X-Content-Type-Options", "nosniff")
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              global DEMO_CACHE
+              parsed = urlparse(self.path)
+              path = parsed.path.rstrip("/") or "/"
+              query = parse_qs(parsed.query)
+
+              try:
+                  if path == "/":
+                      self.send_json(
+                          200,
+                          {
+                              "service": SERVICE,
+                              "upstream": UPSTREAM,
+                              "endpoints": {
+                                  "health": "/healthz",
+                                  "demo": "/demo",
+                                  "models": "/v1/models",
+                                  "upstream": "/upstream",
+                              },
+                          },
+                      )
+                  elif path == "/healthz":
+                      payload = public_payload()
+                      self.send_json(200 if payload["ok"] else 503, payload)
+                  elif path == "/demo":
+                      if DEMO_CACHE is None or query.get("refresh") == ["true"]:
+                          DEMO_CACHE = build_demo()
+                      payload = json.loads(json.dumps(DEMO_CACHE))
+                      payload["runtime"] = public_payload()["runtime"]
+                      self.send_json(200, payload)
+                  elif path == "/v1/models":
+                      self.send_json(200, model_payload())
+                  elif path == "/upstream":
+                      self.send_json(200, upstream_payload())
+                  else:
+                      self.send_json(404, {"ok": False, "error": "not_found", "path": parsed.path})
+              except Exception as exc:
+                  self.send_json(
+                      500,
+                      {
+                          "ok": False,
+                          "error": f"{type(exc).__name__}: {exc}",
+                          "path": parsed.path,
+                          "import_error": IMPORT_ERROR,
+                      },
+                  )
+
+
+      def main():
+          server = ThreadingHTTPServer(("0.0.0.0", DEFAULT_PORT), Handler)
+          print(f"{SERVICE} listening on 0.0.0.0:{DEFAULT_PORT}", flush=True)
+          server.serve_forever()
+
+
+      if __name__ == "__main__":
+          main()

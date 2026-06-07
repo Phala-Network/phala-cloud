@@ -5300,5 +5300,27 @@
     "diskSize": 10
   },
   "tags": ["Web Data & Search", "AI Agents", "Automation"]
-}
+},
+{
+    "id": "paddleocr",
+    "name": "PaddlePaddle/PaddleOCR",
+    "description": "Turn any PDF or image document into structured data for your AI. A powerful, lightweight OCR toolkit that bridges the gap between images/PDFs and LLMs. Supports 100+ languages.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/paddleocr",
+    "author": "PaddlePaddle",
+    "icon": "paddleocr.png",
+    "envs": [
+      {
+        "key": "PADDLEOCR_VERSION",
+        "required": false,
+        "default": "3.6.0",
+        "description": "Pinned PaddleOCR Python package version installed by the verifier image."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["RAG", "Developer Tools", "AI Agents"]
+  }
 ]
