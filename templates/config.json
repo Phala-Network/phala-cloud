@@ -5512,5 +5512,33 @@
     "diskSize": 10
   },
   "tags": ["AI Agents", "Developer Tools"]
-}
+},
+{
+    "id": "harness",
+    "name": "revfactory/harness",
+    "description": "A meta-skill that designs domain-specific agent teams, defines specialized agents, and generates the skills they use.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/harness",
+    "author": "revfactory",
+    "icon": "harness.png",
+    "envs": [
+      {
+        "key": "HARNESS_SOURCE_REF",
+        "required": false,
+        "default": "b8fb858ea9209d6b0d9000e551d3dedbbacb88aa",
+        "description": "Upstream revfactory/harness commit, tag, or branch downloaded from the GitHub source archive at container startup."
+      },
+      {
+        "key": "HARNESS_DEMO_DOMAIN",
+        "required": false,
+        "default": "fintech risk-assessment team",
+        "description": "Domain sentence used by the deterministic team-blueprint demo endpoint."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools", "Automation"]
+  }
 ]
