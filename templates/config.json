@@ -5266,5 +5266,39 @@
       "diskSize": 20
     },
     "tags": ["AI Agents", "Developer Tools", "Automation"]
-  }
+  },
+{
+  "id": "last30days-skill",
+  "name": "mvanhorn/last30days-skill",
+  "description": "AI agent skill that researches any topic across Reddit, X, YouTube, HN, Polymarket, and the web - then synthesizes a grounded summary",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/last30days-skill",
+  "author": "mvanhorn",
+  "icon": "last30days-skill.jpg",
+  "envs": [
+    {
+      "key": "LAST30DAYS_SOURCE_REF",
+      "required": false,
+      "description": "Upstream last30days-skill GitHub commit, tag, or branch archive ref downloaded by the verifier at startup.",
+      "default": "26da1e157cc83aba5b782fd3662627535e81bbc7"
+    },
+    {
+      "key": "LAST30DAYS_VERIFY_TIMEOUT_SECONDS",
+      "required": false,
+      "description": "Timeout in seconds for the public upstream GitHub source archive download.",
+      "default": "15"
+    },
+    {
+      "key": "LAST30DAYS_DEMO_TOPIC",
+      "required": false,
+      "description": "Default topic used by the deterministic /demo endpoint when no topic query parameter is supplied.",
+      "default": "AI agent research across social sources"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": ["Web Data & Search", "AI Agents", "Automation"]
+}
 ]
