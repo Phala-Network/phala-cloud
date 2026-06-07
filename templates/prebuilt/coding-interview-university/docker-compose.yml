@@ -1,0 +1,481 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: ${PORT:-8080}
+      CIU_REF: ${CIU_REF:-717298bf219a30d7fb0671285c5f057b1bb74b27}
+      CIU_FETCH_TIMEOUT_SECONDS: ${CIU_FETCH_TIMEOUT_SECONDS:-120}
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ciu-cache:/opt/coding-interview-university
+    configs:
+      - source: ciu_bootstrap
+        target: /opt/ciu-demo/bootstrap.py
+        mode: 0444
+      - source: ciu_server
+        target: /opt/ciu-demo/server.py
+        mode: 0444
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        python /opt/ciu-demo/bootstrap.py
+        exec python /opt/ciu-demo/server.py
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\", \"8080\")}/healthz', timeout=5).read()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  ciu-cache:
+
+configs:
+  ciu_bootstrap:
+    content: |
+      import io
+      import json
+      import os
+      import shutil
+      import tarfile
+      import time
+      import urllib.parse
+      import urllib.request
+      from datetime import datetime, timezone
+      from pathlib import Path
+
+
+      ROOT = Path("/opt/coding-interview-university")
+      SOURCE_DIR = ROOT / "source"
+      STATE_FILE = ROOT / "state.json"
+      REF_FILE = ROOT / ".source-ref"
+      UPSTREAM = "https://github.com/jwasham/coding-interview-university"
+      DEFAULT_REF = "717298bf219a30d7fb0671285c5f057b1bb74b27"
+
+      REQUIRED_FILES = [
+          "README.md",
+          "LICENSE.txt",
+          "programming-language-resources.md",
+          "extras/cheat sheets/bits-cheat-sheet.pdf",
+          "extras/cheat sheets/big-o-cheatsheet.pdf",
+          "translations/README-cn.md",
+      ]
+
+
+      def log(event, **fields):
+          print(json.dumps({"event": event, **fields}, sort_keys=True), flush=True)
+
+
+      def current_ref():
+          return os.environ.get("CIU_REF", DEFAULT_REF).strip() or DEFAULT_REF
+
+
+      def fetch_timeout():
+          try:
+              return max(5.0, float(os.environ.get("CIU_FETCH_TIMEOUT_SECONDS", "120")))
+          except ValueError:
+              return 120.0
+
+
+      def source_is_ready(ref):
+          return (
+              REF_FILE.is_file()
+              and REF_FILE.read_text(encoding="utf-8").strip() == ref
+              and all(SOURCE_DIR.joinpath(path).is_file() for path in REQUIRED_FILES)
+          )
+
+
+      def safe_extract(data, destination):
+          tmp_dir = ROOT / ".source-tmp"
+          shutil.rmtree(tmp_dir, ignore_errors=True)
+          tmp_dir.mkdir(parents=True, exist_ok=True)
+          top_dir = None
+
+          with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+              for member in archive.getmembers():
+                  parts = Path(member.name).parts
+                  if len(parts) < 2:
+                      if parts:
+                          top_dir = top_dir or parts[0]
+                      continue
+
+                  top_dir = top_dir or parts[0]
+                  relative = Path(*parts[1:])
+                  if relative.is_absolute() or ".." in relative.parts:
+                      raise RuntimeError(f"unsafe tar path: {member.name}")
+
+                  target = tmp_dir / relative
+                  if member.isdir():
+                      target.mkdir(parents=True, exist_ok=True)
+                  elif member.isfile():
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      src = archive.extractfile(member)
+                      if src is None:
+                          raise RuntimeError(f"cannot read tar member: {member.name}")
+                      with src, open(target, "wb") as dst:
+                          shutil.copyfileobj(src, dst)
+                      if member.mode:
+                          target.chmod(member.mode & 0o777)
+
+          shutil.rmtree(destination, ignore_errors=True)
+          tmp_dir.rename(destination)
+          return top_dir
+
+
+      def download_source(ref):
+          encoded_ref = urllib.parse.quote(ref, safe="")
+          url = f"https://api.github.com/repos/jwasham/coding-interview-university/tarball/{encoded_ref}"
+          request = urllib.request.Request(
+              url,
+              headers={"User-Agent": "phala-cloud-coding-interview-university-template/1.0"},
+          )
+          started = time.time()
+          log("download_source", ref=ref, url=url)
+          with urllib.request.urlopen(request, timeout=fetch_timeout()) as response:
+              data = response.read()
+          top_dir = safe_extract(data, SOURCE_DIR)
+          REF_FILE.write_text(ref + "\n", encoding="utf-8")
+          return {
+              "source_ref": ref,
+              "source_url": url,
+              "source_tree": top_dir,
+              "downloaded_bytes": len(data),
+              "download_seconds": round(time.time() - started, 3),
+          }
+
+
+      def main():
+          ROOT.mkdir(parents=True, exist_ok=True)
+          ref = current_ref()
+          state = {}
+          if STATE_FILE.is_file():
+              try:
+                  state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+              except Exception:
+                  state = {}
+
+          if source_is_ready(ref):
+              log("source_cached", ref=ref, source_dir=str(SOURCE_DIR))
+              state.update({"source_ref": ref, "source_dir": str(SOURCE_DIR), "cached": True})
+          else:
+              state.update(download_source(ref))
+              state["cached"] = False
+
+          state.update({
+              "upstream": UPSTREAM,
+              "source_dir": str(SOURCE_DIR),
+              "bootstrapped_at": datetime.now(timezone.utc).isoformat(),
+              "required_files": REQUIRED_FILES,
+          })
+          STATE_FILE.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+          log("bootstrap_complete", ref=ref, source_dir=str(SOURCE_DIR))
+
+
+      if __name__ == "__main__":
+          main()
+
+  ciu_server:
+    content: |
+      import json
+      import os
+      import platform
+      import re
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      ROOT = Path("/opt/coding-interview-university")
+      SOURCE_DIR = ROOT / "source"
+      STATE_FILE = ROOT / "state.json"
+      UPSTREAM = "https://github.com/jwasham/coding-interview-university"
+      DEFAULT_REF = "717298bf219a30d7fb0671285c5f057b1bb74b27"
+      PUBLIC_ENDPOINTS = ["/healthz", "/demo", "/v1/models", "/upstream"]
+
+      REQUIRED_FILES = [
+          "README.md",
+          "LICENSE.txt",
+          "programming-language-resources.md",
+          "extras/cheat sheets/bits-cheat-sheet.pdf",
+          "extras/cheat sheets/big-o-cheatsheet.pdf",
+          "translations/README-cn.md",
+      ]
+
+      RUNTIME_GUARDS = {
+          "credentials_required": False,
+          "llm_provider_calls": False,
+          "browser_auth": False,
+          "model_downloaded": False,
+          "model_loaded": False,
+          "gpu_required": False,
+          "remote_model_calls": False,
+      }
+
+
+      def read_text(relative_path):
+          return SOURCE_DIR.joinpath(relative_path).read_text(encoding="utf-8", errors="replace")
+
+
+      def load_state():
+          try:
+              return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+          except Exception as exc:
+              return {"error": f"{type(exc).__name__}: {exc}"}
+
+
+      def file_status(relative_path):
+          path = SOURCE_DIR / relative_path
+          return {
+              "path": relative_path,
+              "exists": path.is_file(),
+              "bytes": path.stat().st_size if path.is_file() else 0,
+          }
+
+
+      def source_checks():
+          checks = [file_status(path) for path in REQUIRED_FILES]
+          return {
+              "ok": all(item["exists"] and item["bytes"] > 0 for item in checks),
+              "files": checks,
+          }
+
+
+      def clean_markdown(value):
+          value = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", value)
+          value = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", value)
+          value = re.sub(r"`([^`]+)`", r"\1", value)
+          value = re.sub(r"[*_<>#]", "", value)
+          return re.sub(r"\s+", " ", value).strip()
+
+
+      def headings(readme, marker):
+          pattern = "^" + re.escape(marker) + r"\s+(.+)$"
+          return [clean_markdown(match.group(1)) for match in re.finditer(pattern, readme, re.MULTILINE)]
+
+
+      def translation_links(readme):
+          translations = []
+          in_block = False
+          for line in readme.splitlines():
+              if "<summary>Translations:</summary>" in line:
+                  in_block = True
+                  continue
+              if in_block and line.strip() == "</details>":
+                  break
+              if in_block:
+                  match = re.search(r"-\s+\[([^\]]+)\]\((translations/README-[^)]+)\)", line)
+                  if match:
+                      translations.append({"language": clean_markdown(match.group(1)), "path": match.group(2)})
+          return translations
+
+
+      def first_unchecked_tasks(readme, limit=12):
+          tasks = []
+          for line in readme.splitlines():
+              match = re.match(r"\s*-\s+\[\s\]\s+(.+)$", line)
+              if not match:
+                  continue
+              task = clean_markdown(match.group(1).rstrip(":"))
+              if task:
+                  tasks.append(task)
+              if len(tasks) >= limit:
+                  break
+          return tasks
+
+
+      def study_topics(readme):
+          topics = []
+          capture = False
+          for line in readme.splitlines():
+              if line.startswith("## Let's Get Started"):
+                  capture = True
+                  continue
+              if capture and line.startswith("## Additional Books"):
+                  break
+              if capture and line.startswith("## "):
+                  title = clean_markdown(line[3:])
+                  if title and title not in {"Let's Get Started"}:
+                      topics.append(title)
+          return topics
+
+
+      def cheat_sheets():
+          root = SOURCE_DIR / "extras" / "cheat sheets"
+          if not root.is_dir():
+              return []
+          return [
+              {"name": path.name, "bytes": path.stat().st_size}
+              for path in sorted(root.glob("*.pdf"))
+          ]
+
+
+      def readme_summary():
+          readme = read_text("README.md")
+          translations = translation_links(readme)
+          topics = study_topics(readme)
+          unchecked_tasks = len(re.findall(r"^\s*-\s+\[\s\]\s+", readme, re.MULTILINE))
+          checked_tasks = len(re.findall(r"^\s*-\s+\[[xX]\]\s+", readme, re.MULTILINE))
+          external_links = len(re.findall(r"\]\(https?://", readme))
+
+          return {
+              "title": headings(readme, "#")[0] if headings(readme, "#") else "Coding Interview University",
+              "top_level_sections": headings(readme, "##")[:24],
+              "study_topic_count": len(topics),
+              "sample_study_topics": topics[:16],
+              "translation_count": len(translations),
+              "translations": translations,
+              "unchecked_task_count": unchecked_tasks,
+              "checked_task_count": checked_tasks,
+              "external_link_count": external_links,
+              "sample_tasks": first_unchecked_tasks(readme),
+              "cheat_sheets": cheat_sheets(),
+          }
+
+
+      def base_payload():
+          state = load_state()
+          checks = source_checks()
+          return {
+              "service": "coding-interview-university-verifier",
+              "upstream": UPSTREAM,
+              "source_ref": state.get("source_ref", os.environ.get("CIU_REF", DEFAULT_REF)),
+              "source_dir": state.get("source_dir", str(SOURCE_DIR)),
+              "source_ready": checks["ok"],
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "runtime_guards": RUNTIME_GUARDS,
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "coding-interview-university-verifier/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              path = urlparse(self.path).path
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  payload["ok"] = payload["source_ready"]
+                  payload["status"] = "ready" if payload["source_ready"] else "source_missing"
+                  payload["endpoints"] = PUBLIC_ENDPOINTS
+                  self.respond_json(HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  payload.update({
+                      "ok": payload["source_ready"],
+                      "description": "Deterministic parser demo over the real upstream Markdown study plan.",
+                      "remote_calls": False,
+                  })
+                  if not payload["source_ready"]:
+                      payload["source_checks"] = source_checks()
+                      self.respond_json(HTTPStatus.SERVICE_UNAVAILABLE, payload)
+                      return
+                  try:
+                      summary = readme_summary()
+                      payload["demo"] = {
+                          "source_artifact": "GitHub tarball",
+                          "source_files_checked": REQUIRED_FILES,
+                          "study_plan": summary,
+                          "suggested_local_smoke_path": [
+                              "Open /healthz to confirm the source artifact is cached.",
+                              "Open /demo to inspect parsed study-plan sections and checklist counts.",
+                              "Use the upstream README or a fork for personal progress tracking.",
+                          ],
+                      }
+                  except Exception as exc:
+                      payload["ok"] = False
+                      payload["error"] = f"{type(exc).__name__}: {exc}"
+                      self.respond_json(HTTPStatus.INTERNAL_SERVER_ERROR, payload)
+                      return
+                  self.respond_json(HTTPStatus.OK, payload)
+                  return
+
+              if path == "/v1/models":
+                  payload = {
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "coding-interview-university/no-llm-study-plan-verifier",
+                              "object": "model",
+                              "created": 0,
+                              "owned_by": "jwasham",
+                              "root": "coding-interview-university-source",
+                              "permission": [],
+                              "metadata": {
+                                  "upstream": UPSTREAM,
+                                  "source_ref": load_state().get("source_ref", os.environ.get("CIU_REF", DEFAULT_REF)),
+                                  "purpose": "OpenAI-style compatibility endpoint for a local source verifier.",
+                              },
+                          }
+                      ],
+                      "runtime_guards": RUNTIME_GUARDS,
+                  }
+                  self.respond_json(HTTPStatus.OK, payload)
+                  return
+
+              if path == "/upstream":
+                  payload = base_payload()
+                  payload.update({
+                      "ok": payload["source_ready"],
+                      "state": load_state(),
+                      "source_checks": source_checks(),
+                      "docs_inspected": [
+                          "README.md",
+                          "programming-language-resources.md",
+                          "extras/cheat sheets/*.pdf",
+                          "translations/README-*.md",
+                      ],
+                      "production_notes": [
+                          "Upstream is a Markdown study plan, not a server application.",
+                          "Use a fork or local clone when tracking personal checkbox progress.",
+                          "This verifier does not provide authentication, persistence for user progress, or an editor UI.",
+                      ],
+                  })
+                  self.respond_json(HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload)
+                  return
+
+              self.respond_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not found", "endpoints": PUBLIC_ENDPOINTS})
+
+
+      def main():
+          port = int(os.environ.get("PORT", "8080"))
+          server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+          print(json.dumps({"event": "server_start", "port": port, "upstream": UPSTREAM}, sort_keys=True), flush=True)
+          server.serve_forever()
+
+
+      if __name__ == "__main__":
+          main()

@@ -5450,5 +5450,39 @@
       "diskSize": 10
     },
     "tags": ["Developer Tools", "Infrastructure"]
+  },
+{
+    "id": "coding-interview-university",
+    "name": "jwasham/coding-interview-university",
+    "description": "A complete computer science study plan to become a software engineer.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/coding-interview-university",
+    "author": "jwasham",
+    "icon": "coding-interview-university.png",
+    "envs": [
+      {
+        "key": "CIU_REF",
+        "required": false,
+        "default": "717298bf219a30d7fb0671285c5f057b1bb74b27",
+        "description": "Git branch, tag, or commit downloaded from jwasham/coding-interview-university at startup. Defaults to the upstream main HEAD inspected for this template."
+      },
+      {
+        "key": "CIU_FETCH_TIMEOUT_SECONDS",
+        "required": false,
+        "default": "120",
+        "description": "Timeout for downloading the upstream GitHub source tarball during bootstrap."
+      },
+      {
+        "key": "PORT",
+        "required": false,
+        "default": "8080",
+        "description": "HTTP port listened on inside the verifier container and published by the Compose file."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["Developer Tools", "Starter Kits"]
   }
 ]
