@@ -1,0 +1,488 @@
+services:
+  app:
+    image: python:3.13-slim-bookworm
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      APP_PORT: ${APP_PORT:-8080}
+      OPENCLAW_WINDOWS_NODE_REF: ${OPENCLAW_WINDOWS_NODE_REF:-4be005707f44f2b77d70e9ad83e2aecb878a5585}
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - openclaw_windows_node_source:/opt/openclaw-windows-node
+    configs:
+      - source: openclaw_windows_node_verifier
+        target: /opt/openclaw-windows-node-demo/server.py
+    command:
+      - python
+      - /opt/openclaw-windows-node-demo/server.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8080'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+configs:
+  openclaw_windows_node_verifier:
+    content: |
+      import io
+      import json
+      import os
+      import platform
+      import re
+      import shutil
+      import sys
+      import tarfile
+      import time
+      import urllib.parse
+      import urllib.request
+      import xml.etree.ElementTree as ET
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      ROOT = Path("/opt/openclaw-windows-node")
+      SOURCE_DIR = ROOT / "source"
+      STATE_FILE = ROOT / "state.json"
+      REF_FILE = ROOT / ".source-ref"
+      UPSTREAM = "https://github.com/openclaw/openclaw-windows-node"
+      DEFAULT_REF = "4be005707f44f2b77d70e9ad83e2aecb878a5585"
+
+      REQUIRED_FILES = [
+          "README.md",
+          "DEVELOPMENT.md",
+          "docs/SETUP.md",
+          "docs/MCP_MODE.md",
+          "docs/WINDOWS_NODE_ARCHITECTURE.md",
+          "openclaw-windows-node.slnx",
+          "global.json",
+          "package.json",
+          "src/OpenClaw.Tray.WinUI/OpenClaw.Tray.WinUI.csproj",
+          "src/OpenClaw.WinNode.Cli/OpenClaw.WinNode.Cli.csproj",
+          "src/OpenClaw.Shared/OpenClaw.Shared.csproj",
+          "src/OpenClaw.Shared/Mcp/McpToolBridge.cs",
+          "src/OpenClaw.WinNode.Cli/skill.md",
+          "src/OpenClaw.Tray.WinUI/Assets/Square44x44Logo.targetsize-256_altform-unplated.png",
+      ]
+
+
+      def log(event, **fields):
+          print(json.dumps({"event": event, **fields}, sort_keys=True), flush=True)
+
+
+      def current_ref():
+          return os.environ.get("OPENCLAW_WINDOWS_NODE_REF", DEFAULT_REF).strip() or DEFAULT_REF
+
+
+      def safe_extract(data, destination):
+          tmp_dir = ROOT / ".source-tmp"
+          shutil.rmtree(tmp_dir, ignore_errors=True)
+          tmp_dir.mkdir(parents=True, exist_ok=True)
+          top_dir = None
+
+          with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+              for member in archive.getmembers():
+                  parts = Path(member.name).parts
+                  if not parts:
+                      continue
+
+                  top_dir = top_dir or parts[0]
+                  if len(parts) == 1:
+                      continue
+
+                  relative = Path(*parts[1:])
+                  if relative.is_absolute() or ".." in relative.parts:
+                      raise RuntimeError(f"unsafe tar path: {member.name}")
+
+                  target = tmp_dir / relative
+                  if member.isdir():
+                      target.mkdir(parents=True, exist_ok=True)
+                  elif member.isfile():
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      src = archive.extractfile(member)
+                      if src is None:
+                          raise RuntimeError(f"cannot read tar member: {member.name}")
+                      with src, open(target, "wb") as dst:
+                          shutil.copyfileobj(src, dst)
+                      if member.mode:
+                          target.chmod(member.mode & 0o777)
+
+          shutil.rmtree(destination, ignore_errors=True)
+          tmp_dir.rename(destination)
+          return top_dir
+
+
+      def download_source(ref):
+          encoded_ref = urllib.parse.quote(ref, safe="")
+          url = f"https://api.github.com/repos/openclaw/openclaw-windows-node/tarball/{encoded_ref}"
+          request = urllib.request.Request(
+              url,
+              headers={"User-Agent": "phala-cloud-template-openclaw-windows-node"},
+          )
+          started = time.time()
+          log("download_source", ref=ref, url=url)
+          with urllib.request.urlopen(request, timeout=120) as response:
+              data = response.read()
+
+          top_dir = safe_extract(data, SOURCE_DIR)
+          REF_FILE.write_text(ref + "\n", encoding="utf-8")
+          state = {
+              "source_ref": ref,
+              "source_url": url,
+              "source_tree": top_dir,
+              "downloaded_bytes": len(data),
+              "download_seconds": round(time.time() - started, 3),
+          }
+          STATE_FILE.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+          return state
+
+
+      def source_is_ready(ref):
+          return (
+              REF_FILE.is_file()
+              and REF_FILE.read_text(encoding="utf-8").strip() == ref
+              and all((SOURCE_DIR / path).is_file() for path in REQUIRED_FILES)
+          )
+
+
+      def ensure_source():
+          ROOT.mkdir(parents=True, exist_ok=True)
+          ref = current_ref()
+          if source_is_ready(ref):
+              try:
+                  return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+              except Exception:
+                  return {"source_ref": ref, "source_url": None, "source_tree": None, "downloaded_bytes": None}
+          return download_source(ref)
+
+
+      def rel(path):
+          return SOURCE_DIR / path
+
+
+      def read_text(path):
+          return rel(path).read_text(encoding="utf-8")
+
+
+      def read_json(path):
+          return json.loads(read_text(path))
+
+
+      def parse_csproj(path):
+          project_path = rel(path)
+          root = ET.parse(project_path).getroot()
+          properties = {}
+          packages = []
+          project_refs = []
+
+          for child in root.iter():
+              tag = child.tag.split("}", 1)[-1]
+              if tag == "PropertyGroup":
+                  for prop in child:
+                      prop_tag = prop.tag.split("}", 1)[-1]
+                      if prop.text and prop.text.strip():
+                          properties[prop_tag] = prop.text.strip()
+              elif tag == "PackageReference":
+                  packages.append(
+                      {
+                          "include": child.attrib.get("Include"),
+                          "version": child.attrib.get("Version"),
+                          "private_assets": child.attrib.get("PrivateAssets"),
+                      }
+                  )
+              elif tag == "ProjectReference":
+                  project_refs.append(child.attrib.get("Include"))
+
+          return {
+              "path": path,
+              "name": project_path.stem,
+              "target_framework": properties.get("TargetFramework"),
+              "output_type": properties.get("OutputType"),
+              "use_winui": properties.get("UseWinUI") == "true",
+              "runtime_identifiers": properties.get("RuntimeIdentifiers"),
+              "application_icon": properties.get("ApplicationIcon"),
+              "package_references": packages,
+              "project_references": project_refs,
+          }
+
+
+      def parse_slnx():
+          root = ET.parse(rel("openclaw-windows-node.slnx")).getroot()
+          projects = []
+          for project in root.iter("Project"):
+              path = project.attrib.get("Path")
+              if path:
+                  projects.append(path)
+          return {
+              "project_count": len(projects),
+              "source_project_count": sum(1 for path in projects if path.startswith("src/")),
+              "test_project_count": sum(1 for path in projects if path.startswith("tests/")),
+              "projects": projects,
+          }
+
+
+      def command_catalog():
+          bridge = read_text("src/OpenClaw.Shared/Mcp/McpToolBridge.cs")
+          skill = read_text("src/OpenClaw.WinNode.Cli/skill.md")
+          bridge_commands = sorted(set(re.findall(r'\["([a-z][a-z0-9]*\.[A-Za-z0-9_.]+)"\]\s*=', bridge)))
+          skill_commands = sorted(set(re.findall(r"^### ([a-z][a-z0-9]*\.[A-Za-z0-9_.]+)\s*$", skill, re.MULTILINE)))
+          by_category = {}
+          for command in bridge_commands:
+              by_category.setdefault(command.split(".", 1)[0], []).append(command)
+          return {
+              "mcp_bridge_commands": bridge_commands,
+              "skill_reference_commands": skill_commands,
+              "command_count": len(bridge_commands),
+              "skill_reference_matches_bridge": bridge_commands == skill_commands,
+              "by_category": by_category,
+          }
+
+
+      def image_info(path):
+          data = rel(path).read_bytes()
+          if data.startswith(b"\x89PNG\r\n\x1a\n") and len(data) >= 24:
+              width = int.from_bytes(data[16:20], "big")
+              height = int.from_bytes(data[20:24], "big")
+              return {"path": path, "format": "png", "width": width, "height": height, "bytes": len(data)}
+          return {"path": path, "format": "unknown", "bytes": len(data)}
+
+
+      def inspect_source():
+          state = ensure_source()
+          missing = [path for path in REQUIRED_FILES if not rel(path).is_file()]
+          package_json = read_json("package.json")
+          global_json = read_json("global.json")
+          slnx = parse_slnx()
+          key_projects = [
+              parse_csproj("src/OpenClaw.Tray.WinUI/OpenClaw.Tray.WinUI.csproj"),
+              parse_csproj("src/OpenClaw.WinNode.Cli/OpenClaw.WinNode.Cli.csproj"),
+              parse_csproj("src/OpenClaw.Cli/OpenClaw.Cli.csproj"),
+              parse_csproj("src/OpenClaw.Shared/OpenClaw.Shared.csproj"),
+              parse_csproj("src/OpenClaw.Connection/OpenClaw.Connection.csproj"),
+          ]
+          commands = command_catalog()
+          capability_files = sorted(
+              path.name
+              for path in (SOURCE_DIR / "src/OpenClaw.Shared/Capabilities").glob("*.cs")
+              if path.is_file()
+          )
+          windows_only = any(
+              project["use_winui"] or (project["target_framework"] and "-windows" in project["target_framework"])
+              for project in key_projects
+          )
+
+          return {
+              "ok": not missing and commands["command_count"] > 0,
+              "missing_required_files": missing,
+              "source": state,
+              "upstream": UPSTREAM,
+              "package_json": {
+                  "name": package_json.get("name"),
+                  "version": package_json.get("version"),
+                  "private": package_json.get("private"),
+                  "description": package_json.get("description"),
+                  "dependencies": package_json.get("dependencies", {}),
+              },
+              "dotnet_sdk": global_json.get("sdk", {}),
+              "solution": slnx,
+              "key_projects": key_projects,
+              "commands": commands,
+              "capability_files": capability_files,
+              "icon_asset": image_info("src/OpenClaw.Tray.WinUI/Assets/Square44x44Logo.targetsize-256_altform-unplated.png"),
+              "runtime_classification": {
+                  "windows_desktop_suite": windows_only,
+                  "linux_container_runs_desktop_app": False,
+                  "source_verifier_only": True,
+              },
+          }
+
+
+      def base_payload():
+          try:
+              source = inspect_source()
+          except Exception as exc:
+              source = {
+                  "ok": False,
+                  "error": f"{type(exc).__name__}: {exc}",
+                  "upstream": UPSTREAM,
+              }
+          return {
+              "ok": source.get("ok", False),
+              "status": "ready" if source.get("ok", False) else "unhealthy",
+              "service": "openclaw-windows-node-source-verifier",
+              "upstream": UPSTREAM,
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "cpu_only": True,
+              "credentials_required": False,
+              "gateway_contacted": False,
+              "mcp_server_started": False,
+              "windows_desktop_started": False,
+              "llm_provider_calls": False,
+              "model_downloaded": False,
+              "source": source,
+          }
+
+
+      def demo_payload(payload):
+          source = payload["source"]
+          commands = source.get("commands", {})
+          key_projects = source.get("key_projects", [])
+          package_info = source.get("package_json", {})
+
+          return {
+              **payload,
+              "demo": {
+                  "check": "Downloaded upstream source and inspected deterministic project metadata.",
+                  "upstream_source_ref": source.get("source", {}).get("source_ref"),
+                  "dotnet_sdk": source.get("dotnet_sdk"),
+                  "root_package": {
+                      "name": package_info.get("name"),
+                      "dependencies": package_info.get("dependencies"),
+                  },
+                  "solution": {
+                      "source_project_count": source.get("solution", {}).get("source_project_count"),
+                      "test_project_count": source.get("solution", {}).get("test_project_count"),
+                  },
+                  "project_targets": [
+                      {
+                          "name": project["name"],
+                          "target_framework": project["target_framework"],
+                          "use_winui": project["use_winui"],
+                          "runtime_identifiers": project["runtime_identifiers"],
+                      }
+                      for project in key_projects
+                  ],
+                  "node_command_catalog": {
+                      "command_count": commands.get("command_count"),
+                      "skill_reference_matches_bridge": commands.get("skill_reference_matches_bridge"),
+                      "by_category": commands.get("by_category"),
+                  },
+                  "production_runtime": "Windows 10/11 desktop companion; this Linux container is a verifier only.",
+              },
+          }
+
+
+      def upstream_payload(payload):
+          source = payload["source"]
+          return {
+              "ok": payload["ok"],
+              "upstream": UPSTREAM,
+              "inspected_ref": source.get("source", {}).get("source_ref"),
+              "docs": {
+                  "readme": f"{UPSTREAM}/blob/master/README.md",
+                  "setup": f"{UPSTREAM}/blob/master/docs/SETUP.md",
+                  "mcp_mode": f"{UPSTREAM}/blob/master/docs/MCP_MODE.md",
+                  "windows_node_architecture": f"{UPSTREAM}/blob/master/docs/WINDOWS_NODE_ARCHITECTURE.md",
+              },
+              "default_template_behavior": {
+                  "credentials_required": False,
+                  "gateway_contacted": False,
+                  "desktop_started": False,
+                  "model_provider_calls": False,
+                  "model_downloads": False,
+              },
+              "production_notes": [
+                  "Use the upstream Windows installer or build on Windows for the tray, WinUI, WebView2, camera, screen, notification, and local MCP features.",
+                  "Real gateway operation requires OpenClaw gateway configuration, pairing, and token/setup-code handling outside this no-secret verifier.",
+                  "The root package.json dependency on @microsoft/mxc-sdk is build support for the Windows tray output, not a Linux web server.",
+              ],
+          }
+
+
+      def models_payload(payload):
+          source = payload["source"]
+          return {
+              "object": "list",
+              "data": [
+                  {
+                      "id": "openclaw-windows-node/source-verifier",
+                      "object": "model",
+                      "created": 0,
+                      "owned_by": "openclaw",
+                      "description": "Local source verifier for the OpenClaw Windows companion suite. It does not host or call an LLM.",
+                  }
+              ],
+              "service": payload["service"],
+              "llm_provider_calls": False,
+              "model_downloaded": False,
+              "command_count": source.get("commands", {}).get("command_count"),
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "openclaw-windows-node-verifier"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def write_json(self, status, payload):
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+              payload = base_payload()
+
+              if path in ("/", "/healthz"):
+                  self.write_json(HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload)
+                  return
+
+              if path == "/demo":
+                  self.write_json(HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE, demo_payload(payload))
+                  return
+
+              if path == "/v1/models":
+                  self.write_json(HTTPStatus.OK, models_payload(payload))
+                  return
+
+              if path == "/upstream":
+                  self.write_json(HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE, upstream_payload(payload))
+                  return
+
+              self.write_json(
+                  HTTPStatus.NOT_FOUND,
+                  {"ok": False, "error": "not_found", "endpoints": ["/healthz", "/demo", "/v1/models", "/upstream"]},
+              )
+
+
+      def main():
+          port = int(os.environ.get("APP_PORT", "8080"))
+          log("startup", port=port, ref=current_ref(), upstream=UPSTREAM)
+          try:
+              ensure_source()
+          except Exception as exc:
+              log("source_bootstrap_failed", error=f"{type(exc).__name__}: {exc}")
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+
+
+      if __name__ == "__main__":
+          main()
+
+volumes:
+  openclaw_windows_node_source:

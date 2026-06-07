@@ -5400,5 +5400,33 @@
       "diskSize": 20
     },
     "tags": ["AI Agents", "Developer Tools"]
+  },
+{
+    "id": "openclaw-windows-node",
+    "name": "openclaw/openclaw-windows-node",
+    "description": "Windows companion suite for OpenClaw - System Tray app, Shared library, Node, and PowerToys Command Palette extension",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/openclaw-windows-node",
+    "author": "openclaw",
+    "icon": "openclaw-windows-node.png",
+    "envs": [
+      {
+        "key": "OPENCLAW_WINDOWS_NODE_REF",
+        "required": false,
+        "default": "4be005707f44f2b77d70e9ad83e2aecb878a5585",
+        "description": "Upstream git branch, tag, or commit downloaded from openclaw/openclaw-windows-node at startup. Defaults to the upstream master HEAD inspected for this template."
+      },
+      {
+        "key": "APP_PORT",
+        "required": false,
+        "default": "8080",
+        "description": "HTTP port listened on inside the verifier container."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools", "Automation"]
   }
 ]
