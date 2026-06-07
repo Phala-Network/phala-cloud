@@ -5484,5 +5484,33 @@
       "diskSize": 10
     },
     "tags": ["Developer Tools", "Starter Kits"]
-  }
+  },
+{
+  "id": "copilot-sdk",
+  "name": "github/copilot-sdk",
+  "description": "Multi-platform SDK for integrating GitHub Copilot Agent into apps and services",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/copilot-sdk",
+  "author": "GitHub",
+  "icon": "copilot-sdk.png",
+  "envs": [
+    {
+      "key": "COPILOT_SDK_PYTHON_VERSION",
+      "required": false,
+      "description": "Published github-copilot-sdk Python package version installed by the verifier at container startup.",
+      "default": "1.0.0"
+    },
+    {
+      "key": "COPILOT_SDK_DEMO_TOPIC",
+      "required": false,
+      "description": "Default topic returned by the deterministic local verifier endpoint.",
+      "default": "Phala Cloud Copilot SDK verifier"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 2048,
+    "diskSize": 10
+  },
+  "tags": ["AI Agents", "Developer Tools"]
+}
 ]
