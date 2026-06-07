@@ -1,0 +1,393 @@
+services:
+  hermes-desktop:
+    image: python:3.11-slim-bookworm
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: ${PORT:-8080}
+      HERMES_DESKTOP_REF: ${HERMES_DESKTOP_REF:-2c2ee24928fa017971ee057c36870be508578cb0}
+      PYTHONUNBUFFERED: "1"
+    configs:
+      - source: hermes_desktop_server
+        target: /server.py
+    command:
+      - python
+      - /server.py
+    cap_drop:
+      - NET_RAW
+      - NET_ADMIN
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('PORT', '8080') + '/healthz', timeout=5).read()\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+configs:
+  hermes_desktop_server:
+    content: |
+      import hashlib
+      import io
+      import json
+      import os
+      import platform
+      import re
+      import shutil
+      import sys
+      import tarfile
+      import time
+      import urllib.parse
+      import urllib.request
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path
+
+      STARTED_AT = time.time()
+      TEMPLATE_ID = "hermes-desktop"
+      UPSTREAM = "https://github.com/fathah/hermes-desktop"
+      DEFAULT_REF = "2c2ee24928fa017971ee057c36870be508578cb0"
+      SOURCE_REF = os.environ.get("HERMES_DESKTOP_REF", DEFAULT_REF).strip() or DEFAULT_REF
+      SOURCE_ROOT = Path("/tmp/hermes-desktop-source")
+      MAX_TARBALL_BYTES = 25 * 1024 * 1024
+      ENDPOINTS = ["/healthz", "/demo", "/v1/models"]
+
+      REQUIRED_FILES = [
+          "README.md",
+          "docs/SSH-TUNNEL-VPS.md",
+          "package.json",
+          "electron-builder.yml",
+          "electron.vite.config.ts",
+          "src/main/installer.ts",
+          "src/main/config.ts",
+          "src/main/hermes.ts",
+          "src/main/ssh-tunnel.ts",
+          "src/main/sse-parser.ts",
+          "src/shared/url-key-map.ts",
+          "resources/icon.png",
+      ]
+
+      def request_bytes(url):
+          request = urllib.request.Request(
+              url,
+              headers={
+                  "Accept": "application/vnd.github+json",
+                  "User-Agent": "phala-cloud-hermes-desktop-template",
+              },
+          )
+          with urllib.request.urlopen(request, timeout=45) as response:
+              data = response.read(MAX_TARBALL_BYTES + 1)
+          if len(data) > MAX_TARBALL_BYTES:
+              raise RuntimeError("upstream tarball is larger than the configured safety limit")
+          return data
+
+      def safe_extract_tarball(data, destination):
+          if destination.exists():
+              shutil.rmtree(destination)
+          destination.mkdir(parents=True, exist_ok=True)
+          with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+              members = archive.getmembers()
+              if not members:
+                  raise RuntimeError("upstream tarball was empty")
+              top_level = members[0].name.split("/", 1)[0]
+              for member in members:
+                  target = destination / member.name
+                  resolved = target.resolve()
+                  if not str(resolved).startswith(str(destination.resolve()) + os.sep):
+                      raise RuntimeError(f"unsafe tarball path: {member.name}")
+                  if member.isdev():
+                      raise RuntimeError(f"unsupported tarball device entry: {member.name}")
+              for member in members:
+                  if member.issym() or member.islnk():
+                      continue
+                  archive.extract(member, destination)
+          source = destination / top_level
+          if not source.is_dir():
+              raise RuntimeError("could not locate extracted upstream source root")
+          return source
+
+      def read_text(source, relative_path):
+          return source.joinpath(relative_path).read_text(encoding="utf-8", errors="replace")
+
+      def file_digest(path):
+          data = path.read_bytes()
+          return {"bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+
+      def marker(name, ok, detail=None):
+          item = {"name": name, "ok": bool(ok)}
+          if detail is not None:
+              item["detail"] = detail
+          return item
+
+      def package_summary(package_json):
+          dependencies = package_json.get("dependencies", {})
+          dev_dependencies = package_json.get("devDependencies", {})
+          scripts = package_json.get("scripts", {})
+          return {
+              "name": package_json.get("name"),
+              "version": package_json.get("version"),
+              "description": package_json.get("description"),
+              "author": package_json.get("author"),
+              "homepage": package_json.get("homepage"),
+              "main": package_json.get("main"),
+              "scripts_checked": {
+                  key: scripts.get(key)
+                  for key in ["dev", "build", "start", "test", "typecheck", "build:linux"]
+                  if key in scripts
+              },
+              "runtime_dependencies": {
+                  key: dependencies.get(key)
+                  for key in [
+                      "@electron-toolkit/preload",
+                      "@electron-toolkit/utils",
+                      "better-sqlite3",
+                      "electron-updater",
+                      "react",
+                      "react-dom",
+                      "three",
+                  ]
+                  if key in dependencies
+              },
+              "dev_dependencies": {
+                  key: dev_dependencies.get(key)
+                  for key in ["electron", "electron-builder", "electron-vite", "typescript", "vite", "vitest"]
+                  if key in dev_dependencies
+              },
+          }
+
+      def build_source_check():
+          encoded_ref = urllib.parse.quote(SOURCE_REF, safe="")
+          tarball_url = f"https://api.github.com/repos/fathah/hermes-desktop/tarball/{encoded_ref}"
+          data = request_bytes(tarball_url)
+          source = safe_extract_tarball(data, SOURCE_ROOT)
+
+          files = []
+          errors = []
+          for relative_path in REQUIRED_FILES:
+              path = source / relative_path
+              present = path.is_file()
+              item = {"path": relative_path, "present": present}
+              if present:
+                  item.update(file_digest(path))
+              else:
+                  errors.append({"path": relative_path, "error": "missing required upstream file"})
+              files.append(item)
+
+          package_json = json.loads(read_text(source, "package.json"))
+          readme = read_text(source, "README.md")
+          tunnel_doc = read_text(source, "docs/SSH-TUNNEL-VPS.md")
+          installer = read_text(source, "src/main/installer.ts")
+          config = read_text(source, "src/main/config.ts")
+          hermes = read_text(source, "src/main/hermes.ts")
+          ssh_tunnel = read_text(source, "src/main/ssh-tunnel.ts")
+          sse_parser = read_text(source, "src/main/sse-parser.ts")
+          url_key_map = read_text(source, "src/shared/url-key-map.ts")
+          electron_builder = read_text(source, "electron-builder.yml")
+
+          provider_names = sorted(set(re.findall(r'envKey: "([A-Z0-9_]+)"', url_key_map)))
+          platform_names = sorted(set(re.findall(r"^\s{2}([a-z_]+): \{", config, flags=re.MULTILINE)))
+          slash_commands = sorted(set(re.findall(r"`/([a-z-]+)`", readme)))
+
+          content_checks = [
+              marker("package_name_is_hermes_desktop", package_json.get("name") == "hermes-desktop"),
+              marker("package_has_electron_main", package_json.get("main") == "./out/main/index.js"),
+              marker("package_build_uses_electron_vite", "electron-vite build" in package_json.get("scripts", {}).get("build", "")),
+              marker("package_has_electron_dependency", "electron" in package_json.get("devDependencies", {})),
+              marker("package_has_react_dependency", "react" in package_json.get("dependencies", {}) or "react" in package_json.get("devDependencies", {})),
+              marker("package_has_better_sqlite_dependency", "better-sqlite3" in package_json.get("dependencies", {})),
+              marker("readme_describes_desktop_companion", "native desktop app" in readme and "Hermes Agent" in readme),
+              marker("readme_documents_local_and_remote_modes", "Local mode" in readme and "Remote mode" in readme),
+              marker("readme_mentions_remote_backend_port", "127.0.0.1:8642" in readme),
+              marker("readme_lists_supported_providers", "OpenRouter" in readme and "Anthropic" in readme and "OpenAI" in readme),
+              marker("ssh_doc_documents_plain_remote_mode", "Remote (HTTP + API key)" in tunnel_doc),
+              marker("ssh_doc_documents_tunnel_mode", "SSH Tunnel" in tunnel_doc and "BatchMode=yes" in tunnel_doc),
+              marker("installer_uses_official_hermes_install_script", "raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh" in installer),
+              marker("installer_defines_hermes_home", "export const HERMES_HOME" in installer),
+              marker("config_supports_local_remote_ssh_modes", 'mode: "local" | "remote" | "ssh"' in config),
+              marker("hermes_runtime_streams_chat_completions", "/v1/chat/completions" in hermes and "stream: true" in hermes),
+              marker("ssh_tunnel_forwards_hermes_api_port", "127.0.0.1:" in ssh_tunnel and "config.remotePort" in ssh_tunnel and "8642" in ssh_tunnel),
+              marker("sse_parser_present", "parseSseStream" in sse_parser or "SSE" in sse_parser),
+              marker("url_key_map_has_custom_api_key_fallback", "CUSTOM_API_KEY" in url_key_map),
+              marker("electron_builder_linux_targets_present", "AppImage" in electron_builder and "deb" in electron_builder and "rpm" in electron_builder),
+              marker("upstream_icon_present", source.joinpath("resources/icon.png").is_file()),
+          ]
+
+          for item in content_checks:
+              if not item["ok"]:
+                  errors.append({"check": item["name"], "error": "expected upstream marker was not found"})
+
+          icon_info = file_digest(source / "resources/icon.png")
+          return {
+              "ok": not errors,
+              "template_id": TEMPLATE_ID,
+              "upstream": UPSTREAM,
+              "source_ref": SOURCE_REF,
+              "source_ref_is_default": SOURCE_REF == DEFAULT_REF,
+              "source_artifact": tarball_url,
+              "tarball_bytes": len(data),
+              "source_path": str(source),
+              "checked_at": int(time.time()),
+              "package": package_summary(package_json),
+              "files": files,
+              "content_checks": content_checks,
+              "counts": {
+                  "provider_key_mappings": len(provider_names),
+                  "messaging_platform_rules": len(platform_names),
+                  "slash_commands_seen_in_readme": len(slash_commands),
+              },
+              "provider_key_mappings": provider_names,
+              "messaging_platform_rules": platform_names,
+              "readme_slash_commands": slash_commands,
+              "icon": {
+                  "source": "resources/icon.png",
+                  **icon_info,
+              },
+              "production_runtime": {
+                  "desktop_app": True,
+                  "headless_server": False,
+                  "uses_hermes_agent_api": True,
+                  "default_hermes_api_port": 8642,
+                  "remote_modes": ["remote_http_api_key", "ssh_tunnel"],
+              },
+              "safety": {
+                  "cpu_only": True,
+                  "provider_calls_performed": False,
+                  "browser_auth_performed": False,
+                  "model_weights_downloaded": False,
+                  "electron_gui_started": False,
+                  "hermes_installer_run": False,
+                  "credentials_required_for_default_demo": False,
+              },
+              "errors": errors,
+          }
+
+      try:
+          SOURCE_CHECK = build_source_check()
+      except Exception as exc:
+          SOURCE_CHECK = {
+              "ok": False,
+              "template_id": TEMPLATE_ID,
+              "upstream": UPSTREAM,
+              "source_ref": SOURCE_REF,
+              "checked_at": int(time.time()),
+              "errors": [{"error": f"{type(exc).__name__}: {exc}"}],
+          }
+          print("Hermes Desktop source verification failed: " + repr(exc), file=sys.stderr, flush=True)
+
+      def base_payload():
+          return {
+              "ok": SOURCE_CHECK["ok"],
+              "status": "ready" if SOURCE_CHECK["ok"] else "source_check_failed",
+              "service": "hermes-desktop-source-verifier",
+              "template_id": TEMPLATE_ID,
+              "upstream": UPSTREAM,
+              "source_ref": SOURCE_REF,
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "endpoints": ENDPOINTS,
+              "source_check": SOURCE_CHECK,
+          }
+
+      def write_json(response, status, payload):
+          body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+          response.send_response(status)
+          response.send_header("Content-Type", "application/json; charset=utf-8")
+          response.send_header("Content-Length", str(len(body)))
+          response.send_header("Cache-Control", "no-store")
+          response.end_headers()
+          response.wfile.write(body)
+
+      def models_payload():
+          package = SOURCE_CHECK.get("package", {})
+          return {
+              "object": "list",
+              "data": [
+                  {
+                      "id": "hermes-desktop/source-verifier",
+                      "object": "model",
+                      "created": SOURCE_CHECK.get("checked_at", 0),
+                      "owned_by": "fathah",
+                      "description": (
+                          "Metadata-only Hermes Desktop source verifier. "
+                          "No model is hosted, downloaded, or called."
+                      ),
+                  }
+              ],
+              "service": "hermes-desktop-source-verifier",
+              "source_ok": SOURCE_CHECK.get("ok", False),
+              "source_ref": SOURCE_REF,
+              "upstream": UPSTREAM,
+              "package_name": package.get("name"),
+              "package_version": package.get("version"),
+              "hosted_llm_calls_performed": False,
+              "model_weights_downloaded": False,
+          }
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "hermes-desktop-source-verifier/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def do_GET(self):
+              path = urllib.parse.urlparse(self.path).path
+              status = HTTPStatus.OK if SOURCE_CHECK["ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+
+              if path in ("", "/"):
+                  write_json(self, status, base_payload())
+                  return
+
+              if path == "/healthz":
+                  write_json(
+                      self,
+                      status,
+                      {
+                          "ok": SOURCE_CHECK["ok"],
+                          "status": "ready" if SOURCE_CHECK["ok"] else "source_check_failed",
+                          "service": "hermes-desktop-source-verifier",
+                          "source_ref": SOURCE_REF,
+                          "upstream": UPSTREAM,
+                      },
+                  )
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  payload["demo"] = {
+                      "description": "CPU-safe source artifact verifier for the Hermes Desktop Electron app.",
+                      "what_was_exercised": [
+                          "downloaded the real upstream GitHub source tarball",
+                          "parsed upstream package metadata",
+                          "verified desktop, installer, remote API, SSH tunnel, streaming, provider, and packaging source markers",
+                          "reported upstream icon metadata",
+                      ],
+                      "what_was_not_started": [
+                          "Electron GUI",
+                          "Hermes Agent installer",
+                          "Hermes Agent gateway",
+                          "provider APIs",
+                          "browser authentication",
+                          "model downloads",
+                      ],
+                  }
+                  write_json(self, status, payload)
+                  return
+
+              if path == "/v1/models":
+                  write_json(self, status, models_payload())
+                  return
+
+              write_json(self, HTTPStatus.NOT_FOUND, {"ok": False, "error": "not_found", "endpoints": ENDPOINTS})
+
+      port = int(os.environ.get("PORT", "8080"))
+      server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+      print(f"Hermes Desktop source verifier listening on 0.0.0.0:{port}", flush=True)
+      server.serve_forever()

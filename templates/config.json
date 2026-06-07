@@ -5658,5 +5658,27 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools"]
+  },
+{
+    "id": "hermes-desktop",
+    "name": "fathah/hermes-desktop",
+    "description": "Desktop Companion for Hermes Agent",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/hermes-desktop",
+    "author": "fathah",
+    "icon": "hermes-desktop.png",
+    "envs": [
+      {
+        "key": "HERMES_DESKTOP_REF",
+        "required": false,
+        "default": "2c2ee24928fa017971ee057c36870be508578cb0",
+        "description": "Upstream fathah/hermes-desktop git ref downloaded from the GitHub source tarball API at startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools"]
   }
 ]
