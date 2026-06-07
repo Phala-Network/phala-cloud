@@ -1,0 +1,410 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8000"
+    environment:
+      AGENT_REACH_REF: ${AGENT_REACH_REF:-17624268a059ccfb23eba8a2ba50f9f92c8dc0ca}
+      AGENT_REACH_SOURCE_DIR: /opt/agent-reach-source
+      APP_PORT: ${APP_PORT:-8000}
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+      PIP_ROOT_USER_ACTION: ignore
+      PYTHONUNBUFFERED: "1"
+      UV_SYSTEM_PYTHON: "1"
+    configs:
+      - source: agent_reach_demo_app
+        target: /opt/agent-reach-demo/server.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache requests feedparser python-dotenv loguru pyyaml rich yt-dlp
+        python - <<'PY'
+        import os
+        import pathlib
+        import shutil
+        import urllib.request
+        import zipfile
+
+        ref = os.environ["AGENT_REACH_REF"]
+        source_dir = pathlib.Path(os.environ["AGENT_REACH_SOURCE_DIR"])
+        archive_path = pathlib.Path("/tmp/agent-reach.zip")
+        extract_root = pathlib.Path("/tmp/agent-reach-extract")
+        url = f"https://github.com/Panniantong/Agent-Reach/archive/{ref}.zip"
+
+        shutil.rmtree(source_dir, ignore_errors=True)
+        shutil.rmtree(extract_root, ignore_errors=True)
+        extract_root.mkdir(parents=True, exist_ok=True)
+        urllib.request.urlretrieve(url, archive_path)
+        with zipfile.ZipFile(archive_path) as archive:
+            archive.extractall(extract_root)
+        roots = [path for path in extract_root.iterdir() if path.is_dir()]
+        if len(roots) != 1:
+            raise RuntimeError(f"expected one archive root, found {len(roots)}")
+        shutil.move(str(roots[0]), source_dir)
+        PY
+        export PYTHONPATH="$${AGENT_REACH_SOURCE_DIR}$${PYTHONPATH:+:$${PYTHONPATH}}"
+        exec python /opt/agent-reach-demo/server.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8000'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+          reverse_proxy app:8000
+      }
+
+  agent_reach_demo_app:
+    content: |
+      import importlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import parse_qs, urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "agent-reach"
+      MODULE_NAME = "agent_reach"
+      UPSTREAM_REPO = "https://github.com/Panniantong/Agent-Reach"
+      SOURCE_DIR = os.environ.get("AGENT_REACH_SOURCE_DIR", "/opt/agent-reach-source")
+      DEFAULT_URLS = [
+          "https://github.com/Panniantong/Agent-Reach",
+          "https://x.com/Neo_Reidlab",
+          "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+          "https://example.com/feed.xml",
+          "https://example.com/article",
+      ]
+      MAX_URLS = 8
+
+
+      def package_version(name):
+          try:
+              return importlib.metadata.version(name)
+          except Exception as exc:
+              return None
+
+
+      def source_metadata():
+          result = {
+              "source_dir": SOURCE_DIR,
+              "pyproject_version": None,
+              "pyproject_name": None,
+              "pyproject_found": False,
+              "error": None,
+          }
+          try:
+              import tomllib
+
+              pyproject_path = os.path.join(SOURCE_DIR, "pyproject.toml")
+              with open(pyproject_path, "rb") as file:
+                  data = tomllib.load(file)
+              project = data.get("project", {})
+              result["pyproject_found"] = True
+              result["pyproject_name"] = project.get("name")
+              result["pyproject_version"] = project.get("version")
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      def import_checks():
+          result = {
+              "package": PACKAGE_NAME,
+              "distribution_version": None,
+              "source": source_metadata(),
+              "module_version": None,
+              "import_ok": False,
+              "symbols": {},
+              "channel_count": 0,
+              "channel_names": [],
+              "error": None,
+          }
+          try:
+              result["distribution_version"] = package_version(PACKAGE_NAME)
+              agent_reach = importlib.import_module(MODULE_NAME)
+              result["module_version"] = getattr(agent_reach, "__version__", None)
+
+              from agent_reach import AgentReach
+              from agent_reach.channels import get_all_channels, get_channel
+              from agent_reach.channels.base import Channel
+
+              result["symbols"] = {
+                  "AgentReach": AgentReach is not None,
+                  "Channel": Channel is not None,
+                  "get_all_channels": callable(get_all_channels),
+                  "get_channel": callable(get_channel),
+              }
+              channels = get_all_channels()
+              result["channel_count"] = len(channels)
+              result["channel_names"] = [ch.name for ch in channels]
+              result["import_ok"] = (
+                  bool(result["source"]["pyproject_version"])
+                  and bool(result["module_version"])
+                  and all(result["symbols"].values())
+                  and result["channel_count"] >= 10
+              )
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      IMPORT_STATUS = import_checks()
+
+
+      def normalize_urls(values):
+          urls = []
+          for value in values:
+              for item in value.split(","):
+                  candidate = item.strip()
+                  if candidate:
+                      urls.append(candidate)
+          return urls[:MAX_URLS] or list(DEFAULT_URLS)
+
+
+      def run_local_demo(urls):
+          if not IMPORT_STATUS["import_ok"]:
+              raise RuntimeError(IMPORT_STATUS["error"] or "Agent Reach import check failed")
+
+          from agent_reach import AgentReach
+          from agent_reach.channels import get_all_channels, get_channel
+          from agent_reach.channels.rss import RSSChannel
+          from agent_reach.channels.web import WebChannel
+
+          reach = AgentReach()
+          channels = get_all_channels()
+          classifications = []
+          for url in urls:
+              matches = [ch.name for ch in channels if ch.can_handle(url)]
+              classifications.append(
+                  {
+                      "url": url,
+                      "matching_channels": matches,
+                      "primary_match": next((name for name in matches if name != "web"), "web"),
+                  }
+              )
+
+          web_status, web_message = WebChannel().check(reach.config)
+          rss_status, rss_message = RSSChannel().check(reach.config)
+          twitter_channel = get_channel("twitter")
+
+          return {
+              "ok": True,
+              "demo_type": "deterministic local Agent Reach channel primitives",
+              "input_urls": urls,
+              "classifications": classifications,
+              "local_checks": {
+                  "web": {"status": web_status, "message": web_message},
+                  "rss": {"status": rss_status, "message": rss_message},
+              },
+              "channel_registry": {
+                  "count": len(channels),
+                  "names": [ch.name for ch in channels],
+                  "twitter_backends": twitter_channel.backends if twitter_channel else [],
+              },
+              "agent_class": type(reach).__name__,
+              "llm_provider_calls": False,
+              "hosted_model_calls": False,
+              "model_downloaded": False,
+              "model_loaded": False,
+              "credentials_required": False,
+              "browser_automation": False,
+              "platform_network_calls": False,
+              "installer_ran": False,
+          }
+
+
+      def demo_result(urls):
+          try:
+              return run_local_demo(urls)
+          except Exception as exc:
+              return {
+                  "ok": False,
+                  "error": f"{type(exc).__name__}: {exc}",
+                  "llm_provider_calls": False,
+                  "hosted_model_calls": False,
+                  "model_downloaded": False,
+                  "model_loaded": False,
+                  "credentials_required": False,
+              }
+
+
+      def base_payload():
+          return {
+              "service": "agent-reach-demo",
+              "upstream": UPSTREAM_REPO,
+              "source_ref": os.environ.get("AGENT_REACH_REF", ""),
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "agent_reach": IMPORT_STATUS,
+          }
+
+
+      def response_body(path, query):
+          if path == "/healthz":
+              demo = demo_result(list(DEFAULT_URLS))
+              ok = IMPORT_STATUS["import_ok"] and demo["ok"]
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": ok,
+                      "status": "ready" if ok else "unhealthy",
+                      "demo_ok": demo["ok"],
+                      "cpu_only": True,
+                      "credential_free": True,
+                      "llm_provider_calls": False,
+                      "browser_automation": False,
+                  }
+              )
+              if not demo["ok"]:
+                  payload["demo_error"] = demo.get("error")
+              return HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/demo":
+              urls = normalize_urls(query.get("url", []))
+              demo = demo_result(urls)
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": IMPORT_STATUS["import_ok"] and demo["ok"],
+                      "cpu_only": True,
+                      "credential_free": True,
+                      "remote_platform_calls": False,
+                      "demo": demo,
+                  }
+              )
+              return HTTPStatus.OK if payload["ok"] else HTTPStatus.INTERNAL_SERVER_ERROR, payload
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "agent-reach-local-verifier",
+                          "object": "model",
+                          "created": 1712963143,
+                          "owned_by": "Panniantong",
+                          "description": (
+                              "Metadata endpoint for the Agent Reach local verifier. "
+                              "No LLM is hosted or called by this template."
+                          ),
+                      }
+                  ],
+                  "agent_reach": {
+                      "distribution_version": IMPORT_STATUS["distribution_version"],
+                      "source_version": IMPORT_STATUS["source"]["pyproject_version"],
+                      "module_version": IMPORT_STATUS["module_version"],
+                      "source_ref": os.environ.get("AGENT_REACH_REF", ""),
+                  },
+              }
+
+          if path == "/":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": IMPORT_STATUS["import_ok"],
+                      "endpoints": ["/healthz", "/demo", "/v1/models"],
+                      "description": (
+                          "CPU-safe Agent Reach verifier. It imports local package "
+                          "and channel primitives without running the upstream installer."
+                      ),
+                  }
+              )
+              return HTTPStatus.OK, payload
+
+          return HTTPStatus.NOT_FOUND, {
+              "ok": False,
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "agent-reach-demo"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              parsed = urlparse(self.path)
+              path = parsed.path.rstrip("/") or "/"
+              status, payload = response_body(path, parse_qs(parsed.query))
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8000"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "agent_reach": IMPORT_STATUS,
+                      "llm_provider_calls": False,
+                      "browser_automation": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+
+networks:
+  internal:
+    driver: bridge
