@@ -5608,5 +5608,33 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Media & Design", "Web Apps"]
-  }
+  },
+{
+  "id": "voxcpm",
+  "name": "OpenBMB/VoxCPM",
+  "description": "VoxCPM2: Tokenizer-Free TTS for Multilingual Speech Generation, Creative Voice Design, and True-to-Life Cloning",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/voxcpm",
+  "author": "OpenBMB",
+  "icon": "voxcpm.png",
+  "envs": [
+    {
+      "key": "VOXCPM_PACKAGE_VERSION",
+      "required": false,
+      "default": "2.0.3",
+      "description": "Pinned VoxCPM Python package version installed by the verifier service at startup."
+    },
+    {
+      "key": "VOXCPM_DEMO_TEXT",
+      "required": false,
+      "default": "VoxCPM2 package verifier running on Phala Cloud",
+      "description": "Text returned by the /demo endpoint as verifier metadata. It is not synthesized into audio by default."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": ["Media & Design", "Developer Tools", "AI Agents"]
+}
 ]
