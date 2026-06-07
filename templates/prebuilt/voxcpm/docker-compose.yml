@@ -1,0 +1,365 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8000"
+    environment:
+      APP_PORT: "8000"
+      VOXCPM_PACKAGE_VERSION: ${VOXCPM_PACKAGE_VERSION:-2.0.3}
+      VOXCPM_DEMO_TEXT: ${VOXCPM_DEMO_TEXT:-VoxCPM2 package verifier running on Phala Cloud}
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+      PYTHONUNBUFFERED: "1"
+      UV_SYSTEM_PYTHON: "1"
+    configs:
+      - source: voxcpm_demo_app
+        target: /opt/voxcpm-demo/main.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache --no-deps "voxcpm==$${VOXCPM_PACKAGE_VERSION}"
+        exec python /opt/voxcpm-demo/main.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8000'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+          reverse_proxy app:8000
+      }
+
+  voxcpm_demo_app:
+    content: |
+      import ast
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import re
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "voxcpm"
+      UPSTREAM_REPO = "https://github.com/OpenBMB/VoxCPM"
+      UPSTREAM_DOCS = "https://voxcpm.readthedocs.io/en/latest/"
+      DEFAULT_MODEL_ID = "openbmb/VoxCPM2"
+
+
+      def read_dist_file(dist, suffix):
+          normalized_suffix = suffix.strip("/")
+          for package_path in dist.files or []:
+              path_text = str(package_path).replace("\\", "/")
+              if path_text.endswith(normalized_suffix):
+                  path = dist.locate_file(package_path)
+                  return path.read_text(encoding="utf-8"), str(path)
+          return None, None
+
+
+      def find_class_methods(source, class_name):
+          methods = []
+          tree = ast.parse(source)
+          for node in tree.body:
+              if isinstance(node, ast.ClassDef) and node.name == class_name:
+                  methods = [
+                      item.name
+                      for item in node.body
+                      if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+                  ]
+                  break
+          return methods
+
+
+      def find_cli_subcommands(source):
+          commands = set()
+          tree = ast.parse(source)
+          for node in ast.walk(tree):
+              if not isinstance(node, ast.Call):
+                  continue
+              func = node.func
+              if not (isinstance(func, ast.Attribute) and func.attr == "add_parser"):
+                  continue
+              if not node.args:
+                  continue
+              value = node.args[0]
+              if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                  commands.add(value.value)
+          return sorted(commands)
+
+
+      def package_status():
+          result = {
+              "package": PACKAGE_NAME,
+              "distribution_version": None,
+              "metadata_ok": False,
+              "source_ok": False,
+              "checks": {},
+              "requires": [],
+              "entry_points": [],
+              "files": {},
+              "error": None,
+          }
+          try:
+              dist = importlib.metadata.distribution(PACKAGE_NAME)
+              result["distribution_version"] = dist.version
+              result["summary"] = dist.metadata.get("Summary")
+              result["author"] = dist.metadata.get("Author") or dist.metadata.get("Author-email")
+              result["license"] = dist.metadata.get("License-Expression") or dist.metadata.get("License")
+              result["requires"] = list(dist.requires or [])
+              result["entry_points"] = [
+                  {"name": item.name, "value": item.value}
+                  for item in dist.entry_points
+              ]
+              result["metadata_ok"] = bool(result["distribution_version"])
+
+              init_source, init_path = read_dist_file(dist, "voxcpm/__init__.py")
+              core_source, core_path = read_dist_file(dist, "voxcpm/core.py")
+              cli_source, cli_path = read_dist_file(dist, "voxcpm/cli.py")
+              utils_source, utils_path = read_dist_file(dist, "voxcpm/model/utils.py")
+              result["files"] = {
+                  "voxcpm/__init__.py": bool(init_source),
+                  "voxcpm/core.py": bool(core_source),
+                  "voxcpm/cli.py": bool(cli_source),
+                  "voxcpm/model/utils.py": bool(utils_source),
+              }
+              result["file_paths"] = {
+                  "voxcpm/__init__.py": init_path,
+                  "voxcpm/core.py": core_path,
+                  "voxcpm/cli.py": cli_path,
+                  "voxcpm/model/utils.py": utils_path,
+              }
+
+              methods = find_class_methods(core_source, "VoxCPM") if core_source else []
+              cli_commands = find_cli_subcommands(cli_source) if cli_source else []
+              default_model_match = re.search(
+                  r'DEFAULT_HF_MODEL_ID\s*=\s*["\']([^"\']+)["\']',
+                  cli_source or "",
+              )
+              declared_dependencies = "\n".join(result["requires"])
+              result["checks"] = {
+                  "exports_voxcpm_class": "__all__" in (init_source or "") and "VoxCPM" in (init_source or ""),
+                  "has_voxcpm_class": bool(methods),
+                  "has_from_pretrained": "from_pretrained" in methods,
+                  "has_generate": "generate" in methods,
+                  "has_generate_streaming": "generate_streaming" in methods,
+                  "uses_huggingface_snapshot_download": "snapshot_download" in (core_source or ""),
+                  "declares_pytorch_dependency": "torch" in declared_dependencies,
+                  "declares_torchaudio_dependency": "torchaudio" in declared_dependencies,
+                  "declares_transformers_dependency": "transformers" in declared_dependencies,
+                  "declares_console_script": any(
+                      item["name"] == "voxcpm" and item["value"] == "voxcpm.cli:main"
+                      for item in result["entry_points"]
+                  ),
+                  "cli_subcommands": cli_commands,
+                  "default_hf_model_id": default_model_match.group(1) if default_model_match else None,
+                  "has_runtime_device_selection": "resolve_runtime_device" in (utils_source or ""),
+              }
+              required_checks = [
+                  "exports_voxcpm_class",
+                  "has_voxcpm_class",
+                  "has_from_pretrained",
+                  "has_generate",
+                  "has_generate_streaming",
+                  "uses_huggingface_snapshot_download",
+                  "declares_pytorch_dependency",
+                  "declares_torchaudio_dependency",
+                  "declares_transformers_dependency",
+                  "declares_console_script",
+                  "has_runtime_device_selection",
+              ]
+              result["source_ok"] = all(result["checks"].get(name) for name in required_checks)
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      PACKAGE_STATUS = package_status()
+
+
+      def service_info():
+          return {
+              "service": "voxcpm-source-verifier",
+              "upstream": UPSTREAM_REPO,
+              "docs": UPSTREAM_DOCS,
+              "package": PACKAGE_NAME,
+              "package_version": PACKAGE_STATUS.get("distribution_version"),
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+          }
+
+
+      def response_body(path):
+          ok = PACKAGE_STATUS["metadata_ok"] and PACKAGE_STATUS["source_ok"]
+          uptime_seconds = round(time.time() - STARTED_AT, 3)
+
+          if path == "/healthz":
+              payload = service_info()
+              payload.update({
+                  "status": "ok" if ok else "unhealthy",
+                  "artifact_verified": ok,
+                  "credentials_required": False,
+                  "model_downloaded": False,
+                  "model_loaded": False,
+                  "remote_model_calls": False,
+                  "package": PACKAGE_STATUS,
+              })
+              return HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/demo":
+              return HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE, {
+                  "name": "VoxCPM2 no-model package verifier",
+                  "description": (
+                      "Installs the real voxcpm package artifact and verifies the installed "
+                      "source shape without importing the PyTorch model stack or downloading weights."
+                  ),
+                  "demo_text": os.environ.get("VOXCPM_DEMO_TEXT", "VoxCPM2 package verifier running on Phala Cloud"),
+                  "artifact_verified": ok,
+                  "cpu_only": True,
+                  "credentials_required": False,
+                  "browser_auth_required": False,
+                  "model_downloaded": False,
+                  "model_loaded": False,
+                  "audio_generated": False,
+                  "remote_model_calls": False,
+                  "upstream_default_model": DEFAULT_MODEL_ID,
+                  "upstream_capabilities": [
+                      "multilingual text-to-speech",
+                      "voice design",
+                      "controllable voice cloning",
+                      "ultimate cloning with prompt audio and transcript",
+                      "streaming generation",
+                  ],
+                  "verifier_checks": PACKAGE_STATUS,
+                  "production_hint": (
+                      "Replace this verifier with the upstream app.py, Nano-vLLM-VoxCPM, "
+                      "or vLLM-Omni only after provisioning model storage, the PyTorch/audio "
+                      "runtime, and suitable CPU/GPU resources."
+                  ),
+                  "uptime_seconds": uptime_seconds,
+              }
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "voxcpm/package-source-verifier",
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "OpenBMB",
+                          "description": "No-model metadata endpoint for the Phala Cloud VoxCPM verifier.",
+                      },
+                      {
+                          "id": DEFAULT_MODEL_ID,
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "OpenBMB",
+                          "description": "Upstream VoxCPM2 Hugging Face model id; not loaded or downloaded by this template.",
+                      },
+                  ],
+                  "model_loaded": False,
+                  "model_downloaded": False,
+                  "package_version": PACKAGE_STATUS.get("distribution_version"),
+              }
+
+          if path == "/":
+              payload = service_info()
+              payload.update({
+                  "endpoints": ["/healthz", "/demo", "/v1/models"],
+                  "artifact_verified": ok,
+              })
+              return HTTPStatus.OK, payload
+
+          return HTTPStatus.NOT_FOUND, {
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "voxcpm-source-verifier"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+              status, payload = response_body(path)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8000"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "package": PACKAGE_STATUS,
+                      "model_downloaded": False,
+                      "model_loaded": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+
+networks:
+  internal:
+    driver: bridge
