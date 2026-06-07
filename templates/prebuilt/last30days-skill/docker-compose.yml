@@ -1,0 +1,458 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    restart: unless-stopped
+    init: true
+    user: "65532:65532"
+    ports:
+      - "8080:8000"
+    environment:
+      APP_PORT: ${APP_PORT:-8000}
+      LAST30DAYS_SOURCE_REF: ${LAST30DAYS_SOURCE_REF:-26da1e157cc83aba5b782fd3662627535e81bbc7}
+      LAST30DAYS_VERIFY_TIMEOUT_SECONDS: ${LAST30DAYS_VERIFY_TIMEOUT_SECONDS:-15}
+      LAST30DAYS_DEMO_TOPIC: ${LAST30DAYS_DEMO_TOPIC:-AI agent research across social sources}
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    configs:
+      - source: last30days_demo_app
+        target: /opt/last30days-demo/server.py
+        mode: 0444
+    command:
+      - python
+      - /opt/last30days-demo/server.py
+    working_dir: /tmp
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8000'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+configs:
+  last30days_demo_app:
+    content: |
+      import importlib
+      import json
+      import os
+      import platform
+      import shutil
+      import sys
+      import tarfile
+      import tempfile
+      import threading
+      import time
+      import urllib.request
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path
+      from urllib.parse import parse_qs, urlparse
+
+
+      STARTED_AT = time.time()
+      UPSTREAM_REPO = "https://github.com/mvanhorn/last30days-skill"
+      DEFAULT_REF = "26da1e157cc83aba5b782fd3662627535e81bbc7"
+      SOURCE_PARENT = Path("/tmp/last30days-source")
+      SOURCE_LOCK = threading.Lock()
+      SOURCE_STATUS = None
+      REDDIT_RSS_FIXTURE = """<?xml version="1.0" encoding="UTF-8"?>
+      <feed xmlns="http://www.w3.org/2005/Atom">
+        <entry>
+          <title>AI agent skill research workflow</title>
+          <link href="https://www.reddit.com/r/AI_Agents/comments/demo001/ai_agent_skill_research_workflow/" />
+          <category term="AI_Agents" />
+          <author><name>/u/phala_demo</name></author>
+          <updated>2026-05-28T12:00:00+00:00</updated>
+          <content type="html">A local verifier item for recent social research workflows.</content>
+        </entry>
+        <entry>
+          <title>Grounded summaries from Reddit and Hacker News</title>
+          <link href="https://www.reddit.com/r/LocalLLaMA/comments/demo002/grounded_summaries_from_reddit_and_hacker_news/" />
+          <category term="LocalLLaMA" />
+          <author><name>/u/source_checker</name></author>
+          <updated>2026-05-29T15:30:00+00:00</updated>
+          <content type="html">Fixture text parsed through the real upstream reddit_rss module.</content>
+        </entry>
+        <entry>
+          <title>Prediction markets as research signals</title>
+          <link href="https://www.reddit.com/r/predictionmarkets/comments/demo003/prediction_markets_as_research_signals/" />
+          <category term="predictionmarkets" />
+          <author><name>/u/odds_reader</name></author>
+          <updated>2026-05-30T09:15:00+00:00</updated>
+          <content type="html">Another deterministic item for the Phala Cloud smoke endpoint.</content>
+        </entry>
+      </feed>"""
+
+
+      def timeout_seconds():
+          try:
+              return max(5.0, float(os.environ.get("LAST30DAYS_VERIFY_TIMEOUT_SECONDS", "15")))
+          except ValueError:
+              return 15.0
+
+
+      def source_ref():
+          return os.environ.get("LAST30DAYS_SOURCE_REF", DEFAULT_REF).strip() or DEFAULT_REF
+
+
+      def source_url(ref):
+          return f"{UPSTREAM_REPO}/archive/{ref}.tar.gz"
+
+
+      def safe_extract(tar, destination):
+          destination = destination.resolve()
+          for member in tar.getmembers():
+              member_path = (destination / member.name).resolve()
+              if destination != member_path and destination not in member_path.parents:
+                  raise RuntimeError(f"unsafe archive member path: {member.name}")
+          tar.extractall(destination)
+
+
+      def download_source():
+          ref = source_ref()
+          archive_url = source_url(ref)
+          shutil.rmtree(SOURCE_PARENT, ignore_errors=True)
+          SOURCE_PARENT.mkdir(parents=True, exist_ok=True)
+
+          with tempfile.NamedTemporaryFile(dir=SOURCE_PARENT, suffix=".tar.gz", delete=False) as handle:
+              archive_path = Path(handle.name)
+              request = urllib.request.Request(
+                  archive_url,
+                  headers={"User-Agent": "phala-cloud-last30days-skill-template/1.0"},
+              )
+              with urllib.request.urlopen(request, timeout=timeout_seconds()) as response:
+                  shutil.copyfileobj(response, handle)
+
+          extract_dir = SOURCE_PARENT / "extract"
+          extract_dir.mkdir(parents=True, exist_ok=True)
+          with tarfile.open(archive_path, "r:gz") as tar:
+              safe_extract(tar, extract_dir)
+
+          candidates = [path for path in extract_dir.iterdir() if (path / "pyproject.toml").exists()]
+          if not candidates:
+              raise RuntimeError("upstream archive did not contain pyproject.toml")
+          root = candidates[0]
+          script_dir = root / "skills" / "last30days" / "scripts"
+          skill_md = root / "skills" / "last30days" / "SKILL.md"
+          for required in (script_dir, skill_md):
+              if not required.exists():
+                  raise RuntimeError(f"missing expected upstream path: {required.relative_to(root)}")
+
+          return {
+              "ok": True,
+              "ref": ref,
+              "archive_url": archive_url,
+              "root": root,
+              "script_dir": script_dir,
+              "skill_md": skill_md,
+              "downloaded_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+          }
+
+
+      def load_source():
+          global SOURCE_STATUS
+          with SOURCE_LOCK:
+              if SOURCE_STATUS is not None:
+                  return SOURCE_STATUS
+              try:
+                  SOURCE_STATUS = download_source()
+              except Exception as exc:
+                  SOURCE_STATUS = {
+                      "ok": False,
+                      "ref": source_ref(),
+                      "archive_url": source_url(source_ref()),
+                      "error": f"{type(exc).__name__}: {exc}",
+                  }
+              return SOURCE_STATUS
+
+
+      def import_checks():
+          source = load_source()
+          result = {
+              "source_ok": source.get("ok", False),
+              "import_ok": False,
+              "modules": {},
+              "skill_version": None,
+              "plugin_version": None,
+              "source": public_source_status(source),
+              "error": source.get("error"),
+          }
+          if not source.get("ok"):
+              return result
+
+          script_dir = str(source["script_dir"])
+          if script_dir not in sys.path:
+              sys.path.insert(0, script_dir)
+
+          try:
+              modules = {}
+              for name in (
+                  "last30days",
+                  "lib.schema",
+                  "lib.query",
+                  "lib.categories",
+                  "lib.reddit_rss",
+                  "lib.hackernews",
+                  "lib.polymarket",
+                  "lib.skill_meta",
+              ):
+                  module = importlib.import_module(name)
+                  modules[name] = getattr(module, "__file__", "built-in")
+
+              version = modules_module("lib.skill_meta").read_skill_version(source["skill_md"])
+              plugin_json = source["root"] / ".claude-plugin" / "plugin.json"
+              plugin_version = None
+              if plugin_json.exists():
+                  plugin_version = json.loads(plugin_json.read_text(encoding="utf-8")).get("version")
+
+              result.update(
+                  {
+                      "import_ok": True,
+                      "modules": modules,
+                      "skill_version": version,
+                      "plugin_version": plugin_version,
+                      "error": None,
+                  }
+              )
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      def modules_module(name):
+          return sys.modules[name]
+
+
+      def public_source_status(source):
+          payload = {
+              "ok": source.get("ok", False),
+              "ref": source.get("ref"),
+              "archive_url": source.get("archive_url"),
+          }
+          if source.get("ok"):
+              payload.update(
+                  {
+                      "downloaded_at": source.get("downloaded_at"),
+                      "source_artifact": "GitHub archive",
+                      "script_path": "skills/last30days/scripts",
+                  }
+              )
+          else:
+              payload["error"] = source.get("error")
+          return payload
+
+
+      def run_demo(topic):
+          checks = import_checks()
+          if not checks["import_ok"]:
+              raise RuntimeError(checks["error"] or "upstream imports failed")
+
+          source = load_source()
+          last30days = modules_module("last30days")
+          categories = modules_module("lib.categories")
+          hackernews = modules_module("lib.hackernews")
+          polymarket = modules_module("lib.polymarket")
+          query = modules_module("lib.query")
+          reddit_rss = modules_module("lib.reddit_rss")
+          schema = modules_module("lib.schema")
+
+          reddit_posts = reddit_rss._parse_feed(REDDIT_RSS_FIXTURE, query=topic)[:3]
+          hn_items = hackernews.parse_hackernews_response(
+              {
+                  "hits": [
+                      {
+                          "objectID": "l30d-demo-1",
+                          "title": f"Show HN: {topic} deterministic last30days verifier",
+                          "points": 42,
+                          "num_comments": 7,
+                          "created_at_i": 1780000000,
+                          "author": "phala-demo",
+                          "url": "https://example.com/last30days-demo",
+                      }
+                  ]
+              },
+              query=topic,
+          )
+          market = {
+              "outcomes": '["Yes", "No"]',
+              "outcomePrices": '["0.65", "0.35"]',
+          }
+          outcome_prices = [
+              {"outcome": outcome, "probability": probability}
+              for outcome, probability in polymarket._parse_outcome_prices(market)
+          ]
+
+          source_item = schema.SourceItem(
+              item_id="demo-reddit-1",
+              source="reddit",
+              title=reddit_posts[0]["title"] if reddit_posts else "No fixture item",
+              body=reddit_posts[0].get("selftext", "") if reddit_posts else "",
+              url=reddit_posts[0]["url"] if reddit_posts else "",
+              author=reddit_posts[0].get("author") if reddit_posts else None,
+              container=reddit_posts[0].get("subreddit") if reddit_posts else None,
+              published_at=reddit_posts[0].get("date") if reddit_posts else None,
+              engagement=reddit_posts[0].get("engagement", {}) if reddit_posts else {},
+              relevance_hint=reddit_posts[0].get("relevance", 0.0) if reddit_posts else 0.0,
+              why_relevant="Parsed from a local Atom fixture through the upstream reddit_rss module.",
+          )
+
+          return {
+              "topic": topic,
+              "skill_version": checks["skill_version"],
+              "plugin_version": checks["plugin_version"],
+              "core_subject": query.extract_core_subject(topic),
+              "category": categories.detect_category(topic),
+              "slug": last30days.slugify(topic),
+              "source_parsers": {
+                  "reddit_rss_fixture_count": len(reddit_posts),
+                  "reddit_rss_titles": [post["title"] for post in reddit_posts],
+                  "hackernews_mock_count": len(hn_items),
+                  "hackernews_items": hn_items,
+                  "polymarket_outcome_prices": outcome_prices,
+              },
+              "dataclass_round_trip": schema.to_dict(source_item),
+              "remote_calls": {
+                  "source_archive_downloaded": True,
+                  "llm_provider_calls": False,
+                  "social_api_calls": False,
+                  "browser_auth": False,
+                  "model_downloaded": False,
+                  "model_loaded": False,
+              },
+          }
+
+
+      def base_payload():
+          checks = import_checks()
+          return {
+              "service": "last30days-skill-demo",
+              "upstream": UPSTREAM_REPO,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "source": checks["source"],
+              "imports": {
+                  "ok": checks["import_ok"],
+                  "skill_version": checks["skill_version"],
+                  "plugin_version": checks["plugin_version"],
+                  "modules": checks["modules"],
+                  "error": checks["error"],
+              },
+              "credentials_required": False,
+              "llm_provider_calls": False,
+              "browser_auth": False,
+              "model_downloaded": False,
+              "model_loaded": False,
+          }
+
+
+      def response_body(path, query_params):
+          if path in ("", "/"):
+              return HTTPStatus.OK, {
+                  "service": "last30days-skill-demo",
+                  "endpoints": ["/healthz", "/demo", "/v1/models"],
+                  "upstream": UPSTREAM_REPO,
+              }
+
+          if path == "/healthz":
+              payload = base_payload()
+              payload["ok"] = payload["imports"]["ok"]
+              payload["status"] = "ready" if payload["ok"] else "source_or_import_failed"
+              status = HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+              return status, payload
+
+          if path == "/demo":
+              topic = (query_params.get("topic") or [os.environ.get("LAST30DAYS_DEMO_TOPIC", "")])[0]
+              topic = " ".join(topic.split()) or "AI agent research across social sources"
+              payload = base_payload()
+              try:
+                  payload.update({"ok": True, "demo": run_demo(topic)})
+                  return HTTPStatus.OK, payload
+              except Exception as exc:
+                  payload.update({"ok": False, "error": f"{type(exc).__name__}: {exc}"})
+                  return HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/v1/models":
+              checks = import_checks()
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "last30days/local-source-fixture-verifier",
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "mvanhorn",
+                          "description": (
+                              "Deterministic source-code and fixture verifier for the "
+                              "mvanhorn/last30days-skill archive. No LLM model is loaded or called."
+                          ),
+                      }
+                  ],
+                  "upstream": UPSTREAM_REPO,
+                  "source_ref": source_ref(),
+                  "skill_version": checks["skill_version"],
+                  "provider_calls": False,
+              }
+
+          return HTTPStatus.NOT_FOUND, {
+              "ok": False,
+              "error": "not_found",
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "last30days-skill-demo"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      },
+                      sort_keys=True,
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              parsed = urlparse(self.path)
+              status, payload = response_body(parsed.path.rstrip("/") or "/", parse_qs(parsed.query))
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          status = import_checks()
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "source": status["source"],
+                      "import_ok": status["import_ok"],
+                      "error": status["error"],
+                      "llm_provider_calls": False,
+                  },
+                  sort_keys=True,
+              ),
+              flush=True,
+          )
+          port = int(os.environ.get("APP_PORT", "8000"))
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
