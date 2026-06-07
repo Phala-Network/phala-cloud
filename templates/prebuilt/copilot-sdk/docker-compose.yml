@@ -1,0 +1,447 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8000"
+    environment:
+      APP_PORT: "8000"
+      COPILOT_SDK_PYTHON_VERSION: ${COPILOT_SDK_PYTHON_VERSION:-1.0.0}
+      COPILOT_SDK_DEMO_TOPIC: ${COPILOT_SDK_DEMO_TOPIC:-Phala Cloud Copilot SDK verifier}
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+      PIP_ROOT_USER_ACTION: ignore
+      PYTHONUNBUFFERED: "1"
+      UV_SYSTEM_PYTHON: "1"
+    configs:
+      - source: copilot_sdk_demo_app
+        target: /opt/copilot-sdk-demo/main.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache "github-copilot-sdk==$${COPILOT_SDK_PYTHON_VERSION}"
+        exec python /opt/copilot-sdk-demo/main.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8000'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 240s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+          reverse_proxy app:8000
+      }
+
+  copilot_sdk_demo_app:
+    content: |
+      import asyncio
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import tempfile
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import parse_qs, urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "github-copilot-sdk"
+      DEFAULT_TOPIC = os.environ.get(
+          "COPILOT_SDK_DEMO_TOPIC", "Phala Cloud Copilot SDK verifier"
+      )
+      BASE_DIRECTORY = tempfile.mkdtemp(prefix="copilot-sdk-local-")
+      IMPORT_ERROR = None
+
+      try:
+          from pydantic import BaseModel, Field
+
+          from copilot import (
+              BUILTIN_TOOLS_ISOLATED,
+              CopilotClient,
+              ModelCapabilities,
+              ModelInfo,
+              ModelLimits,
+              ModelPolicy,
+              ModelSupports,
+              ToolInvocation,
+              ToolSet,
+              convert_mcp_call_tool_result,
+              define_tool,
+          )
+
+
+          class DemoPlanParams(BaseModel):
+              topic: str = Field(
+                  default=DEFAULT_TOPIC,
+                  description="Short topic used by the local deterministic verifier.",
+                  min_length=1,
+                  max_length=160,
+              )
+              checks: int = Field(
+                  default=4,
+                  description="Number of local SDK steps to include.",
+                  ge=1,
+                  le=5,
+              )
+
+
+          @define_tool(
+              name="copilot_sdk_plan",
+              description="Return deterministic local Copilot SDK verifier steps.",
+              skip_permission=True,
+          )
+          def copilot_sdk_plan(params: DemoPlanParams, invocation: ToolInvocation) -> dict:
+              topic = " ".join(params.topic.split()) or DEFAULT_TOPIC
+              steps = [
+                  "import github-copilot-sdk",
+                  "define a typed local tool with pydantic schema generation",
+                  "invoke the tool handler through ToolInvocation",
+                  "build isolated/custom tool filters with ToolSet",
+                  "list a local verifier model through CopilotClient.on_list_models",
+              ]
+              return {
+                  "topic": topic,
+                  "tool_name": invocation.tool_name,
+                  "session_id": invocation.session_id,
+                  "tool_call_id": invocation.tool_call_id,
+                  "steps": steps[: params.checks],
+              }
+
+
+          DEMO_TOOL = copilot_sdk_plan
+      except Exception as exc:
+          IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+          BaseModel = None
+          Field = None
+          BUILTIN_TOOLS_ISOLATED = []
+          CopilotClient = None
+          ModelCapabilities = None
+          ModelInfo = None
+          ModelLimits = None
+          ModelPolicy = None
+          ModelSupports = None
+          ToolInvocation = None
+          ToolSet = None
+          convert_mcp_call_tool_result = None
+          DEMO_TOOL = None
+
+
+      def package_status():
+          status = {
+              "package": PACKAGE_NAME,
+              "requested_version": os.environ.get("COPILOT_SDK_PYTHON_VERSION", "1.0.0"),
+              "distribution_version": None,
+              "module_version": None,
+              "summary": None,
+              "import_ok": IMPORT_ERROR is None,
+              "python_requires": ">=3.11",
+              "error": IMPORT_ERROR,
+          }
+          try:
+              distribution = importlib.metadata.distribution(PACKAGE_NAME)
+              status["distribution_version"] = distribution.version
+              status["summary"] = distribution.metadata.get("Summary")
+              import copilot
+
+              status["module_version"] = getattr(copilot, "__version__", None)
+              status["public_exports_sample"] = list(getattr(copilot, "__all__", []))[:16]
+          except Exception as exc:
+              status["import_ok"] = False
+              status["error"] = f"{type(exc).__name__}: {exc}"
+          return status
+
+
+      def optional_auth_env_status():
+          keys = [
+              "COPILOT_GITHUB_TOKEN",
+              "GH_TOKEN",
+              "GITHUB_TOKEN",
+              "OPENAI_API_KEY",
+              "ANTHROPIC_API_KEY",
+              "AZURE_OPENAI_API_KEY",
+          ]
+          return [
+              {
+                  "key": key,
+                  "configured": bool(os.environ.get(key)),
+                  "used_by_default": False,
+              }
+              for key in keys
+          ]
+
+
+      def local_model():
+          return ModelInfo(
+              id="copilot-sdk/local-verifier",
+              name="GitHub Copilot SDK local verifier",
+              capabilities=ModelCapabilities(
+                  supports=ModelSupports(vision=False, reasoning_effort=False),
+                  limits=ModelLimits(),
+              ),
+              policy=ModelPolicy(
+                  state="enabled",
+                  terms="Local metadata endpoint only; no Copilot CLI or LLM provider is called.",
+              ),
+          )
+
+
+      async def list_local_models():
+          if IMPORT_ERROR is not None:
+              raise RuntimeError(IMPORT_ERROR)
+
+          client = CopilotClient(
+              mode="empty",
+              base_directory=BASE_DIRECTORY,
+              on_list_models=lambda: [local_model()],
+          )
+          models = await client.list_models()
+          return [model.to_dict() for model in models]
+
+
+      def tool_filter_list():
+          filters = (
+              ToolSet()
+              .add_builtin(BUILTIN_TOOLS_ISOLATED[:4])
+              .add_custom(DEMO_TOOL.name)
+              .to_list()
+          )
+          return filters
+
+
+      async def run_demo(topic, checks):
+          if IMPORT_ERROR is not None:
+              raise RuntimeError(IMPORT_ERROR)
+
+          invocation = ToolInvocation(
+              session_id="phala-local-demo",
+              tool_call_id="tool-call-0001",
+              tool_name=DEMO_TOOL.name,
+              arguments={"topic": topic, "checks": checks},
+          )
+          tool_result = await DEMO_TOOL.handler(invocation)
+          mcp_result = convert_mcp_call_tool_result(
+              {
+                  "content": [
+                      {
+                          "type": "text",
+                          "text": "Converted a local MCP-style CallToolResult without contacting a server.",
+                      }
+                  ],
+                  "isError": False,
+              }
+          )
+
+          return {
+              "tool": {
+                  "name": DEMO_TOOL.name,
+                  "description": DEMO_TOOL.description,
+                  "skip_permission": DEMO_TOOL.skip_permission,
+                  "parameters": DEMO_TOOL.parameters,
+                  "result": json.loads(tool_result.text_result_for_llm),
+                  "result_type": tool_result.result_type,
+              },
+              "tool_filters": tool_filter_list(),
+              "mcp_conversion": {
+                  "result_type": mcp_result.result_type,
+                  "text_result_for_llm": mcp_result.text_result_for_llm,
+              },
+              "models": await list_local_models(),
+          }
+
+
+      def base_payload():
+          return {
+              "service": "github-copilot-sdk-local-verifier",
+              "upstream": "https://github.com/github/copilot-sdk",
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "package": package_status(),
+              "credentials_required": False,
+              "copilot_cli_started": False,
+              "remote_model_calls": False,
+              "model_downloaded": False,
+              "cpu_only": True,
+          }
+
+
+      def parse_checks(raw):
+          try:
+              value = int(raw)
+          except (TypeError, ValueError):
+              value = 4
+          return max(1, min(value, 5))
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "copilot-sdk-local-verifier"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              parsed = urlparse(self.path)
+              path = parsed.path.rstrip("/") or "/"
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  ok = IMPORT_ERROR is None and payload["package"]["import_ok"]
+                  payload.update(
+                      {
+                          "ok": ok,
+                          "status": "ready" if ok else "import_failed",
+                          "endpoints": ["/healthz", "/demo", "/v1/models"],
+                      }
+                  )
+                  self.respond_json(HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE, payload)
+                  return
+
+              if path == "/demo":
+                  query = parse_qs(parsed.query)
+                  topic = (query.get("topic", [DEFAULT_TOPIC])[0] or DEFAULT_TOPIC)[:160]
+                  checks = parse_checks(query.get("checks", ["4"])[0])
+                  payload = base_payload()
+                  payload.update(
+                      {
+                          "ok": IMPORT_ERROR is None,
+                          "auth_environment": optional_auth_env_status(),
+                          "default_behavior": {
+                              "installs_real_python_sdk": True,
+                              "uses_local_sdk_primitives": True,
+                              "starts_copilot_cli": False,
+                              "calls_github_copilot": False,
+                              "calls_external_llms": False,
+                              "downloads_model_weights": False,
+                              "requires_gpu": False,
+                          },
+                      }
+                  )
+                  if IMPORT_ERROR is not None:
+                      self.respond_json(HTTPStatus.SERVICE_UNAVAILABLE, payload)
+                      return
+                  try:
+                      payload["demo"] = asyncio.run(run_demo(topic, checks))
+                  except Exception as exc:
+                      payload["ok"] = False
+                      payload["error"] = f"{type(exc).__name__}: {exc}"
+                      self.respond_json(HTTPStatus.INTERNAL_SERVER_ERROR, payload)
+                      return
+                  self.respond_json(HTTPStatus.OK, payload)
+                  return
+
+              if path == "/v1/models":
+                  if IMPORT_ERROR is not None:
+                      self.respond_json(
+                          HTTPStatus.SERVICE_UNAVAILABLE,
+                          {"object": "list", "data": [], "error": IMPORT_ERROR},
+                      )
+                      return
+                  try:
+                      sdk_models = asyncio.run(list_local_models())
+                  except Exception as exc:
+                      self.respond_json(
+                          HTTPStatus.INTERNAL_SERVER_ERROR,
+                          {"object": "list", "data": [], "error": f"{type(exc).__name__}: {exc}"},
+                      )
+                      return
+                  self.respond_json(
+                      HTTPStatus.OK,
+                      {
+                          "object": "list",
+                          "data": [
+                              {
+                                  "id": model["id"],
+                                  "object": "model",
+                                  "created": 0,
+                                  "owned_by": "github",
+                                  "description": (
+                                      "Local verifier model metadata returned through "
+                                      "CopilotClient.on_list_models; no LLM is hosted."
+                                  ),
+                              }
+                              for model in sdk_models
+                          ],
+                          "sdk_models": sdk_models,
+                      },
+                  )
+                  return
+
+              self.respond_json(
+                  HTTPStatus.NOT_FOUND,
+                  {"ok": False, "error": "not_found", "endpoints": ["/healthz", "/demo", "/v1/models"]},
+              )
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8000"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "package": package_status(),
+                      "copilot_cli_started": False,
+                      "remote_model_calls": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+
+networks:
+  internal:
+    driver: bridge
