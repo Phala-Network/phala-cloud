@@ -5580,5 +5580,33 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Data & Storage", "Developer Tools"]
+  },
+{
+    "id": "open-llm-vtuber",
+    "name": "Open-LLM-VTuber/Open-LLM-VTuber",
+    "description": "Talk to any LLM with hands-free voice interaction, voice interruption, and Live2D taking face running locally across platforms",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/open-llm-vtuber",
+    "author": "Open-LLM-VTuber",
+    "icon": "open-llm-vtuber.png",
+    "envs": [
+      {
+        "key": "OPEN_LLM_VTUBER_SOURCE_REF",
+        "required": false,
+        "default": "992309c0aa19845960228f880013d4685fde93b5",
+        "description": "Upstream Open-LLM-VTuber commit, tag, or branch downloaded from the GitHub source archive at container startup."
+      },
+      {
+        "key": "OPEN_LLM_VTUBER_DEMO_TEXT",
+        "required": false,
+        "default": "Hello from Phala Cloud",
+        "description": "Text used by /demo to create deterministic upstream BatchInput and SentenceOutput objects."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Media & Design", "Web Apps"]
   }
 ]
