@@ -5540,5 +5540,45 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools", "Automation"]
+  },
+{
+    "id": "supermemory",
+    "name": "supermemoryai/supermemory",
+    "description": "Memory engine and app that is extremely fast, scalable. The Memory API for the AI era.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/supermemory",
+    "author": "supermemoryai",
+    "icon": "supermemory.svg",
+    "envs": [
+      {
+        "key": "SUPERMEMORY_SDK_VERSION",
+        "required": false,
+        "default": "4.24.12",
+        "description": "Version of the official supermemory TypeScript SDK installed by the verifier at container startup."
+      },
+      {
+        "key": "SUPERMEMORY_TOOLS_VERSION",
+        "required": false,
+        "default": "2.0.0",
+        "description": "Version of @supermemory/tools installed by the verifier at container startup."
+      },
+      {
+        "key": "SUPERMEMORY_DEMO_CONTAINER_TAG",
+        "required": false,
+        "default": "phala-template",
+        "description": "Local container tag used in deterministic request blueprints returned by the demo endpoint."
+      },
+      {
+        "key": "SUPERMEMORY_DEMO_QUERY",
+        "required": false,
+        "default": "What does this Supermemory verifier prove?",
+        "description": "Local query used in deterministic request blueprints returned by the verifier."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Data & Storage", "Developer Tools"]
   }
 ]
