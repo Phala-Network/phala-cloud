@@ -4,7 +4,7 @@ import { defineAction } from "../../utils/define-action";
 
 const KmsInfoSchema = z.object({
   contract_address: z.string(),
-  chain_id: z.string().nullable(),
+  chain_id: z.number().nullable(),
   version: z.string(),
   url: z.string(),
   gateway_app_id: z.string().nullable(),
