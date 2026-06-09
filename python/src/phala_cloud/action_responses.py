@@ -50,7 +50,10 @@ class ProvisionCvmResponse(CloudModel):
     os_image_hash: str | None = None
     instance_type: str | None = None
     node_id: int | None = None
+    # Deprecated: identifies a KMS node, not the on-chain KMS contract.
+    # Use kms_contract_id instead.
     kms_id: str | None = None
+    kms_contract_id: str | None = None
 
 
 class ProvisionCvmComposeFileUpdateResult(CloudModel):

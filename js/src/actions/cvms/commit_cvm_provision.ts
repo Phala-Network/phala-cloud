@@ -203,7 +203,9 @@ export const CommitCvmProvisionRequestSchema = z
     encrypted_env: z.string().optional().nullable(),
     app_id: z.string(),
     compose_hash: z.string(),
+    /** @deprecated Identifies a KMS node, not the on-chain KMS contract. Use kms_contract_id. */
     kms_id: z.string().optional(),
+    kms_contract_id: z.union([z.string(), z.number()]).optional(),
     contract_address: z.string().optional(),
     deployer_address: z.string().optional(),
     env_keys: z.array(z.string()).optional().nullable(),

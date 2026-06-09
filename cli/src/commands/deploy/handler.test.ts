@@ -117,7 +117,8 @@ describe("buildProvisionPayload", () => {
 			expect(payload.teepod_id).toBe(123);
 			expect(payload.region).toBe("us-west");
 			expect(payload.image).toBe("dstack-dev-0.5.0");
-			expect(payload.kms_id).toBe("phala");
+			// --kms-id is deprecated and now a no-op; it is no longer sent.
+			expect(payload.kms_id).toBeUndefined();
 			expect(payload.prefer_dev).toBe(true);
 		});
 
@@ -217,7 +218,7 @@ describe("buildProvisionPayload", () => {
 			expect(payload.kms).toBe("BASE");
 		});
 
-		test("should include deprecatedKmsId when provided via preResolvedKmsSelection", () => {
+		test("ignores deprecatedKmsId (kms_id is a no-op) but keeps kms type", () => {
 			const options = {};
 
 			const payload = buildProvisionPayload(
@@ -230,7 +231,8 @@ describe("buildProvisionPayload", () => {
 			);
 
 			expect(payload.kms).toBe("PHALA");
-			expect(payload.kms_id).toBe("custom-kms");
+			// --kms-id is deprecated and now a no-op; it is no longer sent.
+			expect(payload.kms_id).toBeUndefined();
 		});
 
 		test("should include CVM resource matching v2 fields when specified", () => {

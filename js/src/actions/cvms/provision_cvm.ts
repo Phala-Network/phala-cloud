@@ -172,7 +172,9 @@ export const ProvisionCvmSchema = z
     instance_type: z.string().nullable().optional(),
     teepod_id: z.number().nullable().optional(), // Will be transformed to node_id
     node_id: z.number().nullable().optional(),
+    /** @deprecated Identifies a KMS node, not the on-chain KMS contract. Use kms_contract_id. */
     kms_id: z.string().nullable().optional(),
+    kms_contract_id: z.union([z.string(), z.number()]).nullable().optional(),
   })
   .passthrough()
   .transform((data) => {
