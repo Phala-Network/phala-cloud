@@ -6,6 +6,7 @@ from pydantic import Field, computed_field
 
 from .base import AliasModel, CloudModel
 from .kms import KmsInfo
+from .nodes import DeviceIdEntry
 
 BillingPeriod = Literal["skip", "hourly", "monthly"]
 KmsType = Literal["phala", "ethereum", "base", "legacy"]
@@ -83,6 +84,7 @@ class NodeRef(CloudModel):
     name: str | None = None
     region: str | None = None
     device_id: str | None = None
+    device_ids: list[DeviceIdEntry] = Field(default_factory=list)
     ppid: str | None = None
     status: str | None = None
     version: str | None = None

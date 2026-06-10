@@ -13,6 +13,13 @@ class AvailableOSImage(CloudModel):
     os_image_hash: str | None = None
 
 
+class DeviceIdEntry(CloudModel):
+    device_id: str
+    algorithm_version: str
+    os_image_ids: list[int] = Field(default_factory=list)
+    enabled: bool
+
+
 class TeepodCapacity(CloudModel):
     teepod_id: int
     name: str
@@ -25,6 +32,7 @@ class TeepodCapacity(CloudModel):
     support_onchain_kms: bool | None = None
     fmspc: str | None = None
     device_id: str | None = None
+    device_ids: list[DeviceIdEntry] = Field(default_factory=list)
     region_identifier: str | None = None
     default_kms: str | None = None
     kms_list: list[str] = Field(default_factory=list)

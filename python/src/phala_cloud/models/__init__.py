@@ -78,6 +78,7 @@ from .nodes import (
     CvmCreateResourceGraphAny,
     CvmCreateResourceGraphV20260121,
     CvmCreateResourceGraphV20260522,
+    DeviceIdEntry,
     GpuAvailability,
 )
 from .os_images import GetOsImagesRequest, GetOsImagesResponse, OSImagePublic
@@ -92,6 +93,7 @@ __all__ = [
     "AppCvmsBatchIsAllowedResponseV20260522",
     "AvailableNodes",
     "BillingPeriod",
+    "DeviceIdEntry",
     "Certificate",
     "CertificateIssuer",
     "CertificateSubject",

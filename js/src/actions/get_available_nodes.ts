@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { type Client } from "../client";
+import { DeviceIdEntrySchema } from "../types/cvm_info_v20260121";
 import { KmsInfoSchema } from "../types/kms_info";
 import { defineSimpleAction } from "../utils/define-action";
 
@@ -87,6 +88,7 @@ export const TeepodCapacitySchema = z
     support_onchain_kms: z.boolean().optional(),
     fmspc: z.string().nullable().optional(),
     device_id: z.string().nullable().optional(),
+    device_ids: z.array(DeviceIdEntrySchema).default([]),
     region_identifier: z.string().nullable().optional(),
     default_kms: z.string().nullable().optional(),
     kms_list: z.array(z.string()).default([]),
