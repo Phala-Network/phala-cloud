@@ -7,10 +7,19 @@ export {
   withComposeMethods,
   type AppCompose,
   type AppComposeWithMethods,
+  type DockerConfig,
+  type KeyProviderKind,
   type SortableValue,
   type SortableObject,
   type SortableArray,
 } from "./get_compose_hash";
+export {
+  getMrConfigId,
+  getMrConfigIdV1,
+  verifyMrConfigId,
+  type MrConfigIdInput,
+  type KeyProviderKind as MrConfigKeyProviderKind,
+} from "./get_mr_config_id";
 export { asHex } from "./as-hex";
 export { validateActionParameters, safeValidateActionParameters } from "./validate-parameters";
 export {

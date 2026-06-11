@@ -52,7 +52,7 @@ import type { RuntimeProjectConfig } from "@/src/utils/project-config";
 type PrivacyConfig = Pick<
 	RuntimeProjectConfig,
 	"public_logs" | "public_sysinfo" | "listed"
->;
+> & { public_tcbinfo?: boolean; secure_time?: boolean };
 
 interface Options {
 	name?: string;
@@ -89,6 +89,8 @@ interface Options {
 	devOs?: boolean;
 	publicLogs?: boolean;
 	publicSysinfo?: boolean;
+	publicTcbinfo?: boolean;
+	secureTime?: boolean;
 	listed?: boolean;
 	prepareOnly?: boolean;
 	commit?: boolean;
@@ -602,6 +604,8 @@ const validateCpuMemoryDiskSize = async (options: Options) => {
 interface PrivacySettings {
 	publicLogs: boolean;
 	publicSysinfo: boolean;
+	publicTcbinfo: boolean;
+	secureTime: boolean;
 	listed: boolean;
 }
 
@@ -616,6 +620,9 @@ const resolvePrivacySettings = (
 		publicLogs: options.publicLogs ?? projectConfig?.public_logs ?? true,
 		publicSysinfo:
 			options.publicSysinfo ?? projectConfig?.public_sysinfo ?? true,
+		publicTcbinfo:
+			options.publicTcbinfo ?? projectConfig?.public_tcbinfo ?? true,
+		secureTime: options.secureTime ?? projectConfig?.secure_time ?? false,
 		listed: options.listed ?? projectConfig?.listed ?? false,
 	};
 };
@@ -640,6 +647,8 @@ export const buildProvisionPayload = (
 		allowed_envs: envs?.map((e) => e.key) || [],
 		public_logs: privacySettings.publicLogs,
 		public_sysinfo: privacySettings.publicSysinfo,
+		public_tcbinfo: privacySettings.publicTcbinfo,
+		secure_time: privacySettings.secureTime,
 	};
 
 	if (preLaunchScriptContent) {

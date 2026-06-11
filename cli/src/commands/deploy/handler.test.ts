@@ -16,6 +16,8 @@ describe("buildProvisionPayload", () => {
 	const defaultPrivacySettings = {
 		publicLogs: true,
 		publicSysinfo: true,
+		publicTcbinfo: true,
+		secureTime: false,
 		listed: false,
 	};
 
@@ -718,6 +720,8 @@ describe("buildProvisionPayload", () => {
 			const privacySettings = {
 				publicLogs: true,
 				publicSysinfo: false,
+				publicTcbinfo: true,
+				secureTime: false,
 				listed: true,
 			};
 

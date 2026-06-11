@@ -131,7 +131,7 @@ import { isValidHostname } from "../../utils/hostname";
  *   - Each instance type has a default disk size
  *   - Specify only if you need a different size than the default
  * - **env_keys**: List of allowed environment variable keys
- * - **listed**: Whether the CVM is publicly listed (default: true)
+ * - **listed**: Whether the CVM is publicly listed (default: false)
  *
  * ## Returns
  *
@@ -213,16 +213,28 @@ export const ProvisionCvmRequestSchema = z
         docker_compose_file: z.string().optional(),
         name: z.string().optional().default(""), // optional with default empty string
         kms_enabled: z.boolean().optional(),
-        public_logs: z.boolean().optional(),
-        public_sysinfo: z.boolean().optional(),
         gateway_enabled: z.boolean().optional(), // recommended
         tproxy_enabled: z.boolean().optional(), // deprecated, for compatibility
+        local_key_provider_enabled: z.boolean().optional(),
+        key_provider: z.enum(["none", "kms", "local", "tpm"]).optional(),
+        key_provider_id: z.string().optional(),
+        public_logs: z.boolean().optional(),
+        public_sysinfo: z.boolean().optional(),
+        public_tcbinfo: z.boolean().optional(),
+        no_instance_id: z.boolean().optional(),
+        secure_time: z.boolean().optional(),
         storage_fs: z.enum(["ext4", "zfs"]).optional(),
+        swap_size: z.string().optional(),
+        port_policy: z
+          .object({
+            ports: z.array(z.object({ port: z.number(), pp: z.boolean() })),
+            restrict_mode: z.boolean(),
+          })
+          .optional(),
       })
-      // Keep compose_file open to newer backend fields (e.g.
-      // local_key_provider_enabled, port_policy). Without passthrough, zod's
-      // default strip mode drops every unknown key at parse time and the
-      // backend never sees fields that the UI / SDK consumer set.
+      // Keep compose_file open to newer backend fields. Without passthrough,
+      // zod's default strip mode drops every unknown key at parse time and
+      // the backend never sees fields that the UI / SDK consumer set.
       .passthrough()
       .superRefine((data, ctx) => {
         validateComposePayloadSize(data.docker_compose_file, data.pre_launch_script, ctx);

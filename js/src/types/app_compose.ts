@@ -33,10 +33,18 @@ export const LooseAppComposeSchema = z
     features: z.array(z.string()).optional(),
     name: z.string().optional(),
     manifest_version: z.number().optional(),
+    runner: z.string().optional(),
     kms_enabled: z.boolean().optional(),
+    gateway_enabled: z.boolean().optional(),
+    tproxy_enabled: z.boolean().optional(),
+    local_key_provider_enabled: z.boolean().optional(),
+    key_provider: z.enum(["none", "kms", "local", "tpm"]).optional(),
+    key_provider_id: z.string().optional(),
     public_logs: z.boolean().optional(),
     public_sysinfo: z.boolean().optional(),
-    tproxy_enabled: z.boolean().optional(),
+    public_tcbinfo: z.boolean().optional(),
+    no_instance_id: z.boolean().optional(),
+    secure_time: z.boolean().optional(),
     port_policy: z
       .object({
         ports: z.array(
@@ -49,6 +57,7 @@ export const LooseAppComposeSchema = z
       })
       .optional(),
     storage_fs: z.enum(["ext4", "zfs"]).optional(),
+    swap_size: z.string().optional(),
     pre_launch_script: z.string().optional(),
     env_pubkey: z.string().optional(),
     salt: z.string().optional().nullable(),
