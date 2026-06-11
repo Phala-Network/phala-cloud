@@ -49,3 +49,87 @@ def verify_env_encrypt_public_key(*args: Any, **kwargs: Any) -> Any:
         raise RuntimeError(
             "verify_env_encrypt_public_key requires dstack-sdk in Python environment"
         ) from exc
+
+
+from typing import Literal
+
+KeyProviderKind = Literal["none", "kms", "local", "tpm"]
+
+_KEY_PROVIDER_BYTE: dict[str, int] = {
+    "none": 0,
+    "local": 1,
+    "kms": 2,
+    "tpm": 3,
+}
+
+
+def get_mr_config_id(
+    compose_hash: bytes,
+    app_id: bytes,
+    key_provider_type: KeyProviderKind,
+    key_provider_id: bytes,
+) -> bytes:
+    """Compute mr_config_id V2.
+
+    Mirrors dstack-types/src/mr_config.rs MrConfig::V2::to_mr_config_id().
+
+    Args:
+        compose_hash: 32-byte SHA-256 compose hash.
+        app_id: 20-byte application ID.
+        key_provider_type: Key provider kind.
+        key_provider_id: Key provider identity (variable length, can be empty).
+
+    Returns:
+        48-byte mr_config_id (0x02 || keccak256(...) || zero_pad).
+    """
+    import sha3  # type: ignore[import-untyped]
+
+    kp_byte = _KEY_PROVIDER_BYTE[key_provider_type]
+    payload = compose_hash + app_id + bytes([kp_byte]) + key_provider_id
+    digest = sha3.keccak_256(payload).digest()
+    result = bytearray(48)
+    result[0] = 2
+    result[1:33] = digest[:32]
+    return bytes(result)
+
+
+def get_mr_config_id_v1(compose_hash: bytes) -> bytes:
+    """Compute mr_config_id V1 (compose_hash only, no key provider).
+
+    Args:
+        compose_hash: 32-byte SHA-256 compose hash.
+
+    Returns:
+        48-byte mr_config_id (0x01 || compose_hash || zero_pad).
+    """
+    result = bytearray(48)
+    result[0] = 1
+    result[1:33] = compose_hash
+    return bytes(result)
+
+
+def get_mr_config_id_hex(
+    compose_hash_hex: str,
+    app_id_hex: str,
+    key_provider_type: KeyProviderKind,
+    key_provider_id_hex: str = "",
+) -> str:
+    """Convenience wrapper accepting and returning hex strings."""
+    compose_hash = bytes.fromhex(compose_hash_hex.removeprefix("0x"))
+    app_id = bytes.fromhex(app_id_hex.removeprefix("0x"))
+    kp_id = bytes.fromhex(key_provider_id_hex.removeprefix("0x")) if key_provider_id_hex else b""
+    return "0x" + get_mr_config_id(compose_hash, app_id, key_provider_type, kp_id).hex()
+
+
+def verify_mr_config_id(
+    mr_config_id_hex: str,
+    compose_hash_hex: str,
+    app_id_hex: str,
+    key_provider_type: KeyProviderKind,
+    key_provider_id_hex: str = "",
+) -> bool:
+    """Verify a mr_config_id against the expected value."""
+    expected = get_mr_config_id_hex(
+        compose_hash_hex, app_id_hex, key_provider_type, key_provider_id_hex
+    )
+    return expected.lower() == mr_config_id_hex.lower()
