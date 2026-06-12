@@ -42,6 +42,8 @@ import {
 	safeCommitCvmUpdate,
 	convertToHostname,
 	isValidHostname,
+	getMrConfigId,
+	type MrConfigIdInput,
 } from "@phala/cloud";
 import dedent from "dedent";
 import fs from "fs-extra";
@@ -92,6 +94,7 @@ interface Options {
 	publicTcbinfo?: boolean;
 	secureTime?: boolean;
 	listed?: boolean;
+	experimentalMrConfigId?: boolean;
 	prepareOnly?: boolean;
 	commit?: boolean;
 	token?: string;
@@ -659,6 +662,11 @@ export const buildProvisionPayload = (
 		composeFile.storage_fs = options.fs;
 	}
 
+	if (options.experimentalMrConfigId) {
+		composeFile.key_provider =
+			options.keyProviderMode === "local" ? "local" : "kms";
+	}
+
 	const payload: Record<string, unknown> = {
 		name: name,
 		compose_file: composeFile,
@@ -813,6 +821,24 @@ const deployNewCvm = async (
 	let commit_result;
 
 	const provisionKmsInfo = app.kms_info;
+
+	if (
+		validatedOptions.experimentalMrConfigId &&
+		app.app_id &&
+		app.compose_hash
+	) {
+		const kpType =
+			validatedOptions.keyProviderMode === "local" ? "local" : "kms";
+		const kpId = provisionKmsInfo?.ca_pubkey || "";
+		const mrConfigId = getMrConfigId({
+			compose_hash: `0x${app.compose_hash}`,
+			app_id: `0x${app.app_id}`,
+			key_provider_type: kpType as "kms" | "local",
+			key_provider_id: kpId ? `0x${kpId}` : "0x",
+		});
+		logger.info(`mr_config_id (v2): ${mrConfigId}`);
+	}
+
 	const needsOnchainKms =
 		!app.app_id &&
 		!!provisionKmsInfo?.chain_id &&

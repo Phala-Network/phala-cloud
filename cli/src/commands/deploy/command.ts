@@ -161,6 +161,14 @@ export const deployCommandMeta: CommandMeta = {
 			group: "advanced",
 		},
 		{
+			name: "experimental-mr-config-id",
+			description:
+				"Populate key_provider and key_provider_id in compose, compute and display mr_config_id after provision (experimental)",
+			type: "boolean",
+			target: "experimentalMrConfigId",
+			group: "advanced",
+		},
+		{
 			name: "skip-gateway",
 			description: "Skip gateway matching",
 			type: "boolean",
@@ -374,6 +382,7 @@ export const deployCommandSchema = z.object({
 	kmsContract: z.string().optional(),
 	kmsContractId: z.string().optional(),
 	keyProviderMode: z.enum(["kms", "local"]).optional(),
+	experimentalMrConfigId: z.boolean().optional(),
 	skipGateway: z.boolean().optional(),
 	cvmId: z.string().optional(),
 	customAppId: z.string().optional(),
