@@ -94,7 +94,7 @@ interface Options {
 	publicTcbinfo?: boolean;
 	secureTime?: boolean;
 	listed?: boolean;
-	experimentalMrConfigId?: boolean;
+	experimentalKeyProviderType?: "kms" | "local" | "tpm";
 	prepareOnly?: boolean;
 	commit?: boolean;
 	token?: string;
@@ -662,9 +662,8 @@ export const buildProvisionPayload = (
 		composeFile.storage_fs = options.fs;
 	}
 
-	if (options.experimentalMrConfigId) {
-		composeFile.key_provider =
-			options.keyProviderMode === "local" ? "local" : "kms";
+	if (options.experimentalKeyProviderType) {
+		composeFile.key_provider = options.experimentalKeyProviderType;
 	}
 
 	const payload: Record<string, unknown> = {
@@ -823,17 +822,16 @@ const deployNewCvm = async (
 	const provisionKmsInfo = app.kms_info;
 
 	if (
-		validatedOptions.experimentalMrConfigId &&
+		validatedOptions.experimentalKeyProviderType &&
 		app.app_id &&
 		app.compose_hash
 	) {
-		const kpType =
-			validatedOptions.keyProviderMode === "local" ? "local" : "kms";
+		const kpType = validatedOptions.experimentalKeyProviderType;
 		const kpId = provisionKmsInfo?.k256_pubkey || "";
 		const mrConfigId = getMrConfigId({
 			compose_hash: `0x${app.compose_hash}`,
 			app_id: `0x${app.app_id}`,
-			key_provider_type: kpType as "kms" | "local",
+			key_provider_type: kpType,
 			key_provider_id: kpId ? `0x${kpId}` : "0x",
 		});
 		logger.info(`mr_config_id (v2): ${mrConfigId}`);

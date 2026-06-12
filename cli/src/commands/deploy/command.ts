@@ -161,11 +161,11 @@ export const deployCommandMeta: CommandMeta = {
 			group: "advanced",
 		},
 		{
-			name: "experimental-mr-config-id",
+			name: "experimental-key-provider-type",
 			description:
-				"Populate key_provider and key_provider_id in compose, compute and display mr_config_id after provision (experimental)",
-			type: "boolean",
-			target: "experimentalMrConfigId",
+				"Set key_provider in compose (kms, local, tpm). Backend resolves key_provider_id for kms; local/tpm require manual key_provider_id. Computes and displays mr_config_id after provision.",
+			type: "string",
+			target: "experimentalKeyProviderType",
 			group: "advanced",
 		},
 		{
@@ -382,7 +382,7 @@ export const deployCommandSchema = z.object({
 	kmsContract: z.string().optional(),
 	kmsContractId: z.string().optional(),
 	keyProviderMode: z.enum(["kms", "local"]).optional(),
-	experimentalMrConfigId: z.boolean().optional(),
+	experimentalKeyProviderType: z.enum(["kms", "local", "tpm"]).optional(),
 	skipGateway: z.boolean().optional(),
 	cvmId: z.string().optional(),
 	customAppId: z.string().optional(),
