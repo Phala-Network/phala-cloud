@@ -829,7 +829,7 @@ const deployNewCvm = async (
 	) {
 		const kpType =
 			validatedOptions.keyProviderMode === "local" ? "local" : "kms";
-		const kpId = provisionKmsInfo?.ca_pubkey || "";
+		const kpId = provisionKmsInfo?.k256_pubkey || "";
 		const mrConfigId = getMrConfigId({
 			compose_hash: `0x${app.compose_hash}`,
 			app_id: `0x${app.app_id}`,
