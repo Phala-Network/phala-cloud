@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 
 def parse_env_vars(content: str) -> list[dict[str, str]]:
@@ -50,8 +50,6 @@ def verify_env_encrypt_public_key(*args: Any, **kwargs: Any) -> Any:
             "verify_env_encrypt_public_key requires dstack-sdk in Python environment"
         ) from exc
 
-
-from typing import Literal
 
 KeyProviderKind = Literal["none", "kms", "local", "tpm"]
 

@@ -13,29 +13,37 @@ from phala_cloud.utils import (
 COMPOSE_HASH = bytes(range(32))
 APP_ID = bytes(range(20))
 
+# Expected outputs (shared with JS/Go test vectors)
+V2_KMS = (
+    "02e472ed80a08042f044ba63b53b798e98e3ea5219"
+    "cd078007b1ac8b3dfc762b94"
+    "000000000000000000000000000000"
+)
+V2_NONE = (
+    "02b21a3a65891c2c3955d82000b30fab13f4adc1a1"
+    "2dc4a84793ea322b71f1882a"
+    "000000000000000000000000000000"
+)
+V1_EXPECTED = (
+    "01000102030405060708090a0b0c0d0e0f10111213"
+    "1415161718191a1b1c1d1e1f"
+    "000000000000000000000000000000"
+)
+
 
 def test_v2_kms_with_key_provider_id():
     result = get_mr_config_id(COMPOSE_HASH, APP_ID, "kms", bytes.fromhex("aabbccdd"))
-    assert (
-        result.hex()
-        == "02e472ed80a08042f044ba63b53b798e98e3ea5219cd078007b1ac8b3dfc762b94000000000000000000000000000000"
-    )
+    assert result.hex() == V2_KMS
 
 
 def test_v2_none_empty_key_provider_id():
     result = get_mr_config_id(COMPOSE_HASH, APP_ID, "none", b"")
-    assert (
-        result.hex()
-        == "02b21a3a65891c2c3955d82000b30fab13f4adc1a12dc4a84793ea322b71f1882a000000000000000000000000000000"
-    )
+    assert result.hex() == V2_NONE
 
 
 def test_v1():
     result = get_mr_config_id_v1(COMPOSE_HASH)
-    assert (
-        result.hex()
-        == "01000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f000000000000000000000000000000"
-    )
+    assert result.hex() == V1_EXPECTED
 
 
 def test_length_48():
@@ -62,15 +70,12 @@ def test_hex_wrapper():
         "kms",
         "aabbccdd",
     )
-    assert (
-        result
-        == "0x02e472ed80a08042f044ba63b53b798e98e3ea5219cd078007b1ac8b3dfc762b94000000000000000000000000000000"
-    )
+    assert result == "0x" + V2_KMS
 
 
 def test_verify_pass():
     assert verify_mr_config_id(
-        "0x02e472ed80a08042f044ba63b53b798e98e3ea5219cd078007b1ac8b3dfc762b94000000000000000000000000000000",
+        "0x" + V2_KMS,
         "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
         "0x000102030405060708090a0b0c0d0e0f10111213",
         "kms",
@@ -91,6 +96,11 @@ def test_verify_fail():
 def test_different_key_provider_types():
     results = set()
     for kp in ("none", "local", "kms", "tpm"):
-        r = get_mr_config_id(COMPOSE_HASH, APP_ID, kp, bytes.fromhex("aabb"))  # type: ignore[arg-type]
+        r = get_mr_config_id(
+            COMPOSE_HASH,
+            APP_ID,
+            kp,
+            bytes.fromhex("aabb"),  # type: ignore[arg-type]
+        )
         results.add(r)
     assert len(results) == 4
