@@ -5778,5 +5778,27 @@
       "diskSize": 10
     },
     "tags": ["Media & Design", "Web Apps", "Developer Tools"]
+  },
+{
+  "id": "superpowers",
+  "name": "obra/superpowers",
+  "description": "An agentic skills framework & software development methodology that works.",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/superpowers",
+  "author": "Jesse Vincent / obra",
+  "icon": "superpowers.svg",
+  "envs": [
+    {
+      "key": "SUPERPOWERS_SOURCE_REF",
+      "required": false,
+      "default": "6fd4507659784c351abbd2bc264c7162cfd386dc",
+      "description": "Upstream Superpowers commit or tag installed from the GitHub source archive by the verifier."
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": ["AI Agents", "Developer Tools"]
   }
 ]

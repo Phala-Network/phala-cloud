@@ -1,0 +1,436 @@
+services:
+  app:
+    image: node:22-bookworm-slim
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: ${PORT:-8080}
+      SUPERPOWERS_SOURCE_REF: ${SUPERPOWERS_SOURCE_REF:-6fd4507659784c351abbd2bc264c7162cfd386dc}
+      NODE_ENV: production
+      NPM_CONFIG_AUDIT: "false"
+      NPM_CONFIG_FUND: "false"
+      NPM_CONFIG_UPDATE_NOTIFIER: "false"
+      NPM_CONFIG_CACHE: /tmp/npm-cache
+    configs:
+      - source: superpowers_demo_app
+        target: /opt/superpowers-demo/server.mjs
+        mode: 0444
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        mkdir -p /opt/superpowers-demo /tmp/npm-cache
+        SUPERPOWERS_ARCHIVE_URL="https://github.com/obra/superpowers/archive/$${SUPERPOWERS_SOURCE_REF}.tar.gz"
+        npm install --prefix /opt/superpowers-demo --no-audit --no-fund --omit=dev "$${SUPERPOWERS_ARCHIVE_URL}"
+        exec node /opt/superpowers-demo/server.mjs
+    working_dir: /opt/superpowers-demo
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:' + (process.env.PORT || '8080') + '/healthz').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+
+configs:
+  superpowers_demo_app:
+    content: |
+      import fs from "node:fs";
+      import http from "node:http";
+      import os from "node:os";
+      import path from "node:path";
+      import { pathToFileURL } from "node:url";
+      import { URL } from "node:url";
+
+      const STARTED_AT = Date.now();
+      const PORT = Number.parseInt(process.env.PORT || "8080", 10);
+      const UPSTREAM_REPO = "https://github.com/obra/superpowers";
+      const SOURCE_REF = process.env.SUPERPOWERS_SOURCE_REF || "6fd4507659784c351abbd2bc264c7162cfd386dc";
+      const PACKAGE_ROOT = "/opt/superpowers-demo/node_modules/superpowers";
+      const REQUIRED_SKILLS = [
+        "using-superpowers",
+        "brainstorming",
+        "writing-plans",
+        "test-driven-development",
+        "systematic-debugging",
+        "verification-before-completion",
+        "subagent-driven-development",
+        "requesting-code-review",
+      ];
+
+      function cleanText(value, maxLength = 4000) {
+        return String(value || "")
+          .replace(/\u001b\[[0-9;]*m/g, "")
+          .trim()
+          .slice(0, maxLength);
+      }
+
+      function readTextFile(relativePath) {
+        const filePath = path.join(PACKAGE_ROOT, relativePath);
+        try {
+          return {
+            ok: true,
+            relative_path: relativePath,
+            text: fs.readFileSync(filePath, "utf8"),
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            relative_path: relativePath,
+            error: error.name + ": " + error.message,
+          };
+        }
+      }
+
+      function readJsonFile(relativePath) {
+        const textResult = readTextFile(relativePath);
+        if (!textResult.ok) return textResult;
+        try {
+          return {
+            ok: true,
+            relative_path: relativePath,
+            data: JSON.parse(textResult.text),
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            relative_path: relativePath,
+            error: error.name + ": " + error.message,
+          };
+        }
+      }
+
+      function extractFrontmatter(content) {
+        const lines = String(content || "").split(/\r?\n/);
+        if (lines[0] !== "---") {
+          return { frontmatter: {}, body: content };
+        }
+
+        const endIndex = lines.indexOf("---", 1);
+        if (endIndex < 0) {
+          return { frontmatter: {}, body: content };
+        }
+
+        const frontmatter = {};
+        for (const line of lines.slice(1, endIndex)) {
+          const colonIndex = line.indexOf(":");
+          if (colonIndex > 0) {
+            const key = line.slice(0, colonIndex).trim();
+            const value = line.slice(colonIndex + 1).trim().replace(/^["']|["']$/g, "");
+            frontmatter[key] = value;
+          }
+        }
+
+        return {
+          frontmatter,
+          body: lines.slice(endIndex + 1).join("\n"),
+        };
+      }
+
+      function firstHeading(markdown) {
+        const line = String(markdown || "")
+          .split(/\r?\n/)
+          .find((candidate) => candidate.startsWith("# "));
+        return line ? line.replace(/^# +/, "").trim() : null;
+      }
+
+      function listSkills() {
+        const skillsDir = path.join(PACKAGE_ROOT, "skills");
+        const entries = fs.readdirSync(skillsDir, { withFileTypes: true })
+          .filter((entry) => entry.isDirectory())
+          .map((entry) => entry.name)
+          .sort();
+
+        return entries.map((id) => {
+          const relativePath = path.join("skills", id, "SKILL.md");
+          const skillFile = readTextFile(relativePath);
+          if (!skillFile.ok) {
+            return {
+              id,
+              ok: false,
+              relative_path: relativePath,
+              error: skillFile.error,
+            };
+          }
+
+          const parsed = extractFrontmatter(skillFile.text);
+          return {
+            id,
+            ok: true,
+            name: parsed.frontmatter.name || id,
+            description: parsed.frontmatter.description || "",
+            heading: firstHeading(parsed.body),
+            relative_path: relativePath,
+          };
+        });
+      }
+
+      async function inspectOpenCodePlugin() {
+        const pluginPath = path.join(PACKAGE_ROOT, ".opencode", "plugins", "superpowers.js");
+        const pluginUrl = pathToFileURL(pluginPath).href;
+
+        try {
+          const module = await import(pluginUrl);
+          const factory = module.SuperpowersPlugin;
+          const hookSet = typeof factory === "function"
+            ? await factory({ client: {}, directory: "/tmp/superpowers-demo-project" })
+            : {};
+
+          const config = {};
+          if (typeof hookSet.config === "function") {
+            await hookSet.config(config);
+          }
+
+          const messages = [
+            {
+              info: { role: "user" },
+              parts: [
+                { type: "text", text: "Tell me about your superpowers" },
+              ],
+            },
+          ];
+
+          const transform = hookSet["experimental.chat.messages.transform"];
+          if (typeof transform === "function") {
+            await transform({}, { messages });
+          }
+
+          const textParts = messages[0].parts
+            .filter((part) => part.type === "text")
+            .map((part) => part.text);
+          const bootstrapText = textParts.find((text) => text.includes("EXTREMELY_IMPORTANT")) || "";
+
+          return {
+            ok: typeof factory === "function" && Boolean(config.skills && config.skills.paths && config.skills.paths.length) && Boolean(bootstrapText),
+            exported_factory: typeof factory === "function",
+            hooks: Object.keys(hookSet).sort(),
+            registered_skill_paths: config.skills && config.skills.paths ? config.skills.paths : [],
+            bootstrap_injected: Boolean(bootstrapText),
+            bootstrap_mentions_skill_tool: bootstrapText.includes("skill tool") || bootstrapText.includes("Skill tool"),
+            transformed_user_message_parts: messages[0].parts.length,
+            bootstrap_preview: cleanText(bootstrapText, 700),
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            error: error.name + ": " + error.message,
+          };
+        }
+      }
+
+      async function inspectRuntime() {
+        const packageJson = readJsonFile("package.json");
+        const claudePlugin = readJsonFile(".claude-plugin/plugin.json");
+        const codexPlugin = readJsonFile(".codex-plugin/plugin.json");
+        const cursorPlugin = readJsonFile(".cursor-plugin/plugin.json");
+        const geminiExtension = readJsonFile("gemini-extension.json");
+        const opencodeInstallDoc = readTextFile(".opencode/INSTALL.md");
+
+        let skills = [];
+        let skillsError = null;
+        try {
+          skills = listSkills();
+        } catch (error) {
+          skillsError = error.name + ": " + error.message;
+        }
+
+        const skillIds = new Set(skills.filter((skill) => skill.ok).map((skill) => skill.id));
+        const missingRequiredSkills = REQUIRED_SKILLS.filter((id) => !skillIds.has(id));
+        const opencodePlugin = await inspectOpenCodePlugin();
+        const packageOk = packageJson.ok && packageJson.data.name === "superpowers";
+
+        return {
+          ok: packageOk && skills.length > 0 && missingRequiredSkills.length === 0 && opencodePlugin.ok,
+          service: "superpowers-local-verifier",
+          upstream: UPSTREAM_REPO,
+          source_ref: SOURCE_REF,
+          source_archive_url: UPSTREAM_REPO + "/archive/" + SOURCE_REF + ".tar.gz",
+          node: process.version,
+          platform: os.platform() + "/" + os.arch(),
+          cpu_only: true,
+          credentials_required: false,
+          provider_network_calls_performed: false,
+          browser_auth_performed: false,
+          model_downloaded: false,
+          package: packageJson.ok
+            ? {
+                name: packageJson.data.name,
+                version: packageJson.data.version,
+                type: packageJson.data.type,
+                main: packageJson.data.main,
+              }
+            : packageJson,
+          plugin_metadata: {
+            claude: claudePlugin.ok ? claudePlugin.data : claudePlugin,
+            codex: codexPlugin.ok ? {
+              name: codexPlugin.data.name,
+              version: codexPlugin.data.version,
+              short_description: codexPlugin.data.interface && codexPlugin.data.interface.shortDescription,
+              category: codexPlugin.data.interface && codexPlugin.data.interface.category,
+              composer_icon: codexPlugin.data.interface && codexPlugin.data.interface.composerIcon,
+              logo: codexPlugin.data.interface && codexPlugin.data.interface.logo,
+            } : codexPlugin,
+            cursor: cursorPlugin.ok ? {
+              name: cursorPlugin.data.name,
+              version: cursorPlugin.data.version,
+              description: cursorPlugin.data.description,
+            } : cursorPlugin,
+            gemini: geminiExtension.ok ? geminiExtension.data : geminiExtension,
+          },
+          opencode: {
+            install_doc_present: opencodeInstallDoc.ok,
+            plugin: opencodePlugin,
+          },
+          skills: {
+            count: skills.length,
+            required: REQUIRED_SKILLS.map((id) => {
+              const skill = skills.find((candidate) => candidate.id === id);
+              return skill || { id, ok: false };
+            }),
+            all_ids: skills.map((skill) => skill.id),
+            error: skillsError,
+          },
+        };
+      }
+
+      const startupInspection = inspectRuntime();
+
+      function writeJson(response, status, payload) {
+        const body = Buffer.from(JSON.stringify(payload, null, 2) + "\n", "utf8");
+        response.writeHead(status, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Content-Length": String(body.length),
+          "Cache-Control": "no-store",
+        });
+        response.end(body);
+      }
+
+      function baseResponse(inspection) {
+        return {
+          ok: inspection.ok,
+          service: inspection.service,
+          upstream: inspection.upstream,
+          source_ref: inspection.source_ref,
+          uptime_seconds: Math.round((Date.now() - STARTED_AT) / 100) / 10,
+          cpu_only: true,
+          credentials_required: false,
+          provider_network_calls_performed: false,
+          browser_auth_performed: false,
+          model_downloaded: false,
+          package: inspection.package,
+        };
+      }
+
+      async function responseFor(request) {
+        const requestUrl = new URL(request.url, "http://127.0.0.1");
+        const inspection = await startupInspection;
+
+        if (requestUrl.pathname === "/" || requestUrl.pathname === "/healthz") {
+          return {
+            status: inspection.ok ? 200 : 503,
+            body: {
+              ...baseResponse(inspection),
+              status: inspection.ok ? "ready" : "unhealthy",
+              skills_count: inspection.skills.count,
+              missing_required_skills: inspection.skills.required
+                .filter((skill) => !skill.ok)
+                .map((skill) => skill.id),
+              opencode_plugin_ok: inspection.opencode.plugin.ok,
+              endpoints: ["/healthz", "/demo", "/v1/models"],
+            },
+          };
+        }
+
+        if (requestUrl.pathname === "/demo") {
+          const requestedSkill = requestUrl.searchParams.get("skill") || "using-superpowers";
+          const skill = inspection.skills.required.find((candidate) => candidate.id === requestedSkill)
+            || inspection.skills.required.find((candidate) => candidate.id === "using-superpowers");
+
+          return {
+            status: inspection.ok ? 200 : 503,
+            body: {
+              ...baseResponse(inspection),
+              demo: {
+                what_ran: [
+                  "Installed the upstream Superpowers source archive with npm.",
+                  "Parsed real SKILL.md frontmatter from the installed skills directory.",
+                  "Dynamically imported the installed OpenCode plugin.",
+                  "Executed the plugin config hook and bootstrap message transform against local fixture data.",
+                ],
+                selected_skill: skill,
+                required_skills: inspection.skills.required,
+                opencode_plugin: inspection.opencode.plugin,
+                local_only: {
+                  credentials_required: false,
+                  provider_network_calls_performed: false,
+                  browser_auth_performed: false,
+                  model_downloaded: false,
+                },
+              },
+            },
+          };
+        }
+
+        if (requestUrl.pathname === "/v1/models") {
+          return {
+            status: inspection.ok ? 200 : 503,
+            body: {
+              object: "list",
+              data: [
+                {
+                  id: "superpowers/local-skills-verifier",
+                  object: "model",
+                  created: 0,
+                  owned_by: "obra",
+                  description: "Metadata-only verifier for the installed Superpowers skills package. No LLM model is loaded or called.",
+                },
+              ],
+              package_version: inspection.package.version,
+              skills_count: inspection.skills.count,
+              remote_model_calls: false,
+            },
+          };
+        }
+
+        return {
+          status: 404,
+          body: {
+            ok: false,
+            error: "not_found",
+            endpoints: ["/healthz", "/demo", "/v1/models"],
+          },
+        };
+      }
+
+      const server = http.createServer(async (request, response) => {
+        if (request.method !== "GET") {
+          writeJson(response, 405, { ok: false, error: "method_not_allowed" });
+          return;
+        }
+
+        try {
+          const result = await responseFor(request);
+          writeJson(response, result.status, result.body);
+        } catch (error) {
+          writeJson(response, 500, {
+            ok: false,
+            error: error.name + ": " + error.message,
+          });
+        }
+      });
+
+      server.listen(PORT, "0.0.0.0", () => {
+        console.log("superpowers verifier listening on port " + PORT);
+      });
