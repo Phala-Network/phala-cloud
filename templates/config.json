@@ -6052,5 +6052,33 @@
       "diskSize": 20
     },
     "tags": ["AI Agents", "Developer Tools", "Data & Storage"]
+  },
+{
+    "id": "supertonic",
+    "name": "supertone-inc/supertonic",
+    "description": "Lightning-Fast, On-Device, Multilingual TTS — running natively via ONNX.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/supertonic",
+    "author": "supertone-inc",
+    "icon": "supertonic.png",
+    "envs": [
+      {
+        "key": "SUPERTONIC_PACKAGE_VERSION",
+        "required": false,
+        "default": "1.3.1",
+        "description": "Pinned Supertonic Python package version installed by the verifier service at startup."
+      },
+      {
+        "key": "SUPERTONIC_DEMO_TEXT",
+        "required": false,
+        "default": "Supertonic verifier running on Phala Cloud",
+        "description": "Text split by upstream utility functions and echoed by /demo. It is not synthesized into audio by the default template."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["LLM Inference & Model Serving", "Media & Design", "AI Agents"]
   }
 ]
