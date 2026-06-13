@@ -1,0 +1,531 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    restart: unless-stopped
+    init: true
+    user: "65532:65532"
+    expose:
+      - "8000"
+    environment:
+      APP_PORT: "8000"
+      AGENCY_AGENTS_REF: ${AGENCY_AGENTS_REF:-a077c9ac0be381ec15e7dcbb690f641d6091a5db}
+      AGENCY_AGENTS_SOURCE_TIMEOUT_SECONDS: ${AGENCY_AGENTS_SOURCE_TIMEOUT_SECONDS:-60}
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    configs:
+      - source: agency_agents_verifier
+        target: /opt/agency-agents-verifier/server.py
+        mode: 0444
+    command:
+      - python
+      - /opt/agency-agents-verifier/server.py
+    working_dir: /tmp
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8000'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+          reverse_proxy app:8000
+      }
+
+  agency_agents_verifier:
+    content: |
+      import collections
+      import json
+      import os
+      import platform
+      import shutil
+      import sys
+      import tarfile
+      import threading
+      import time
+      import urllib.error
+      import urllib.parse
+      import urllib.request
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      UPSTREAM_REPO = "https://github.com/msitarzewski/agency-agents"
+      PHALA_TEMPLATE = "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/agency-agents"
+      DEFAULT_REF = "a077c9ac0be381ec15e7dcbb690f641d6091a5db"
+      SOURCE_REF = os.environ.get("AGENCY_AGENTS_REF", DEFAULT_REF).strip() or DEFAULT_REF
+      SOURCE_DIR = Path("/tmp/agency-agents-source")
+      APP_PORT = int(os.environ.get("APP_PORT", "8000"))
+      AGENT_DIRS = (
+          "academic",
+          "design",
+          "engineering",
+          "finance",
+          "game-development",
+          "gis",
+          "marketing",
+          "paid-media",
+          "product",
+          "project-management",
+          "sales",
+          "security",
+          "spatial-computing",
+          "specialized",
+          "strategy",
+          "support",
+          "testing",
+      )
+      SAMPLE_AGENT_PATHS = (
+          "engineering/engineering-frontend-developer.md",
+          "marketing/marketing-reddit-community-builder.md",
+          "design/design-whimsy-injector.md",
+          "testing/testing-reality-checker.md",
+      )
+      REQUIRED_PATHS = (
+          "README.md",
+          "LICENSE",
+          "scripts/install.sh",
+          "scripts/convert.sh",
+          "scripts/lib.sh",
+          "integrations/README.md",
+      )
+      SOURCE_LOCK = threading.Lock()
+      INDEX_LOCK = threading.Lock()
+      SOURCE_STATUS = None
+      INDEX_STATUS = None
+
+
+      def timeout_seconds():
+          try:
+              return max(10.0, float(os.environ.get("AGENCY_AGENTS_SOURCE_TIMEOUT_SECONDS", "60")))
+          except ValueError:
+              return 60.0
+
+
+      def source_tarball_url():
+          ref = urllib.parse.quote(SOURCE_REF, safe="")
+          return f"https://codeload.github.com/msitarzewski/agency-agents/tar.gz/{ref}"
+
+
+      def is_relative_to(child, parent):
+          try:
+              child.resolve().relative_to(parent.resolve())
+              return True
+          except ValueError:
+              return False
+
+
+      def open_source_archive():
+          retryable_statuses = {429, 500, 502, 503, 504}
+          last_error = None
+          for attempt in range(1, 4):
+              request = urllib.request.Request(
+                  source_tarball_url(),
+                  headers={"User-Agent": "phala-cloud-agency-agents-template/1.0"},
+              )
+              try:
+                  return urllib.request.urlopen(request, timeout=timeout_seconds())
+              except urllib.error.HTTPError as exc:
+                  last_error = exc
+                  if exc.code not in retryable_statuses:
+                      raise
+              except urllib.error.URLError as exc:
+                  last_error = exc
+
+              if attempt < 3:
+                  time.sleep(min(20, 2 ** attempt))
+
+          raise RuntimeError(f"failed to download upstream source: {last_error}")
+
+
+      def extract_source_archive():
+          if SOURCE_DIR.exists():
+              shutil.rmtree(SOURCE_DIR)
+          SOURCE_DIR.mkdir(parents=True, exist_ok=True)
+
+          with open_source_archive() as response:
+              with tarfile.open(fileobj=response, mode="r|gz") as archive:
+                  for member in archive:
+                      parts = Path(member.name).parts
+                      if len(parts) <= 1:
+                          continue
+                      relative = Path(*parts[1:])
+                      target = SOURCE_DIR / relative
+                      if not is_relative_to(target, SOURCE_DIR):
+                          raise RuntimeError(f"unsafe archive path: {member.name}")
+                      if member.isdir():
+                          target.mkdir(parents=True, exist_ok=True)
+                      elif member.isfile():
+                          target.parent.mkdir(parents=True, exist_ok=True)
+                          source = archive.extractfile(member)
+                          if source is None:
+                              continue
+                          with target.open("wb") as output:
+                              shutil.copyfileobj(source, output)
+
+
+      def public_source_status(source):
+          return {
+              "ok": source.get("ok", False),
+              "ref": source.get("ref", SOURCE_REF),
+              "archive_url": source.get("archive_url", source_tarball_url()),
+              "downloaded_at": source.get("downloaded_at"),
+              "error": source.get("error"),
+          }
+
+
+      def load_source():
+          global SOURCE_STATUS
+          with SOURCE_LOCK:
+              if SOURCE_STATUS is not None:
+                  return SOURCE_STATUS
+              try:
+                  extract_source_archive()
+                  missing = [path for path in REQUIRED_PATHS if not (SOURCE_DIR / path).exists()]
+                  if missing:
+                      raise RuntimeError("missing expected upstream paths: " + ", ".join(missing))
+                  SOURCE_STATUS = {
+                      "ok": True,
+                      "ref": SOURCE_REF,
+                      "archive_url": source_tarball_url(),
+                      "root": SOURCE_DIR,
+                      "downloaded_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                  }
+              except Exception as exc:
+                  SOURCE_STATUS = {
+                      "ok": False,
+                      "ref": SOURCE_REF,
+                      "archive_url": source_tarball_url(),
+                      "error": f"{type(exc).__name__}: {exc}",
+                  }
+              return SOURCE_STATUS
+
+
+      def parse_frontmatter(path):
+          text = path.read_text("utf-8", errors="replace")
+          if not text.startswith("---\n"):
+              return None
+          end = text.find("\n---", 4)
+          if end == -1:
+              return None
+          fields = {}
+          for line in text[4:end].splitlines():
+              if ":" not in line:
+                  continue
+              key, value = line.split(":", 1)
+              fields[key.strip()] = value.strip().strip("'\"")
+          if not fields.get("name") or not fields.get("description"):
+              return None
+          headings = []
+          for line in text[end + 4 :].splitlines():
+              if line.startswith("#"):
+                  headings.append(line.lstrip("#").strip())
+              if len(headings) >= 5:
+                  break
+          return {
+              "name": fields.get("name"),
+              "description": fields.get("description"),
+              "color": fields.get("color"),
+              "emoji": fields.get("emoji"),
+              "vibe": fields.get("vibe"),
+              "headings": headings,
+              "bytes": path.stat().st_size,
+          }
+
+
+      def integration_docs(root):
+          base = root / "integrations"
+          docs = []
+          if not base.exists():
+              return docs
+          for path in sorted(base.glob("*/README.md")):
+              docs.append(path.parent.name)
+          return docs
+
+
+      def scan_source():
+          source = load_source()
+          if not source.get("ok"):
+              return {
+                  "ok": False,
+                  "source": public_source_status(source),
+                  "error": source.get("error"),
+              }
+
+          root = source["root"]
+          agents = []
+          counts = collections.Counter()
+          for division in AGENT_DIRS:
+              division_root = root / division
+              if not division_root.exists():
+                  continue
+              for path in sorted(division_root.rglob("*.md")):
+                  metadata = parse_frontmatter(path)
+                  if metadata is None:
+                      continue
+                  relative = path.relative_to(root).as_posix()
+                  metadata["path"] = relative
+                  metadata["division"] = division
+                  agents.append(metadata)
+                  counts[division] += 1
+
+          sample_agents = []
+          sample_errors = []
+          for relative in SAMPLE_AGENT_PATHS:
+              path = root / relative
+              metadata = parse_frontmatter(path) if path.exists() else None
+              if metadata is None:
+                  sample_errors.append(relative)
+                  continue
+              metadata["path"] = relative
+              metadata["division"] = relative.split("/", 1)[0]
+              sample_agents.append(metadata)
+
+          required_checks = {path: (root / path).exists() for path in REQUIRED_PATHS}
+          ok = (
+              bool(agents)
+              and not sample_errors
+              and all(required_checks.values())
+              and len(integration_docs(root)) >= 8
+          )
+          return {
+              "ok": ok,
+              "source": public_source_status(source),
+              "upstream_repo": UPSTREAM_REPO,
+              "phala_template": PHALA_TEMPLATE,
+              "agent_count": len(agents),
+              "division_count": len([name for name, count in counts.items() if count > 0]),
+              "agents_by_division": dict(sorted(counts.items())),
+              "integration_docs": integration_docs(root),
+              "required_paths": required_checks,
+              "sample_agents": sample_agents,
+              "sample_errors": sample_errors,
+              "error": None if ok else "upstream source did not match expected agency-agents structure",
+          }
+
+
+      def load_index():
+          global INDEX_STATUS
+          with INDEX_LOCK:
+              if INDEX_STATUS is None:
+                  INDEX_STATUS = scan_source()
+              return INDEX_STATUS
+
+
+      def base_payload():
+          index = load_index()
+          return {
+              "service": "agency-agents-verifier",
+              "ok": index.get("ok", False),
+              "status": "ready" if index.get("ok", False) else "unhealthy",
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "credentials_required": False,
+              "llm_provider_calls": False,
+              "model_downloaded": False,
+              "model_loaded": False,
+              "source": index.get("source"),
+          }
+
+
+      def demo_payload():
+          index = load_index()
+          handoff_plan = [
+              {
+                  "agent": "Frontend Developer",
+                  "responsibility": "Define the user-facing implementation checks for a small web feature.",
+              },
+              {
+                  "agent": "Reddit Community Builder",
+                  "responsibility": "Draft community-safe launch feedback questions without posting anywhere.",
+              },
+              {
+                  "agent": "Whimsy Injector",
+                  "responsibility": "Suggest where personality can be added without changing core behavior.",
+              },
+              {
+                  "agent": "Reality Checker",
+                  "responsibility": "Require evidence before marking the workflow production-ready.",
+              },
+          ]
+          return {
+              "ok": index.get("ok", False),
+              "demo": "deterministic agency roster source verifier",
+              "input": "Plan a small launch review for an AI developer tool.",
+              "upstream_repo": UPSTREAM_REPO,
+              "agent_count": index.get("agent_count", 0),
+              "division_count": index.get("division_count", 0),
+              "sample_agents": index.get("sample_agents", []),
+              "handoff_plan": handoff_plan,
+              "local_checks": {
+                  "required_paths_present": all(index.get("required_paths", {}).values()),
+                  "sample_agent_frontmatter_parsed": not index.get("sample_errors"),
+                  "integration_docs_detected": len(index.get("integration_docs", [])),
+              },
+              "credentials_required": False,
+              "llm_provider_calls": False,
+              "browser_auth": False,
+              "model_downloaded": False,
+              "production_note": (
+                  "This endpoint verifies and indexes the real upstream Markdown agent source. "
+                  "Production use means installing selected agents into a supported local tool "
+                  "with upstream scripts, then configuring any model provider credentials in that tool."
+              ),
+              "error": index.get("error"),
+          }
+
+
+      def models_payload():
+          index = load_index()
+          return {
+              "object": "list",
+              "data": [
+                  {
+                      "id": "agency-agents/no-llm-roster-index",
+                      "object": "model",
+                      "created": 0,
+                      "owned_by": "msitarzewski",
+                      "description": (
+                          "OpenAI-shaped metadata endpoint for the local agency-agents source verifier. "
+                          "It indexes upstream Markdown agent definitions and does not host or call an LLM."
+                      ),
+                  }
+              ],
+              "upstream_repo": UPSTREAM_REPO,
+              "agent_count": index.get("agent_count", 0),
+              "llm_provider_calls": False,
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "agency-agents-verifier"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+
+              if path == "/healthz":
+                  payload = base_payload()
+                  if payload["ok"]:
+                      index = load_index()
+                      payload.update(
+                          {
+                              "agent_count": index.get("agent_count", 0),
+                              "division_count": index.get("division_count", 0),
+                              "integration_docs": index.get("integration_docs", []),
+                          }
+                      )
+                  else:
+                      payload["error"] = load_index().get("error")
+                  self.respond_json(HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload)
+                  return
+
+              if path == "/demo":
+                  payload = demo_payload()
+                  self.respond_json(HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload)
+                  return
+
+              if path == "/v1/models":
+                  self.respond_json(HTTPStatus.OK, models_payload())
+                  return
+
+              if path == "/":
+                  self.respond_json(
+                      HTTPStatus.OK,
+                      {
+                          "service": "agency-agents-verifier",
+                          "endpoints": ["/healthz", "/demo", "/v1/models"],
+                          "upstream_repo": UPSTREAM_REPO,
+                          "credentials_required": False,
+                          "llm_provider_calls": False,
+                      },
+                  )
+                  return
+
+              self.respond_json(
+                  HTTPStatus.NOT_FOUND,
+                  {
+                      "error": "not_found",
+                      "endpoints": ["/healthz", "/demo", "/v1/models"],
+                  },
+              )
+
+
+      if __name__ == "__main__":
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": APP_PORT,
+                      "upstream_repo": UPSTREAM_REPO,
+                      "source_ref": SOURCE_REF,
+                      "credentials_required": False,
+                      "llm_provider_calls": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", APP_PORT), Handler).serve_forever()
+
+networks:
+  internal:
+    driver: bridge

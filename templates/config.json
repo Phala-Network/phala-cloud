@@ -5912,5 +5912,33 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools", "Automation"]
+  },
+{
+    "id": "agency-agents",
+    "name": "msitarzewski/agency-agents",
+    "description": "A complete AI agency at your fingertips - From frontend wizards to Reddit community ninjas, from whimsy injectors to reality checkers. Each agent is a specialized expert with personality, processes, and proven deliverables.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/agency-agents",
+    "author": "msitarzewski",
+    "icon": "agency-agents.jpg",
+    "envs": [
+      {
+        "key": "AGENCY_AGENTS_REF",
+        "required": false,
+        "default": "a077c9ac0be381ec15e7dcbb690f641d6091a5db",
+        "description": "Upstream agency-agents branch, tag, or commit archive ref downloaded by the verifier service at startup."
+      },
+      {
+        "key": "AGENCY_AGENTS_SOURCE_TIMEOUT_SECONDS",
+        "required": false,
+        "default": "60",
+        "description": "Timeout in seconds for downloading the upstream source archive."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools"]
   }
 ]
