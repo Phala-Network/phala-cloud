@@ -1,0 +1,319 @@
+services:
+  app:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8000"
+    environment:
+      APP_PORT: ${APP_PORT:-8000}
+      SUPERTONIC_PACKAGE_VERSION: ${SUPERTONIC_PACKAGE_VERSION:-1.3.1}
+      SUPERTONIC_DEMO_TEXT: ${SUPERTONIC_DEMO_TEXT:-Supertonic verifier running on Phala Cloud}
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_ROOT_USER_ACTION: ignore
+      PYTHONUNBUFFERED: "1"
+      UV_SYSTEM_PYTHON: "1"
+    configs:
+      - source: supertonic_demo_app
+        target: /opt/supertonic-demo/main.py
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        uv pip install --system --no-cache "supertonic==$${SUPERTONIC_PACKAGE_VERSION}"
+        exec python /opt/supertonic-demo/main.py
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8000'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+          reverse_proxy app:8000
+      }
+
+  supertonic_demo_app:
+    content: |
+      import importlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      PACKAGE_NAME = "supertonic"
+      DEMO_TEXT = os.environ.get(
+          "SUPERTONIC_DEMO_TEXT",
+          "Supertonic verifier running on Phala Cloud",
+      )
+
+
+      def import_checks():
+          result = {
+              "package": PACKAGE_NAME,
+              "distribution_version": None,
+              "module_version": None,
+              "import_ok": False,
+              "checks": {},
+              "available_models": [],
+              "default_model": None,
+              "available_languages": [],
+              "model_configs": {},
+              "demo_chunks": [],
+              "demo_filename": None,
+              "error": None,
+          }
+          try:
+              result["distribution_version"] = importlib.metadata.version(PACKAGE_NAME)
+              supertonic = importlib.import_module(PACKAGE_NAME)
+              config = importlib.import_module("supertonic.config")
+              utils = importlib.import_module("supertonic.utils")
+
+              result["module_version"] = getattr(supertonic, "__version__", None)
+              result["available_models"] = list(getattr(config, "AVAILABLE_MODELS", []))
+              result["default_model"] = getattr(config, "DEFAULT_MODEL", None)
+              result["available_languages"] = list(getattr(config, "AVAILABLE_LANGUAGES", []))
+              result["model_configs"] = dict(getattr(config, "MODEL_CONFIGS", {}))
+              result["demo_chunks"] = utils.chunk_text(DEMO_TEXT, max_len=80)
+              result["demo_filename"] = utils.sanitize_filename(DEMO_TEXT, max_len=48)
+
+              for symbol in (
+                  "TTS",
+                  "Style",
+                  "UnicodeProcessor",
+                  "AVAILABLE_MODELS",
+                  "DEFAULT_MODEL",
+                  "SUPPORTED_LANGUAGES",
+              ):
+                  result["checks"][symbol] = hasattr(supertonic, symbol)
+
+              result["checks"]["chunk_text"] = callable(getattr(utils, "chunk_text", None))
+              result["checks"]["sanitize_filename"] = callable(
+                  getattr(utils, "sanitize_filename", None)
+              )
+              result["checks"]["has_supertonic_3"] = "supertonic-3" in result["available_models"]
+              result["checks"]["has_na_language_fallback"] = "na" in result["available_languages"]
+              result["checks"]["language_count_at_least_31"] = (
+                  len([lang for lang in result["available_languages"] if lang != "na"]) >= 31
+              )
+              result["import_ok"] = (
+                  bool(result["distribution_version"])
+                  and bool(result["module_version"])
+                  and all(result["checks"].values())
+              )
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      IMPORT_STATUS = import_checks()
+
+
+      def model_rows():
+          rows = []
+          configs = IMPORT_STATUS.get("model_configs") or {}
+          for model_id in IMPORT_STATUS.get("available_models") or []:
+              model_config = configs.get(model_id, {})
+              rows.append(
+                  {
+                      "id": model_id,
+                      "object": "model",
+                      "created": 0,
+                      "owned_by": "Supertone",
+                      "loaded": False,
+                      "downloaded": False,
+                      "repo": model_config.get("repo"),
+                      "revision": model_config.get("revision"),
+                      "multilingual": bool(model_config.get("multilingual")),
+                      "description": (
+                          "Upstream Supertonic model metadata. The default Phala "
+                          "template does not download weights or load ONNX sessions."
+                      ),
+                  }
+              )
+          if not rows:
+              rows.append(
+                  {
+                      "id": "supertonic/package-verifier",
+                      "object": "model",
+                      "created": 0,
+                      "owned_by": "Supertone",
+                      "loaded": False,
+                      "downloaded": False,
+                      "description": "Package import verifier; no model is hosted.",
+                  }
+              )
+          return rows
+
+
+      def base_payload():
+          return {
+              "service": "supertonic-demo",
+              "upstream": "https://github.com/supertone-inc/supertonic",
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "package": IMPORT_STATUS,
+          }
+
+
+      def response_body(path):
+          if path in ("/", "/healthz", "/v1/health"):
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": IMPORT_STATUS["import_ok"],
+                      "status": "ready" if IMPORT_STATUS["import_ok"] else "import_failed",
+                      "credentials_required": False,
+                      "model_downloaded": False,
+                      "model_loaded": False,
+                      "audio_generated": False,
+                      "endpoints": ["/healthz", "/v1/health", "/demo", "/v1/models"],
+                  }
+              )
+              status = HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+              return status, payload
+
+          if path == "/demo":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "ok": IMPORT_STATUS["import_ok"],
+                      "demo_kind": "cpu-safe package verifier",
+                      "demo_text": DEMO_TEXT,
+                      "chunked_by_upstream_utils": IMPORT_STATUS.get("demo_chunks", []),
+                      "sanitized_filename": IMPORT_STATUS.get("demo_filename"),
+                      "credentials_required": False,
+                      "provider_calls": False,
+                      "browser_auth_required": False,
+                      "model_downloaded": False,
+                      "model_loaded": False,
+                      "audio_generated": False,
+                      "example_native_tts_request": {
+                          "method": "POST",
+                          "path": "/v1/tts",
+                          "body": {
+                              "text": DEMO_TEXT,
+                              "voice": "M1",
+                              "lang": "en",
+                              "steps": 8,
+                              "speed": 1.05,
+                              "response_format": "wav",
+                          },
+                          "note": (
+                              "This is the official server request shape. The verifier "
+                              "does not run it because doing so would require model assets."
+                          ),
+                      },
+                      "production_server": {
+                          "command": "pip install 'supertonic[serve]' && supertonic serve --host 0.0.0.0 --port 7788",
+                          "health_endpoint": "/v1/health",
+                          "native_tts_endpoint": "/v1/tts",
+                          "openai_audio_speech_endpoint": "/v1/audio/speech",
+                      },
+                  }
+              )
+              status = HTTPStatus.OK if IMPORT_STATUS["import_ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+              return status, payload
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": model_rows(),
+                  "model_downloaded": False,
+                  "model_loaded": False,
+                  "audio_generated": False,
+              }
+
+          return HTTPStatus.NOT_FOUND, {
+              "error": "not_found",
+              "endpoints": ["/healthz", "/v1/health", "/demo", "/v1/models"],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "supertonic-demo/1.0"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+              status, payload = response_body(path)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8000"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "package": PACKAGE_NAME,
+                      "import_ok": IMPORT_STATUS["import_ok"],
+                      "model_downloaded": False,
+                      "model_loaded": False,
+                      "audio_generated": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+
+networks:
+  internal:
+    driver: bridge
