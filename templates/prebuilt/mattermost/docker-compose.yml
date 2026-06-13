@@ -1,0 +1,310 @@
+services:
+  mattermost:
+    image: mattermost/mattermost-preview:11.7.3
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8065"
+    volumes:
+      - mattermost_data:/mm/mattermost-data
+      - mattermost_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8065; printf "GET /api/v4/system/ping HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n" >&3; head -n 1 <&3 | grep -q " 200 "'
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 240s
+    networks:
+      - internal
+
+  verifier:
+    image: python:3.12-slim
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8000"
+    environment:
+      APP_PORT: "8000"
+      MATTERMOST_BASE_URL: http://mattermost:8065
+      MATTERMOST_IMAGE: mattermost/mattermost-preview:11.7.3
+      PYTHONUNBUFFERED: "1"
+    configs:
+      - source: verifier_app
+        target: /opt/mattermost-verifier/main.py
+    command:
+      - python
+      - /opt/mattermost-verifier/main.py
+    depends_on:
+      mattermost:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8000'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      mattermost:
+        condition: service_healthy
+      verifier:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+
+          @verifier path /healthz /healthz/ /demo /demo/ /v1/models /v1/models/
+          handle @verifier {
+              reverse_proxy verifier:8000
+          }
+
+          handle {
+              reverse_proxy mattermost:8065 {
+                  header_up X-Forwarded-Proto {scheme}
+                  header_up X-Forwarded-Host {host}
+                  header_up X-Forwarded-For {remote_host}
+              }
+          }
+      }
+
+  verifier_app:
+    content: |
+      import json
+      import os
+      import platform
+      import sys
+      import time
+      import urllib.error
+      import urllib.request
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      ENDPOINTS = ["/healthz", "/demo", "/v1/models"]
+      MATTERMOST_BASE_URL = os.environ.get("MATTERMOST_BASE_URL", "http://mattermost:8065").rstrip("/")
+      MATTERMOST_IMAGE = os.environ.get("MATTERMOST_IMAGE", "mattermost/mattermost-preview:11.7.3")
+      UPSTREAM_REPO = "https://github.com/mattermost/mattermost"
+      DEPLOYMENT_DOCS = "https://docs.mattermost.com/deployment-guide/server/deploy-containers.html"
+
+
+      def request_json(path, timeout=5):
+          url = MATTERMOST_BASE_URL + path
+          started = time.time()
+          try:
+              request = urllib.request.Request(
+                  url,
+                  headers={
+                      "Accept": "application/json",
+                      "User-Agent": "phala-mattermost-verifier/1.0",
+                  },
+              )
+              with urllib.request.urlopen(request, timeout=timeout) as response:
+                  raw = response.read(128 * 1024).decode("utf-8", "replace")
+                  try:
+                      payload = json.loads(raw) if raw else {}
+                  except json.JSONDecodeError:
+                      payload = {"raw": raw[:2048]}
+                  return {
+                      "ok": 200 <= response.status < 300,
+                      "status_code": response.status,
+                      "elapsed_ms": round((time.time() - started) * 1000, 3),
+                      "payload": payload,
+                      "error": None,
+                  }
+          except urllib.error.HTTPError as exc:
+              body = exc.read(4096).decode("utf-8", "replace")
+              return {
+                  "ok": False,
+                  "status_code": exc.code,
+                  "elapsed_ms": round((time.time() - started) * 1000, 3),
+                  "payload": {"raw": body},
+                  "error": f"HTTPError: {exc}",
+              }
+          except Exception as exc:
+              return {
+                  "ok": False,
+                  "status_code": None,
+                  "elapsed_ms": round((time.time() - started) * 1000, 3),
+                  "payload": {},
+                  "error": f"{type(exc).__name__}: {exc}",
+              }
+
+
+      def mattermost_ping():
+          result = request_json("/api/v4/system/ping?get_server_status=true")
+          payload = result.get("payload") or {}
+          status = str(payload.get("status", "")).lower()
+          result["mattermost_status_ok"] = result["ok"] and status == "ok"
+          return result
+
+
+      def base_payload():
+          return {
+              "service": "mattermost-preview-verifier",
+              "upstream": UPSTREAM_REPO,
+              "deployment_docs": DEPLOYMENT_DOCS,
+              "mattermost_image": MATTERMOST_IMAGE,
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "endpoints": ENDPOINTS,
+              "llm_provider_calls": False,
+              "credentials_required": False,
+          }
+
+
+      def response_for(path):
+          ping = mattermost_ping()
+
+          if path == "/healthz":
+              healthy = ping["mattermost_status_ok"]
+              payload = base_payload()
+              payload.update(
+                  {
+                      "status": "ok" if healthy else "unhealthy",
+                      "mattermost": {
+                          "base_url": MATTERMOST_BASE_URL,
+                          "system_ping": ping,
+                      },
+                  }
+              )
+              return HTTPStatus.OK if healthy else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/demo":
+              payload = base_payload()
+              payload.update(
+                  {
+                      "name": "Mattermost Preview verifier",
+                      "description": (
+                          "Runs the official Mattermost Docker Preview server and verifies "
+                          "the real Mattermost /api/v4/system/ping endpoint without requiring "
+                          "user credentials or external provider calls."
+                      ),
+                      "routes": {
+                          "/": "Mattermost web UI proxied by Caddy.",
+                          "/api/v4/system/ping": "Native Mattermost server ping endpoint.",
+                          "/healthz": "Phala template health check for the running server.",
+                          "/demo": "Deterministic JSON description of this preview deployment.",
+                          "/v1/models": "OpenAI-shaped metadata stub; this template does not serve models.",
+                      },
+                      "mattermost": {
+                          "base_url": MATTERMOST_BASE_URL,
+                          "system_ping": ping,
+                      },
+                      "preview_mode": {
+                          "production_ready": False,
+                          "notes": [
+                              "The upstream Docker Preview image is intended for evaluation on one machine.",
+                              "It includes internal non-production database settings.",
+                              "Use the official production Docker deployment for real teams.",
+                          ],
+                      },
+                  }
+              )
+              return HTTPStatus.OK if ping["mattermost_status_ok"] else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/v1/models":
+              return HTTPStatus.OK, {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": "mattermost/no-llm-preview",
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "mattermost",
+                          "description": (
+                              "Metadata-only placeholder. The default Mattermost template "
+                              "runs a collaboration server, not an LLM or inference API."
+                          ),
+                      }
+                  ],
+              }
+
+          if path == "/":
+              payload = base_payload()
+              payload["mattermost"] = {"base_url": MATTERMOST_BASE_URL, "system_ping": ping}
+              return HTTPStatus.OK, payload
+
+          return HTTPStatus.NOT_FOUND, {"error": "not_found", "endpoints": ENDPOINTS}
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "mattermost-preview-verifier"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+              status, payload = response_for(path)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8000"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "mattermost_base_url": MATTERMOST_BASE_URL,
+                      "mattermost_image": MATTERMOST_IMAGE,
+                      "llm_provider_calls": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+
+volumes:
+  mattermost_data:
+  mattermost_postgres:
+
+networks:
+  internal:
+    driver: bridge
