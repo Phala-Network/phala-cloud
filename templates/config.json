@@ -5680,5 +5680,33 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools"]
+  },
+{
+    "id": "agent-skills",
+    "name": "addyosmani/agent-skills",
+    "description": "Production-grade engineering skills for AI coding agents.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/agent-skills",
+    "author": "addyosmani",
+    "icon": "agent-skills.jpg",
+    "envs": [
+      {
+        "key": "AGENT_SKILLS_REF",
+        "required": false,
+        "default": "d187883b7d761265309cdcc0f202cc76b4b3fb06",
+        "description": "Git branch, tag, or commit fetched from the upstream agent-skills repository by the verifier."
+      },
+      {
+        "key": "AGENT_SKILLS_REPO",
+        "required": false,
+        "default": "https://github.com/addyosmani/agent-skills.git",
+        "description": "Source repository fetched by the verifier. Override only for testing a fork."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools"]
   }
 ]

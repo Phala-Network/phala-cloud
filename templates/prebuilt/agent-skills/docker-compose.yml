@@ -1,0 +1,454 @@
+services:
+  app:
+    image: node:22-alpine
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8000"
+    environment:
+      APP_PORT: ${APP_PORT:-8000}
+      AGENT_SKILLS_REPO: ${AGENT_SKILLS_REPO:-https://github.com/addyosmani/agent-skills.git}
+      AGENT_SKILLS_REF: ${AGENT_SKILLS_REF:-d187883b7d761265309cdcc0f202cc76b4b3fb06}
+      NODE_ENV: production
+    configs:
+      - source: agent_skills_demo_app
+        target: /opt/agent-skills-demo/server.js
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        apk add --no-cache git ca-certificates
+        exec node /opt/agent-skills-demo/server.js
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "const http=require('http'); const port=process.env.APP_PORT || '8000'; const req=http.get({host:'127.0.0.1', port, path:'/healthz', timeout:5000}, res => { process.exit(res.statusCode === 200 ? 0 : 1); }); req.on('timeout', () => req.destroy(new Error('timeout'))); req.on('error', () => process.exit(1));",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+          reverse_proxy app:8000
+      }
+
+  agent_skills_demo_app:
+    content: |
+      const childProcess = require("child_process");
+      const fs = require("fs");
+      const http = require("http");
+      const os = require("os");
+      const path = require("path");
+      const url = require("url");
+
+      const STARTED_AT = Date.now();
+      const DEFAULT_REPO = "https://github.com/addyosmani/agent-skills.git";
+      const DEFAULT_REF = "d187883b7d761265309cdcc0f202cc76b4b3fb06";
+      const SOURCE_DIR = "/tmp/agent-skills-source";
+      const REQUIRED_SECTIONS = [
+        "## Overview",
+        "## When to Use",
+        "## Common Rationalizations",
+        "## Red Flags",
+        "## Verification",
+      ];
+      const SECTION_EXEMPT_SKILLS = new Set(["using-agent-skills", "idea-refine"]);
+
+      function tail(value, maxChars) {
+        const text = String(value || "");
+        return text.length > maxChars ? text.slice(text.length - maxChars) : text;
+      }
+
+      function run(command, args, options) {
+        const result = childProcess.spawnSync(command, args, {
+          cwd: options && options.cwd ? options.cwd : undefined,
+          encoding: "utf8",
+          maxBuffer: 16 * 1024 * 1024,
+          timeout: options && options.timeout ? options.timeout : 120000,
+        });
+        if (result.error) {
+          throw result.error;
+        }
+        if (result.status !== 0) {
+          const error = new Error(command + " " + args.join(" ") + " exited with " + result.status);
+          error.stdout = tail(result.stdout, 4000);
+          error.stderr = tail(result.stderr, 4000);
+          throw error;
+        }
+        return {
+          stdout: result.stdout || "",
+          stderr: result.stderr || "",
+          status: result.status,
+        };
+      }
+
+      function runCheck(command, args, options) {
+        const result = childProcess.spawnSync(command, args, {
+          cwd: options && options.cwd ? options.cwd : undefined,
+          encoding: "utf8",
+          maxBuffer: 16 * 1024 * 1024,
+          timeout: options && options.timeout ? options.timeout : 120000,
+        });
+        return {
+          status: typeof result.status === "number" ? result.status : 1,
+          stdout: result.stdout || "",
+          stderr: result.stderr || (result.error ? String(result.error.message || result.error) : ""),
+        };
+      }
+
+      function listFiles(dir, predicate) {
+        if (!fs.existsSync(dir)) {
+          return [];
+        }
+        return fs
+          .readdirSync(dir, { withFileTypes: true })
+          .filter(function (entry) {
+            return entry.isFile() && (!predicate || predicate(entry.name));
+          })
+          .map(function (entry) {
+            return entry.name;
+          })
+          .sort();
+      }
+
+      function listDirs(dir) {
+        if (!fs.existsSync(dir)) {
+          return [];
+        }
+        return fs
+          .readdirSync(dir, { withFileTypes: true })
+          .filter(function (entry) {
+            return entry.isDirectory();
+          })
+          .map(function (entry) {
+            return entry.name;
+          })
+          .sort();
+      }
+
+      function readJson(filePath) {
+        return JSON.parse(fs.readFileSync(filePath, "utf8"));
+      }
+
+      function parseFrontmatter(content) {
+        const normalized = content.replace(/\r\n/g, "\n");
+        if (!normalized.startsWith("---\n")) {
+          return null;
+        }
+        const end = normalized.indexOf("\n---\n", 4);
+        if (end === -1) {
+          return null;
+        }
+        const frontmatter = {};
+        const lines = normalized.slice(4, end).split("\n");
+        for (const line of lines) {
+          const index = line.indexOf(":");
+          if (index === -1) {
+            continue;
+          }
+          const key = line.slice(0, index).trim();
+          let value = line.slice(index + 1).trim();
+          value = value.replace(/^["']|["']$/g, "");
+          if (key) {
+            frontmatter[key] = value;
+          }
+        }
+        return frontmatter;
+      }
+
+      function inspectSource(root) {
+        const pluginManifest = readJson(path.join(root, "plugin.json"));
+        const claudePluginManifest = readJson(path.join(root, ".claude-plugin", "plugin.json"));
+        const marketplaceManifest = readJson(path.join(root, ".claude-plugin", "marketplace.json"));
+        const skillNames = listDirs(path.join(root, "skills"));
+        const skills = [];
+        const skillErrors = [];
+
+        for (const skillName of skillNames) {
+          const skillPath = path.join(root, "skills", skillName, "SKILL.md");
+          if (!fs.existsSync(skillPath)) {
+            skillErrors.push(skillName + ": missing SKILL.md");
+            continue;
+          }
+          const content = fs.readFileSync(skillPath, "utf8");
+          const frontmatter = parseFrontmatter(content);
+          const sectionStatus = {};
+          for (const section of REQUIRED_SECTIONS) {
+            sectionStatus[section] = content.includes(section);
+          }
+          const missingSections = SECTION_EXEMPT_SKILLS.has(skillName)
+            ? []
+            : REQUIRED_SECTIONS.filter(function (section) {
+                return !sectionStatus[section];
+              });
+          if (!frontmatter) {
+            skillErrors.push(skillName + ": missing frontmatter");
+          } else {
+            if (frontmatter.name !== skillName) {
+              skillErrors.push(skillName + ": frontmatter name mismatch");
+            }
+            if (!frontmatter.description) {
+              skillErrors.push(skillName + ": missing description");
+            }
+          }
+          for (const missing of missingSections) {
+            skillErrors.push(skillName + ": missing " + missing);
+          }
+          skills.push({
+            name: skillName,
+            description: frontmatter && frontmatter.description ? frontmatter.description : null,
+            section_checks_exempt: SECTION_EXEMPT_SKILLS.has(skillName),
+            missing_sections: missingSections,
+          });
+        }
+
+        const commandFiles = {
+          claude: listFiles(path.join(root, ".claude", "commands"), function (name) {
+            return name.endsWith(".md");
+          }),
+          toml: listFiles(path.join(root, "commands"), function (name) {
+            return name.endsWith(".toml");
+          }),
+          gemini: listFiles(path.join(root, ".gemini", "commands"), function (name) {
+            return name.endsWith(".toml");
+          }),
+        };
+        const agents = listFiles(path.join(root, "agents"), function (name) {
+          return name.endsWith(".md") && name !== "README.md";
+        });
+        const references = listFiles(path.join(root, "references"), function (name) {
+          return name.endsWith(".md");
+        });
+
+        return {
+          ok: skillErrors.length === 0 && pluginManifest.name === "agent-skills",
+          plugin: pluginManifest,
+          claude_plugin: {
+            name: claudePluginManifest.name,
+            license: claudePluginManifest.license,
+            homepage: claudePluginManifest.homepage,
+            commands: claudePluginManifest.commands,
+            skills: claudePluginManifest.skills,
+            agents: claudePluginManifest.agents,
+          },
+          marketplace: {
+            name: marketplaceManifest.name,
+            plugin_count: Array.isArray(marketplaceManifest.plugins) ? marketplaceManifest.plugins.length : 0,
+          },
+          counts: {
+            skills: skills.length,
+            claude_commands: commandFiles.claude.length,
+            toml_commands: commandFiles.toml.length,
+            gemini_commands: commandFiles.gemini.length,
+            agents: agents.length,
+            references: references.length,
+          },
+          commands: commandFiles,
+          agents: agents,
+          references: references,
+          sample_skills: skills.slice(0, 8),
+          skill_errors: skillErrors,
+        };
+      }
+
+      function initialize() {
+        const repo = process.env.AGENT_SKILLS_REPO || DEFAULT_REPO;
+        const ref = process.env.AGENT_SKILLS_REF || DEFAULT_REF;
+        const result = {
+          ok: false,
+          checked_at: new Date().toISOString(),
+          source: {
+            repo: repo,
+            ref: ref,
+            commit: null,
+          },
+          validation: null,
+          inspect: null,
+          error: null,
+        };
+
+        try {
+          fs.rmSync(SOURCE_DIR, { recursive: true, force: true });
+          fs.mkdirSync(SOURCE_DIR, { recursive: true });
+          run("git", ["init", "-q", "."], { cwd: SOURCE_DIR });
+          run("git", ["remote", "add", "origin", repo], { cwd: SOURCE_DIR });
+          run("git", ["fetch", "--depth", "1", "origin", ref], { cwd: SOURCE_DIR, timeout: 180000 });
+          run("git", ["checkout", "--detach", "-q", "FETCH_HEAD"], { cwd: SOURCE_DIR });
+          result.source.commit = run("git", ["rev-parse", "HEAD"], { cwd: SOURCE_DIR }).stdout.trim();
+          result.inspect = inspectSource(SOURCE_DIR);
+
+          const validation = runCheck("node", ["scripts/validate-skills.js"], {
+            cwd: SOURCE_DIR,
+            timeout: 120000,
+          });
+          result.validation = {
+            passed: validation.status === 0,
+            exit_code: validation.status,
+            stdout_tail: tail(validation.stdout, 6000),
+            stderr_tail: tail(validation.stderr, 2000),
+          };
+          result.ok = Boolean(result.inspect && result.inspect.ok && result.validation.passed);
+        } catch (error) {
+          result.error = {
+            message: error.message,
+            stdout_tail: error.stdout || "",
+            stderr_tail: error.stderr || "",
+          };
+        }
+        return result;
+      }
+
+      const STATUS = initialize();
+
+      function basePayload() {
+        return {
+          service: "agent-skills-verifier",
+          upstream: "https://github.com/addyosmani/agent-skills",
+          source: STATUS.source,
+          uptime_seconds: Math.round((Date.now() - STARTED_AT) / 100) / 10,
+          node: process.version,
+          platform: os.platform() + "/" + os.arch(),
+          credentials_required: false,
+          provider_calls: false,
+          hosted_model_calls: false,
+          model_downloads: false,
+        };
+      }
+
+      function payloadForPath(pathname) {
+        if (pathname === "/" || pathname === "/healthz") {
+          const payload = basePayload();
+          payload.status = STATUS.ok ? "ok" : "unhealthy";
+          payload.ok = STATUS.ok;
+          payload.checks = {
+            source_checkout: Boolean(STATUS.source.commit),
+            upstream_validator: Boolean(STATUS.validation && STATUS.validation.passed),
+            local_skill_inspection: Boolean(STATUS.inspect && STATUS.inspect.ok),
+          };
+          if (STATUS.validation) {
+            payload.validation = {
+              passed: STATUS.validation.passed,
+              exit_code: STATUS.validation.exit_code,
+            };
+          }
+          if (STATUS.inspect) {
+            payload.counts = STATUS.inspect.counts;
+            payload.skill_errors = STATUS.inspect.skill_errors;
+          }
+          if (STATUS.error) {
+            payload.error = STATUS.error;
+          }
+          return { status: STATUS.ok ? 200 : 503, body: payload };
+        }
+
+        if (pathname === "/demo") {
+          const payload = basePayload();
+          payload.name = "addyosmani/agent-skills local source verifier";
+          payload.description = "Clones the real upstream source, runs the upstream skill validator, and reports local plugin and skill metadata without invoking any model provider.";
+          payload.ok = STATUS.ok;
+          payload.demo = {
+            lifecycle: ["define", "plan", "build", "verify", "review", "ship"],
+            source_checkout: STATUS.source,
+            validator: STATUS.validation,
+            manifest: STATUS.inspect ? STATUS.inspect.plugin : null,
+            claude_plugin: STATUS.inspect ? STATUS.inspect.claude_plugin : null,
+            marketplace: STATUS.inspect ? STATUS.inspect.marketplace : null,
+            counts: STATUS.inspect ? STATUS.inspect.counts : null,
+            commands: STATUS.inspect ? STATUS.inspect.commands : null,
+            agents: STATUS.inspect ? STATUS.inspect.agents : null,
+            references: STATUS.inspect ? STATUS.inspect.references : null,
+            sample_skills: STATUS.inspect ? STATUS.inspect.sample_skills : [],
+          };
+          if (STATUS.error) {
+            payload.error = STATUS.error;
+          }
+          return { status: STATUS.ok ? 200 : 503, body: payload };
+        }
+
+        if (pathname === "/v1/models") {
+          return {
+            status: 200,
+            body: {
+              object: "list",
+              data: [
+                {
+                  id: "agent-skills/no-llm-verifier",
+                  object: "model",
+                  created: 0,
+                  owned_by: "addyosmani",
+                  description: "Metadata-only verifier endpoint. This template does not host, download, or call an LLM model.",
+                },
+              ],
+            },
+          };
+        }
+
+        return {
+          status: 404,
+          body: {
+            error: "not_found",
+            endpoints: ["/healthz", "/demo", "/v1/models"],
+          },
+        };
+      }
+
+      const server = http.createServer(function (request, response) {
+        const pathname = url.parse(request.url).pathname.replace(/\/+$/, "") || "/";
+        const result = payloadForPath(pathname);
+        const body = JSON.stringify(result.body, null, 2);
+        response.writeHead(result.status, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Content-Length": Buffer.byteLength(body),
+        });
+        response.end(body);
+      });
+
+      const port = Number.parseInt(process.env.APP_PORT || "8000", 10);
+      server.listen(port, "0.0.0.0", function () {
+        console.log(JSON.stringify({
+          event: "startup",
+          port: port,
+          ok: STATUS.ok,
+          source: STATUS.source,
+          counts: STATUS.inspect ? STATUS.inspect.counts : null,
+          credentials_required: false,
+          provider_calls: false,
+          hosted_model_calls: false,
+          model_downloads: false,
+        }));
+      });
+
+networks:
+  internal:
+    driver: bridge
