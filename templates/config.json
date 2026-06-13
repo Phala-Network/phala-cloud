@@ -5800,5 +5800,33 @@
     "diskSize": 10
   },
   "tags": ["AI Agents", "Developer Tools"]
+  },
+{
+    "id": "tolaria",
+    "name": "refactoringhq/tolaria",
+    "description": "Desktop app to manage markdown knowledge bases",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/tolaria",
+    "author": "refactoringhq",
+    "icon": "tolaria.svg",
+    "envs": [
+      {
+        "key": "TOLARIA_REF",
+        "required": false,
+        "default": "b92d0c7db24cab0461cd81f36c21511cff243c3d",
+        "description": "Git branch, tag, or commit downloaded from refactoringhq/tolaria at container startup."
+      },
+      {
+        "key": "TOLARIA_FETCH_TIMEOUT_SECONDS",
+        "required": false,
+        "default": "120",
+        "description": "Timeout for downloading the upstream GitHub source tarball during bootstrap."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["Developer Tools", "Data & Storage", "AI Agents"]
   }
 ]
