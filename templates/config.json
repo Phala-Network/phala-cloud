@@ -5722,5 +5722,33 @@
       "diskSize": 20
     },
     "tags": ["Business Apps", "Web Apps", "Automation"]
+  },
+{
+    "id": "container",
+    "name": "apple/container",
+    "description": "A tool for creating and running Linux containers using lightweight virtual machines on a Mac. It is written in Swift, and optimized for Apple silicon.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/container",
+    "author": "apple",
+    "icon": "container.png",
+    "envs": [
+      {
+        "key": "CONTAINER_SOURCE_REF",
+        "required": false,
+        "default": "1.0.0",
+        "description": "Upstream apple/container git branch, tag, or 40-character commit cloned into the verifier volume."
+      },
+      {
+        "key": "CONTAINER_EXPECTED_COMMIT",
+        "required": false,
+        "default": "ee848e3ebfd7c73b04dd419683be54fb450b8779",
+        "description": "Expected commit for the cloned upstream source checkout."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["Developer Tools", "Infrastructure"]
   }
 ]
