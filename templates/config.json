@@ -5974,5 +5974,27 @@
       "diskSize": 10
     },
     "tags": ["Developer Tools", "Automation"]
+  },
+{
+    "id": "opencv",
+    "name": "opencv/opencv",
+    "description": "Open Source Computer Vision Library",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/opencv",
+    "author": "opencv",
+    "icon": "opencv.png",
+    "envs": [
+      {
+        "key": "OPENCV_PYTHON_HEADLESS_VERSION",
+        "required": false,
+        "default": "4.13.0.92",
+        "description": "Pinned opencv-python-headless wheel version installed at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 10
+    },
+    "tags": ["Media & Design", "Developer Tools", "AI Agents"]
   }
 ]
