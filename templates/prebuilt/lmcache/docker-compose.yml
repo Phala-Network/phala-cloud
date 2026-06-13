@@ -1,0 +1,348 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.12-slim-bookworm
+        ENV LMCACHE_VERSION=0.4.7 \
+            LMCACHE_LOG_LEVEL=INFO \
+            NO_NATIVE_EXT=1 \
+            PIP_DISABLE_PIP_VERSION_CHECK=1 \
+            PIP_NO_CACHE_DIR=1 \
+            PIP_ROOT_USER_ACTION=ignore \
+            PYTHONUNBUFFERED=1 \
+            SETUPTOOLS_SCM_PRETEND_VERSION_FOR_LMCACHE=0.4.7
+        RUN python -m pip install --no-cache-dir --upgrade pip "setuptools>=77.0.3,<81.0.0" wheel setuptools_scm \
+            && python -m pip install --no-cache-dir --no-deps --no-build-isolation \
+                "https://github.com/LMCache/LMCache/archive/refs/tags/v0.4.7.tar.gz" \
+            && python -c 'import importlib.metadata, lmcache; assert importlib.metadata.version("lmcache") == "0.4.7"; assert getattr(lmcache, "torch_device_type", None) == "cpu"'
+        WORKDIR /app
+        EXPOSE 8080
+        CMD ["python", "/app/server.py"]
+    image: lmcache-demo:0.4.7
+    pull_policy: build
+    ports:
+      - "8080:8080"
+    environment:
+      LMCACHE_LOG_LEVEL: ${LMCACHE_LOG_LEVEL:-INFO}
+      PYTHONUNBUFFERED: "1"
+    configs:
+      - source: server_py
+        target: /app/server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=5).read()
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+configs:
+  server_py:
+    content: |
+      import hashlib
+      import importlib
+      import importlib.metadata
+      import json
+      import os
+      import platform
+      import re
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path
+      from urllib.parse import parse_qs, urlparse
+
+
+      STARTED_AT = time.time()
+      UPSTREAM = "https://github.com/LMCache/LMCache"
+      DOCS = "https://docs.lmcache.ai/"
+      PACKAGE_NAME = "lmcache"
+      ENDPOINTS = ["/healthz", "/demo", "/v1/models"]
+      DEFAULT_QUERY = "How does LMCache reuse KV cache chunks?"
+
+
+      def import_status():
+          result = {
+              "package": PACKAGE_NAME,
+              "distribution_version": None,
+              "module_version": None,
+              "module_file": None,
+              "import_ok": False,
+              "torch_device_type": None,
+              "native_extensions_loaded": False,
+              "runtime_dependencies_installed": {
+                  "torch": False,
+                  "numba": False,
+                  "numpy": False,
+              },
+              "error": None,
+          }
+          try:
+              lmcache = importlib.import_module(PACKAGE_NAME)
+              result["distribution_version"] = importlib.metadata.version(PACKAGE_NAME)
+              result["module_version"] = getattr(lmcache, "__version__", None)
+              result["module_file"] = getattr(lmcache, "__file__", None)
+              result["torch_device_type"] = getattr(lmcache, "torch_device_type", None)
+              result["native_extensions_loaded"] = "lmcache.c_ops" in sys.modules
+              for name in result["runtime_dependencies_installed"]:
+                  try:
+                      importlib.metadata.version(name)
+                      result["runtime_dependencies_installed"][name] = True
+                  except importlib.metadata.PackageNotFoundError:
+                      result["runtime_dependencies_installed"][name] = False
+              result["import_ok"] = (
+                  result["distribution_version"] == "0.4.7"
+                  and result["module_version"] == "0.4.7"
+                  and result["torch_device_type"] == "cpu"
+              )
+          except Exception as exc:
+              result["error"] = f"{type(exc).__name__}: {exc}"
+          return result
+
+
+      IMPORT_STATUS = import_status()
+
+
+      def package_root():
+          module_file = IMPORT_STATUS.get("module_file")
+          if not module_file:
+              return None
+          return Path(module_file).resolve().parent
+
+
+      def file_record(package_path, markers):
+          root = package_root()
+          if root is None:
+              return {
+                  "path": package_path,
+                  "present": False,
+                  "contains_expected_content": False,
+                  "markers": markers,
+                  "error": "lmcache module path is unavailable",
+              }
+          path = root / package_path
+          try:
+              data = path.read_bytes()
+              text = data.decode("utf-8", errors="replace")
+              marker_hits = {marker: marker in text for marker in markers}
+              return {
+                  "path": f"lmcache/{package_path}",
+                  "present": True,
+                  "bytes": len(data),
+                  "sha256": hashlib.sha256(data).hexdigest(),
+                  "contains_expected_content": all(marker_hits.values()),
+                  "markers": marker_hits,
+              }
+          except Exception as exc:
+              return {
+                  "path": f"lmcache/{package_path}",
+                  "present": False,
+                  "contains_expected_content": False,
+                  "markers": {marker: False for marker in markers},
+                  "error": f"{type(exc).__name__}: {exc}",
+              }
+
+
+      def source_status():
+          required = [
+              ("__init__.py", ["_detect_device", "torch_device_type", "python_ops_fallback"]),
+              ("cli/main.py", ["LMCache", "add_subparsers", "ALL_COMMANDS"]),
+              ("v1/cache_engine.py", ["class LMCacheEngine", "StorageManager", "CacheEngineKey"]),
+              ("v1/server/__main__.py", ["class LMCacheServer", "ClientCommand.HEALTH", "ServerReturnCode.SUCCESS"]),
+          ]
+          files = [file_record(path, markers) for path, markers in required]
+          return {
+              "ok": all(item["present"] and item["contains_expected_content"] for item in files),
+              "files": files,
+          }
+
+
+      SOURCE_STATUS = source_status()
+
+
+      def tokenize(text):
+          return re.findall(r"[a-z0-9]+", text.lower())
+
+
+      def chunk_tokens(tokens, chunk_size):
+          return [tokens[i : i + chunk_size] for i in range(0, len(tokens), chunk_size)]
+
+
+      def chunk_key(tokens):
+          joined = " ".join(tokens).encode("utf-8")
+          return hashlib.sha256(joined).hexdigest()[:16]
+
+
+      def deterministic_demo(query):
+          chunk_size = 4
+          first_prompt = (
+              "Phala Cloud deploys a CPU safe LMCache verifier with no model downloads "
+              "or provider credentials."
+          )
+          second_prompt = (
+              "Phala Cloud deploys a CPU safe LMCache verifier that reports package "
+              "metadata and source markers."
+          )
+          first_chunks = chunk_tokens(tokenize(first_prompt), chunk_size)
+          second_chunks = chunk_tokens(tokenize(second_prompt), chunk_size)
+          stored = {
+              chunk_key(chunk): {
+                  "tokens": chunk,
+                  "source": "first_prompt",
+              }
+              for chunk in first_chunks
+          }
+          second_records = []
+          hits = 0
+          for index, chunk in enumerate(second_chunks):
+              key = chunk_key(chunk)
+              hit = key in stored
+              hits += 1 if hit else 0
+              second_records.append({
+                  "index": index,
+                  "tokens": chunk,
+                  "cache_key": key,
+                  "hit": hit,
+              })
+          return {
+              "query": query,
+              "package": {
+                  "name": PACKAGE_NAME,
+                  "version": IMPORT_STATUS.get("distribution_version"),
+                  "import_ok": IMPORT_STATUS.get("import_ok"),
+                  "torch_device_type": IMPORT_STATUS.get("torch_device_type"),
+              },
+              "demo_kind": "deterministic_chunk_reuse_verifier",
+              "chunk_size_tokens": chunk_size,
+              "first_prompt_cache_entries": len(stored),
+              "second_prompt_chunks": second_records,
+              "cache_hits": hits,
+              "cache_misses": len(second_records) - hits,
+              "cache_hit_ratio": round(hits / max(len(second_records), 1), 3),
+              "llm_provider_calls": False,
+              "model_downloaded": False,
+              "model_loaded": False,
+              "gpu_required": False,
+              "note": (
+                  "This local verifier illustrates KV-cache chunk identity and imports "
+                  "the real LMCache package. It does not start LMCache MP serving or "
+                  "execute model inference."
+              ),
+          }
+
+
+      def base_payload():
+          return {
+              "service": "lmcache-cpu-verifier",
+              "upstream": UPSTREAM,
+              "docs": DOCS,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "endpoints": ENDPOINTS,
+          }
+
+
+      def response_for(path, params):
+          ok = IMPORT_STATUS["import_ok"] and SOURCE_STATUS["ok"]
+          if path in ("", "/"):
+              payload = base_payload()
+              payload.update({
+                  "ok": ok,
+                  "status": "ready" if ok else "source_or_import_check_failed",
+                  "lmcache": IMPORT_STATUS,
+              })
+              return HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/healthz":
+              payload = base_payload()
+              payload.update({
+                  "ok": ok,
+                  "status": "ready" if ok else "source_or_import_check_failed",
+                  "lmcache": IMPORT_STATUS,
+                  "source": SOURCE_STATUS,
+                  "cpu_only": True,
+                  "credentials_required": False,
+                  "model_downloaded": False,
+                  "model_loaded": False,
+                  "inference_started": False,
+              })
+              return HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/demo":
+              query = params.get("query", [DEFAULT_QUERY])[0]
+              payload = base_payload()
+              payload.update({
+                  "ok": ok,
+                  "source": SOURCE_STATUS,
+                  "demo": deterministic_demo(query),
+              })
+              return HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          if path == "/v1/models":
+              payload = {
+                  "object": "list",
+                  "data": [],
+                  "demo": (
+                      "No OpenAI-compatible inference model is served by this CPU-safe "
+                      "LMCache verifier. Replace it with vLLM, SGLang, or another "
+                      "supported engine for production inference."
+                  ),
+                  "lmcache_version": IMPORT_STATUS.get("distribution_version"),
+                  "source_ok": SOURCE_STATUS["ok"],
+              }
+              return HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE, payload
+
+          return HTTPStatus.NOT_FOUND, {
+              "error": "not_found",
+              "endpoints": ENDPOINTS,
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "lmcache-cpu-verifier"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps({
+                      "ts": time.time(),
+                      "client": self.client_address[0],
+                      "request": self.requestline,
+                      "message": fmt % args,
+                  }),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              parsed = urlparse(self.path)
+              path = parsed.path.rstrip("/") or "/"
+              params = parse_qs(parsed.query)
+              status, payload = response_for(path, params)
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Cache-Control", "no-store")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          print(
+              json.dumps({
+                  "event": "startup",
+                  "port": 8080,
+                  "lmcache": IMPORT_STATUS,
+                  "source_ok": SOURCE_STATUS["ok"],
+                  "llm_provider_calls": False,
+                  "model_downloaded": False,
+              }),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
