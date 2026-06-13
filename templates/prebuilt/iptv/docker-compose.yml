@@ -1,0 +1,397 @@
+services:
+  app:
+    image: node:22-bookworm-slim
+    ports:
+      - "8080:8080"
+    environment:
+      IPTV_SDK_VERSION: ${IPTV_SDK_VERSION:-1.5.0}
+      IPTV_DEMO_QUERY: ${IPTV_DEMO_QUERY:-news}
+      NODE_ENV: production
+      PORT: "8080"
+    working_dir: /app
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        npm init -y >/dev/null
+        npm install --omit=dev --no-audit --no-fund "@iptv-org/sdk@$${IPTV_SDK_VERSION}"
+        exec node /app/server.mjs
+    configs:
+      - source: server_mjs
+        target: /app/server.mjs
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 6
+      start_period: 90s
+    restart: unless-stopped
+
+configs:
+  server_mjs:
+    content: |
+      import http from 'node:http';
+      import os from 'node:os';
+      import { URL } from 'node:url';
+
+      const STARTED_AT = new Date();
+      const PORT = Number.parseInt(process.env.PORT || '8080', 10);
+      const SDK_VERSION = process.env.IPTV_SDK_VERSION || '1.5.0';
+      const DEFAULT_QUERY = process.env.IPTV_DEMO_QUERY || 'news';
+      const DATA_DIR = '/tmp/iptv-org-sdk-data';
+      const SERVICE = 'iptv-org-sdk-verifier';
+
+      let client = null;
+      let data = null;
+      let indexes = {
+        countries: new Map(),
+        categories: new Map()
+      };
+      let state = {
+        ok: false,
+        status: 'starting',
+        message: 'installing and loading @iptv-org/sdk',
+        loaded_at: null,
+        error: null,
+        counts: {},
+        sdk_version: SDK_VERSION,
+        upstream: 'https://github.com/iptv-org/iptv',
+        api_base: 'https://iptv-org.github.io/api',
+        playlist_url: 'https://iptv-org.github.io/iptv/index.m3u',
+        provider_credentials_required: false,
+        stream_fetches_performed: false,
+        model_downloaded: false,
+        llm_provider_calls: false
+      };
+
+      function isoNow() {
+        return new Date().toISOString();
+      }
+
+      function uptimeSeconds() {
+        return Math.round((Date.now() - STARTED_AT.getTime()) / 1000);
+      }
+
+      function collectionItems(collection) {
+        if (!collection || typeof collection.all !== 'function') return [];
+        return collection.all();
+      }
+
+      function plainModel(model) {
+        if (!model) return {};
+        if (typeof model.toObject === 'function') return model.toObject();
+        if (typeof model.toJSON === 'function') {
+          const json = model.toJSON();
+          if (typeof json === 'string') return JSON.parse(json);
+          return json;
+        }
+        return JSON.parse(JSON.stringify(model));
+      }
+
+      function collectCounts() {
+        const names = [
+          'blocklist',
+          'categories',
+          'channels',
+          'cities',
+          'countries',
+          'feeds',
+          'guides',
+          'languages',
+          'logos',
+          'regions',
+          'streams',
+          'subdivisions',
+          'timezones'
+        ];
+        const counts = {};
+        for (const name of names) {
+          counts[name] = collectionItems(data[name]).length;
+        }
+        return counts;
+      }
+
+      function buildIndexes() {
+        indexes = {
+          countries: new Map(collectionItems(data.countries).map(item => {
+            const country = plainModel(item);
+            return [country.code, country.name];
+          })),
+          categories: new Map(collectionItems(data.categories).map(item => {
+            const category = plainModel(item);
+            return [category.id, category.name];
+          }))
+        };
+      }
+
+      function collectionCount(value) {
+        return collectionItems(value).length;
+      }
+
+      function channelSummary(channel) {
+        const item = plainModel(channel);
+        const categoryNames = (item.categories || []).map(id => ({
+          id,
+          name: indexes.categories.get(id) || id
+        }));
+
+        return {
+          id: item.id,
+          name: item.name,
+          country: {
+            code: item.country,
+            name: indexes.countries.get(item.country) || item.country
+          },
+          categories: categoryNames,
+          is_nsfw: item.is_nsfw,
+          is_closed: typeof channel.isClosed === 'function' ? channel.isClosed() : Boolean(item.closed || item.replaced_by),
+          stream_count: typeof channel.getStreams === 'function' ? collectionCount(channel.getStreams()) : null,
+          guide_count: typeof channel.getGuides === 'function' ? collectionCount(channel.getGuides()) : null,
+          feed_count: typeof channel.getFeeds === 'function' ? collectionCount(channel.getFeeds()) : null,
+          website: item.website
+        };
+      }
+
+      function streamSample(stream) {
+        const item = plainModel(stream);
+        let protocol = null;
+        try {
+          protocol = new URL(item.url).protocol.replace(':', '');
+        } catch {
+          protocol = null;
+        }
+
+        return {
+          channel: item.channel,
+          feed: item.feed,
+          title: item.title,
+          quality: item.quality,
+          label: item.label,
+          protocol,
+          url_redacted: true,
+          referrer_required: Boolean(item.referrer),
+          user_agent_required: Boolean(item.user_agent)
+        };
+      }
+
+      function readinessPayload() {
+        return {
+          service: SERVICE,
+          ok: state.ok,
+          status: state.status,
+          message: state.message,
+          uptime_seconds: uptimeSeconds(),
+          loaded_at: state.loaded_at,
+          error: state.error,
+          sdk_version: state.sdk_version,
+          counts: state.counts,
+          provider_credentials_required: false,
+          stream_fetches_performed: false,
+          model_downloaded: false,
+          llm_provider_calls: false
+        };
+      }
+
+      function upstreamPayload() {
+        return {
+          service: SERVICE,
+          display_name: 'iptv-org/iptv',
+          category: 'AI Apps & Workflows',
+          upstream_repository: 'https://github.com/iptv-org/iptv',
+          upstream_description: 'Collection of publicly available IPTV channels from all over the world',
+          upstream_runtime_shape: 'Public M3U playlists plus JSON API data; no official no-secret server image was found in the upstream iptv repository.',
+          inspected_runtime_docs: [
+            'https://github.com/iptv-org/iptv#how-to-use',
+            'https://github.com/iptv-org/iptv#playlists',
+            'https://github.com/iptv-org/iptv#api',
+            'https://github.com/iptv-org/api',
+            'https://www.npmjs.com/package/@iptv-org/sdk'
+          ],
+          playlist_url: 'https://iptv-org.github.io/iptv/index.m3u',
+          api_base: 'https://iptv-org.github.io/api',
+          sdk_package: '@iptv-org/sdk',
+          sdk_version: SDK_VERSION,
+          icon_source: 'https://iptv-org.github.io/icon.svg',
+          ready: state.ok,
+          counts: state.counts,
+          caveats: [
+            'This verifier loads metadata through the real @iptv-org/sdk package.',
+            'It does not fetch, proxy, rebroadcast, transcode, or verify live video stream URLs.',
+            'The /v1/models endpoint is a compatibility-shaped metadata endpoint, not a model server.'
+          ]
+        };
+      }
+
+      function parseLimit(url) {
+        const raw = Number.parseInt(url.searchParams.get('limit') || '5', 10);
+        if (Number.isNaN(raw)) return 5;
+        return Math.max(1, Math.min(raw, 20));
+      }
+
+      function demoPayload(url) {
+        const query = (url.searchParams.get('q') || DEFAULT_QUERY).trim() || DEFAULT_QUERY;
+        const limit = parseLimit(url);
+        const channels = collectionItems(client.searchChannels(query)).slice(0, limit).map(channelSummary);
+        const streams = collectionItems(data.streams).slice(0, Math.min(limit, 10)).map(streamSample);
+
+        return {
+          service: SERVICE,
+          query,
+          result_count: channels.length,
+          channels,
+          stream_samples: streams,
+          safety: {
+            provider_credentials_required: false,
+            stream_fetches_performed: false,
+            stream_urls_redacted: true,
+            llm_provider_calls: false,
+            model_downloaded: false
+          }
+        };
+      }
+
+      function modelListPayload() {
+        return {
+          object: 'list',
+          data: [
+            {
+              id: 'iptv-org/sdk-metadata-demo',
+              object: 'model',
+              created: Math.floor(STARTED_AT.getTime() / 1000),
+              owned_by: 'iptv-org',
+              root: '@iptv-org/sdk',
+              parent: null,
+              metadata: {
+                description: 'Metadata-only verifier for iptv-org public playlist/API data. This is not an LLM or media-serving model.',
+                sdk_version: SDK_VERSION,
+                upstream_repository: 'https://github.com/iptv-org/iptv',
+                playlist_url: 'https://iptv-org.github.io/iptv/index.m3u',
+                api_base: 'https://iptv-org.github.io/api',
+                ready: state.ok,
+                counts: state.counts
+              }
+            }
+          ]
+        };
+      }
+
+      function rootPayload() {
+        return {
+          service: SERVICE,
+          status: state.status,
+          ok: state.ok,
+          endpoints: {
+            healthz: '/healthz',
+            demo: '/demo?q=news&limit=5',
+            models: '/v1/models',
+            upstream: '/upstream'
+          },
+          upstream: 'https://github.com/iptv-org/iptv'
+        };
+      }
+
+      function sendJson(response, statusCode, payload) {
+        const body = JSON.stringify(payload, null, 2) + '\n';
+        response.writeHead(statusCode, {
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': 'no-store'
+        });
+        response.end(body);
+      }
+
+      function sendNotFound(response) {
+        sendJson(response, 404, {
+          ok: false,
+          error: 'not_found',
+          endpoints: ['/healthz', '/demo', '/v1/models', '/upstream']
+        });
+      }
+
+      async function loadSdkData() {
+        try {
+          const imported = await import('@iptv-org/sdk');
+          const sdk = imported.default || imported;
+          client = new sdk.Client({ dataDir: DATA_DIR });
+          await client.load();
+          data = client.getData();
+          buildIndexes();
+          state = {
+            ...state,
+            ok: true,
+            status: 'ready',
+            message: 'loaded public iptv-org API data through @iptv-org/sdk',
+            loaded_at: isoNow(),
+            error: null,
+            counts: collectCounts()
+          };
+          console.log(JSON.stringify(readinessPayload()));
+        } catch (error) {
+          state = {
+            ...state,
+            ok: false,
+            status: 'error',
+            message: 'failed to load @iptv-org/sdk public API data',
+            loaded_at: null,
+            error: {
+              name: error && error.name ? error.name : 'Error',
+              message: error && error.message ? error.message : String(error)
+            }
+          };
+          console.error(JSON.stringify(state.error));
+        }
+      }
+
+      const server = http.createServer((request, response) => {
+        const url = new URL(request.url || '/', 'http://127.0.0.1');
+
+        if (request.method !== 'GET') {
+          sendJson(response, 405, { ok: false, error: 'method_not_allowed' });
+          return;
+        }
+
+        if (url.pathname === '/' || url.pathname === '') {
+          sendJson(response, 200, rootPayload());
+          return;
+        }
+
+        if (url.pathname === '/healthz') {
+          sendJson(response, state.ok ? 200 : 503, readinessPayload());
+          return;
+        }
+
+        if (url.pathname === '/upstream') {
+          sendJson(response, 200, upstreamPayload());
+          return;
+        }
+
+        if (url.pathname === '/v1/models') {
+          sendJson(response, 200, modelListPayload());
+          return;
+        }
+
+        if (url.pathname === '/demo') {
+          if (!state.ok) {
+            sendJson(response, 503, readinessPayload());
+            return;
+          }
+          sendJson(response, 200, demoPayload(url));
+          return;
+        }
+
+        sendNotFound(response);
+      });
+
+      server.listen(PORT, '0.0.0.0', () => {
+        console.log(JSON.stringify({
+          service: SERVICE,
+          status: 'listening',
+          port: PORT,
+          node: process.version,
+          platform: os.platform(),
+          arch: os.arch()
+        }));
+      });
+
+      loadSdkData();

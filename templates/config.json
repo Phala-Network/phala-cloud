@@ -5750,5 +5750,33 @@
       "diskSize": 10
     },
     "tags": ["Developer Tools", "Infrastructure"]
+  },
+{
+    "id": "iptv",
+    "name": "iptv-org/iptv",
+    "description": "Collection of publicly available IPTV channels from all over the world",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/iptv",
+    "author": "iptv-org",
+    "icon": "iptv.svg",
+    "envs": [
+      {
+        "key": "IPTV_SDK_VERSION",
+        "required": false,
+        "default": "1.5.0",
+        "description": "Version of the real @iptv-org/sdk npm package installed at container startup."
+      },
+      {
+        "key": "IPTV_DEMO_QUERY",
+        "required": false,
+        "default": "news",
+        "description": "Default channel search query used by the /demo endpoint when no q parameter is supplied."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["Media & Design", "Web Apps", "Developer Tools"]
   }
 ]
