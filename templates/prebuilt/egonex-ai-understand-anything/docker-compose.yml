@@ -1,0 +1,473 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        UNDERSTAND_ANYTHING_REF: ${UNDERSTAND_ANYTHING_REF:-09ede1917ffd043e6d5bbc8a80b45760814c2d7f}
+      dockerfile_inline: |
+        FROM node:22-bookworm-slim
+
+        ARG UNDERSTAND_ANYTHING_REF=09ede1917ffd043e6d5bbc8a80b45760814c2d7f
+
+        ENV NODE_ENV=production \
+            NPM_CONFIG_AUDIT=false \
+            NPM_CONFIG_FUND=false \
+            NPM_CONFIG_UPDATE_NOTIFIER=false \
+            NO_COLOR=1
+
+        RUN apt-get update \
+            && apt-get install -y --no-install-recommends ca-certificates curl python3 make g++ \
+            && rm -rf /var/lib/apt/lists/*
+
+        RUN npm install --global --no-audit --no-fund pnpm@10.6.2
+
+        WORKDIR /opt/understand-anything
+
+        RUN curl -fsSL "https://github.com/Egonex-AI/Understand-Anything/archive/$${UNDERSTAND_ANYTHING_REF}.tar.gz" -o /tmp/understand-anything.tar.gz \
+            && tar -xzf /tmp/understand-anything.tar.gz --strip-components=1 \
+            && rm /tmp/understand-anything.tar.gz \
+            && test -f understand-anything-plugin/packages/core/package.json
+
+        RUN pnpm install --no-frozen-lockfile --filter @understand-anything/core... \
+            && pnpm --filter @understand-anything/core build \
+            && pnpm store prune
+
+        RUN groupadd --system app \
+            && useradd --system --create-home --home-dir /app --gid app app \
+            && mkdir -p /app \
+            && chown -R app:app /app
+
+        WORKDIR /app
+        USER app
+        EXPOSE 8080
+    image: phala-egonex-ai-understand-anything:09ede191
+    pull_policy: build
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      UNDERSTAND_ANYTHING_REF: ${UNDERSTAND_ANYTHING_REF:-09ede1917ffd043e6d5bbc8a80b45760814c2d7f}
+      UNDERSTAND_ANYTHING_DEMO_QUERY: ${UNDERSTAND_ANYTHING_DEMO_QUERY:-payment graph onboarding}
+    configs:
+      - source: server_mjs
+        target: /app/server.mjs
+        mode: 0444
+    command:
+      - node
+      - /app/server.mjs
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - 'fetch("http://127.0.0.1:8080/healthz").then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+
+configs:
+  server_mjs:
+    content: |
+      import { createServer } from "node:http";
+      import { readFileSync } from "node:fs";
+      import os from "node:os";
+      import process from "node:process";
+
+      import { SearchEngine } from "/opt/understand-anything/understand-anything-plugin/packages/core/dist/search.js";
+      import { validateGraph } from "/opt/understand-anything/understand-anything-plugin/packages/core/dist/schema.js";
+      import { generateHeuristicTour } from "/opt/understand-anything/understand-anything-plugin/packages/core/dist/analyzer/tour-generator.js";
+      import { detectLanguageConcepts } from "/opt/understand-anything/understand-anything-plugin/packages/core/dist/analyzer/language-lesson.js";
+      import { contentHash, compareFingerprints, extractFileFingerprint } from "/opt/understand-anything/understand-anything-plugin/packages/core/dist/fingerprint.js";
+      import { classifyUpdate } from "/opt/understand-anything/understand-anything-plugin/packages/core/dist/change-classifier.js";
+
+      const STARTED_AT = Date.now();
+      const PORT = Number(process.env.PORT || "8080");
+      const UPSTREAM_REPO = "https://github.com/Egonex-AI/Understand-Anything";
+      const SOURCE_REF = process.env.UNDERSTAND_ANYTHING_REF || "09ede1917ffd043e6d5bbc8a80b45760814c2d7f";
+      const DEFAULT_QUERY = process.env.UNDERSTAND_ANYTHING_DEMO_QUERY || "payment graph onboarding";
+      const ROOT_PACKAGE_JSON = "/opt/understand-anything/package.json";
+      const SKILL_PACKAGE_JSON = "/opt/understand-anything/understand-anything-plugin/package.json";
+      const CORE_PACKAGE_JSON = "/opt/understand-anything/understand-anything-plugin/packages/core/package.json";
+
+      function readPackage(path) {
+        const parsed = JSON.parse(readFileSync(path, "utf8"));
+        return {
+          name: parsed.name || null,
+          version: parsed.version || null,
+          private: Boolean(parsed.private),
+          description: parsed.description || "",
+        };
+      }
+
+      const packages = {
+        root: readPackage(ROOT_PACKAGE_JSON),
+        skill: readPackage(SKILL_PACKAGE_JSON),
+        core: readPackage(CORE_PACKAGE_JSON),
+      };
+
+      function sampleGraph() {
+        const graph = {
+          version: "1.0.0",
+          kind: "codebase",
+          project: {
+            name: "checkout-knowledge-graph-demo",
+            languages: ["typescript"],
+            frameworks: ["Understand Anything core"],
+            description: "Small deterministic code graph used to verify upstream graph primitives on Phala Cloud.",
+            analyzedAt: "2026-06-13T00:00:00.000Z",
+            gitCommitHash: "demo",
+          },
+          nodes: [
+            {
+              id: "file:src/index.ts",
+              type: "file",
+              name: "src/index.ts",
+              filePath: "src/index.ts",
+              lineRange: [1, 12],
+              summary: "Entry point that loads the knowledge graph and exposes local search.",
+              tags: ["entry", "graph", "search"],
+              complexity: "simple",
+              languageNotes: "Uses async/await to prepare the graph before serving requests.",
+            },
+            {
+              id: "class:GraphWorkspace",
+              type: "class",
+              name: "GraphWorkspace",
+              filePath: "src/graph-workspace.ts",
+              lineRange: [1, 48],
+              summary: "Coordinates graph validation, search indexing, and guided tour generation.",
+              tags: ["graph", "service", "generics"],
+              complexity: "moderate",
+              languageNotes: "Uses generics and dependency injection to keep the graph store testable.",
+            },
+            {
+              id: "function:loadKnowledgeGraph",
+              type: "function",
+              name: "loadKnowledgeGraph",
+              filePath: "src/graph-store.ts",
+              lineRange: [5, 26],
+              summary: "Reads graph JSON, validates it with the upstream schema, and returns typed nodes and edges.",
+              tags: ["validation", "schema", "json"],
+              complexity: "moderate",
+            },
+            {
+              id: "function:searchGraph",
+              type: "function",
+              name: "searchGraph",
+              filePath: "src/search.ts",
+              lineRange: [8, 22],
+              summary: "Runs fuzzy search over graph node names, summaries, tags, and language notes.",
+              tags: ["search", "fuzzy", "onboarding"],
+              complexity: "simple",
+            },
+            {
+              id: "concept:GuidedTour",
+              type: "concept",
+              name: "Guided Tour",
+              summary: "An ordered learning path that helps a newcomer inspect graph nodes in context.",
+              tags: ["tour", "onboarding", "architecture"],
+              complexity: "simple",
+            },
+          ],
+          edges: [
+            {
+              source: "file:src/index.ts",
+              target: "class:GraphWorkspace",
+              type: "imports",
+              direction: "forward",
+              description: "The entry point creates the workspace service.",
+              weight: 0.9,
+            },
+            {
+              source: "class:GraphWorkspace",
+              target: "function:loadKnowledgeGraph",
+              type: "calls",
+              direction: "forward",
+              description: "The workspace validates graph data before indexing.",
+              weight: 0.9,
+            },
+            {
+              source: "class:GraphWorkspace",
+              target: "function:searchGraph",
+              type: "calls",
+              direction: "forward",
+              description: "The workspace delegates graph queries to the search helper.",
+              weight: 0.8,
+            },
+            {
+              source: "concept:GuidedTour",
+              target: "class:GraphWorkspace",
+              type: "documents",
+              direction: "forward",
+              description: "The tour explains how the workspace ties graph primitives together.",
+              weight: 0.7,
+            },
+          ],
+          layers: [
+            {
+              id: "entry",
+              name: "Entry",
+              description: "Request entry point and bootstrap flow",
+              nodeIds: ["file:src/index.ts"],
+            },
+            {
+              id: "core-graph",
+              name: "Core Graph",
+              description: "Validation, graph orchestration, and local search",
+              nodeIds: ["class:GraphWorkspace", "function:loadKnowledgeGraph", "function:searchGraph"],
+            },
+          ],
+          tour: [],
+        };
+
+        graph.tour = generateHeuristicTour(graph);
+        return graph;
+      }
+
+      function nodeSummaries(graph, results) {
+        const byId = new Map(graph.nodes.map((node) => [node.id, node]));
+        return results.map((result) => {
+          const node = byId.get(result.nodeId);
+          return {
+            ...result,
+            name: node?.name || null,
+            type: node?.type || null,
+            summary: node?.summary || null,
+          };
+        });
+      }
+
+      function fingerprintDemo() {
+        const beforeContent = [
+          "export async function loadKnowledgeGraph(path: string) {",
+          "  const raw = await readFile(path);",
+          "  return validateGraph(JSON.parse(raw));",
+          "}",
+          "",
+        ].join("\n");
+        const afterContent = [
+          "export async function loadKnowledgeGraph(path: string) {",
+          "  const raw = await readFile(path);",
+          "  const parsed = JSON.parse(raw);",
+          "  return validateGraph(parsed);",
+          "}",
+          "",
+        ].join("\n");
+        const beforeAnalysis = {
+          functions: [
+            {
+              name: "loadKnowledgeGraph",
+              params: ["path: string"],
+              returnType: "Promise<ValidationResult>",
+              lineRange: [1, 4],
+            },
+          ],
+          classes: [],
+          imports: [
+            {
+              source: "node:fs/promises",
+              specifiers: ["readFile"],
+              lineNumber: 1,
+            },
+          ],
+          exports: [
+            {
+              name: "loadKnowledgeGraph",
+              lineNumber: 1,
+            },
+          ],
+        };
+        const afterAnalysis = {
+          ...beforeAnalysis,
+          functions: [
+            {
+              name: "loadKnowledgeGraph",
+              params: ["path: string"],
+              returnType: "Promise<ValidationResult>",
+              lineRange: [1, 5],
+            },
+            {
+              name: "searchGraph",
+              params: ["query: string"],
+              returnType: "SearchResult[]",
+              lineRange: [7, 12],
+            },
+          ],
+          exports: [
+            ...beforeAnalysis.exports,
+            {
+              name: "searchGraph",
+              lineNumber: 7,
+            },
+          ],
+        };
+
+        const before = extractFileFingerprint("src/graph-store.ts", beforeContent, beforeAnalysis);
+        const cosmetic = extractFileFingerprint("src/graph-store.ts", afterContent, beforeAnalysis);
+        const structural = extractFileFingerprint("src/graph-store.ts", afterContent, afterAnalysis);
+        const cosmeticChange = compareFingerprints(before, cosmetic);
+        const structuralChange = compareFingerprints(before, structural);
+        const decision = classifyUpdate(
+          {
+            fileChanges: [cosmeticChange, structuralChange],
+            newFiles: [],
+            deletedFiles: [],
+            structurallyChangedFiles: ["src/graph-store.ts"],
+            cosmeticOnlyFiles: ["src/graph-store.ts"],
+            unchangedFiles: [],
+          },
+          5,
+          ["src/index.ts", "src/graph-store.ts", "src/search.ts"],
+        );
+
+        return {
+          beforeHash: before.contentHash,
+          afterHash: contentHash(afterContent),
+          cosmeticChange,
+          structuralChange,
+          updateDecision: decision,
+        };
+      }
+
+      function demoPayload(query = DEFAULT_QUERY) {
+        const graph = sampleGraph();
+        const validation = validateGraph(graph);
+        const validGraph = validation.data || graph;
+        const engine = new SearchEngine(validGraph.nodes);
+        const searchResults = engine.search(query, { limit: 5 });
+        const concepts = validGraph.nodes.map((node) => ({
+          nodeId: node.id,
+          name: node.name,
+          concepts: detectLanguageConcepts(node, "typescript"),
+        })).filter((item) => item.concepts.length > 0);
+
+        return {
+          ok: validation.success,
+          service: "understand-anything-local-verifier",
+          upstream: UPSTREAM_REPO,
+          sourceRef: SOURCE_REF,
+          cpuOnly: true,
+          credentialsRequired: false,
+          remoteModelCalls: false,
+          modelDownloaded: false,
+          browserAuthRequired: false,
+          packages,
+          query,
+          graph: {
+            validation: {
+              success: validation.success,
+              fatal: validation.fatal || null,
+              issues: validation.issues,
+            },
+            nodeCount: validGraph.nodes.length,
+            edgeCount: validGraph.edges.length,
+            layerCount: validGraph.layers.length,
+            tour: validGraph.tour,
+          },
+          search: {
+            engine: "SearchEngine",
+            resultCount: searchResults.length,
+            results: nodeSummaries(validGraph, searchResults),
+          },
+          languageConcepts: concepts,
+          fingerprints: fingerprintDemo(),
+        };
+      }
+
+      function healthPayload() {
+        const demo = demoPayload(DEFAULT_QUERY);
+        return {
+          ok: demo.ok,
+          status: demo.ok ? "ok" : "unhealthy",
+          service: demo.service,
+          uptimeSeconds: Math.round((Date.now() - STARTED_AT) / 100) / 10,
+          upstream: UPSTREAM_REPO,
+          sourceRef: SOURCE_REF,
+          nodeVersion: process.version,
+          platform: {
+            arch: os.arch(),
+            platform: os.platform(),
+          },
+          packages,
+          checks: {
+            graphValidated: demo.graph.validation.success,
+            searchReturnedResults: demo.search.resultCount > 0,
+            heuristicTourGenerated: demo.graph.tour.length > 0,
+            remoteModelCalls: false,
+            modelDownloaded: false,
+          },
+        };
+      }
+
+      function modelsPayload() {
+        return {
+          object: "list",
+          data: [
+            {
+              id: "understand-anything-core-local-verifier",
+              object: "model",
+              created: 0,
+              owned_by: "Egonex-AI",
+              metadata: {
+                upstream: UPSTREAM_REPO,
+                sourceRef: SOURCE_REF,
+                package: packages.core.name,
+                packageVersion: packages.core.version,
+                cpuOnly: true,
+                remoteModelCalls: false,
+              },
+            },
+          ],
+        };
+      }
+
+      function writeJson(response, status, payload) {
+        const body = Buffer.from(JSON.stringify(payload, null, 2) + "\n", "utf8");
+        response.writeHead(status, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Content-Length": body.length,
+        });
+        response.end(body);
+      }
+
+      const server = createServer((request, response) => {
+        const url = new URL(request.url || "/", "http://127.0.0.1");
+        if (request.method !== "GET") {
+          writeJson(response, 405, { ok: false, error: "method not allowed" });
+          return;
+        }
+
+        if (url.pathname === "/" || url.pathname === "/healthz") {
+          const payload = healthPayload();
+          writeJson(response, payload.ok ? 200 : 503, payload);
+          return;
+        }
+
+        if (url.pathname === "/demo") {
+          const payload = demoPayload(url.searchParams.get("q") || DEFAULT_QUERY);
+          writeJson(response, payload.ok ? 200 : 503, payload);
+          return;
+        }
+
+        if (url.pathname === "/v1/models") {
+          writeJson(response, 200, modelsPayload());
+          return;
+        }
+
+        writeJson(response, 404, {
+          ok: false,
+          error: "not found",
+          endpoints: ["/healthz", "/demo", "/v1/models"],
+        });
+      });
+
+      server.listen(PORT, "0.0.0.0", () => {
+        console.log("understand-anything verifier listening on " + PORT);
+      });
