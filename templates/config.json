@@ -5872,5 +5872,45 @@
     "diskSize": 10
   },
   "tags": ["LLM Inference & Model Serving", "Data & Storage", "Infrastructure"]
-}
+},
+{
+    "id": "pm-skills",
+    "name": "phuryn/pm-skills",
+    "description": "PM Skills Marketplace: 100+ agentic skills, commands, and plugins — from discovery to strategy, execution, launch, and growth.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/pm-skills",
+    "author": "phuryn",
+    "icon": "pm-skills.png",
+    "envs": [
+      {
+        "key": "APP_PORT",
+        "required": false,
+        "default": "8000",
+        "description": "Internal HTTP port used by the verifier service. The compose file publishes 8080:8000."
+      },
+      {
+        "key": "PM_SKILLS_SOURCE_REF",
+        "required": false,
+        "default": "d384f0c9eb81fe74656a4f6da168587836939edb",
+        "description": "Upstream phuryn/pm-skills commit, tag, or branch downloaded from the GitHub source archive at startup."
+      },
+      {
+        "key": "PM_SKILLS_VERIFY_TIMEOUT_SECONDS",
+        "required": false,
+        "default": "30",
+        "description": "Timeout for the public GitHub source archive download."
+      },
+      {
+        "key": "PM_SKILLS_DEMO_PLUGIN",
+        "required": false,
+        "default": "pm-product-discovery",
+        "description": "Default upstream PM Skills plugin inspected by the deterministic /demo endpoint."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools", "Automation"]
+  }
 ]
