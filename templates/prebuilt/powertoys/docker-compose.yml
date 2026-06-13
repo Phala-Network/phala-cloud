@@ -1,0 +1,527 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: ${PORT:-8080}
+      POWERTOYS_REF: ${POWERTOYS_REF:-v0.100.0}
+      POWERTOYS_FETCH_TIMEOUT_SECONDS: ${POWERTOYS_FETCH_TIMEOUT_SECONDS:-30}
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - powertoys-cache:/opt/powertoys
+    configs:
+      - source: powertoys_bootstrap
+        target: /opt/powertoys-demo/bootstrap.py
+        mode: 0444
+      - source: powertoys_server
+        target: /opt/powertoys-demo/server.py
+        mode: 0444
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        python /opt/powertoys-demo/bootstrap.py
+        exec python /opt/powertoys-demo/server.py
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\", \"8080\")}/healthz', timeout=5).read()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  powertoys-cache:
+
+configs:
+  powertoys_bootstrap:
+    content: |
+      import hashlib
+      import json
+      import os
+      import time
+      import urllib.parse
+      import urllib.request
+      from datetime import datetime, timezone
+      from pathlib import Path
+
+
+      ROOT = Path("/opt/powertoys")
+      SOURCE_DIR = ROOT / "source-files"
+      STATE_FILE = ROOT / "state.json"
+      REF_FILE = ROOT / ".source-ref"
+      UPSTREAM = "https://github.com/microsoft/PowerToys"
+      DEFAULT_REF = "v0.100.0"
+      MAX_SOURCE_BYTES = 4 * 1024 * 1024
+
+      SOURCE_FILES = [
+          "README.md",
+          "PowerToys.slnx",
+          ".vsconfig",
+          "doc/devdocs/readme.md",
+          "doc/devdocs/development/dev-with-vscode.md",
+          "src/common/PowerToys.ModuleContracts/IModuleService.cs",
+          "src/dsc/Microsoft.PowerToys.Configure/examples/README.md",
+          "installer/PowerToysSetupVNext/Product.wxs",
+      ]
+
+
+      def log(event, **fields):
+          print(json.dumps({"event": event, **fields}, sort_keys=True), flush=True)
+
+
+      def current_ref():
+          return os.environ.get("POWERTOYS_REF", DEFAULT_REF).strip() or DEFAULT_REF
+
+
+      def fetch_timeout():
+          try:
+              return max(5.0, float(os.environ.get("POWERTOYS_FETCH_TIMEOUT_SECONDS", "30")))
+          except ValueError:
+              return 30.0
+
+
+      def source_path(relative_path):
+          return SOURCE_DIR / relative_path
+
+
+      def source_is_ready(ref):
+          return (
+              REF_FILE.is_file()
+              and REF_FILE.read_text(encoding="utf-8").strip() == ref
+              and all(source_path(path).is_file() for path in SOURCE_FILES)
+          )
+
+
+      def raw_url(ref, relative_path):
+          encoded_ref = urllib.parse.quote(ref, safe="")
+          encoded_path = urllib.parse.quote(relative_path, safe="/.")
+          return f"https://raw.githubusercontent.com/microsoft/PowerToys/{encoded_ref}/{encoded_path}"
+
+
+      def download_file(ref, relative_path):
+          url = raw_url(ref, relative_path)
+          request = urllib.request.Request(
+              url,
+              headers={"User-Agent": "phala-cloud-powertoys-template/1.0"},
+          )
+          started = time.time()
+          with urllib.request.urlopen(request, timeout=fetch_timeout()) as response:
+              data = response.read(MAX_SOURCE_BYTES + 1)
+          if len(data) > MAX_SOURCE_BYTES:
+              raise RuntimeError(f"{relative_path} exceeds {MAX_SOURCE_BYTES} bytes")
+
+          target = source_path(relative_path)
+          target.parent.mkdir(parents=True, exist_ok=True)
+          target.write_bytes(data)
+          digest = hashlib.sha256(data).hexdigest()
+          return {
+              "path": relative_path,
+              "url": url,
+              "bytes": len(data),
+              "sha256": digest,
+              "download_seconds": round(time.time() - started, 3),
+          }
+
+
+      def download_sources(ref):
+          SOURCE_DIR.mkdir(parents=True, exist_ok=True)
+          downloads = []
+          for relative_path in SOURCE_FILES:
+              log("download_source_file", ref=ref, path=relative_path)
+              downloads.append(download_file(ref, relative_path))
+          REF_FILE.write_text(ref + "\n", encoding="utf-8")
+          return downloads
+
+
+      def main():
+          ROOT.mkdir(parents=True, exist_ok=True)
+          ref = current_ref()
+          state = {}
+          if STATE_FILE.is_file():
+              try:
+                  state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+              except Exception:
+                  state = {}
+
+          if source_is_ready(ref):
+              log("source_cached", ref=ref, source_dir=str(SOURCE_DIR))
+              state.update({"source_ref": ref, "source_dir": str(SOURCE_DIR), "cached": True})
+          else:
+              downloads = download_sources(ref)
+              state.update({
+                  "source_ref": ref,
+                  "source_dir": str(SOURCE_DIR),
+                  "cached": False,
+                  "downloads": downloads,
+                  "downloaded_bytes": sum(item["bytes"] for item in downloads),
+              })
+
+          state.update({
+              "upstream": UPSTREAM,
+              "bootstrapped_at": datetime.now(timezone.utc).isoformat(),
+              "required_files": SOURCE_FILES,
+          })
+          STATE_FILE.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+          log("bootstrap_complete", ref=ref, source_dir=str(SOURCE_DIR))
+
+
+      if __name__ == "__main__":
+          main()
+
+  powertoys_server:
+    content: |
+      import json
+      import os
+      import platform
+      import re
+      import sys
+      import time
+      import xml.etree.ElementTree as ET
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      ROOT = Path("/opt/powertoys")
+      SOURCE_DIR = ROOT / "source-files"
+      STATE_FILE = ROOT / "state.json"
+      UPSTREAM = "https://github.com/microsoft/PowerToys"
+      DEFAULT_REF = "v0.100.0"
+      PUBLIC_ENDPOINTS = ["/healthz", "/demo", "/v1/models", "/upstream"]
+
+      REQUIRED_FILES = [
+          "README.md",
+          "PowerToys.slnx",
+          ".vsconfig",
+          "doc/devdocs/readme.md",
+          "doc/devdocs/development/dev-with-vscode.md",
+          "src/common/PowerToys.ModuleContracts/IModuleService.cs",
+          "src/dsc/Microsoft.PowerToys.Configure/examples/README.md",
+          "installer/PowerToysSetupVNext/Product.wxs",
+      ]
+
+
+      def read_text(relative_path):
+          return SOURCE_DIR.joinpath(relative_path).read_text(encoding="utf-8", errors="replace")
+
+
+      def load_json(relative_path):
+          try:
+              return json.loads(read_text(relative_path))
+          except Exception as exc:
+              return {"error": f"{type(exc).__name__}: {exc}"}
+
+
+      def load_state():
+          try:
+              return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+          except Exception as exc:
+              return {"error": f"{type(exc).__name__}: {exc}"}
+
+
+      def source_checks():
+          files = {path: SOURCE_DIR.joinpath(path).is_file() for path in REQUIRED_FILES}
+          summary = {
+              "required_files": files,
+              "required_files_ok": all(files.values()),
+              "source_file_count": sum(1 for path in SOURCE_DIR.rglob("*") if path.is_file()),
+          }
+          if summary["required_files_ok"]:
+              utilities = readme_utilities()
+              solution = solution_summary()
+              contract = module_contract_summary()
+              vsconfig = vsconfig_summary()
+              summary.update({
+                  "readme_utilities_count": utilities["count"],
+                  "solution_projects_count": solution["project_count"],
+                  "module_contract_ok": contract["ok"],
+                  "vsconfig_components_count": vsconfig["component_count"],
+                  "verifier_ok": (
+                      utilities["count"] >= 30
+                      and solution["project_count"] >= 100
+                      and contract["ok"]
+                      and vsconfig["component_count"] >= 10
+                  ),
+              })
+          else:
+              summary["verifier_ok"] = False
+          return summary
+
+
+      def readme_utilities():
+          text = read_text("README.md")
+          utilities = []
+          pattern = re.compile(
+              r'<img src="(?P<icon>doc/images/icons/[^"]+)" alt="(?P<alt>[^"]+)" height="16">\s*'
+              r'(?P<name>[^\]]+)\]\((?P<link>https://aka\.ms/PowerToysOverview_[^)]+)\)'
+          )
+          for match in pattern.finditer(text):
+              utilities.append({
+                  "name": match.group("name").strip(),
+                  "alt": match.group("alt").strip(),
+                  "icon": match.group("icon").strip(),
+                  "docs": match.group("link").strip(),
+              })
+          return {
+              "count": len(utilities),
+              "sample": utilities[:12],
+          }
+
+
+      def prerequisites_summary():
+          text = read_text("doc/devdocs/readme.md")
+          section_match = re.search(r"### Prerequisites\s+(.*?)(?:\n### |\Z)", text, flags=re.DOTALL)
+          section = section_match.group(1) if section_match else text
+          items = []
+          for line in section.splitlines():
+              stripped = line.strip()
+              if re.match(r"^\d+\.\s+", stripped) or stripped.startswith("- "):
+                  cleaned = re.sub(r"^\d+\.\s+", "", stripped)
+                  cleaned = re.sub(r"^-\s+", "", cleaned)
+                  cleaned = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", cleaned)
+                  items.append(cleaned)
+          return {
+              "windows_required": "Windows 10" in section,
+              "visual_studio_required": "Visual Studio" in section,
+              "dotnet_8_required": ".NET 8 SDK" in section,
+              "long_paths_required": "long paths" in section.lower(),
+              "submodules_required": "git submodule update --init --recursive" in text,
+              "items": items[:12],
+          }
+
+
+      def solution_summary():
+          text = read_text("PowerToys.slnx")
+          root = ET.fromstring(text)
+          project_paths = [
+              element.attrib.get("Path", "")
+              for element in root.iter("Project")
+              if element.attrib.get("Path")
+          ]
+          module_names = sorted({
+              path.split("/")[2]
+              for path in project_paths
+              if path.startswith("src/modules/") and len(path.split("/")) > 2
+          })
+          by_type = {
+              "csproj": sum(path.endswith(".csproj") for path in project_paths),
+              "vcxproj": sum(path.endswith(".vcxproj") for path in project_paths),
+              "wixproj": sum(path.endswith(".wixproj") for path in project_paths),
+              "other": sum(
+                  not (path.endswith(".csproj") or path.endswith(".vcxproj") or path.endswith(".wixproj"))
+                  for path in project_paths
+              ),
+          }
+          return {
+              "project_count": len(project_paths),
+              "by_type": by_type,
+              "module_count": len(module_names),
+              "module_samples": module_names[:16],
+              "platforms": [element.attrib.get("Name") for element in root.findall(".//Platform")],
+          }
+
+
+      def vsconfig_summary():
+          data = load_json(".vsconfig")
+          components = data.get("components") or []
+          selected = [
+              component
+              for component in components
+              if component in {
+                  "Microsoft.VisualStudio.Workload.NativeDesktop",
+                  "Microsoft.VisualStudio.Workload.ManagedDesktop",
+                  "Microsoft.VisualStudio.Workload.Universal",
+                  "Microsoft.VisualStudio.Component.Windows10SDK.22621",
+                  "Microsoft.VisualStudio.Component.Windows10SDK.26100",
+                  "Microsoft.VisualStudio.ComponentGroup.WindowsAppSDK.Cs",
+                  "Microsoft.VisualStudio.Component.Vcpkg",
+              }
+          ]
+          return {
+              "version": data.get("version"),
+              "component_count": len(components),
+              "selected_components": selected,
+              "has_error": "error" in data,
+          }
+
+
+      def module_contract_summary():
+          text = read_text("src/common/PowerToys.ModuleContracts/IModuleService.cs")
+          symbols = {
+              "IModuleService": "interface IModuleService" in text,
+              "Key": "string Key" in text,
+              "LaunchAsync": "Task<OperationResult> LaunchAsync" in text,
+              "OpenSettingsAsync": "Task<OperationResult> OpenSettingsAsync" in text,
+              "ModuleServiceBase": "abstract class ModuleServiceBase" in text,
+          }
+          return {
+              "ok": all(symbols.values()),
+              "symbols": symbols,
+          }
+
+
+      def installer_summary():
+          text = read_text("installer/PowerToysSetupVNext/Product.wxs")
+          return {
+              "wix_product_file_present": bool(text.strip()),
+              "mentions_powertoys": "PowerToys" in text,
+              "mentions_per_machine_install": "perMachine" in text or "ALLUSERS" in text,
+              "mentions_upgrade": "Upgrade" in text,
+          }
+
+
+      def dsc_summary():
+          text = read_text("src/dsc/Microsoft.PowerToys.Configure/examples/README.md")
+          example_files = sorted(set(re.findall(r"`([^`]+\.winget)`", text)))
+          return {
+              "docs_present": bool(text.strip()),
+              "mentions_winget_configure": "winget configure" in text.lower(),
+              "example_count": len(example_files),
+              "example_files": example_files[:8],
+          }
+
+
+      def caveats():
+          return {
+              "upstream_runtime": "Windows desktop utility suite",
+              "container_runtime": "Linux HTTP source verifier",
+              "runs_powertoys_desktop_app": False,
+              "builds_windows_binaries": False,
+              "downloads_model_weights": False,
+              "uses_provider_credentials": False,
+              "requires_browser_auth": False,
+              "reason": (
+                  "PowerToys requires Windows desktop APIs and Visual Studio/Windows SDK tooling. "
+                  "This template verifies real upstream source files on Phala Cloud instead."
+              ),
+          }
+
+
+      def base_payload():
+          checks = source_checks()
+          return {
+              "service": "powertoys-source-verifier",
+              "ok": checks["verifier_ok"],
+              "upstream": UPSTREAM,
+              "source_ref": os.environ.get("POWERTOYS_REF", DEFAULT_REF).strip() or DEFAULT_REF,
+              "state": load_state(),
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "endpoints": PUBLIC_ENDPOINTS,
+              "source": checks,
+              "caveats": caveats(),
+          }
+
+
+      def demo_payload():
+          return {
+              "ok": True,
+              "check": "PowerToys upstream source metadata verifier",
+              "cpu_only": True,
+              "remote_model_calls": False,
+              "model_downloaded": False,
+              "credentials_required": False,
+              "readme_utilities": readme_utilities(),
+              "solution": solution_summary(),
+              "visual_studio_config": vsconfig_summary(),
+              "developer_prerequisites": prerequisites_summary(),
+              "module_contract": module_contract_summary(),
+              "installer": installer_summary(),
+              "dsc_examples": dsc_summary(),
+              "production_caveats": caveats(),
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "powertoys-source-verifier/1.0"
+
+          def log_message(self, fmt, *args):
+              print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+          def respond_json(self, status, payload):
+              body = json.dumps(payload, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              path = urlparse(self.path).path
+
+              if path in ("/", "/healthz"):
+                  payload = base_payload()
+                  payload["status"] = "ready" if payload["ok"] else "source_check_failed"
+                  self.respond_json(HTTPStatus.OK if payload["ok"] else HTTPStatus.INTERNAL_SERVER_ERROR, payload)
+                  return
+
+              if path == "/demo":
+                  payload = base_payload()
+                  if not payload["ok"]:
+                      payload["error"] = "required upstream source checks failed"
+                      self.respond_json(HTTPStatus.INTERNAL_SERVER_ERROR, payload)
+                      return
+                  payload["demo"] = demo_payload()
+                  self.respond_json(HTTPStatus.OK, payload)
+                  return
+
+              if path == "/v1/models":
+                  checks = source_checks()
+                  payload = {
+                      "object": "list",
+                      "data": [
+                          {
+                              "id": "microsoft-powertoys/source-verifier",
+                              "object": "model",
+                              "created": 0,
+                              "owned_by": "microsoft",
+                              "description": (
+                                  "Metadata-only local verifier for the PowerToys source artifact. "
+                                  "No LLM or Windows desktop app is hosted."
+                              ),
+                              "source_ok": checks["verifier_ok"],
+                              "source_ref": os.environ.get("POWERTOYS_REF", DEFAULT_REF).strip() or DEFAULT_REF,
+                          }
+                      ],
+                  }
+                  self.respond_json(HTTPStatus.OK if checks["verifier_ok"] else HTTPStatus.INTERNAL_SERVER_ERROR, payload)
+                  return
+
+              if path == "/upstream":
+                  payload = base_payload()
+                  if payload["ok"]:
+                      payload["upstream_summary"] = demo_payload()
+                  self.respond_json(HTTPStatus.OK if payload["ok"] else HTTPStatus.INTERNAL_SERVER_ERROR, payload)
+                  return
+
+              self.respond_json(
+                  HTTPStatus.NOT_FOUND,
+                  {"ok": False, "error": "not_found", "endpoints": PUBLIC_ENDPOINTS},
+              )
+
+
+      def main():
+          port = int(os.environ.get("PORT", "8080"))
+          server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+          print(f"PowerToys source verifier listening on 0.0.0.0:{port}", flush=True)
+          server.serve_forever()
+
+
+      if __name__ == "__main__":
+          main()

@@ -5940,5 +5940,39 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools"]
+  },
+{
+    "id": "powertoys",
+    "name": "microsoft/PowerToys",
+    "description": "Microsoft PowerToys is a collection of utilities that supercharge productivity and customization on Windows",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/powertoys",
+    "author": "microsoft",
+    "icon": "powertoys.png",
+    "envs": [
+      {
+        "key": "POWERTOYS_REF",
+        "required": false,
+        "default": "v0.100.0",
+        "description": "Upstream PowerToys branch, tag, or commit used when fetching source files for the verifier."
+      },
+      {
+        "key": "POWERTOYS_FETCH_TIMEOUT_SECONDS",
+        "required": false,
+        "default": "30",
+        "description": "Timeout in seconds for each public GitHub raw source file download."
+      },
+      {
+        "key": "PORT",
+        "required": false,
+        "default": "8080",
+        "description": "HTTP port listened on inside the verifier container and published by the Compose file."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["Developer Tools", "Automation"]
   }
 ]
