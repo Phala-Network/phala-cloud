@@ -6024,5 +6024,33 @@
       "diskSize": 10
     },
     "tags": ["Web Apps", "Developer Tools", "Starter Kits"]
+  },
+{
+    "id": "egonex-ai-understand-anything",
+    "name": "Egonex-AI/Understand-Anything",
+    "description": "Graphs that teach > graphs that impress. Turn any code into an interactive knowledge graph you can explore, search, and ask questions about. Works with Claude Code, Codex, Cursor, Copilot, Gemini CLI, and more.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/egonex-ai-understand-anything",
+    "author": "Egonex-AI",
+    "icon": "egonex-ai-understand-anything.svg",
+    "envs": [
+      {
+        "key": "UNDERSTAND_ANYTHING_REF",
+        "required": false,
+        "default": "09ede1917ffd043e6d5bbc8a80b45760814c2d7f",
+        "description": "Git branch, tag, or commit downloaded from Egonex-AI/Understand-Anything at image build time. Defaults to the upstream main commit inspected for this template."
+      },
+      {
+        "key": "UNDERSTAND_ANYTHING_DEMO_QUERY",
+        "required": false,
+        "default": "payment graph onboarding",
+        "description": "Default fuzzy-search query passed to the local /demo endpoint."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["AI Agents", "Developer Tools", "Data & Storage"]
   }
 ]
