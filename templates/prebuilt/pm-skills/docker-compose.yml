@@ -1,0 +1,544 @@
+services:
+  app:
+    image: python:3.12-slim-bookworm
+    restart: unless-stopped
+    init: true
+    user: "65532:65532"
+    ports:
+      - "8080:8000"
+    environment:
+      APP_PORT: ${APP_PORT:-8000}
+      PM_SKILLS_SOURCE_REF: ${PM_SKILLS_SOURCE_REF:-d384f0c9eb81fe74656a4f6da168587836939edb}
+      PM_SKILLS_VERIFY_TIMEOUT_SECONDS: ${PM_SKILLS_VERIFY_TIMEOUT_SECONDS:-30}
+      PM_SKILLS_DEMO_PLUGIN: ${PM_SKILLS_DEMO_PLUGIN:-pm-product-discovery}
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    configs:
+      - source: pm_skills_demo_app
+        target: /opt/pm-skills-demo/server.py
+        mode: 0444
+    command:
+      - python
+      - /opt/pm-skills-demo/server.py
+    working_dir: /tmp
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, sys, urllib.request; port = os.environ.get('APP_PORT', '8000'); response = urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+
+configs:
+  pm_skills_demo_app:
+    content: |
+      import io
+      import json
+      import os
+      import platform
+      import shutil
+      import tarfile
+      import tempfile
+      import threading
+      import time
+      import urllib.parse
+      import urllib.request
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path, PurePosixPath
+      from urllib.parse import parse_qs, urlparse
+
+
+      SERVICE = "pm-skills-source-verifier"
+      UPSTREAM_REPO = "https://github.com/phuryn/pm-skills"
+      DEFAULT_SOURCE_REF = "d384f0c9eb81fe74656a4f6da168587836939edb"
+      SOURCE_PARENT = Path("/tmp/pm-skills-source")
+      STARTED_AT = time.time()
+      SOURCE_LOCK = threading.Lock()
+      SOURCE_STATUS = None
+      SUMMARY_CACHE = None
+      EXPECTED_PLUGIN_COUNT = 9
+      EXPECTED_SKILL_COUNT = 68
+      EXPECTED_COMMAND_COUNT = 42
+
+
+      def timeout_seconds():
+          try:
+              return max(5.0, float(os.environ.get("PM_SKILLS_VERIFY_TIMEOUT_SECONDS", "30")))
+          except ValueError:
+              return 30.0
+
+
+      def source_ref():
+          return os.environ.get("PM_SKILLS_SOURCE_REF", DEFAULT_SOURCE_REF).strip() or DEFAULT_SOURCE_REF
+
+
+      def clean_ref(value):
+          allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._/-")
+          if not value or any(character not in allowed for character in value):
+              raise ValueError("PM_SKILLS_SOURCE_REF contains unsupported characters")
+          if value.startswith("/") or ".." in value.split("/"):
+              raise ValueError("PM_SKILLS_SOURCE_REF must not contain path traversal")
+          return value
+
+
+      def archive_url(ref):
+          quoted = urllib.parse.quote(clean_ref(ref), safe="")
+          return f"https://api.github.com/repos/phuryn/pm-skills/tarball/{quoted}"
+
+
+      def safe_archive_url(ref):
+          try:
+              return archive_url(ref)
+          except Exception:
+              return None
+
+
+      def safe_extract(archive_bytes, destination):
+          with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as archive:
+              for member in archive.getmembers():
+                  parts = PurePosixPath(member.name).parts
+                  if len(parts) < 2:
+                      continue
+                  relative = PurePosixPath(*parts[1:])
+                  if relative.is_absolute() or ".." in relative.parts:
+                      raise RuntimeError(f"unsafe archive member path: {member.name}")
+                  target = destination / Path(*relative.parts)
+                  if member.isdir():
+                      target.mkdir(parents=True, exist_ok=True)
+                  elif member.isfile():
+                      source = archive.extractfile(member)
+                      if source is None:
+                          raise RuntimeError(f"cannot read archive member: {member.name}")
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      with source, target.open("wb") as output:
+                          shutil.copyfileobj(source, output)
+
+
+      def download_source():
+          ref = source_ref()
+          request = urllib.request.Request(
+              archive_url(ref),
+              headers={"User-Agent": "phala-cloud-pm-skills-template/1.0"},
+          )
+          started = time.time()
+          with urllib.request.urlopen(request, timeout=timeout_seconds()) as response:
+              archive_bytes = response.read()
+
+          temp_root = Path(tempfile.mkdtemp(prefix="pm-skills-source-"))
+          try:
+              safe_extract(archive_bytes, temp_root)
+              required_files = [
+                  "README.md",
+                  "validate_plugins.py",
+                  ".claude-plugin/marketplace.json",
+              ]
+              missing = [path for path in required_files if not (temp_root / path).is_file()]
+              if missing:
+                  raise RuntimeError("missing required upstream files: " + ", ".join(missing))
+              shutil.rmtree(SOURCE_PARENT, ignore_errors=True)
+              shutil.move(str(temp_root), str(SOURCE_PARENT))
+          except Exception:
+              shutil.rmtree(temp_root, ignore_errors=True)
+              raise
+
+          return {
+              "ok": True,
+              "source_ref": ref,
+              "source_url": archive_url(ref),
+              "downloaded_bytes": len(archive_bytes),
+              "download_seconds": round(time.time() - started, 3),
+              "loaded_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+              "error": None,
+          }
+
+
+      def load_source():
+          global SOURCE_STATUS
+          with SOURCE_LOCK:
+              if SOURCE_STATUS is not None:
+                  return SOURCE_STATUS
+              try:
+                  SOURCE_STATUS = download_source()
+              except Exception as exc:
+                  ref = source_ref()
+                  SOURCE_STATUS = {
+                      "ok": False,
+                      "source_ref": ref,
+                      "source_url": safe_archive_url(ref),
+                      "downloaded_bytes": 0,
+                      "download_seconds": None,
+                      "loaded_at": None,
+                      "error": f"{type(exc).__name__}: {exc}",
+                  }
+              return SOURCE_STATUS
+
+
+      def read_text(relative_path):
+          return (SOURCE_PARENT / relative_path).read_text(encoding="utf-8")
+
+
+      def read_json(relative_path):
+          return json.loads(read_text(relative_path))
+
+
+      def parse_frontmatter(markdown):
+          lines = markdown.splitlines()
+          if not lines or lines[0].strip() != "---":
+              return {}
+          end_index = None
+          for index, line in enumerate(lines[1:], start=1):
+              if line.strip() == "---":
+                  end_index = index
+                  break
+          if end_index is None:
+              return {}
+          data = {}
+          for line in lines[1:end_index]:
+              if ":" not in line:
+                  continue
+              key, value = line.split(":", 1)
+              data[key.strip()] = value.strip().strip('"').strip("'")
+          return data
+
+
+      def public_source_status(source):
+          return {
+              "ok": source.get("ok", False),
+              "source_ref": source.get("source_ref"),
+              "source_url": source.get("source_url"),
+              "downloaded_bytes": source.get("downloaded_bytes"),
+              "download_seconds": source.get("download_seconds"),
+              "loaded_at": source.get("loaded_at"),
+              "error": source.get("error"),
+          }
+
+
+      def safe_source_path(source_value):
+          source = str(source_value or "").strip()
+          if source.startswith("./"):
+              source = source[2:]
+          path = PurePosixPath(source)
+          if not source or path.is_absolute() or ".." in path.parts:
+              return None
+          return Path(*path.parts)
+
+
+      def plugin_summary(marketplace_plugin):
+          errors = []
+          source_path = safe_source_path(marketplace_plugin.get("source"))
+          if source_path is None:
+              return {
+                  "name": marketplace_plugin.get("name"),
+                  "source": marketplace_plugin.get("source"),
+                  "ok": False,
+                  "errors": ["invalid plugin source path"],
+                  "skills": [],
+                  "commands": [],
+                  "skill_count": 0,
+                  "command_count": 0,
+              }
+
+          manifest_path = source_path / ".claude-plugin" / "plugin.json"
+          try:
+              manifest = json.loads((SOURCE_PARENT / manifest_path).read_text(encoding="utf-8"))
+          except Exception as exc:
+              manifest = {}
+              errors.append(f"manifest error: {type(exc).__name__}: {exc}")
+
+          expected_name = marketplace_plugin.get("name")
+          if manifest.get("name") != expected_name:
+              errors.append(f"manifest name does not match marketplace name: {expected_name}")
+          for field in ("name", "version", "description"):
+              if not manifest.get(field):
+                  errors.append(f"plugin manifest missing {field}")
+
+          skills = []
+          skills_dir = SOURCE_PARENT / source_path / "skills"
+          for skill_file in sorted(skills_dir.glob("*/SKILL.md")):
+              body = skill_file.read_text(encoding="utf-8")
+              frontmatter = parse_frontmatter(body)
+              name = skill_file.parent.name
+              if frontmatter.get("name") != name:
+                  errors.append(f"skill {name} frontmatter name mismatch")
+              if not frontmatter.get("description"):
+                  errors.append(f"skill {name} missing description")
+              skills.append(
+                  {
+                      "name": name,
+                      "description": frontmatter.get("description"),
+                      "bytes": skill_file.stat().st_size,
+                  }
+              )
+
+          commands = []
+          commands_dir = SOURCE_PARENT / source_path / "commands"
+          for command_file in sorted(commands_dir.glob("*.md")):
+              body = command_file.read_text(encoding="utf-8")
+              frontmatter = parse_frontmatter(body)
+              command_name = command_file.stem
+              if not frontmatter.get("description"):
+                  errors.append(f"command {command_name} missing description")
+              if not frontmatter.get("argument-hint"):
+                  errors.append(f"command {command_name} missing argument-hint")
+              commands.append(
+                  {
+                      "name": command_name,
+                      "description": frontmatter.get("description"),
+                      "argument_hint": frontmatter.get("argument-hint"),
+                      "bytes": command_file.stat().st_size,
+                  }
+              )
+
+          return {
+              "name": expected_name,
+              "source": str(source_path),
+              "category": marketplace_plugin.get("category"),
+              "ok": len(errors) == 0,
+              "manifest": {
+                  "name": manifest.get("name"),
+                  "version": manifest.get("version"),
+                  "description": manifest.get("description"),
+                  "author": manifest.get("author"),
+                  "homepage": manifest.get("homepage"),
+                  "license": manifest.get("license"),
+                  "keywords": manifest.get("keywords", []),
+              },
+              "skills": skills,
+              "commands": commands,
+              "skill_count": len(skills),
+              "command_count": len(commands),
+              "errors": errors,
+          }
+
+
+      def source_summary():
+          global SUMMARY_CACHE
+          source = load_source()
+          if SUMMARY_CACHE is not None:
+              return SUMMARY_CACHE
+          if not source.get("ok"):
+              SUMMARY_CACHE = {
+                  "ok": False,
+                  "source": public_source_status(source),
+                  "marketplace": None,
+                  "plugins": [],
+                  "totals": {"plugins": 0, "skills": 0, "commands": 0, "components": 0},
+                  "validation_errors": [source.get("error")],
+              }
+              return SUMMARY_CACHE
+
+          errors = []
+          try:
+              marketplace = read_json(".claude-plugin/marketplace.json")
+          except Exception as exc:
+              marketplace = {}
+              errors.append(f"marketplace error: {type(exc).__name__}: {exc}")
+
+          if marketplace.get("name") != "pm-skills":
+              errors.append("marketplace name is not pm-skills")
+          if not marketplace.get("version"):
+              errors.append("marketplace version missing")
+          marketplace_plugins = marketplace.get("plugins", [])
+          if not marketplace_plugins:
+              errors.append("marketplace has no plugins")
+
+          plugins = [plugin_summary(item) for item in marketplace_plugins]
+          for plugin in plugins:
+              errors.extend(plugin.get("errors", []))
+
+          totals = {
+              "plugins": len(plugins),
+              "skills": sum(plugin["skill_count"] for plugin in plugins),
+              "commands": sum(plugin["command_count"] for plugin in plugins),
+          }
+          totals["components"] = totals["skills"] + totals["commands"]
+          expected_counts = {
+              "plugins": EXPECTED_PLUGIN_COUNT,
+              "skills": EXPECTED_SKILL_COUNT,
+              "commands": EXPECTED_COMMAND_COUNT,
+              "components": EXPECTED_SKILL_COUNT + EXPECTED_COMMAND_COUNT,
+          }
+          count_check = {
+              key: totals.get(key) == value
+              for key, value in expected_counts.items()
+          }
+
+          SUMMARY_CACHE = {
+              "ok": len(errors) == 0 and totals["plugins"] > 0 and totals["skills"] > 0,
+              "source": public_source_status(source),
+              "marketplace": {
+                  "name": marketplace.get("name"),
+                  "version": marketplace.get("version"),
+                  "description": marketplace.get("description"),
+                  "owner": marketplace.get("owner"),
+              },
+              "plugins": plugins,
+              "totals": totals,
+              "expected_counts": expected_counts,
+              "expected_counts_match_default_ref": count_check,
+              "validator_script_present": (SOURCE_PARENT / "validate_plugins.py").is_file(),
+              "validation_errors": errors[:50],
+              "remote_calls": {
+                  "llm_provider_calls": False,
+                  "browser_auth": False,
+                  "model_downloaded": False,
+                  "model_loaded": False,
+                  "plugin_host_invoked": False,
+              },
+          }
+          return SUMMARY_CACHE
+
+
+      def select_plugin(summary, requested):
+          plugins = summary.get("plugins", [])
+          for plugin in plugins:
+              if plugin.get("name") == requested:
+                  return plugin
+          return plugins[0] if plugins else None
+
+
+      def health_payload():
+          summary = source_summary()
+          return {
+              "ok": summary["ok"],
+              "service": SERVICE,
+              "upstream": UPSTREAM_REPO,
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "python": platform.python_version(),
+              "platform": platform.platform(),
+              "source": summary["source"],
+              "marketplace": summary["marketplace"],
+              "totals": summary["totals"],
+              "expected_counts_match_default_ref": summary.get("expected_counts_match_default_ref"),
+              "validator_script_present": summary.get("validator_script_present", False),
+              "validation_errors": summary.get("validation_errors", []),
+              "endpoints": ["/healthz", "/demo", "/v1/models"],
+          }
+
+
+      def demo_payload(query):
+          summary = source_summary()
+          params = parse_qs(query)
+          requested = params.get("plugin", [os.environ.get("PM_SKILLS_DEMO_PLUGIN", "pm-product-discovery")])[0]
+          plugin = select_plugin(summary, requested)
+          sample_skill = plugin["skills"][0] if plugin and plugin.get("skills") else None
+          sample_command = plugin["commands"][0] if plugin and plugin.get("commands") else None
+
+          return {
+              "ok": summary["ok"] and plugin is not None,
+              "service": SERVICE,
+              "upstream": UPSTREAM_REPO,
+              "source_ref": summary["source"].get("source_ref"),
+              "marketplace_version": (summary.get("marketplace") or {}).get("version"),
+              "totals": summary["totals"],
+              "selected_plugin": {
+                  "name": plugin.get("name") if plugin else None,
+                  "category": plugin.get("category") if plugin else None,
+                  "version": plugin.get("manifest", {}).get("version") if plugin else None,
+                  "description": plugin.get("manifest", {}).get("description") if plugin else None,
+                  "skill_count": plugin.get("skill_count") if plugin else 0,
+                  "command_count": plugin.get("command_count") if plugin else 0,
+              },
+              "sample_skill": sample_skill,
+              "sample_command": sample_command,
+              "deterministic_workflow": [
+                  {
+                      "step": "load_marketplace",
+                      "input": ".claude-plugin/marketplace.json",
+                      "result": f"{summary['totals']['plugins']} plugin manifests found",
+                  },
+                  {
+                      "step": "inspect_selected_plugin",
+                      "input": plugin.get("source") if plugin else None,
+                      "result": "skill and command metadata parsed without invoking a plugin host" if plugin else "plugin not found",
+                  },
+                  {
+                      "step": "preview_pm_workflow",
+                      "input": sample_command.get("name") if sample_command else None,
+                      "result": "local metadata preview only; no LLM, browser, or credentialed provider was called",
+                  },
+              ],
+              "remote_calls": summary["remote_calls"],
+              "validation_errors": summary.get("validation_errors", []),
+          }
+
+
+      def models_payload():
+          summary = source_summary()
+          return {
+              "object": "list",
+              "data": [
+                  {
+                      "id": "pm-skills-source-verifier",
+                      "object": "model",
+                      "created": int(STARTED_AT),
+                      "owned_by": "phuryn",
+                      "metadata": {
+                          "type": "local-source-verifier",
+                          "upstream": UPSTREAM_REPO,
+                          "source_ref": summary["source"].get("source_ref"),
+                          "marketplace_version": (summary.get("marketplace") or {}).get("version"),
+                          "llm_provider_calls": False,
+                          "model_downloaded": False,
+                      },
+                  }
+              ],
+          }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "pm-skills-verifier/1.0"
+
+          def log_message(self, format, *args):
+              return
+
+          def send_json(self, payload, status=HTTPStatus.OK):
+              body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Content-Length", str(len(body)))
+              self.end_headers()
+              self.wfile.write(body)
+
+          def do_GET(self):
+              parsed = urlparse(self.path)
+              if parsed.path in ("/", "/healthz"):
+                  payload = health_payload()
+                  status = HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+                  self.send_json(payload, status)
+              elif parsed.path == "/demo":
+                  payload = demo_payload(parsed.query)
+                  status = HTTPStatus.OK if payload["ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+                  self.send_json(payload, status)
+              elif parsed.path == "/v1/models":
+                  self.send_json(models_payload())
+              else:
+                  self.send_json(
+                      {
+                          "ok": False,
+                          "error": "not found",
+                          "endpoints": ["/healthz", "/demo", "/v1/models"],
+                      },
+                      HTTPStatus.NOT_FOUND,
+                  )
+
+
+      def main():
+          port = int(os.environ.get("APP_PORT", "8000"))
+          server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+          print(json.dumps({"event": "start", "service": SERVICE, "port": port}), flush=True)
+          server.serve_forever()
+
+
+      if __name__ == "__main__":
+          main()
