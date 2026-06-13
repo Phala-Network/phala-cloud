@@ -5996,5 +5996,33 @@
       "diskSize": 10
     },
     "tags": ["Media & Design", "Developer Tools", "AI Agents"]
+  },
+{
+    "id": "svelte",
+    "name": "sveltejs/svelte",
+    "description": "web development for the rest of us",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/svelte",
+    "author": "sveltejs",
+    "icon": "svelte.png",
+    "envs": [
+      {
+        "key": "SVELTE_VERSION",
+        "required": false,
+        "default": "5.56.3",
+        "description": "Svelte npm package version installed by the verifier service at container startup."
+      },
+      {
+        "key": "SVELTE_DEMO_NAME",
+        "required": false,
+        "default": "Phala Cloud",
+        "description": "Name rendered by the deterministic Svelte demo component."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["Web Apps", "Developer Tools", "Starter Kits"]
   }
 ]

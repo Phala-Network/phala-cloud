@@ -1,0 +1,384 @@
+services:
+  app:
+    image: node:22-alpine
+    working_dir: /app
+    ports:
+      - "8080:8080"
+    environment:
+      - NODE_ENV=production
+      - NPM_CONFIG_AUDIT=false
+      - NPM_CONFIG_FUND=false
+      - PORT=8080
+      - SVELTE_VERSION=${SVELTE_VERSION:-5.56.3}
+      - SVELTE_DEMO_NAME=${SVELTE_DEMO_NAME:-Phala Cloud}
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        npm init -y >/dev/null
+        npm install --omit=dev --no-audit --no-fund --package-lock=false "svelte@$${SVELTE_VERSION}"
+        exec node /app/server.mjs
+    configs:
+      - source: server_mjs
+        target: /app/server.mjs
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch("http://127.0.0.1:8080/healthz").then((r) => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1))
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    restart: unless-stopped
+
+configs:
+  server_mjs:
+    content: |
+      import { createHash } from "node:crypto";
+      import { mkdir, readFile, writeFile } from "node:fs/promises";
+      import http from "node:http";
+      import os from "node:os";
+      import process from "node:process";
+      import { pathToFileURL } from "node:url";
+      import { compile, parse, VERSION } from "svelte/compiler";
+      import { render } from "svelte/server";
+      import { writable } from "svelte/store";
+
+      const STARTED_AT = Date.now();
+      const PORT = Number.parseInt(process.env.PORT || "8080", 10);
+      const DEFAULT_NAME = normalizeName(process.env.SVELTE_DEMO_NAME || "Phala Cloud");
+      const COMPONENT_SOURCE = [
+        "<svelte:options runes={true} />",
+        "<script>",
+        "  let { name = \"Phala Cloud\" } = " + String.fromCharCode(36) + "props();",
+        "  const checkpoints = [\"compile\", \"render\", \"verify\"];",
+        "  const message = \"web development for the rest of us\";",
+        "</script>",
+        "",
+        "<svelte:head>",
+        "  <title>Svelte verifier</title>",
+        "</svelte:head>",
+        "",
+        "<section class=\"demo\">",
+        "  <p class=\"eyebrow\">Svelte on Phala Cloud</p>",
+        "  <h1>Hello {name}</h1>",
+        "  <p>{message}</p>",
+        "  <ul>",
+        "    {#each checkpoints as checkpoint}",
+        "      <li>{checkpoint}</li>",
+        "    {/each}",
+        "  </ul>",
+        "</section>",
+        "",
+        "<style>",
+        "  .demo {",
+        "    font-family: system-ui, sans-serif;",
+        "    max-width: 44rem;",
+        "    margin: 3rem auto;",
+        "    padding: 2rem;",
+        "    border: 1px solid #ff3e00;",
+        "  }",
+        "  .eyebrow {",
+        "    color: #ff3e00;",
+        "    font-weight: 700;",
+        "    text-transform: uppercase;",
+        "  }",
+        "  h1 {",
+        "    margin: 0.25rem 0 1rem;",
+        "  }",
+        "  ul {",
+        "    display: flex;",
+        "    gap: 0.75rem;",
+        "    flex-wrap: wrap;",
+        "    padding: 0;",
+        "  }",
+        "  li {",
+        "    list-style: none;",
+        "    padding: 0.35rem 0.6rem;",
+        "    background: #fff1eb;",
+        "  }",
+        "</style>"
+      ].join("\n");
+
+      const HTML_ENTITIES = {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#39;"
+      };
+
+      let bootError = null;
+      let boot = null;
+
+      try {
+        boot = await prepareDemo();
+      } catch (error) {
+        bootError = formatError(error);
+      }
+
+      function normalizeName(value) {
+        return String(value || "Phala Cloud").trim().replace(/\s+/g, " ").slice(0, 80) || "Phala Cloud";
+      }
+
+      function formatError(error) {
+        return {
+          name: error && error.name ? error.name : "Error",
+          message: error && error.message ? error.message : String(error)
+        };
+      }
+
+      function hashText(value) {
+        return createHash("sha256").update(value).digest("hex");
+      }
+
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, (char) => HTML_ENTITIES[char]);
+      }
+
+      function safeJsonScript(value) {
+        return JSON.stringify(value).replace(/</g, "\\u003c");
+      }
+
+      async function prepareDemo() {
+        const packageJson = JSON.parse(
+          await readFile(new URL("./node_modules/svelte/package.json", import.meta.url), "utf8")
+        );
+        const ast = parse(COMPONENT_SOURCE, {
+          filename: "Demo.svelte",
+          modern: true
+        });
+        const serverCompiled = compile(COMPONENT_SOURCE, {
+          filename: "Demo.svelte",
+          generate: "server",
+          dev: false
+        });
+        const clientCompiled = compile(COMPONENT_SOURCE, {
+          filename: "Demo.svelte",
+          generate: "client",
+          dev: false
+        });
+        const compiledDir = process.cwd() + "/.compiled";
+        const modulePath = compiledDir + "/Demo.server.mjs";
+
+        await mkdir(compiledDir, { recursive: true });
+        await writeFile(modulePath, serverCompiled.js.code, "utf8");
+
+        const moduleUrl = pathToFileURL(modulePath).href + "?loaded=" + Date.now();
+        const componentModule = await import(moduleUrl);
+        const cssCode = serverCompiled.css && serverCompiled.css.code ? serverCompiled.css.code : "";
+
+        return {
+          component: componentModule.default,
+          cssCode,
+          metadata: {
+            package: {
+              name: packageJson.name,
+              version: packageJson.version,
+              description: packageJson.description,
+              repository: packageJson.repository,
+              engines: packageJson.engines
+            },
+            compiler: {
+              version: VERSION,
+              ast_type: ast.type,
+              has_instance_script: Boolean(ast.instance),
+              has_css: Boolean(ast.css),
+              source_sha256: hashText(COMPONENT_SOURCE),
+              server_js_bytes: Buffer.byteLength(serverCompiled.js.code),
+              client_js_bytes: Buffer.byteLength(clientCompiled.js.code),
+              css_bytes: Buffer.byteLength(cssCode),
+              warning_count: serverCompiled.warnings.length + clientCompiled.warnings.length
+            }
+          }
+        };
+      }
+
+      function runStoreDemo(name) {
+        const trace = [];
+        const counter = writable(0);
+        const unsubscribe = counter.subscribe((value) => trace.push(value));
+
+        counter.update((value) => value + 1);
+        counter.set(name.length);
+        unsubscribe();
+
+        return trace;
+      }
+
+      function renderDemo(name) {
+        if (bootError || !boot) {
+          throw new Error(bootError ? bootError.message : "Svelte verifier failed to initialize");
+        }
+
+        const rendered = render(boot.component, {
+          props: {
+            name
+          }
+        });
+        const body = rendered.body || rendered.html || "";
+
+        return {
+          name,
+          html: body,
+          head: rendered.head || "",
+          css: boot.cssCode,
+          html_sha256: hashText(body),
+          store_trace: runStoreDemo(name)
+        };
+      }
+
+      function basePayload() {
+        return {
+          service: "svelte-compiler-verifier",
+          ok: bootError === null,
+          status: bootError === null ? "ready" : "boot_failed",
+          upstream: "https://github.com/sveltejs/svelte",
+          docs: {
+            svelte: "https://svelte.dev/docs/svelte/overview",
+            compiler: "https://svelte.dev/docs/svelte/svelte-compiler",
+            node_adapter: "https://svelte.dev/docs/kit/adapter-node"
+          },
+          node: process.version,
+          platform: os.platform() + "/" + os.arch(),
+          uptime_seconds: Math.round((Date.now() - STARTED_AT) / 1000),
+          cpu_only: true,
+          credentials_required: false,
+          remote_model_calls: false,
+          model_downloaded: false,
+          package: boot ? boot.metadata.package : {},
+          compiler: boot ? boot.metadata.compiler : {},
+          error: bootError
+        };
+      }
+
+      function modelListPayload() {
+        return {
+          object: "list",
+          data: [
+            {
+              id: "svelte-compiler-" + VERSION,
+              object: "model",
+              created: 0,
+              owned_by: "sveltejs",
+              root: "svelte/compiler",
+              permission: [],
+              metadata: {
+                kind: "deterministic-local-verifier",
+                upstream: "https://github.com/sveltejs/svelte",
+                external_provider_required: false
+              }
+            }
+          ]
+        };
+      }
+
+      function htmlPage(demo) {
+        return [
+          "<!doctype html>",
+          "<html lang=\"en\">",
+          "<head>",
+          "<meta charset=\"utf-8\">",
+          "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
+          "<title>Svelte verifier</title>",
+          "<style>",
+          "body{margin:0;background:#fff;color:#1f1f1f;}",
+          demo.css,
+          "</style>",
+          demo.head,
+          "</head>",
+          "<body>",
+          demo.html,
+          "<script type=\"application/json\" id=\"svelte-verifier-metadata\">",
+          safeJsonScript({ package: boot.metadata.package, compiler: boot.metadata.compiler }),
+          "</script>",
+          "</body>",
+          "</html>"
+        ].join("");
+      }
+
+      function send(response, status, body, contentType) {
+        const payload = Buffer.from(body);
+        response.writeHead(status, {
+          "Content-Type": contentType,
+          "Content-Length": String(payload.length),
+          "Cache-Control": "no-store"
+        });
+        response.end(payload);
+      }
+
+      function sendJson(response, status, payload) {
+        send(response, status, JSON.stringify(payload, null, 2) + "\n", "application/json; charset=utf-8");
+      }
+
+      const server = http.createServer((request, response) => {
+        const url = new URL(request.url || "/", "http://127.0.0.1");
+
+        if (request.method !== "GET") {
+          sendJson(response, 405, { ok: false, error: "method not allowed" });
+          return;
+        }
+
+        if (url.pathname === "/" || url.pathname === "/healthz") {
+          const payload = basePayload();
+          if (bootError) {
+            sendJson(response, 500, payload);
+            return;
+          }
+          try {
+            payload.demo_check = renderDemo(DEFAULT_NAME).html_sha256;
+            sendJson(response, 200, payload);
+          } catch (error) {
+            payload.ok = false;
+            payload.status = "render_failed";
+            payload.error = formatError(error);
+            sendJson(response, 500, payload);
+          }
+          return;
+        }
+
+        if (url.pathname === "/demo") {
+          const name = normalizeName(url.searchParams.get("name") || DEFAULT_NAME);
+          const payload = basePayload();
+          try {
+            payload.demo = renderDemo(name);
+            sendJson(response, 200, payload);
+          } catch (error) {
+            payload.ok = false;
+            payload.status = "render_failed";
+            payload.error = formatError(error);
+            sendJson(response, 500, payload);
+          }
+          return;
+        }
+
+        if (url.pathname === "/demo.html") {
+          const name = normalizeName(url.searchParams.get("name") || DEFAULT_NAME);
+          try {
+            send(response, 200, htmlPage(renderDemo(name)), "text/html; charset=utf-8");
+          } catch (error) {
+            sendJson(response, 500, {
+              ok: false,
+              error: formatError(error)
+            });
+          }
+          return;
+        }
+
+        if (url.pathname === "/v1/models") {
+          sendJson(response, bootError ? 500 : 200, modelListPayload());
+          return;
+        }
+
+        sendJson(response, 404, {
+          ok: false,
+          error: "not found",
+          endpoints: ["/healthz", "/demo", "/demo.html", "/v1/models"]
+        });
+      });
+
+      server.listen(PORT, "0.0.0.0", () => {
+        console.log("svelte verifier listening on 0.0.0.0:" + PORT);
+      });
