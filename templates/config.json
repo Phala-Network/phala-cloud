@@ -5828,5 +5828,27 @@
       "diskSize": 10
     },
     "tags": ["Developer Tools", "Data & Storage", "AI Agents"]
+  },
+{
+    "id": "openmed",
+    "name": "maziyarpanahi/openmed",
+    "description": "open-source healthcare ai",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/openmed",
+    "author": "maziyarpanahi",
+    "icon": "openmed.png",
+    "envs": [
+      {
+        "key": "OPENMED_VERSION",
+        "required": false,
+        "default": "1.5.5",
+        "description": "Pinned OpenMed Python package version installed at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools", "TEE & Privacy"]
   }
 ]
