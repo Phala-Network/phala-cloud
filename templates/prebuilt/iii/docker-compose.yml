@@ -1,0 +1,463 @@
+services:
+  iii:
+    image: iiidev/iii:latest
+    restart: unless-stopped
+    init: true
+    command:
+      - --use-default-config
+      - --no-update-check
+    environment:
+      RUST_LOG: info
+      III_EXECUTION_CONTEXT: docker
+      III_ENV: production
+    expose:
+      - "49134"
+      - "3111"
+      - "3112"
+      - "9464"
+
+  app:
+    image: node:22-bookworm-slim
+    restart: unless-stopped
+    init: true
+    depends_on:
+      - iii
+    ports:
+      - "8080:8080"
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      III_ENGINE_WS_URL: ws://iii:49134
+      III_ENGINE_HTTP_URL: http://iii:3111
+      III_SDK_VERSION: ${III_SDK_VERSION:-0.19.2}
+      NPM_CONFIG_AUDIT: "false"
+      NPM_CONFIG_FUND: "false"
+      NPM_CONFIG_UPDATE_NOTIFIER: "false"
+    working_dir: /opt/iii-demo
+    configs:
+      - source: iii_demo_server
+        target: /opt/iii-demo/server.mjs
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        npm install --omit=dev --no-audit --no-fund --no-package-lock --no-save "iii-sdk@$${III_SDK_VERSION}"
+        exec node /opt/iii-demo/server.mjs
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:' + (process.env.PORT || '8080') + '/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+
+configs:
+  iii_demo_server:
+    content: |
+      import http from "node:http";
+      import os from "node:os";
+      import process from "node:process";
+      import { readFileSync } from "node:fs";
+      import { registerWorker } from "iii-sdk";
+
+      const startedAt = Date.now();
+      const serviceName = "iii-phala-demo";
+      const upstreamRepo = "https://github.com/iii-hq/iii";
+      const engineWsUrl = process.env.III_ENGINE_WS_URL || "ws://iii:49134";
+      const engineHttpUrl = (process.env.III_ENGINE_HTTP_URL || "http://iii:3111").replace(/\/+$/, "");
+      const port = Number(process.env.PORT || "8080");
+      const functionId = "phala::iii_demo";
+      const routePath = "/phala/iii-demo";
+      const endpoints = ["/healthz", "/demo", "/v1/models", routePath];
+      const sdkPackage = JSON.parse(readFileSync(new URL("./node_modules/iii-sdk/package.json", import.meta.url), "utf8"));
+
+      const iii = registerWorker(engineWsUrl);
+
+      function errorMessage(error) {
+        if (!error) {
+          return "unknown error";
+        }
+        const name = error.name || "Error";
+        const message = error.message || String(error);
+        return name + ": " + message;
+      }
+
+      function normalizeTopic(value) {
+        const text = typeof value === "string" && value.trim().length > 0 ? value.trim() : "confidential service orchestration";
+        return text.slice(0, 180);
+      }
+
+      function checksum(text) {
+        return Array.from(text).reduce((total, character) => (total + character.charCodeAt(0)) % 10007, 0);
+      }
+
+      function buildPrimitiveDemo(input) {
+        const topic = normalizeTopic(input && input.topic);
+        const words = topic.toLowerCase().match(/[a-z0-9]+/g) || [];
+        const category = words.includes("observe") || words.includes("observability")
+          ? "observability"
+          : words.includes("worker") || words.includes("service")
+            ? "service-composition"
+            : "workflow";
+
+        return {
+          ok: true,
+          service: serviceName,
+          upstream: upstreamRepo,
+          demo: "deterministic iii worker/function/HTTP-trigger demo",
+          credentials_required: false,
+          remote_model_calls: false,
+          model_downloaded: false,
+          cpu_only: true,
+          input: {
+            topic,
+          },
+          iii_primitives: {
+            worker: "phala-template-worker",
+            function_id: functionId,
+            trigger: {
+              type: "http",
+              path: routePath,
+              method: "POST",
+            },
+          },
+          result: {
+            normalized_topic: topic,
+            word_count: words.length,
+            checksum: checksum(topic),
+            category,
+            summary: "iii-sdk registered a local deterministic function with the live iii engine and exposed it through iii-http.",
+          },
+        };
+      }
+
+      iii.registerFunction(functionId, async (input) => {
+        const isHttpRequest = input && typeof input === "object" && input.trigger && input.trigger.type === "http";
+        const body = isHttpRequest ? input.body : input;
+        const payload = buildPrimitiveDemo(body || {});
+        if (isHttpRequest) {
+          return {
+            status_code: 200,
+            body: payload,
+            headers: {
+              "Content-Type": "application/json",
+            },
+          };
+        }
+        return payload;
+      });
+
+      iii.registerTrigger({
+        type: "http",
+        function_id: functionId,
+        config: {
+          api_path: routePath,
+          http_method: "POST",
+        },
+      });
+
+      function runtimeEvidence() {
+        return {
+          node: process.version,
+          platform: process.platform,
+          arch: process.arch,
+          hostname: os.hostname(),
+          uptime_seconds: Math.round((Date.now() - startedAt) / 100) / 10,
+        };
+      }
+
+      async function withTimeout(promise, milliseconds, label) {
+        let timer;
+        const timeout = new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error(label + " timed out after " + milliseconds + "ms")), milliseconds);
+        });
+        try {
+          return await Promise.race([promise, timeout]);
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+
+      async function probeEngineHttp() {
+        try {
+          const response = await withTimeout(fetch(engineHttpUrl + "/__phala_iii_probe__"), 5000, "engine HTTP probe");
+          return {
+            reachable: true,
+            status: response.status,
+          };
+        } catch (error) {
+          return {
+            reachable: false,
+            error: errorMessage(error),
+          };
+        }
+      }
+
+      async function triggerDirect(topic) {
+        try {
+          const payload = await withTimeout(
+            iii.trigger({
+              function_id: functionId,
+              payload: {
+                topic,
+              },
+            }),
+            8000,
+            "iii direct trigger"
+          );
+          return {
+            ok: Boolean(payload && payload.ok),
+            payload,
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            error: errorMessage(error),
+          };
+        }
+      }
+
+      async function triggerViaHttp(topic) {
+        try {
+          const response = await withTimeout(
+            fetch(engineHttpUrl + routePath, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                topic,
+              }),
+            }),
+            8000,
+            "iii HTTP trigger"
+          );
+          const text = await response.text();
+          let body = text;
+          try {
+            body = JSON.parse(text);
+          } catch (_error) {
+            body = text;
+          }
+          return {
+            ok: response.ok && Boolean(body && body.ok),
+            status: response.status,
+            body,
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            error: errorMessage(error),
+          };
+        }
+      }
+
+      async function healthPayload() {
+        const topic = "phala cloud iii smoke";
+        const engineHttp = await probeEngineHttp();
+        const direct = await triggerDirect(topic);
+        const httpTrigger = await triggerViaHttp(topic);
+        const ok = typeof registerWorker === "function" && engineHttp.reachable && direct.ok && httpTrigger.ok;
+
+        return {
+          status: ok ? "ok" : "starting",
+          ok,
+          service: serviceName,
+          upstream: upstreamRepo,
+          credentials_required: false,
+          remote_model_calls: false,
+          model_downloaded: false,
+          runtime: runtimeEvidence(),
+          engine: {
+            image: "iiidev/iii:latest",
+            websocket_url: engineWsUrl,
+            http_url: engineHttpUrl,
+            http_probe: engineHttp,
+          },
+          sdk: {
+            package: "iii-sdk",
+            version: sdkPackage.version,
+            import_ok: typeof registerWorker === "function",
+            direct_trigger_ok: direct.ok,
+            http_trigger_ok: httpTrigger.ok,
+          },
+          demo_function: {
+            function_id: functionId,
+            route_path: routePath,
+          },
+        };
+      }
+
+      async function demoPayload(topic) {
+        const normalizedTopic = normalizeTopic(topic);
+        const direct = await triggerDirect(normalizedTopic);
+        const httpTrigger = await triggerViaHttp(normalizedTopic);
+        return {
+          ok: direct.ok && httpTrigger.ok,
+          service: serviceName,
+          upstream: upstreamRepo,
+          credentials_required: false,
+          remote_model_calls: false,
+          model_downloaded: false,
+          cpu_only: true,
+          sdk: {
+            package: "iii-sdk",
+            version: sdkPackage.version,
+          },
+          engine: {
+            image: "iiidev/iii:latest",
+            websocket_url: engineWsUrl,
+            http_url: engineHttpUrl,
+          },
+          direct_trigger: direct,
+          http_trigger: httpTrigger,
+        };
+      }
+
+      function modelsPayload() {
+        return {
+          object: "list",
+          data: [
+            {
+              id: "iii/local-engine-worker-demo",
+              object: "model",
+              created: 0,
+              owned_by: "iii-hq",
+              description: "Compatibility metadata for the CPU-safe iii engine plus iii-sdk worker demo. No LLM model is hosted or called.",
+            },
+          ],
+          upstream: upstreamRepo,
+          credentials_required: false,
+          remote_model_calls: false,
+          model_downloaded: false,
+          engine: {
+            image: "iiidev/iii:latest",
+          },
+          sdk: {
+            package: "iii-sdk",
+            version: sdkPackage.version,
+          },
+        };
+      }
+
+      function rootPayload() {
+        return {
+          service: serviceName,
+          upstream: upstreamRepo,
+          endpoints,
+          credentials_required: false,
+          remote_model_calls: false,
+          model_downloaded: false,
+        };
+      }
+
+      async function readJsonBody(request) {
+        const chunks = [];
+        let size = 0;
+        for await (const chunk of request) {
+          size += chunk.length;
+          if (size > 1048576) {
+            throw new Error("request body exceeds 1 MiB");
+          }
+          chunks.push(chunk);
+        }
+        if (chunks.length === 0) {
+          return {};
+        }
+        const text = Buffer.concat(chunks).toString("utf8");
+        if (text.trim().length === 0) {
+          return {};
+        }
+        return JSON.parse(text);
+      }
+
+      function sendJson(response, statusCode, payload) {
+        const body = Buffer.from(JSON.stringify(payload, null, 2) + "\n", "utf8");
+        response.writeHead(statusCode, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Content-Length": body.length,
+        });
+        response.end(body);
+      }
+
+      const server = http.createServer((request, response) => {
+        const url = new URL(request.url || "/", "http://localhost");
+        const path = url.pathname.replace(/\/+$/, "") || "/";
+
+        Promise.resolve()
+          .then(async () => {
+            if (path === "/") {
+              if (request.method !== "GET") {
+                sendJson(response, 405, { ok: false, error: "method_not_allowed", endpoints });
+                return;
+              }
+              sendJson(response, 200, rootPayload());
+              return;
+            }
+
+            if (path === "/healthz") {
+              if (request.method !== "GET") {
+                sendJson(response, 405, { ok: false, error: "method_not_allowed", endpoints });
+                return;
+              }
+              const payload = await healthPayload();
+              sendJson(response, payload.ok ? 200 : 503, payload);
+              return;
+            }
+
+            if (path === "/demo") {
+              let topic = url.searchParams.get("topic");
+              if (request.method === "POST") {
+                const body = await readJsonBody(request);
+                topic = body.topic || body.input || topic;
+              } else if (request.method !== "GET") {
+                sendJson(response, 405, { ok: false, error: "method_not_allowed", endpoints });
+                return;
+              }
+              const payload = await demoPayload(topic);
+              sendJson(response, payload.ok ? 200 : 503, payload);
+              return;
+            }
+
+            if (path === "/v1/models") {
+              if (request.method !== "GET") {
+                sendJson(response, 405, { ok: false, error: "method_not_allowed", endpoints });
+                return;
+              }
+              sendJson(response, 200, modelsPayload());
+              return;
+            }
+
+            sendJson(response, 404, {
+              ok: false,
+              error: "not_found",
+              endpoints,
+            });
+          })
+          .catch((error) => {
+            sendJson(response, 500, {
+              ok: false,
+              error: errorMessage(error),
+            });
+          });
+      });
+
+      server.listen(port, "0.0.0.0", () => {
+        console.log(JSON.stringify({
+          event: "startup",
+          service: serviceName,
+          port,
+          upstream: upstreamRepo,
+          engine_ws_url: engineWsUrl,
+          engine_http_url: engineHttpUrl,
+          sdk_version: sdkPackage.version,
+          credentials_required: false,
+          remote_model_calls: false,
+          model_downloaded: false,
+        }));
+      });

@@ -6080,5 +6080,27 @@
       "diskSize": 20
     },
     "tags": ["LLM Inference & Model Serving", "Media & Design", "AI Agents"]
+  },
+{
+    "id": "iii",
+    "name": "iii-hq/iii",
+    "description": "Effortlessly compose, extend, and observe every service in real-time for the first time ever.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/iii",
+    "author": "iii-hq",
+    "icon": "iii.svg",
+    "envs": [
+      {
+        "key": "III_SDK_VERSION",
+        "required": false,
+        "default": "0.19.2",
+        "description": "Pinned iii-sdk npm package version installed by the verifier service at container startup."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 10
+    },
+    "tags": ["AI Agents", "Developer Tools", "Automation"]
   }
 ]
