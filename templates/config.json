@@ -5850,5 +5850,27 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools", "TEE & Privacy"]
-  }
+  },
+{
+  "id": "lmcache",
+  "name": "LMCache/LMCache",
+  "description": "LMCache: Supercharge Your LLM with the Fastest KV Cache Layer",
+  "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/lmcache",
+  "author": "LMCache",
+  "icon": "lmcache.png",
+  "envs": [
+    {
+      "key": "LMCACHE_LOG_LEVEL",
+      "required": false,
+      "description": "Optional LMCache logger level used while importing the package in the CPU-safe verifier.",
+      "default": "INFO"
+    }
+  ],
+  "defaultResource": {
+    "vCPU": 1,
+    "memory": 1024,
+    "diskSize": 10
+  },
+  "tags": ["LLM Inference & Model Serving", "Data & Storage", "Infrastructure"]
+}
 ]
