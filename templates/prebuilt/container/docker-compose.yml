@@ -1,0 +1,476 @@
+services:
+  app:
+    image: python:3.12-bookworm
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8000"
+    environment:
+      CONTAINER_SOURCE_REF: ${CONTAINER_SOURCE_REF:-1.0.0}
+      CONTAINER_EXPECTED_COMMIT: ${CONTAINER_EXPECTED_COMMIT-ee848e3ebfd7c73b04dd419683be54fb450b8779}
+      CONTAINER_SOURCE_DIR: /var/lib/container-source/repo
+      APP_PORT: "8000"
+      PYTHONUNBUFFERED: "1"
+    configs:
+      - source: container_verifier_app
+        target: /opt/container-verifier/main.py
+    command:
+      - python
+      - /opt/container-verifier/main.py
+    volumes:
+      - container_source:/var/lib/container-source
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import sys, urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5); sys.exit(0 if response.status == 200 else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 240s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          encode zstd gzip
+          header {
+              X-Content-Type-Options "nosniff"
+              Referrer-Policy "no-referrer"
+              -Server
+          }
+          reverse_proxy app:8000
+      }
+
+  container_verifier_app:
+    content: |
+      import json
+      import os
+      import platform
+      import re
+      import shutil
+      import subprocess
+      import sys
+      import time
+      from http import HTTPStatus
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from pathlib import Path
+      from urllib.parse import urlparse
+
+
+      STARTED_AT = time.time()
+      UPSTREAM_REPO = "https://github.com/apple/container"
+      GIT_URL = "https://github.com/apple/container.git"
+      SOURCE_REF = os.environ.get("CONTAINER_SOURCE_REF", "1.0.0").strip() or "1.0.0"
+      EXPECTED_COMMIT = os.environ.get("CONTAINER_EXPECTED_COMMIT", "").strip()
+      SOURCE_DIR = Path(os.environ.get("CONTAINER_SOURCE_DIR", "/var/lib/container-source/repo"))
+      REF_MARKER = SOURCE_DIR.parent / ".container-source-ref"
+      ENDPOINTS = ["/healthz", "/demo", "/v1/models", "/upstream"]
+      REQUIRED_FILES = [
+          "README.md",
+          "BUILDING.md",
+          "Package.swift",
+          "docs/technical-overview.md",
+          "docs/tutorials/start-here.md",
+          "docs/command-reference.md",
+      ]
+      REQUIRED_EXECUTABLE_TARGETS = [
+          "container",
+          "container-apiserver",
+          "container-core-images",
+          "container-network-vmnet",
+          "container-runtime-linux",
+          "machine-apiserver",
+      ]
+
+
+      def run_command(args, cwd=None, timeout=120):
+          try:
+              completed = subprocess.run(
+                  args,
+                  cwd=cwd,
+                  check=False,
+                  capture_output=True,
+                  text=True,
+                  timeout=timeout,
+                  env={
+                      **os.environ,
+                      "GIT_TERMINAL_PROMPT": "0",
+                  },
+              )
+              return {
+                  "ok": completed.returncode == 0,
+                  "exit_code": completed.returncode,
+                  "stdout": completed.stdout.strip(),
+                  "stderr": completed.stderr.strip(),
+                  "error": None,
+              }
+          except Exception as exc:
+              return {
+                  "ok": False,
+                  "exit_code": None,
+                  "stdout": "",
+                  "stderr": "",
+                  "error": f"{type(exc).__name__}: {exc}",
+              }
+
+
+      def remove_existing_source(reason):
+          if SOURCE_DIR.exists():
+              shutil.rmtree(SOURCE_DIR)
+          REF_MARKER.parent.mkdir(parents=True, exist_ok=True)
+          REF_MARKER.write_text(reason + "\n", encoding="utf-8")
+
+
+      def source_ref_changed():
+          if not REF_MARKER.exists():
+              return SOURCE_DIR.exists()
+          return REF_MARKER.read_text(encoding="utf-8").strip() != SOURCE_REF
+
+
+      def clone_source():
+          ref_is_commit = bool(re.fullmatch(r"[0-9a-fA-F]{40}", SOURCE_REF))
+          clone_args = ["git", "clone", "--depth", "1"]
+          if not ref_is_commit:
+              clone_args.extend(["--branch", SOURCE_REF])
+          clone_args.extend([GIT_URL, str(SOURCE_DIR)])
+
+          clone = run_command(clone_args, timeout=180)
+          if not clone["ok"]:
+              return clone
+
+          if ref_is_commit:
+              fetch = run_command(["git", "fetch", "--depth", "1", "origin", SOURCE_REF], cwd=SOURCE_DIR, timeout=120)
+              if not fetch["ok"]:
+                  return fetch
+              checkout = run_command(["git", "checkout", "--detach", SOURCE_REF], cwd=SOURCE_DIR, timeout=60)
+              if not checkout["ok"]:
+                  return checkout
+
+          REF_MARKER.parent.mkdir(parents=True, exist_ok=True)
+          REF_MARKER.write_text(SOURCE_REF + "\n", encoding="utf-8")
+          return clone
+
+
+      def ensure_source():
+          git_path = shutil.which("git")
+          if not git_path:
+              return {
+                  "ok": False,
+                  "git": None,
+                  "error": "git executable was not found on PATH",
+                  "cloned": False,
+              }
+
+          if source_ref_changed() or (SOURCE_DIR.exists() and not (SOURCE_DIR / ".git").exists()):
+              remove_existing_source("removed stale source")
+
+          cloned = False
+          if not SOURCE_DIR.exists():
+              clone = clone_source()
+              cloned = True
+              if not clone["ok"]:
+                  return {
+                      "ok": False,
+                      "git": git_path,
+                      "error": "failed to clone upstream source",
+                      "cloned": cloned,
+                      "clone": clone,
+                  }
+
+          commit = run_command(["git", "rev-parse", "HEAD"], cwd=SOURCE_DIR, timeout=30)
+          tag = run_command(["git", "describe", "--tags", "--exact-match", "HEAD"], cwd=SOURCE_DIR, timeout=30)
+          remote = run_command(["git", "config", "--get", "remote.origin.url"], cwd=SOURCE_DIR, timeout=30)
+          commit_sha = commit["stdout"] if commit["ok"] else None
+          expected_ok = not EXPECTED_COMMIT or commit_sha == EXPECTED_COMMIT
+
+          return {
+              "ok": bool(commit["ok"] and expected_ok and (SOURCE_DIR / "Package.swift").exists()),
+              "git": git_path,
+              "source_dir": str(SOURCE_DIR),
+              "source_ref": SOURCE_REF,
+              "expected_commit": EXPECTED_COMMIT or None,
+              "commit": commit_sha,
+              "commit_matches_expected": expected_ok,
+              "tag": tag["stdout"] if tag["ok"] else None,
+              "remote": remote["stdout"] if remote["ok"] else None,
+              "cloned": cloned,
+              "errors": {
+                  "commit": commit if not commit["ok"] else None,
+                  "tag": tag if not tag["ok"] else None,
+              },
+          }
+
+
+      def read_source_file(relative_path):
+          path = SOURCE_DIR / relative_path
+          try:
+              return path.read_text(encoding="utf-8", errors="replace")
+          except Exception:
+              return ""
+
+
+      def package_checks():
+          package_text = read_source_file("Package.swift")
+          readme_text = read_source_file("README.md")
+          building_text = read_source_file("BUILDING.md")
+          overview_text = read_source_file("docs/technical-overview.md")
+
+          swift_tools = None
+          swift_tools_match = re.search(r"swift-tools-version:\s*([0-9.]+)", package_text)
+          if swift_tools_match:
+              swift_tools = swift_tools_match.group(1)
+
+          macos_platform = None
+          macos_match = re.search(r"platforms:\s*\[\s*\.macOS\(\"([0-9]+)\"\)\s*\]", package_text)
+          if macos_match:
+              macos_platform = macos_match.group(1)
+
+          containerization_version = None
+          sc_match = re.search(r'let scVersion = "([^"]+)"', package_text)
+          if sc_match:
+              containerization_version = sc_match.group(1)
+
+          file_checks = {path: (SOURCE_DIR / path).exists() for path in REQUIRED_FILES}
+          executable_targets = {
+              name: f'name: "{name}"' in package_text for name in REQUIRED_EXECUTABLE_TARGETS
+          }
+          runtime_markers = {
+              "package_name_container": 'name: "container"' in package_text,
+              "macos_platform_declared": macos_platform is not None,
+              "containerization_dependency": "https://github.com/apple/containerization.git" in package_text,
+              "virtualization_documented": "Virtualization framework" in overview_text,
+              "vmnet_documented": "vmnet framework" in overview_text,
+              "xpc_documented": "XPC" in overview_text,
+              "launchd_documented": "Launchd" in overview_text,
+              "readme_requires_apple_silicon": "Mac with Apple silicon" in readme_text,
+              "readme_requires_macos26": "macOS 26" in readme_text,
+              "building_requires_xcode26": "Xcode 26" in building_text,
+          }
+
+          ok = (
+              bool(package_text)
+              and all(file_checks.values())
+              and all(executable_targets.values())
+              and all(runtime_markers.values())
+              and swift_tools == "6.2"
+          )
+
+          return {
+              "ok": ok,
+              "swift_tools_version": swift_tools,
+              "macos_platform_minimum": macos_platform,
+              "containerization_version": containerization_version,
+              "library_target_count": package_text.count(".library("),
+              "executable_target_count": package_text.count(".executableTarget("),
+              "test_target_count": package_text.count(".testTarget("),
+              "files": file_checks,
+              "executable_targets": executable_targets,
+              "runtime_markers": runtime_markers,
+          }
+
+
+      def collect_startup_status():
+          source = ensure_source()
+          checks = package_checks() if source["ok"] else {
+              "ok": False,
+              "error": "source checkout is unavailable or failed verification",
+          }
+          return {
+              "ok": bool(source["ok"] and checks["ok"]),
+              "source": source,
+              "checks": checks,
+          }
+
+
+      STARTUP_STATUS = collect_startup_status()
+
+
+      def base_payload():
+          return {
+              "ok": STARTUP_STATUS["ok"],
+              "service": "apple-container-source-verifier",
+              "upstream": UPSTREAM_REPO,
+              "source_ref": SOURCE_REF,
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "uptime_seconds": round(time.time() - STARTED_AT, 3),
+              "cpu_only": True,
+              "credentials_required": False,
+              "provider_calls": False,
+              "model_downloads": False,
+              "macos_container_runtime_started": False,
+              "phala_runtime_note": (
+                  "apple/container is a macOS container runtime for Apple silicon. "
+                  "This Linux service verifies the real upstream source and metadata; "
+                  "it does not start the macOS CLI, launchd services, vmnet networking, "
+                  "or per-container virtual machines."
+              ),
+              "status": STARTUP_STATUS,
+          }
+
+
+      def demo_payload():
+          payload = base_payload()
+          payload["demo"] = {
+              "name": "apple/container source and runtime-shape verifier",
+              "what_is_checked": [
+                  "pinned upstream git checkout",
+                  "expected release commit",
+                  "Swift package manifest",
+                  "macOS platform declaration",
+                  "Containerization package dependency",
+                  "documented runtime components",
+              ],
+              "sample_upstream_commands_for_macos": [
+                  "container system start",
+                  "container build --tag web-test --file Dockerfile .",
+                  "container run --name my-web-server --detach --rm web-test",
+                  "container system stop",
+              ],
+              "default_endpoint_behavior": {
+                  "runs_container_cli": False,
+                  "starts_virtual_machines": False,
+                  "needs_registry_credentials": False,
+                  "downloads_model_weights": False,
+                  "calls_model_provider": False,
+              },
+          }
+          return payload
+
+
+      def upstream_payload():
+          return {
+              "upstream": UPSTREAM_REPO,
+              "source_ref": SOURCE_REF,
+              "default_release": "https://github.com/apple/container/releases/tag/1.0.0",
+              "signed_installer": {
+                  "url": "https://github.com/apple/container/releases/download/1.0.0/container-1.0.0-installer-signed.pkg",
+                  "sha256": "13f45f26da94c354adcbefe1e8f7631e7f126e93c5d4dd6a5a538aa66b4f479d",
+                  "downloaded_by_template": False,
+              },
+              "docs": {
+                  "readme": "https://github.com/apple/container/blob/1.0.0/README.md",
+                  "building": "https://github.com/apple/container/blob/1.0.0/BUILDING.md",
+                  "technical_overview": "https://github.com/apple/container/blob/1.0.0/docs/technical-overview.md",
+                  "guided_tour": "https://github.com/apple/container/blob/1.0.0/docs/tutorials/start-here.md",
+                  "command_reference": "https://github.com/apple/container/blob/1.0.0/docs/command-reference.md",
+              },
+              "icon_source": "https://github.com/apple/container/blob/1.0.0/assets/Containerization-Logo.png",
+          }
+
+
+      def models_payload():
+          return {
+              "object": "list",
+              "data": [
+                  {
+                      "id": "apple-container/source-verifier",
+                      "object": "model",
+                      "created": 0,
+                      "owned_by": "apple",
+                      "description": (
+                          "Metadata-only smoke endpoint. The template does not host "
+                          "or call an LLM model."
+                      ),
+                  }
+              ],
+          }
+
+
+      def write_json(handler, status, payload):
+          body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+          handler.send_response(status)
+          handler.send_header("Content-Type", "application/json; charset=utf-8")
+          handler.send_header("Cache-Control", "no-store")
+          handler.send_header("Content-Length", str(len(body)))
+          handler.end_headers()
+          handler.wfile.write(body)
+
+
+      class Handler(BaseHTTPRequestHandler):
+          server_version = "apple-container-verifier"
+
+          def log_message(self, fmt, *args):
+              print(
+                  json.dumps(
+                      {
+                          "ts": time.time(),
+                          "client": self.client_address[0],
+                          "request": self.requestline,
+                          "message": fmt % args,
+                      }
+                  ),
+                  flush=True,
+              )
+
+          def do_GET(self):
+              path = urlparse(self.path).path.rstrip("/") or "/"
+
+              if path in ("/", "/healthz"):
+                  status = HTTPStatus.OK if STARTUP_STATUS["ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+                  write_json(self, status, base_payload())
+                  return
+
+              if path == "/demo":
+                  status = HTTPStatus.OK if STARTUP_STATUS["ok"] else HTTPStatus.SERVICE_UNAVAILABLE
+                  write_json(self, status, demo_payload())
+                  return
+
+              if path == "/v1/models":
+                  write_json(self, HTTPStatus.OK, models_payload())
+                  return
+
+              if path == "/upstream":
+                  write_json(self, HTTPStatus.OK, upstream_payload())
+                  return
+
+              write_json(
+                  self,
+                  HTTPStatus.NOT_FOUND,
+                  {
+                      "error": "not_found",
+                      "endpoints": ENDPOINTS,
+                  },
+              )
+
+
+      if __name__ == "__main__":
+          port = int(os.environ.get("APP_PORT", "8000"))
+          print(
+              json.dumps(
+                  {
+                      "event": "startup",
+                      "port": port,
+                      "ok": STARTUP_STATUS["ok"],
+                      "source_ref": SOURCE_REF,
+                      "macos_container_runtime_started": False,
+                  }
+              ),
+              flush=True,
+          )
+          ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+
+volumes:
+  container_source:
+
+networks:
+  internal:
+    driver: bridge
