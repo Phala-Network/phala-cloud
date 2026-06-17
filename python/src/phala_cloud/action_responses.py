@@ -7,9 +7,11 @@ from .models.apps import AppRevisionsResponse as AppRevisionsResponse
 from .models.auth import CurrentUserV20251028, CurrentUserV20260121
 from .models.base import CloudModel
 from .models.cvms import (
+    Certificate,
     PaginatedCvmInfosV20251028,
     PaginatedCvmInfosV20260121,
     PaginatedCvmInfosV20260522,
+    TcbInfo,
 )
 
 
@@ -279,8 +281,46 @@ class AppInfoResponse(CloudModel):
 # AppRevisionsResponse and AppRevisionDetailResponse are imported from models.apps
 
 
+class AppAttestationKmsInfo(CloudModel):
+    contract_address: str
+    chain_id: int | None = None
+    version: str
+    url: str
+    gateway_app_id: str | None = None
+    gateway_app_url: str
+    kms_type: str
+
+
+class AppAttestationInstance(CloudModel):
+    vm_uuid: str | None = None
+    name: str | None = None
+    instance_id: str | None = None
+    status: str | None = None
+    image_version: str | None = None
+    quote: str | None = None
+    ppid: str | None = None
+    ppid_sha256: str | None = None
+    device_id: str | None = None
+    fmspc: str | None = None
+    tee_tcb_svn: str | None = None
+    mr_config_id: str | None = None
+    cpusvn: str | None = None
+    pcesvn: int | None = None
+    tcb_info: TcbInfo | None = None
+    app_certificates: list[Certificate] | None = None
+    compose_file: str | None = None
+    eventlog: list[GenericObject] = Field(default_factory=list)
+    error: str | None = None
+
+
 class AppAttestationResponse(CloudModel):
-    instances: list[GenericObject] = Field(default_factory=list)
+    app_id: str | None = None
+    contract_address: str | None = None
+    kms_info: AppAttestationKmsInfo | None = None
+    instances: list[AppAttestationInstance] = Field(default_factory=list)
+    kms_guest_agent_info: GenericObject | None = None
+    gateway_guest_agent_info: GenericObject | None = None
+    qemu_version: str | None = None
 
 
 CurrentUserResponse = CurrentUserV20260121 | CurrentUserV20251028
