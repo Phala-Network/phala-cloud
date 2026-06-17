@@ -34,6 +34,7 @@ export const AppAttestationInstanceSchema = z.object({
   device_id: z.string().optional(),
   fmspc: z.string().nullable().optional(),
   tee_tcb_svn: z.string().nullable().optional(),
+  mr_config_id: z.string().nullable().optional(),
   cpusvn: z.string().nullable().optional(),
   pcesvn: z.number().nullable().optional(),
   tcb_info: TcbInfoSchema.nullable().optional(),
