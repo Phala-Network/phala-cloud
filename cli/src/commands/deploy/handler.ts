@@ -42,6 +42,8 @@ import {
 	safeCommitCvmUpdate,
 	convertToHostname,
 	isValidHostname,
+	getMrConfigId,
+	type MrConfigIdInput,
 } from "@phala/cloud";
 import dedent from "dedent";
 import fs from "fs-extra";
@@ -52,7 +54,7 @@ import type { RuntimeProjectConfig } from "@/src/utils/project-config";
 type PrivacyConfig = Pick<
 	RuntimeProjectConfig,
 	"public_logs" | "public_sysinfo" | "listed"
->;
+> & { public_tcbinfo?: boolean; secure_time?: boolean };
 
 interface Options {
 	name?: string;
@@ -89,7 +91,10 @@ interface Options {
 	devOs?: boolean;
 	publicLogs?: boolean;
 	publicSysinfo?: boolean;
+	publicTcbinfo?: boolean;
+	secureTime?: boolean;
 	listed?: boolean;
+	experimentalKeyProviderType?: "kms" | "local" | "tpm";
 	prepareOnly?: boolean;
 	commit?: boolean;
 	token?: string;
@@ -602,6 +607,8 @@ const validateCpuMemoryDiskSize = async (options: Options) => {
 interface PrivacySettings {
 	publicLogs: boolean;
 	publicSysinfo: boolean;
+	publicTcbinfo: boolean;
+	secureTime: boolean;
 	listed: boolean;
 }
 
@@ -616,6 +623,9 @@ const resolvePrivacySettings = (
 		publicLogs: options.publicLogs ?? projectConfig?.public_logs ?? true,
 		publicSysinfo:
 			options.publicSysinfo ?? projectConfig?.public_sysinfo ?? true,
+		publicTcbinfo:
+			options.publicTcbinfo ?? projectConfig?.public_tcbinfo ?? true,
+		secureTime: options.secureTime ?? projectConfig?.secure_time ?? false,
 		listed: options.listed ?? projectConfig?.listed ?? false,
 	};
 };
@@ -640,6 +650,8 @@ export const buildProvisionPayload = (
 		allowed_envs: envs?.map((e) => e.key) || [],
 		public_logs: privacySettings.publicLogs,
 		public_sysinfo: privacySettings.publicSysinfo,
+		public_tcbinfo: privacySettings.publicTcbinfo,
+		secure_time: privacySettings.secureTime,
 	};
 
 	if (preLaunchScriptContent) {
@@ -648,6 +660,10 @@ export const buildProvisionPayload = (
 
 	if (options.fs) {
 		composeFile.storage_fs = options.fs;
+	}
+
+	if (options.experimentalKeyProviderType) {
+		composeFile.key_provider = options.experimentalKeyProviderType;
 	}
 
 	const payload: Record<string, unknown> = {
@@ -804,6 +820,23 @@ const deployNewCvm = async (
 	let commit_result;
 
 	const provisionKmsInfo = app.kms_info;
+
+	if (
+		validatedOptions.experimentalKeyProviderType &&
+		app.app_id &&
+		app.compose_hash
+	) {
+		const kpType = validatedOptions.experimentalKeyProviderType;
+		const kpId = provisionKmsInfo?.k256_pubkey || "";
+		const mrConfigId = getMrConfigId({
+			compose_hash: `0x${app.compose_hash}`,
+			app_id: `0x${app.app_id}`,
+			key_provider_type: kpType,
+			key_provider_id: kpId ? `0x${kpId}` : "0x",
+		});
+		logger.info(`mr_config_id (v2): ${mrConfigId}`);
+	}
+
 	const needsOnchainKms =
 		!app.app_id &&
 		!!provisionKmsInfo?.chain_id &&

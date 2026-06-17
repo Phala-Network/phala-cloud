@@ -216,7 +216,7 @@ app_compose = tcb_info["app_compose"]
 compose_hash = sha256(app_compose.encode()).hexdigest()
 
 # `mr_config` field of TDX quote includes the compose hash, prefixed with "0x01"
-mr_config = intel_result["quote"]["body"]["mrconfig"]
+mr_config = intel_result["quote"]["body"]["mr_config_id"]
 expected = "0x01" + compose_hash
 assert mr_config.lower().startswith(expected.lower())
 
@@ -341,7 +341,7 @@ assert rd[32:64].hex() == nonce
 tcb = report["info"]["tcb_info"]
 if isinstance(tcb, str): tcb = json.loads(tcb)
 ch = hashlib.sha256(tcb["app_compose"].encode()).hexdigest()
-assert intel["quote"]["body"]["mrconfig"].lower().startswith(("0x01" + ch).lower())
+assert intel["quote"]["body"]["mr_config_id"].lower().startswith(("0x01" + ch).lower())
 
 print("ALL VERIFIED — request to", model, "ran on genuine GPU TEE with the expected code.")
 ```

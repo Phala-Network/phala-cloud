@@ -161,6 +161,14 @@ export const deployCommandMeta: CommandMeta = {
 			group: "advanced",
 		},
 		{
+			name: "experimental-key-provider-type",
+			description:
+				"Set key_provider in compose (kms, local, tpm). Backend resolves key_provider_id for kms; local/tpm require manual key_provider_id. Computes and displays mr_config_id after provision.",
+			type: "string",
+			target: "experimentalKeyProviderType",
+			group: "advanced",
+		},
+		{
 			name: "skip-gateway",
 			description: "Skip gateway matching",
 			type: "boolean",
@@ -258,6 +266,20 @@ export const deployCommandMeta: CommandMeta = {
 			type: "boolean",
 			target: "publicSysinfo",
 			negatedName: "no-public-sysinfo",
+		},
+		{
+			name: "public-tcbinfo",
+			description: "Make attestation data publicly accessible (default: true)",
+			type: "boolean",
+			target: "publicTcbinfo",
+			negatedName: "no-public-tcbinfo",
+		},
+		{
+			name: "secure-time",
+			description: "Enable secure time (default: false)",
+			type: "boolean",
+			target: "secureTime",
+			negatedName: "no-secure-time",
 		},
 		{
 			name: "listed",
@@ -360,6 +382,7 @@ export const deployCommandSchema = z.object({
 	kmsContract: z.string().optional(),
 	kmsContractId: z.string().optional(),
 	keyProviderMode: z.enum(["kms", "local"]).optional(),
+	experimentalKeyProviderType: z.enum(["kms", "local", "tpm"]).optional(),
 	skipGateway: z.boolean().optional(),
 	cvmId: z.string().optional(),
 	customAppId: z.string().optional(),
@@ -372,6 +395,8 @@ export const deployCommandSchema = z.object({
 	devOs: z.boolean().optional(),
 	publicLogs: z.boolean().optional(),
 	publicSysinfo: z.boolean().optional(),
+	publicTcbinfo: z.boolean().optional(),
+	secureTime: z.boolean().optional(),
 	listed: z.boolean().optional(),
 	prepareOnly: z.boolean().default(false),
 	commit: z.boolean().default(false),

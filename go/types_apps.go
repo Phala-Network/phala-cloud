@@ -114,7 +114,49 @@ type AppRevisionsResponse struct {
 }
 
 // AppAttestationResponse is the response for getting app attestation.
-type AppAttestationResponse = GenericObject
+type AppAttestationResponse struct {
+	AppID                 string                   `json:"app_id"`
+	ContractAddress       string                   `json:"contract_address"`
+	KMSInfo               AppAttestationKMSInfo    `json:"kms_info"`
+	Instances             []AppAttestationInstance `json:"instances"`
+	KMSGuestAgentInfo     GenericObject            `json:"kms_guest_agent_info,omitempty"`
+	GatewayGuestAgentInfo GenericObject            `json:"gateway_guest_agent_info,omitempty"`
+	QEMUVersion           *string                  `json:"qemu_version,omitempty"`
+}
+
+// AppAttestationKMSInfo holds KMS information returned with app attestations.
+type AppAttestationKMSInfo struct {
+	ContractAddress string  `json:"contract_address"`
+	ChainID         *int    `json:"chain_id"`
+	Version         string  `json:"version"`
+	URL             string  `json:"url"`
+	GatewayAppID    *string `json:"gateway_app_id"`
+	GatewayAppURL   string  `json:"gateway_app_url"`
+	KMSType         string  `json:"kms_type"`
+}
+
+// AppAttestationInstance holds attestation data for one app instance.
+type AppAttestationInstance struct {
+	VMUUID          *string       `json:"vm_uuid,omitempty"`
+	Name            *string       `json:"name,omitempty"`
+	InstanceID      *string       `json:"instance_id,omitempty"`
+	Status          *string       `json:"status,omitempty"`
+	ImageVersion    *string       `json:"image_version,omitempty"`
+	Quote           *string       `json:"quote,omitempty"`
+	PPID            *string       `json:"ppid,omitempty"`
+	PPIDSHA256      *string       `json:"ppid_sha256,omitempty"`
+	DeviceID        *string       `json:"device_id,omitempty"`
+	FMSPC           *string       `json:"fmspc,omitempty"`
+	TEETCBSVN       *string       `json:"tee_tcb_svn,omitempty"`
+	MRConfigID      *string       `json:"mr_config_id,omitempty"`
+	CPUSVN          *string       `json:"cpusvn,omitempty"`
+	PCESVN          *int          `json:"pcesvn,omitempty"`
+	TCBInfo         *TcbInfo      `json:"tcb_info,omitempty"`
+	AppCertificates []Certificate `json:"app_certificates,omitempty"`
+	ComposeFile     *string       `json:"compose_file,omitempty"`
+	EventLog        []EventLog    `json:"eventlog,omitempty"`
+	Error           *string       `json:"error,omitempty"`
+}
 
 // DeviceAllowlistItemFields contains shared device allowlist fields.
 type DeviceAllowlistItemFields struct {

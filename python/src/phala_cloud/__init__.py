@@ -19,9 +19,13 @@ from .result import SafeResult
 from .utils import (
     encrypt_env_vars,
     get_compose_hash,
+    get_mr_config_id,
+    get_mr_config_id_hex,
+    get_mr_config_id_v1,
     parse_env,
     parse_env_vars,
     verify_env_encrypt_public_key,
+    verify_mr_config_id,
 )
 from .webhook import WebhookEvent, parse_webhook_event, verify_webhook_signature
 
@@ -46,9 +50,13 @@ __all__ = [
     "encrypt_env_vars",
     "error_codes",
     "get_compose_hash",
+    "get_mr_config_id",
+    "get_mr_config_id_hex",
+    "get_mr_config_id_v1",
     "parse_env",
     "parse_env_vars",
     "verify_env_encrypt_public_key",
+    "verify_mr_config_id",
     "verify_webhook_signature",
     "parse_webhook_event",
     "WebhookEvent",

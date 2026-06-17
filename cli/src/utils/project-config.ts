@@ -22,6 +22,8 @@ export const ProjectConfigSchema: z.ZodTypeAny = CvmIdObjectSchema.extend({
 	// Privacy settings
 	public_logs: z.boolean().optional(),
 	public_sysinfo: z.boolean().optional(),
+	public_tcbinfo: z.boolean().optional(),
+	secure_time: z.boolean().optional(),
 	listed: z.boolean().optional(),
 });
 
@@ -37,6 +39,8 @@ export type RuntimeProjectConfig = Partial<ProjectConfig> & {
 	// Privacy settings
 	public_logs?: boolean;
 	public_sysinfo?: boolean;
+	public_tcbinfo?: boolean;
+	secure_time?: boolean;
 	listed?: boolean;
 };
 

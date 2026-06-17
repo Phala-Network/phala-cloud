@@ -33,9 +33,35 @@ export function sortObject(obj: SortableValue): SortableValue {
   return obj;
 }
 
+export type KeyProviderKind = "none" | "kms" | "local" | "tpm";
+
+export interface DockerConfig extends SortableObject {
+  registry?: string;
+  username?: string;
+  token_key?: string;
+}
+
 export interface AppCompose extends SortableObject {
+  manifest_version?: number;
+  name?: string;
+  features?: string[];
   runner?: string;
   docker_compose_file?: string;
+  docker_config?: DockerConfig;
+  public_logs?: boolean;
+  public_sysinfo?: boolean;
+  public_tcbinfo?: boolean;
+  kms_enabled?: boolean;
+  gateway_enabled?: boolean;
+  tproxy_enabled?: boolean;
+  local_key_provider_enabled?: boolean;
+  key_provider?: KeyProviderKind;
+  key_provider_id?: string;
+  allowed_envs?: string[];
+  no_instance_id?: boolean;
+  secure_time?: boolean;
+  storage_fs?: string;
+  swap_size?: string;
   bash_script?: string;
   pre_launch_script?: string;
 }

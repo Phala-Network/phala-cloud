@@ -237,15 +237,15 @@ type ComposeFile struct {
 
 // ProvisionCVMResponse is the response from provisioning a CVM.
 type ProvisionCVMResponse struct {
-	AppID                 string      `json:"app_id"`
-	ComposeHash           string      `json:"compose_hash"`
-	AppEnvEncryptPubkey   string      `json:"app_env_encrypt_pubkey,omitempty"`
-	KMSInfo               *CvmKmsInfo `json:"kms_info,omitempty"`
-	FMSPC                 string      `json:"fmspc,omitempty"`
-	DeviceID              string      `json:"device_id,omitempty"`
-	OSImageHash           string      `json:"os_image_hash,omitempty"`
-	InstanceType          string      `json:"instance_type,omitempty"`
-	NodeID                *int        `json:"node_id,omitempty"`
+	AppID               string      `json:"app_id"`
+	ComposeHash         string      `json:"compose_hash"`
+	AppEnvEncryptPubkey string      `json:"app_env_encrypt_pubkey,omitempty"`
+	KMSInfo             *CvmKmsInfo `json:"kms_info,omitempty"`
+	FMSPC               string      `json:"fmspc,omitempty"`
+	DeviceID            string      `json:"device_id,omitempty"`
+	OSImageHash         string      `json:"os_image_hash,omitempty"`
+	InstanceType        string      `json:"instance_type,omitempty"`
+	NodeID              *int        `json:"node_id,omitempty"`
 	// Deprecated: KMSID identifies a KMS node, not the on-chain KMS contract.
 	// Use KMSContractID instead.
 	KMSID                 string `json:"kms_id,omitempty"`
