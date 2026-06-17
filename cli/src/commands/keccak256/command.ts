@@ -24,7 +24,7 @@ export const keccak256CommandMeta: CommandMeta = {
 };
 
 export const keccak256CommandSchema = z.object({
-	hexValues: z.array(z.string()).min(1),
+	hexValues: z.array(z.string()),
 });
 
 export type Keccak256CommandInput = z.infer<typeof keccak256CommandSchema>;

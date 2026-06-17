@@ -37,6 +37,12 @@ export function runKeccak256Command(
 	input: Keccak256CommandInput,
 	context: CommandContext,
 ): number {
+	if (input.hexValues.length === 0) {
+		context.stderr.write(
+			"Usage: phala keccak256 <hex-value> [hex-value ...]\n\nCompute keccak256 hash of concatenated hex inputs.\n",
+		);
+		return 1;
+	}
 	try {
 		const result = computeKeccak256(input.hexValues);
 		context.stdout.write(`${result}\n`);
