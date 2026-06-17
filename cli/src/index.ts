@@ -43,6 +43,7 @@ import { cvmsRuntimeConfigCommand } from "./commands/cvms/runtime-config";
 import { sshKeysCommands } from "./commands/ssh-keys";
 import { whoamiCommand } from "./commands/whoami";
 import { allowDevicesCommands } from "./commands/allow-devices";
+import { keccak256Command } from "./commands/keccak256";
 import { detectRuntimeFromProcess } from "./core/package-manager";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -85,6 +86,7 @@ registry.registerCommand(statusCommand);
 registry.registerCommand(whoamiCommand);
 registry.registerCommand(completionCommand);
 registry.registerCommand(osImagesCommand);
+registry.registerCommand(keccak256Command);
 registry.registerCommand(helpCommand);
 
 // Command groups + subcommands
