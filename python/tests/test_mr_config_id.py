@@ -29,6 +29,15 @@ V1_EXPECTED = (
     "1415161718191a1b1c1d1e1f"
     "000000000000000000000000000000"
 )
+KMS_CA_PUBKEY_VECTOR_KEY_PROVIDER_ID = (
+    "3059301306072a8648ce3d020106082a8648ce3d030107034200048844eb42ccdf8c52"
+    "fd4f174f362fcb9bbd19c45fd48f1edec2d8f1ca23536ec1a74021b4cee610c074f8294d"
+    "431b2b7fee2c39e5333fdaf0a4522d43fb159d9f"
+)
+KMS_CA_PUBKEY_VECTOR_EXPECTED = (
+    "02dd0db3893b8c47b5e4098d7630d22959a1423af536890d10aaf3f0a7b169921b"
+    "000000000000000000000000000000"
+)
 
 
 def test_v2_kms_with_key_provider_id():
@@ -39,6 +48,16 @@ def test_v2_kms_with_key_provider_id():
 def test_v2_none_empty_key_provider_id():
     result = get_mr_config_id(COMPOSE_HASH, APP_ID, "none", b"")
     assert result.hex() == V2_NONE
+
+
+def test_v2_kms_ca_pubkey_vector():
+    result = get_mr_config_id_hex(
+        "4f475ed201ac079f2e4760fb7554763edcc97c48132d554666a2ec3fd2c9e099",
+        "8d8f406cf93e1cf54207fbf99c9bc437dd4d6aef",
+        "kms",
+        KMS_CA_PUBKEY_VECTOR_KEY_PROVIDER_ID,
+    )
+    assert result == "0x" + KMS_CA_PUBKEY_VECTOR_EXPECTED
 
 
 def test_v1():

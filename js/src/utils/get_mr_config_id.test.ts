@@ -27,6 +27,19 @@ describe("getMrConfigId (V2)", () => {
     );
   });
 
+  it("should match KMS CA pubkey vector", () => {
+    const result = getMrConfigId({
+      compose_hash: "0x4f475ed201ac079f2e4760fb7554763edcc97c48132d554666a2ec3fd2c9e099",
+      app_id: "0x8d8f406cf93e1cf54207fbf99c9bc437dd4d6aef",
+      key_provider_type: "kms",
+      key_provider_id:
+        "0x3059301306072a8648ce3d020106082a8648ce3d030107034200048844eb42ccdf8c52fd4f174f362fcb9bbd19c45fd48f1edec2d8f1ca23536ec1a74021b4cee610c074f8294d431b2b7fee2c39e5333fdaf0a4522d43fb159d9f",
+    });
+    expect(result).toBe(
+      "0x02dd0db3893b8c47b5e4098d7630d22959a1423af536890d10aaf3f0a7b169921b000000000000000000000000000000",
+    );
+  });
+
   it("should match dstack Rust output for none with empty key_provider_id", () => {
     const result = getMrConfigId({
       compose_hash: COMPOSE_HASH,

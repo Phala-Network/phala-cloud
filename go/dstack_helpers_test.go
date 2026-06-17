@@ -150,6 +150,22 @@ func TestGetMrConfigId(t *testing.T) {
 		}
 	})
 
+	t.Run("KMS CA pubkey vector", func(t *testing.T) {
+		got, err := GetMrConfigIdHex(
+			"4f475ed201ac079f2e4760fb7554763edcc97c48132d554666a2ec3fd2c9e099",
+			"8d8f406cf93e1cf54207fbf99c9bc437dd4d6aef",
+			KeyProviderKMS,
+			"3059301306072a8648ce3d020106082a8648ce3d030107034200048844eb42ccdf8c52fd4f174f362fcb9bbd19c45fd48f1edec2d8f1ca23536ec1a74021b4cee610c074f8294d431b2b7fee2c39e5333fdaf0a4522d43fb159d9f",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := "0x02dd0db3893b8c47b5e4098d7630d22959a1423af536890d10aaf3f0a7b169921b000000000000000000000000000000"
+		if got != want {
+			t.Fatalf("KMS CA pubkey vector:\n got  %s\n want %s", got, want)
+		}
+	})
+
 	t.Run("verify", func(t *testing.T) {
 		ok, err := VerifyMrConfigId(
 			"0x02e472ed80a08042f044ba63b53b798e98e3ea5219cd078007b1ac8b3dfc762b94000000000000000000000000000000",
