@@ -450,6 +450,7 @@ export {
   safeUpdateCvmResources,
   UpdateCvmResourcesRequestSchema,
   type UpdateCvmResourcesRequest,
+  type UpdateCvmResourcesResponse,
 } from "./cvms/update_cvm_resources";
 
 export {

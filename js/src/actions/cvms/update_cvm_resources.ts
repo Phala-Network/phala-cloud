@@ -36,16 +36,22 @@ export const UpdateCvmResourcesRequestSchema = refineCvmId(
 
 export type UpdateCvmResourcesRequest = z.infer<typeof UpdateCvmResourcesRequestSchema>;
 
-// PATCH /cvms/{id}/resources returns 202 Accepted with no body
+const UpdateCvmResourcesResponseSchema = z.object({
+  message: z.string(),
+  correlation_id: z.string(),
+  status: z.string(),
+});
+
+export type UpdateCvmResourcesResponse = z.infer<typeof UpdateCvmResourcesResponseSchema>;
+
 const { action: updateCvmResources, safeAction: safeUpdateCvmResources } = defineAction<
   UpdateCvmResourcesRequest,
-  z.ZodVoid
->(z.void(), async (client, request) => {
+  typeof UpdateCvmResourcesResponseSchema
+>(UpdateCvmResourcesResponseSchema, async (client, request) => {
   const parsed = UpdateCvmResourcesRequestSchema.parse(request);
   const { cvmId } = CvmIdSchema.parse(parsed);
   const { ...body } = parsed;
-  await client.patch(`/cvms/${cvmId}/resources`, body);
-  return undefined;
+  return await client.patch(`/cvms/${cvmId}`, body);
 });
 
 export { updateCvmResources, safeUpdateCvmResources };
