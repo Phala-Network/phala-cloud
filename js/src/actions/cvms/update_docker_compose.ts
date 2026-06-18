@@ -169,10 +169,16 @@ const UpdateDockerComposePreconditionRequiredSchema = z.object({
   kms_info: KmsInfoSchema,
 });
 
+const UpdateDockerComposeNoChangeSchema = z.object({
+  status: z.literal("no_change"),
+  message: z.string(),
+});
+
 // Union type for the result
 export const UpdateDockerComposeResultSchema = z.union([
   UpdateDockerComposeInProgressSchema,
   UpdateDockerComposePreconditionRequiredSchema,
+  UpdateDockerComposeNoChangeSchema,
 ]);
 
 export type UpdateDockerComposeRequest = z.input<typeof UpdateDockerComposeRequestSchema>;
