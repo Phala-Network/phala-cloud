@@ -203,7 +203,7 @@ export async function resizeCvm(
 		throw new Error("At least one resource parameter must be provided");
 	}
 
-	await client.patch(`cvms/app_${cleanAppId}/resources`, resizePayload);
+	await client.patch(`cvms/app_${cleanAppId}`, resizePayload);
 	return true;
 }
 
