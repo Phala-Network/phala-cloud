@@ -1,3 +1,29 @@
+## [](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.19...cli-v) (2026-06-17)
+
+### feat
+
+* add kms_contract_id to CVM SDK schemas, deprecate kms_id ([16734b9](https://github.com/Phala-Network/phala-cloud/commit/16734b9d22c2e6584c3c320b64d2bd48cdcb5a2b))
+* add versioned CVM hashid SDK schemas ([b5b3766](https://github.com/Phala-Network/phala-cloud/commit/b5b376620be08e1efbcb26f1ce78fd71bef90544))
+* **cli:** add --experimental-mr-config-id flag to deploy ([6877beb](https://github.com/Phala-Network/phala-cloud/commit/6877beb14bed34f23aa3fa9c1009631619a4651c))
+* **cli:** add --timeout global flag ([484d9f9](https://github.com/Phala-Network/phala-cloud/commit/484d9f982d86aa8546376a4d7fe63a5e33d8bd90))
+* **cli:** add keccak256 subcommand for hex hash computation ([31f04ab](https://github.com/Phala-Network/phala-cloud/commit/31f04ab3e421b1f7bb2c5e00680f9f11593dcb2e))
+* **cli:** rename --experimental-mr-config-id to --experimental-key-provider-type ([fb09481](https://github.com/Phala-Network/phala-cloud/commit/fb09481c404451a77742878686d3769d0dc98814))
+* **cli:** rename to keccak256sum, add stdin and -c/--quiet/--status ([a19cd38](https://github.com/Phala-Network/phala-cloud/commit/a19cd38c2c53b27d85d1b2c4cbde1eeff6bc48cd))
+* **cli:** surface the configured timeout in timeout error messages ([6eec093](https://github.com/Phala-Network/phala-cloud/commit/6eec09386d6fbb1f7bc76ccdbb9cb5f1e018491e))
+* expose latest CVM hashid schemas ([d317ebf](https://github.com/Phala-Network/phala-cloud/commit/d317ebf8acb4a1b53d5c080725af07a2a700d2a5))
+* **js,cli:** add compose types and mr_config_id computation ([c5e321f](https://github.com/Phala-Network/phala-cloud/commit/c5e321fafd91d2063395a76b541cd2b72c8f41ff))
+
+### fix
+
+* align CLI schemas with hashid responses ([07527a1](https://github.com/Phala-Network/phala-cloud/commit/07527a13cef8a5adaf7fa71247f2564250e3f26d))
+* **cli:** preserve SDK error details and stop duplicating error output ([6e517e1](https://github.com/Phala-Network/phala-cloud/commit/6e517e10350fd5b0f32281df52f1c8c9f34b680e))
+* **cli:** show usage when keccak256 called with no args ([2c23662](https://github.com/Phala-Network/phala-cloud/commit/2c23662934375e11abe31ab0bfd845e417be90cb))
+* **cli:** skip DSTACK_AUTHORIZED_KEYS injection when --no-dev-os is set ([ebd53ae](https://github.com/Phala-Network/phala-cloud/commit/ebd53aee77a6b90d7ba169ae2d88cbdf1464c713))
+* **cli:** use k256_pubkey instead of ca_pubkey for key_provider_id ([69e6b82](https://github.com/Phala-Network/phala-cloud/commit/69e6b8227b646a171385319e256a15b5ed758ccd))
+
+### refactor
+
+* **cli:** remove docker command group ([946631e](https://github.com/Phala-Network/phala-cloud/commit/946631e1caeaa7ae7455481aeb8e82e7c27fb0d8))
 ## [1.1.19](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.18...cli-v1.1.19) (2026-05-19)
 
 ### feat

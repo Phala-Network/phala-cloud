@@ -494,8 +494,8 @@ const resolveEnvVars = async (
 const readSshPubkey = async (options: Options): Promise<string | undefined> => {
 	let sshPubkeyPath = options.sshPubkey;
 
-	// For --no-dev-os, only use SSH key if explicitly specified
-	if (options.devOs === false && !options.sshPubkey) {
+	// --no-dev-os: never inject SSH key
+	if (options.devOs === false) {
 		return undefined;
 	}
 
