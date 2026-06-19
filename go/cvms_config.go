@@ -11,11 +11,23 @@ type UpdateResourcesRequest struct {
 	AllowRestart *bool   `json:"allow_restart,omitempty"`
 }
 
+// UpdateResourcesResponse is the response from the unified CVM update endpoint.
+type UpdateResourcesResponse struct {
+	Message       string `json:"message"`
+	CorrelationID string `json:"correlation_id"`
+	Status        string `json:"status"`
+}
+
 // UpdateCVMResources updates the resources for a CVM.
-func (c *Client) UpdateCVMResources(ctx context.Context, cvmID string, req *UpdateResourcesRequest) error {
-	return c.doWithRetry(ctx, func() error {
-		return c.doJSON(ctx, "PATCH", cvmPath(cvmID, "resources"), req, nil)
+func (c *Client) UpdateCVMResources(ctx context.Context, cvmID string, req *UpdateResourcesRequest) (*UpdateResourcesResponse, error) {
+	var result UpdateResourcesResponse
+	err := c.doWithRetry(ctx, func() error {
+		return c.doJSON(ctx, "PATCH", cvmPath(cvmID), req, &result)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
 }
 
 // UpdateVisibilityRequest is the request for updating CVM visibility.

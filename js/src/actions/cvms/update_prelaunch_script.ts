@@ -166,10 +166,16 @@ const UpdatePreLaunchScriptPreconditionRequiredSchema = z.object({
   kms_info: KmsInfoSchema,
 });
 
+const UpdatePreLaunchScriptNoChangeSchema = z.object({
+  status: z.literal("no_change"),
+  message: z.string(),
+});
+
 // Union type for the result
 export const UpdatePreLaunchScriptResultSchema = z.union([
   UpdatePreLaunchScriptInProgressSchema,
   UpdatePreLaunchScriptPreconditionRequiredSchema,
+  UpdatePreLaunchScriptNoChangeSchema,
 ]);
 
 export type UpdatePreLaunchScriptRequest = z.input<typeof UpdatePreLaunchScriptRequestSchema>;

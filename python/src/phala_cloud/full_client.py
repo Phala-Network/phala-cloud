@@ -817,7 +817,9 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     ) -> SafeResult[Any]:
         return self.safe(self.get_cvm_attestation, request)
 
-    def update_cvm_resources(self, request: UpdateResourcesRequest | Mapping[str, Any]) -> None:
+    def update_cvm_resources(
+        self, request: UpdateResourcesRequest | Mapping[str, Any]
+    ) -> dict[str, str]:
         req = UpdateResourcesRequest.model_validate(request)
         body = req.model_dump(exclude_none=True)
         body.pop("id", None)
@@ -826,12 +828,11 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         body.pop("instance_id", None)
         body.pop("cvm_id", None)
         body.pop("cvmId", None)
-        self.request("PATCH", f"/cvms/{req.resolved}/resources", json=body)
-        return None
+        return self.request("PATCH", f"/cvms/{req.resolved}", json=body)
 
     def safe_update_cvm_resources(
         self, request: UpdateResourcesRequest | Mapping[str, Any]
-    ) -> SafeResult[None]:
+    ) -> SafeResult[dict[str, str]]:
         return self.safe(self.update_cvm_resources, request)
 
     def update_cvm_visibility(self, request: UpdateVisibilityRequest | Mapping[str, Any]) -> Any:
