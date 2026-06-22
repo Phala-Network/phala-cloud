@@ -27,4 +27,7 @@ export {
   type EnvVar,
 } from "@phala/dstack-sdk/encrypt-env-vars";
 export { getComposeHash } from "@phala/dstack-sdk/get-compose-hash";
-export { verifyEnvEncryptPublicKey } from "@phala/dstack-sdk/verify-env-encrypt-public-key";
+export {
+  verifyEnvEncryptPublicKey,
+  verifyEnvEncryptPublicKeyLegacy,
+} from "@phala/dstack-sdk/verify-env-encrypt-public-key";

@@ -32,8 +32,12 @@ mock.module("@phala/cloud", () => ({
 	safeGetAppCvms: mock(() => Promise.resolve({ success: true, data: [] })),
 	safeGetCvmInfo: mock(() => Promise.resolve({ success: true, data: {} })),
 	safeGetAppEnvEncryptPubKey: mock(() =>
-		Promise.resolve({ success: true, data: { public_key: "pubkey" } }),
+		Promise.resolve({
+			success: true,
+			data: { public_key: "aa", signature: "bb" },
+		}),
 	),
+	verifyEnvEncryptPublicKeyLegacy: mock(() => "0xexpected_kms_pubkey"),
 	encryptEnvVars: mock(() => "encrypted-env"),
 	formatErrorMessage: (error: Error) => error.message,
 	formatStructuredError: (error: Error) => error.message,
