@@ -7,19 +7,15 @@ import {
 import { getClient } from "@/src/lib/client";
 import { logger } from "@/src/utils/logger";
 import {
-	postCvmResponseSchema,
 	cvmAttestationResponseSchema,
 	getCvmNetworkResponseSchema,
 	replicateCvmResponseSchema,
 	type ReplicateCvmResponse,
 } from "./types";
 import type {
-	PostCvmResponse,
 	CvmAttestationResponse,
 	CvmCreateResourcesResponse,
 	GetCvmNetworkResponse,
-	TeepodResponse,
-	PubkeyResponse,
 	UpgradeResponse,
 } from "./types";
 import inquirer from "inquirer";
@@ -207,48 +203,11 @@ export async function resizeCvm(
 	return true;
 }
 
-// ============================================
-// Legacy Functions (for create/upgrade commands)
-// These use the old API endpoints
-// ============================================
-
 /**
  * VM configuration type
  */
 export interface VMConfig {
 	[key: string]: unknown;
-}
-
-/**
- * Get public key from CVM (Legacy)
- * @deprecated This is a legacy function for create command
- * @param vmConfig VM configuration
- * @returns Public key
- */
-export async function getPubkeyFromCvm(
-	vmConfig: VMConfig,
-): Promise<PubkeyResponse> {
-	const client = await getClient();
-	const response = await client.post(
-		"cvms/pubkey/from_cvm_configuration",
-		vmConfig,
-	);
-	return response as PubkeyResponse;
-}
-
-/**
- * Create a new CVM (Legacy)
- * @deprecated This is a legacy function, consider using SDK's provisionCvm
- * @param vmConfig VM configuration
- * @returns Created CVM details
- */
-export async function createCvm(vmConfig: VMConfig): Promise<PostCvmResponse> {
-	const client = await getClient();
-	const response = await client.post<PostCvmResponse>(
-		"cvms/from_cvm_configuration",
-		vmConfig,
-	);
-	return postCvmResponseSchema.parse(response);
 }
 
 /**
@@ -266,22 +225,6 @@ export async function upgradeCvm(
 	const cleanAppId = appId.replace(/^app_/, "");
 	const response = await client.put(`cvms/app_${cleanAppId}/compose`, vmConfig);
 	return response as UpgradeResponse;
-}
-
-/**
- * Get all TEEPods with their images (Legacy)
- * @deprecated This is a legacy function for create command, use SDK's safeGetAvailableNodes instead
- * @param v03x_only Only get v0.3.x compatible nodes
- * @returns List of TEEPods with embedded images
- */
-export async function getTeepods(v03x_only = false): Promise<TeepodResponse> {
-	const client = await getClient();
-	let url = "teepods/available";
-	if (v03x_only) {
-		url += "?v03x_only=1";
-	}
-	const response = await client.get(url);
-	return response as TeepodResponse;
 }
 
 /**

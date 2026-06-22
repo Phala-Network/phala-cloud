@@ -1,6 +1,5 @@
 import { cvmsGroup } from "./command";
 import { cvmsAttestationCommand } from "./attestation";
-import { cvmsCreateCommand } from "./create";
 import { cvmsDeleteCommand } from "./delete";
 import { cvmsDeviceAllowlistCommand } from "./device-allowlist";
 import { cvmsGetCommand } from "./get";
@@ -19,7 +18,6 @@ export const cvmsCommands = {
 	group: cvmsGroup,
 	commands: [
 		cvmsAttestationCommand,
-		cvmsCreateCommand,
 		cvmsDeleteCommand,
 		cvmsDeviceAllowlistCommand,
 		cvmsGetCommand,

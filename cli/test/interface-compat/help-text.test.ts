@@ -39,10 +39,6 @@ describe("CLI Interface Compatibility - Help Text (v1.0.40 baseline)", () => {
 				],
 			},
 			{
-				cmd: "cvms create",
-				flags: ["--name", "--compose", "--teepod-id"],
-			},
-			{
 				cmd: "cvms resize",
 				flags: [
 					"--vcpu",
@@ -79,7 +75,6 @@ describe("CLI Interface Compatibility - Help Text (v1.0.40 baseline)", () => {
 			{
 				group: "cvms",
 				subcommands: [
-					"create",
 					"list",
 					"get",
 					"delete",

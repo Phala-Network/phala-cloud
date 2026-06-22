@@ -25,36 +25,6 @@ export const composeFileSchema = z
 	})
 	.passthrough();
 
-// POST request CVM Response Schema
-export const postCvmResponseSchema = z.object({
-	id: z.string(),
-	name: z.string(),
-	status: z.string(),
-	teepod_id: z.number().nullable(),
-	teepod: z
-		.object({
-			id: z.number(),
-			name: z.string(),
-		})
-		.nullable(),
-	user_id: z.string().nullable(),
-	app_id: z.string(),
-	vm_uuid: z.string().nullable(),
-	instance_id: z.string().nullable(),
-	app_url: z.string().nullable(),
-	base_image: z.string().nullable(),
-	vcpu: z.number(),
-	memory: z.number(),
-	disk_size: z.number(),
-	manifest_version: z.number().nullable(),
-	version: z.string().nullable(),
-	runner: z.string().nullable(),
-	docker_compose_file: z.string().nullable(),
-	features: z.array(z.string()).nullable(),
-	created_at: z.string(),
-	encrypted_env_pubkey: z.string().nullable(),
-});
-
 // Encrypted Env Item Schema
 export const encryptedEnvItemSchema = z.object({
 	key: z.string(),
@@ -79,7 +49,6 @@ export const getCvmNetworkResponseSchema = z.object({
 // Type exports
 export type DockerConfig = z.infer<typeof dockerConfigSchema>;
 export type ComposeFile = z.infer<typeof composeFileSchema>;
-export type PostCvmResponse = z.infer<typeof postCvmResponseSchema>;
 export type EncryptedEnvItem = z.infer<typeof encryptedEnvItemSchema>;
 export type CvmAttestationResponse = z.infer<
 	typeof cvmAttestationResponseSchema
@@ -263,12 +232,6 @@ export const teepodSchema = z.object({
 export type TEEPod = z.infer<typeof teepodSchema>;
 export type Image = z.infer<typeof imageSchema>;
 
-// TEEPod Response Schema
-export interface TeepodResponse {
-	nodes: TEEPod[];
-	kms_list?: KmsListItem[];
-}
-
 // KMS List Item
 export interface KmsListItem {
 	id?: string;
@@ -329,12 +292,6 @@ export interface CvmCreateResourcesResponse {
 	gateway_nodes: CvmCreateGatewayResource[];
 	instance_types: CvmCreateInstanceTypeResource[];
 	gpu_availability: GpuAvailability;
-}
-
-// Pubkey Response
-export interface PubkeyResponse {
-	app_env_encrypt_pubkey: string;
-	app_id_salt: string;
 }
 
 // Upgrade Response
