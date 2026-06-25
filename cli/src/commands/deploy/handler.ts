@@ -915,6 +915,9 @@ const deployNewCvm = async (
 			kms_id: kmsRef,
 			contract_address: deployed_contract.appAuthAddress,
 			deployer_address: deployed_contract.deployer,
+			...(process.env.PHALA_OIDC_TOKEN
+				? { oidc_token: process.env.PHALA_OIDC_TOKEN }
+				: {}),
 		});
 	} else {
 		// Centralized KMS or provision already has app_id
@@ -928,6 +931,9 @@ const deployNewCvm = async (
 			encrypted_env: encrypted_env_vars,
 			compose_hash: app.compose_hash,
 			kms_id: kmsSelection.deprecatedKmsId,
+			...(process.env.PHALA_OIDC_TOKEN
+				? { oidc_token: process.env.PHALA_OIDC_TOKEN }
+				: {}),
 		});
 	}
 
