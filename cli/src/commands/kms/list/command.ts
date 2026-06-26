@@ -5,12 +5,12 @@ import { jsonOption } from "@/src/core/common-flags";
 export const kmsListCommandMeta: CommandMeta = {
 	name: "list",
 	aliases: ["ls"],
-	description: "List on-chain KMS contracts",
+	description: "List KMS contracts",
 	stability: "unstable",
 	options: [jsonOption],
 	examples: [
 		{
-			name: "List on-chain KMS",
+			name: "List KMS contracts",
 			value: "phala kms list",
 		},
 		{
