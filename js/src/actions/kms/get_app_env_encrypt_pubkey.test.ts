@@ -39,7 +39,7 @@ describe("getAppEnvEncryptPubKey", () => {
 
       const result = await getAppEnvEncryptPubKey(client, mockRequest);
 
-      expect(mockGet).toHaveBeenCalledWith(`/kms/${mockRequest.kms}/pubkey/${mockRequest.app_id}`);
+      expect(mockGet).toHaveBeenCalledWith(`/kms/${mockRequest.kms}/pubkey/${mockRequest.app_id}`, { headers: { "X-Phala-Version": "2026-05-22" } });
       expect(result).toEqual(mockAppEnvEncryptPubKeyData);
       expect((result as GetAppEnvEncryptPubKey).public_key).toBe(mockAppEnvEncryptPubKeyData.public_key);
     });
@@ -77,7 +77,7 @@ describe("getAppEnvEncryptPubKey", () => {
 
       await getAppEnvEncryptPubKey(client, differentRequest);
 
-      expect(mockGet).toHaveBeenCalledWith(`/kms/${differentRequest.kms}/pubkey/${differentRequest.app_id}`);
+      expect(mockGet).toHaveBeenCalledWith(`/kms/${differentRequest.kms}/pubkey/${differentRequest.app_id}`, { headers: { "X-Phala-Version": "2026-05-22" } });
     });
 
     it("should handle special characters in KMS ID", async () => {
@@ -90,7 +90,7 @@ describe("getAppEnvEncryptPubKey", () => {
 
       await getAppEnvEncryptPubKey(client, specialRequest);
 
-      expect(mockGet).toHaveBeenCalledWith(`/kms/${specialRequest.kms}/pubkey/${specialRequest.app_id}`);
+      expect(mockGet).toHaveBeenCalledWith(`/kms/${specialRequest.kms}/pubkey/${specialRequest.app_id}`, { headers: { "X-Phala-Version": "2026-05-22" } });
     });
 
     it("should handle long public key and signature", async () => {
@@ -113,7 +113,7 @@ describe("getAppEnvEncryptPubKey", () => {
 
       const result = await safeGetAppEnvEncryptPubKey(client, mockRequest);
 
-      expect(mockGet).toHaveBeenCalledWith(`/kms/${mockRequest.kms}/pubkey/${mockRequest.app_id}`);
+      expect(mockGet).toHaveBeenCalledWith(`/kms/${mockRequest.kms}/pubkey/${mockRequest.app_id}`, { headers: { "X-Phala-Version": "2026-05-22" } });
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data).toEqual(mockAppEnvEncryptPubKeyData);

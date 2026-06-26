@@ -29,7 +29,11 @@ const { action: getKmsInfo, safeAction: safeGetKmsInfo } = defineAction<
   KmsInfo
 >(KmsInfoSchema, async (client, request) => {
   const validatedRequest = GetKmsInfoRequestSchema.parse(request);
-  return await client.get(`/kms/${validatedRequest.kms_id}`);
+  // Pinned to the node-keyed shape: {kms_id} resolves a KMS node. From API
+  // version 2026-06-23 the same path resolves a contract; use getKmsContract.
+  return await client.get(`/kms/${validatedRequest.kms_id}`, {
+    headers: { "X-Phala-Version": "2026-05-22" },
+  });
 });
 
 export { getKmsInfo, safeGetKmsInfo };

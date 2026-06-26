@@ -30,7 +30,11 @@ const { action: getAppEnvEncryptPubKey, safeAction: safeGetAppEnvEncryptPubKey }
   typeof GetAppEnvEncryptPubKeySchema
 >(GetAppEnvEncryptPubKeySchema, async (client, payload) => {
   const validatedRequest = GetAppEnvEncryptPubKeyRequestSchema.parse(payload);
-  return await client.get(`/kms/${validatedRequest.kms}/pubkey/${validatedRequest.app_id}`);
+  // Pinned to the node-keyed shape: {kms} is a KMS node id/slug, and the
+  // endpoint serves the env pubkey for that node (not a contract slug).
+  return await client.get(`/kms/${validatedRequest.kms}/pubkey/${validatedRequest.app_id}`, {
+    headers: { "X-Phala-Version": "2026-05-22" },
+  });
 });
 
 export { getAppEnvEncryptPubKey, safeGetAppEnvEncryptPubKey };

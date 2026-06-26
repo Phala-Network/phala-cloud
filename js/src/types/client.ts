@@ -5,12 +5,12 @@ import type { PhalaCloudError } from "../utils/errors";
 /**
  * Supported API versions
  */
-export type ApiVersion = "2025-10-28" | "2026-01-21" | "2026-05-22";
+export type ApiVersion = "2025-10-28" | "2026-01-21" | "2026-05-22" | "2026-06-23";
 
 /**
  * Default API version (latest stable)
  */
-export type DefaultApiVersion = "2026-05-22";
+export type DefaultApiVersion = "2026-06-23";
 
 /**
  * Full HTTP response including status, headers, and parsed body

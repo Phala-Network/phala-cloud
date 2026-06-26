@@ -24,8 +24,9 @@ export const SUPPORTED_API_VERSIONS = [
   "2025-10-28",
   "2026-01-21",
   "2026-05-22",
+  "2026-06-23",
 ] as const satisfies readonly ApiVersion[];
-export const DEFAULT_API_VERSION: DefaultApiVersion = "2026-05-22";
+export const DEFAULT_API_VERSION: DefaultApiVersion = "2026-06-23";
 const logger = debug("phala::api-client");
 
 /**
@@ -671,6 +672,9 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
  * // DEBUG=phala::api-client node your-script.js
  * ```
  */
+export function createClient(
+  config: ClientConfig<"2026-06-23"> & { version: "2026-06-23" },
+): Client<"2026-06-23">;
 export function createClient(
   config: ClientConfig<"2026-05-22"> & { version: "2026-05-22" },
 ): Client<"2026-05-22">;

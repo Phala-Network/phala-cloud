@@ -42,7 +42,10 @@ describe("getKmsList", () => {
 
       const result = await getKmsList(client, { page: 2, page_size: 20 });
 
-      expect(mockGet).toHaveBeenCalledWith("/kms", { params: { page: 2, page_size: 20 } });
+      expect(mockGet).toHaveBeenCalledWith("/kms", {
+        params: { page: 2, page_size: 20 },
+        headers: { "X-Phala-Version": "2026-05-22" },
+      });
       expect(result).toEqual(mockKmsListData);
     });
   });
@@ -122,7 +125,10 @@ describe("getKmsList", () => {
 
       const result = await safeGetKmsList(client);
 
-      expect(mockGet).toHaveBeenCalledWith("/kms", { params: {} });
+      expect(mockGet).toHaveBeenCalledWith("/kms", {
+        params: {},
+        headers: { "X-Phala-Version": "2026-05-22" },
+      });
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data).toEqual(mockKmsListData);

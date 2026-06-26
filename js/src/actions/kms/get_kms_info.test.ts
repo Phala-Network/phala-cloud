@@ -40,7 +40,7 @@ describe("getKmsInfo", () => {
 
       const result = await getKmsInfo(client, { kms_id: "test-kms-id" });
 
-      expect(mockGet).toHaveBeenCalledWith("/kms/test-kms-id");
+      expect(mockGet).toHaveBeenCalledWith("/kms/test-kms-id", { headers: { "X-Phala-Version": "2026-05-22" } });
       expect(result).toEqual(mockKmsInfoData);
       expect((result as KmsInfo).id).toBe("kms-123");
     });
@@ -90,7 +90,7 @@ describe("getKmsInfo", () => {
 
       await getKmsInfo(client, { kms_id: specialId });
 
-      expect(mockGet).toHaveBeenCalledWith(`/kms/${specialId}`);
+      expect(mockGet).toHaveBeenCalledWith(`/kms/${specialId}`, { headers: { "X-Phala-Version": "2026-05-22" } });
     });
 
     it("should handle different KMS IDs correctly", async () => {
@@ -98,7 +98,7 @@ describe("getKmsInfo", () => {
 
       await getKmsInfo(client, { kms_id: "another-kms-id" });
 
-      expect(mockGet).toHaveBeenCalledWith("/kms/another-kms-id");
+      expect(mockGet).toHaveBeenCalledWith("/kms/another-kms-id", { headers: { "X-Phala-Version": "2026-05-22" } });
     });
   });
 
@@ -108,7 +108,7 @@ describe("getKmsInfo", () => {
 
       const result = await safeGetKmsInfo(client, { kms_id: "test-kms-id" });
 
-      expect(mockGet).toHaveBeenCalledWith("/kms/test-kms-id");
+      expect(mockGet).toHaveBeenCalledWith("/kms/test-kms-id", { headers: { "X-Phala-Version": "2026-05-22" } });
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data).toEqual(mockKmsInfoData);

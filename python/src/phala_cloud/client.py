@@ -30,6 +30,9 @@ from .models import (
     GetCvmListRequest,
     GetKmsListRequest,
     GetKmsListResponse,
+    KmsContract,
+    ListKmsContractNodesResponse,
+    ListKmsContractsResponse,
     PaginatedCvmInfosAny,
     PaginatedCvmInfosV20251028,
     PaginatedCvmInfosV20260121,
@@ -37,14 +40,19 @@ from .models import (
 )
 from .result import SafeResult
 
-ApiVersion = Literal["2025-10-28", "2026-01-21", "2026-05-22"]
+ApiVersion = Literal["2025-10-28", "2026-01-21", "2026-05-22", "2026-06-23"]
 SUPPORTED_API_VERSIONS: tuple[ApiVersion, ...] = (
     "2025-10-28",
     "2026-01-21",
     "2026-05-22",
+    "2026-06-23",
 )
-DEFAULT_API_VERSION: ApiVersion = "2026-05-22"
+DEFAULT_API_VERSION: ApiVersion = "2026-06-23"
 DEFAULT_BASE_URL = "https://cloud-api.phala.com/api/v1"
+
+# The contract-centric KMS API exists from this version onward; the contract
+# methods pin it per request.
+_KMS_CONTRACT_API_VERSION = "2026-06-23"
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -228,8 +236,20 @@ class AsyncPhalaCloud:
         self,
         request: GetKmsListRequest | Mapping[str, Any] | None = None,
     ) -> GetKmsListResponse:
+        """List KMS nodes (legacy, node-centric shape).
+
+        .. deprecated::
+            From API version 2026-06-23 the KMS API is contract-centric. Use
+            :meth:`list_kms_contracts` and :meth:`list_kms_contract_nodes`. This
+            method stays pinned to the legacy node-list shape.
+        """
         req = self._coerce(GetKmsListRequest, request)
-        data = await self.get("/kms", params=req.model_dump(exclude_none=True))
+        data = await self.request(
+            "GET",
+            "/kms",
+            params=req.model_dump(exclude_none=True),
+            headers={"X-Phala-Version": "2026-05-22"},
+        )
         return self._validate(GetKmsListResponse, data)
 
     async def safe_get_kms_list(
@@ -237,6 +257,38 @@ class AsyncPhalaCloud:
         request: GetKmsListRequest | Mapping[str, Any] | None = None,
     ) -> SafeResult[GetKmsListResponse]:
         return await self.safe(self.get_kms_list, request)
+
+    async def list_kms_contracts(self) -> ListKmsContractsResponse:
+        """List the available KMS contracts."""
+        data = await self.request(
+            "GET", "/kms", headers={"X-Phala-Version": _KMS_CONTRACT_API_VERSION}
+        )
+        return self._validate(ListKmsContractsResponse, data)
+
+    async def safe_list_kms_contracts(self) -> SafeResult[ListKmsContractsResponse]:
+        return await self.safe(self.list_kms_contracts)
+
+    async def get_kms_contract(self, slug: str) -> KmsContract:
+        """Get a KMS contract by slug (a kc_ hashed id also resolves)."""
+        data = await self.request(
+            "GET", f"/kms/{slug}", headers={"X-Phala-Version": _KMS_CONTRACT_API_VERSION}
+        )
+        return self._validate(KmsContract, data)
+
+    async def safe_get_kms_contract(self, slug: str) -> SafeResult[KmsContract]:
+        return await self.safe(self.get_kms_contract, slug)
+
+    async def list_kms_contract_nodes(self, slug: str) -> ListKmsContractNodesResponse:
+        """List the KMS nodes (with RPC url) under a contract."""
+        data = await self.request(
+            "GET", f"/kms/{slug}/nodes", headers={"X-Phala-Version": _KMS_CONTRACT_API_VERSION}
+        )
+        return self._validate(ListKmsContractNodesResponse, data)
+
+    async def safe_list_kms_contract_nodes(
+        self, slug: str
+    ) -> SafeResult[ListKmsContractNodesResponse]:
+        return await self.safe(self.list_kms_contract_nodes, slug)
 
     def _decode_or_raise(self, response: httpx.Response) -> Any:
         if response.status_code >= 400:
@@ -465,8 +517,20 @@ class PhalaCloud:
         self,
         request: GetKmsListRequest | Mapping[str, Any] | None = None,
     ) -> GetKmsListResponse:
+        """List KMS nodes (legacy, node-centric shape).
+
+        .. deprecated::
+            From API version 2026-06-23 the KMS API is contract-centric. Use
+            :meth:`list_kms_contracts` and :meth:`list_kms_contract_nodes`. This
+            method stays pinned to the legacy node-list shape.
+        """
         req = self._coerce(GetKmsListRequest, request)
-        data = self.get("/kms", params=req.model_dump(exclude_none=True))
+        data = self.request(
+            "GET",
+            "/kms",
+            params=req.model_dump(exclude_none=True),
+            headers={"X-Phala-Version": "2026-05-22"},
+        )
         return self._validate(GetKmsListResponse, data)
 
     def safe_get_kms_list(
@@ -474,6 +538,34 @@ class PhalaCloud:
         request: GetKmsListRequest | Mapping[str, Any] | None = None,
     ) -> SafeResult[GetKmsListResponse]:
         return self.safe(self.get_kms_list, request)
+
+    def list_kms_contracts(self) -> ListKmsContractsResponse:
+        """List the available KMS contracts."""
+        data = self.request("GET", "/kms", headers={"X-Phala-Version": _KMS_CONTRACT_API_VERSION})
+        return self._validate(ListKmsContractsResponse, data)
+
+    def safe_list_kms_contracts(self) -> SafeResult[ListKmsContractsResponse]:
+        return self.safe(self.list_kms_contracts)
+
+    def get_kms_contract(self, slug: str) -> KmsContract:
+        """Get a KMS contract by slug (a kc_ hashed id also resolves)."""
+        data = self.request(
+            "GET", f"/kms/{slug}", headers={"X-Phala-Version": _KMS_CONTRACT_API_VERSION}
+        )
+        return self._validate(KmsContract, data)
+
+    def safe_get_kms_contract(self, slug: str) -> SafeResult[KmsContract]:
+        return self.safe(self.get_kms_contract, slug)
+
+    def list_kms_contract_nodes(self, slug: str) -> ListKmsContractNodesResponse:
+        """List the KMS nodes (with RPC url) under a contract."""
+        data = self.request(
+            "GET", f"/kms/{slug}/nodes", headers={"X-Phala-Version": _KMS_CONTRACT_API_VERSION}
+        )
+        return self._validate(ListKmsContractNodesResponse, data)
+
+    def safe_list_kms_contract_nodes(self, slug: str) -> SafeResult[ListKmsContractNodesResponse]:
+        return self.safe(self.list_kms_contract_nodes, slug)
 
     def _decode_or_raise(self, response: httpx.Response) -> Any:
         if response.status_code >= 400:
