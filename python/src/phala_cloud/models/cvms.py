@@ -51,6 +51,7 @@ class CvmKmsInfoV20260121(CloudModel):
     deployer_address: str | None = None
     rpc_endpoint: str | None = None
     encrypted_env_pubkey: str | None = None
+    k256_pubkey: str | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
