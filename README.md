@@ -192,6 +192,7 @@ deployments for:
 
 - MCP servers and AI agent tools
 - LLM inference and model-serving demos
+- AI research and GPU miner workspaces
 - Web apps and developer utilities
 - Blockchain, oracle, and data workloads
 - Confidential computing starter kits

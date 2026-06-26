@@ -1,0 +1,191 @@
+name: ralph-miner-phala
+
+services:
+  tsm-shim:
+    image: ghcr.io/dstack-tee/dstack-tsm-shim:latest
+    restart: unless-stopped
+    environment:
+      TSM_REPORT_DIR: /run/tsm/report
+      TSM_REPORT_MODE: "0666"
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
+      - tsm-report:/run/tsm/report
+
+  ralph-miner:
+    image: ghcr.io/kubeflow/kubeflow/notebook-servers/jupyter-pytorch-cuda:latest
+    restart: unless-stopped
+    init: true
+    user: root
+    depends_on:
+      - tsm-shim
+    working_dir: /workspace
+    ports:
+      - "8888:8888"
+    environment:
+      HOME: /workspace
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      JUPYTER_TOKEN: ${JUPYTER_TOKEN:-}
+      RALPH_TSM_REPORT_PATH: /run/tsm/report
+      HF_HOME: /workspace/.cache/huggingface
+      HF_DATASETS_CACHE: /workspace/.cache/huggingface/datasets
+    volumes:
+      - ralph-work:/workspace
+      - bittensor-wallets:/workspace/.bittensor/wallets
+      - tsm-report:/run/tsm/report
+    configs:
+      - source: ralph_jupyter_bootstrap
+        target: /usr/local/bin/ralph-jupyter-bootstrap.sh
+        mode: 0555
+    entrypoint:
+      - /bin/bash
+      - /usr/local/bin/ralph-jupyter-bootstrap.sh
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+configs:
+  ralph_jupyter_bootstrap:
+    content: |
+      #!/usr/bin/env bash
+      set -Eeuo pipefail
+
+      mkdir -p /workspace/status /workspace/.cache/huggingface /workspace/.bittensor/wallets
+      chmod 0700 /workspace/.bittensor /workspace/.bittensor/wallets || true
+      date -u +%Y-%m-%dT%H:%M:%SZ > /workspace/status/started
+
+      log() {
+        printf '[ralph-phala] %s\n' "$$*"
+      }
+
+      fail_keepalive() {
+        log "setup-failed; container remains alive for Phala logs"
+        date -u +%Y-%m-%dT%H:%M:%SZ > /workspace/status/failed
+        tail -f /dev/null
+      }
+
+      trap fail_keepalive ERR
+
+      if [ -z "$${JUPYTER_TOKEN:-}" ]; then
+        log "missing-required-env JUPYTER_TOKEN"
+        exit 2
+      fi
+
+      if ! command -v git >/dev/null 2>&1; then
+        log "missing-command git"
+        exit 1
+      fi
+
+      if command -v python3 >/dev/null 2>&1; then
+        PYTHON_BIN=python3
+      elif command -v python >/dev/null 2>&1; then
+        PYTHON_BIN=python
+      else
+        log "missing-command python"
+        exit 1
+      fi
+
+      if [ ! -d /workspace/ralph/.git ]; then
+        log "clone RalphLabsAI/ralph"
+        git clone https://github.com/RalphLabsAI/ralph.git /workspace/ralph
+      else
+        log "repo-present /workspace/ralph"
+      fi
+
+      if [ ! -d /workspace/recipe/.git ]; then
+        log "clone RalphLabsAI/recipe"
+        git clone https://github.com/RalphLabsAI/recipe.git /workspace/recipe
+      else
+        log "repo-present /workspace/recipe"
+      fi
+
+      cd /workspace/ralph
+      if [ ! -d .venv ]; then
+        log "create-venv /workspace/ralph/.venv"
+        if ! "$$PYTHON_BIN" -m venv .venv; then
+          "$$PYTHON_BIN" -m pip install --user virtualenv
+          "$$PYTHON_BIN" -m virtualenv .venv
+        fi
+      fi
+      # shellcheck disable=SC1091
+      source .venv/bin/activate
+      python -m pip install --upgrade pip setuptools wheel
+      python -m pip install --no-cache-dir -e '.[hub,chain,data]'
+      python -m pip install --no-cache-dir jupyterlab ipykernel
+      python -m ipykernel install --user --name ralph --display-name "Ralph (.venv)"
+
+      : > /workspace/status/jupyter.log
+      chmod 0600 /workspace/status/jupyter.log
+      nohup /workspace/ralph/.venv/bin/python -m jupyter lab \
+        --ip=0.0.0.0 \
+        --port=8888 \
+        --no-browser \
+        --allow-root \
+        --ServerApp.root_dir=/workspace \
+        --ServerApp.token="$$JUPYTER_TOKEN" \
+        --ServerApp.password='' \
+        > /workspace/status/jupyter.log 2>&1 &
+      JUPYTER_PID="$$!"
+      echo "$$JUPYTER_PID" > /workspace/status/jupyter.pid
+      sleep 2
+      if ! kill -0 "$$JUPYTER_PID" 2>/dev/null; then
+        log "jupyter-start-failed see /workspace/status/jupyter.log"
+        exit 1
+      fi
+      log "jupyter-ready port=8888 token=provided-by-template-env"
+
+      if [ ! -f /workspace/recipe/data/data_manifest.json ]; then
+        log "data-prepare fineweb-edu"
+        cd /workspace/recipe
+        PYTHONPATH=/workspace/recipe /workspace/ralph/.venv/bin/python -m data.prepare \
+          --source fineweb-edu \
+          --out data/shards \
+          --shard-tokens 10000000 \
+          --total-tokens 1000000000 \
+          --eval-tokens 5000000
+      else
+        log "data-manifest-present /workspace/recipe/data/data_manifest.json"
+      fi
+
+      cat > /workspace/PHALA_RALPH_READY.md <<'MD'
+      # Ralph Jupyter Workspace Ready
+
+      This workspace has completed the Phala equivalent of the upstream Ralph H100 miner setup through step 2:
+
+      - `/workspace/ralph` exists.
+      - `/workspace/recipe` exists.
+      - `/workspace/ralph/.venv` exists.
+      - Ralph has been installed into the venv with hub, chain, and data dependencies.
+      - FineWeb-Edu data preparation has run or found an existing manifest.
+      - JupyterLab is running on port 8888 with the Ralph venv registered as the `Ralph (.venv)` kernel.
+
+      Continue from upstream step 3 in JupyterLab:
+
+      1. Open a Jupyter terminal.
+      2. Upload or copy the registered Bittensor wallet into `/workspace/.bittensor/wallets/<BT_WALLET>`.
+      3. Create `/workspace/ralph/.env` with your `BT_*` and `HF_*` values.
+      4. Run the upstream registration check and `scripts/miner_run.py` from `/workspace/ralph`.
+
+      Quick terminal start:
+
+      ```bash
+      cd /workspace/ralph
+      source .venv/bin/activate
+      set -a && source .env && set +a
+      ```
+      MD
+
+      date -u +%Y-%m-%dT%H:%M:%SZ > /workspace/status/ready
+      log "workspace-ready /workspace/PHALA_RALPH_READY.md"
+      tail -f /dev/null
+
+volumes:
+  ralph-work:
+  bittensor-wallets:
+  tsm-report:
