@@ -92,6 +92,9 @@ class OnChainKmsContract(CloudModel):
     contract_address: str
     chain_id: int
     chain_name: str
+    k256_pubkey: str | None = None
+    ca_pubkey: str | None = None
+    gateway_contract_address: str | None = None
     devices: list[OnChainDevice] = Field(default_factory=list)
     os_images: list[OnChainOsImage] = Field(default_factory=list)
 

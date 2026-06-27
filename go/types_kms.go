@@ -158,11 +158,14 @@ type KMSOnChainDetail struct {
 
 // OnChainKMSContract represents an on-chain KMS contract.
 type OnChainKMSContract struct {
-	ContractAddress string           `json:"contract_address"`
-	ChainID         int              `json:"chain_id"`
-	ChainName       string           `json:"chain_name"`
-	Devices         []OnChainDevice  `json:"devices,omitempty"`
-	OSImages        []OnChainOSImage `json:"os_images,omitempty"`
+	ContractAddress        string           `json:"contract_address"`
+	ChainID                int              `json:"chain_id"`
+	ChainName              string           `json:"chain_name"`
+	K256Pubkey             *string          `json:"k256_pubkey,omitempty"`
+	CAPubkey               *string          `json:"ca_pubkey,omitempty"`
+	GatewayContractAddress *string          `json:"gateway_contract_address,omitempty"`
+	Devices                []OnChainDevice  `json:"devices,omitempty"`
+	OSImages               []OnChainOSImage `json:"os_images,omitempty"`
 }
 
 // OnChainDevice represents an on-chain device.

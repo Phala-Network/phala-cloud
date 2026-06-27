@@ -10,6 +10,36 @@ import {
 	type KmsChainCommandInput,
 } from "./command";
 
+// Block explorer base URL per chain id, for linking contract addresses.
+const CHAIN_EXPLORERS: Record<number, string> = {
+	1: "https://etherscan.io",
+	8453: "https://basescan.org",
+};
+
+function explorerUrl(chainId: number, address: string): string | null {
+	const base = CHAIN_EXPLORERS[chainId];
+	return base ? `${base}/address/${address}` : null;
+}
+
+function formatAllowed(allowed: boolean | null | undefined): string {
+	if (allowed === true) return "yes";
+	if (allowed === false) return "no";
+	return "-";
+}
+
+// Descending semver-ish comparison: split on ".", compare numerically segment
+// by segment so 0.5.10 sorts above 0.5.4.1 above 0.5.4.
+function compareVersionDesc(a: string, b: string): number {
+	const pa = a.split(".").map((s) => Number.parseInt(s, 10) || 0);
+	const pb = b.split(".").map((s) => Number.parseInt(s, 10) || 0);
+	const len = Math.max(pa.length, pb.length);
+	for (let i = 0; i < len; i++) {
+		const diff = (pb[i] ?? 0) - (pa[i] ?? 0);
+		if (diff !== 0) return diff;
+	}
+	return 0;
+}
+
 function createChainHandler(chain: string) {
 	return async function runKmsChainCommand(
 		input: KmsChainCommandInput,
@@ -40,21 +70,37 @@ function createChainHandler(chain: string) {
 			}
 
 			for (const contract of data.contracts) {
-				logger.info(
-					`Contract: ${contract.contract_address} (${contract.chain_name})`,
+				const contractUrl = explorerUrl(
+					contract.chain_id,
+					contract.contract_address,
 				);
+				logger.info(`Contract: ${contract.contract_address}`);
+				if (contractUrl) logger.info(`  ${contractUrl}`);
+
+				if (contract.gateway_contract_address) {
+					const gatewayUrl = explorerUrl(
+						contract.chain_id,
+						contract.gateway_contract_address,
+					);
+					logger.info(`Gateway:  ${contract.gateway_contract_address}`);
+					if (gatewayUrl) logger.info(`  ${gatewayUrl}`);
+				}
+
+				logger.info(`K256 pubkey: ${contract.k256_pubkey ?? "-"}`);
+				logger.info(`CA pubkey:   ${contract.ca_pubkey ?? "-"}`);
 				logger.break();
 
 				// Devices table
 				if (contract.devices.length > 0) {
 					logger.info("Devices:");
-					const deviceColumns = ["DEVICE_ID", "NODE"] as const;
+					const deviceColumns = ["DEVICE_ID", "NODE", "ON_CHAIN"] as const;
 					const deviceRows = contract.devices.map((d) => ({
 						DEVICE_ID: d.device_id,
 						NODE:
 							typeof d.node_name === "string" && d.node_name.length > 0
 								? d.node_name
 								: "-",
+						ON_CHAIN: formatAllowed(d.on_chain_allowed),
 					}));
 					printTable(deviceColumns, deviceRows);
 				} else {
@@ -63,15 +109,23 @@ function createChainHandler(chain: string) {
 
 				logger.break();
 
-				// OS Images table
+				// OS Images table, newest version first
 				if (contract.os_images.length > 0) {
 					logger.info("OS Images:");
-					const imageColumns = ["NAME", "VERSION", "OS_IMAGE_HASH"] as const;
-					const imageRows = contract.os_images.map((img) => ({
-						NAME: img.name,
-						VERSION: img.version,
-						OS_IMAGE_HASH: img.os_image_hash ?? "-",
-					}));
+					const imageColumns = [
+						"NAME",
+						"VERSION",
+						"OS_IMAGE_HASH",
+						"ON_CHAIN",
+					] as const;
+					const imageRows = [...contract.os_images]
+						.sort((a, b) => compareVersionDesc(a.version, b.version))
+						.map((img) => ({
+							NAME: img.name,
+							VERSION: img.version,
+							OS_IMAGE_HASH: img.os_image_hash ?? "-",
+							ON_CHAIN: formatAllowed(img.on_chain_allowed),
+						}));
 					printTable(imageColumns, imageRows);
 				} else {
 					logger.info("OS Images: none");
