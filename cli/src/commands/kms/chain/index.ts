@@ -69,30 +69,36 @@ function createChainHandler(chain: string) {
 				return 0;
 			}
 
-			for (const contract of data.contracts) {
+			const LABEL_WIDTH = 13;
+			const kv = (label: string, value: string) => {
+				console.log(`${label.padEnd(LABEL_WIDTH)}${value}`);
+			};
+
+			data.contracts.forEach((contract, index) => {
+				if (index > 0) console.log("");
+
+				kv("Contract", contract.contract_address);
 				const contractUrl = explorerUrl(
 					contract.chain_id,
 					contract.contract_address,
 				);
-				logger.info(`Contract: ${contract.contract_address}`);
-				if (contractUrl) logger.info(`  ${contractUrl}`);
+				if (contractUrl) kv("", contractUrl);
 
 				if (contract.gateway_contract_address) {
+					kv("Gateway", contract.gateway_contract_address);
 					const gatewayUrl = explorerUrl(
 						contract.chain_id,
 						contract.gateway_contract_address,
 					);
-					logger.info(`Gateway:  ${contract.gateway_contract_address}`);
-					if (gatewayUrl) logger.info(`  ${gatewayUrl}`);
+					if (gatewayUrl) kv("", gatewayUrl);
 				}
 
-				logger.info(`K256 pubkey: ${contract.k256_pubkey ?? "-"}`);
-				logger.info(`CA pubkey:   ${contract.ca_pubkey ?? "-"}`);
-				logger.break();
+				kv("K256 pubkey", contract.k256_pubkey ?? "-");
+				kv("CA pubkey", contract.ca_pubkey ?? "-");
 
-				// Devices table
+				console.log("");
+				console.log("Devices");
 				if (contract.devices.length > 0) {
-					logger.info("Devices:");
 					const deviceColumns = ["DEVICE_ID", "NODE", "ON_CHAIN"] as const;
 					const deviceRows = contract.devices.map((d) => ({
 						DEVICE_ID: d.device_id,
@@ -104,14 +110,12 @@ function createChainHandler(chain: string) {
 					}));
 					printTable(deviceColumns, deviceRows);
 				} else {
-					logger.info("Devices: none");
+					console.log("  none");
 				}
 
-				logger.break();
-
-				// OS Images table, newest version first
+				console.log("");
+				console.log("OS Images");
 				if (contract.os_images.length > 0) {
-					logger.info("OS Images:");
 					const imageColumns = [
 						"NAME",
 						"VERSION",
@@ -128,11 +132,9 @@ function createChainHandler(chain: string) {
 						}));
 					printTable(imageColumns, imageRows);
 				} else {
-					logger.info("OS Images: none");
+					console.log("  none");
 				}
-
-				logger.break();
-			}
+			});
 
 			return 0;
 		} catch (error) {
