@@ -1,5 +1,30 @@
 [
   {
+    "id": "ralph-miner",
+    "name": "RalphLabsAI/ralph miner",
+    "description": "Ralph Bittensor H100-style miner workspace for Phala Cloud H200 TEE. It prepares Ralph, recipe, dependencies, data, the TDX/NVIDIA CC attestation path, and a token-protected JupyterLab environment for miners to continue manually.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/ralph-miner",
+    "author": "RalphLabsAI",
+    "tags": [
+      "AI Research",
+      "Bittensor",
+      "TEE & Privacy",
+      "GPU"
+    ],
+    "defaultResource": {
+      "vCPU": 24,
+      "memory": 196608,
+      "diskSize": 300
+    },
+    "envs": [
+      {
+        "key": "JUPYTER_TOKEN",
+        "required": true,
+        "description": "Long random token used to open the JupyterLab workspace on port 8888. Generate one with openssl rand -hex 32 or an equivalent password manager."
+      }
+    ]
+  },
+  {
     "id": "autogen",
     "name": "microsoft/autogen",
     "description": "Microsoft's multi-agent conversation framework; Azure-integrated. This template runs a CPU-only HTTP smoke demo that installs AutoGen Core and AgentChat packages and executes a deterministic local two-agent interaction without external LLM credentials.",
