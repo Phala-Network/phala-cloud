@@ -1,4 +1,5 @@
-import { safeGetKmsOnChainDetail } from "@phala/cloud";
+import { safeGetKmsContract, safeGetKmsOnChainDetail } from "@phala/cloud";
+import { jsonOption } from "@/src/core/common-flags";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
@@ -25,6 +26,17 @@ function formatAllowed(allowed: boolean | null | undefined): string {
 	if (allowed === true) return "yes";
 	if (allowed === false) return "no";
 	return "-";
+}
+
+// Show hashes/pubkeys with a 0x prefix so they read as hex values.
+function hex(value: string | null | undefined): string {
+	if (!value) return "-";
+	return value.startsWith("0x") ? value : `0x${value}`;
+}
+
+const LABEL_WIDTH = 13;
+function kv(label: string, value: string): void {
+	console.log(`${label.padEnd(LABEL_WIDTH)}${value}`);
 }
 
 // Descending semver-ish comparison: split on ".", compare numerically segment
@@ -69,11 +81,6 @@ function createChainHandler(chain: string) {
 				return 0;
 			}
 
-			const LABEL_WIDTH = 13;
-			const kv = (label: string, value: string) => {
-				console.log(`${label.padEnd(LABEL_WIDTH)}${value}`);
-			};
-
 			data.contracts.forEach((contract, index) => {
 				if (index > 0) console.log("");
 
@@ -93,15 +100,15 @@ function createChainHandler(chain: string) {
 					if (gatewayUrl) kv("", gatewayUrl);
 				}
 
-				kv("K256 pubkey", contract.k256_pubkey ?? "-");
-				kv("CA pubkey", contract.ca_pubkey ?? "-");
+				kv("K256 pubkey", hex(contract.k256_pubkey));
+				kv("CA pubkey", hex(contract.ca_pubkey));
 
 				console.log("");
-				console.log("Devices");
+				console.log("Devices (nodes currently hosting this KMS)");
 				if (contract.devices.length > 0) {
 					const deviceColumns = ["DEVICE_ID", "NODE", "ON_CHAIN"] as const;
 					const deviceRows = contract.devices.map((d) => ({
-						DEVICE_ID: d.device_id,
+						DEVICE_ID: hex(d.device_id),
 						NODE:
 							typeof d.node_name === "string" && d.node_name.length > 0
 								? d.node_name
@@ -114,7 +121,7 @@ function createChainHandler(chain: string) {
 				}
 
 				console.log("");
-				console.log("OS Images");
+				console.log("Allowed OS Images (this KMS permits deploying)");
 				if (contract.os_images.length > 0) {
 					const imageColumns = [
 						"NAME",
@@ -127,7 +134,7 @@ function createChainHandler(chain: string) {
 						.map((img) => ({
 							NAME: img.name,
 							VERSION: img.version,
-							OS_IMAGE_HASH: img.os_image_hash ?? "-",
+							OS_IMAGE_HASH: hex(img.os_image_hash),
 							ON_CHAIN: formatAllowed(img.on_chain_allowed),
 						}));
 					printTable(imageColumns, imageRows);
@@ -161,4 +168,57 @@ export const kmsBaseCommand = defineCommand({
 	meta: kmsChainCommandMeta("base"),
 	schema: kmsChainCommandSchema,
 	handler: createChainHandler("base"),
+});
+
+// The Phala KMS is off-chain (no chain, no device/OS whitelist), so it only
+// has its root keys to show.
+async function runKmsPhalaCommand(
+	input: KmsChainCommandInput,
+	context: CommandContext,
+): Promise<number> {
+	try {
+		const client = await getClient(context);
+		const result = await safeGetKmsContract(client, { slug: "phala" });
+
+		if (!result.success) {
+			context.fail(result.error.message);
+			return 1;
+		}
+
+		const contract = result.data;
+
+		if (input.json) {
+			context.success(contract);
+			return 0;
+		}
+
+		if (contract.label) kv("Name", contract.label);
+		kv("K256 pubkey", hex(contract.k256_pubkey));
+		kv("CA pubkey", hex(contract.ca_pubkey));
+		return 0;
+	} catch (error) {
+		logger.logDetailedError(error);
+		context.fail(
+			`Failed to get Phala KMS details: ${
+				error instanceof Error ? error.message : String(error)
+			}`,
+		);
+		return 1;
+	}
+}
+
+export const kmsPhalaCommand = defineCommand({
+	path: ["kms", "phala"],
+	meta: {
+		name: "phala",
+		description: "Show the off-chain Phala KMS root keys",
+		stability: "unstable",
+		options: [jsonOption],
+		examples: [
+			{ name: "Show Phala KMS keys", value: "phala kms phala" },
+			{ name: "Output as JSON", value: "phala kms phala --json" },
+		],
+	},
+	schema: kmsChainCommandSchema,
+	handler: runKmsPhalaCommand,
 });

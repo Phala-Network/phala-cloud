@@ -1,7 +1,11 @@
 import { kmsGroup } from "./command";
 import { kmsCommand, kmsListCommand } from "./list/index";
 import { kmsNodesCommand } from "./nodes/index";
-import { kmsEthereumCommand, kmsBaseCommand } from "./chain/index";
+import {
+	kmsEthereumCommand,
+	kmsBaseCommand,
+	kmsPhalaCommand,
+} from "./chain/index";
 
 export const kmsCommands = {
 	group: kmsGroup,
@@ -11,6 +15,7 @@ export const kmsCommands = {
 		kmsNodesCommand,
 		kmsEthereumCommand,
 		kmsBaseCommand,
+		kmsPhalaCommand,
 	],
 };
 
