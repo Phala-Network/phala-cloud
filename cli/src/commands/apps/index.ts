@@ -40,6 +40,8 @@ async function runAppsCommand(
 		});
 
 		if (result.success === false) {
+			const cause = result.error.cause;
+			logger.logDetailedError(cause ?? result.error);
 			context.fail(result.error.message);
 			return 1;
 		}

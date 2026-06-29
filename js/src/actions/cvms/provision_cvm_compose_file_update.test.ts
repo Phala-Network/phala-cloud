@@ -36,6 +36,7 @@ describe("provisionCvmComposeFileUpdate", () => {
     device_id: "device-456",
     compose_hash: "abc123def456",
     compose_hash_registered: false,
+    compose_unchanged: false,
     kms_info: {
       id: "kms-123",
       slug: "test-kms",

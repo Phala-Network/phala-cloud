@@ -494,6 +494,7 @@ describe("RequestError.fromFetchError with StructuredError responses", () => {
         links: [{ url: "https://docs.example.com", label: "Docs" }],
       },
       request: "/api/cvms/abc123/envs",
+      options: { method: "PATCH" },
       response: {} as Response,
     } as unknown;
   }
@@ -523,6 +524,8 @@ describe("RequestError.fromFetchError with StructuredError responses", () => {
     expect(error).toBeInstanceOf(PhalaCloudError);
     expect(error.status).toBe(465);
     expect(error.requestId).toBe("rid-body-123");
+    expect(error.request).toBe("/api/cvms/abc123/envs");
+    expect(error.requestMethod).toBe("PATCH");
 
     // detail should still contain the StructuredError object
     expect(error.detail).toBeDefined();
@@ -531,6 +534,34 @@ describe("RequestError.fromFetchError with StructuredError responses", () => {
     expect(detail.error_code).toBe("ERR-01-005");
     expect(detail.request_id).toBe("rid-body-123");
     expect(Array.isArray(detail.details)).toBe(true);
+  });
+
+  it("should parse StructuredError wrapped in HTTPException detail", () => {
+    const fetchError = {
+      message: '[GET] "/api/v1/profiles/me": 403 Forbidden',
+      status: 403,
+      statusText: "Forbidden",
+      data: {
+        detail: {
+          error_code: "ERR-06-006",
+          message: "You do not have permission to perform this action.",
+          details: [{ field: "permission", value: "UserPermission.SELF" }],
+        },
+      },
+      request: "/api/v1/profiles/me",
+      options: { method: "GET" },
+      response: { headers: new Headers({ "X-Request-ID": "rid-authz-789" }) } as Response,
+    } as unknown;
+
+    const requestError = RequestError.fromFetchError(fetchError as never);
+    const error = parseApiError(requestError);
+
+    expect(error).toBeInstanceOf(ResourceError);
+    expect(error.status).toBe(403);
+    expect(error.request).toBe("/api/v1/profiles/me");
+    expect(error.requestMethod).toBe("GET");
+    expect(error.requestId).toBe("rid-authz-789");
+    expect((error as ResourceError).errorCode).toBe("ERR-06-006");
   });
 
   it("should use X-Request-ID header when structured body omits request_id", () => {
@@ -563,6 +594,7 @@ describe("RequestError.fromFetchError with timeout/network errors", () => {
       statusText: undefined,
       data: undefined,
       request: "/api/v1/status/batch",
+      options: { method: "POST" },
       response: undefined,
       cause: timeoutCause,
     } as unknown;
@@ -572,6 +604,7 @@ describe("RequestError.fromFetchError with timeout/network errors", () => {
     expect(requestError.code).toBe("TIMEOUT");
     expect(requestError.status).toBe(0);
     expect(requestError.statusText).toBe("Request Timeout");
+    expect(requestError.requestMethod).toBe("POST");
     expect(requestError.message).toBe(
       "Request timed out. The server did not respond in time.",
     );
@@ -602,6 +635,7 @@ describe("RequestError.fromFetchError with timeout/network errors", () => {
       statusText: undefined,
       data: undefined,
       request: "/api/v1/status/batch",
+      options: { method: "POST" },
       response: undefined,
       cause: Object.assign(new Error(""), { name: "TimeoutError" }),
     } as unknown;
@@ -613,6 +647,8 @@ describe("RequestError.fromFetchError with timeout/network errors", () => {
     // can discriminate timeouts without string matching on message/statusText.
     expect(error.code).toBe("TIMEOUT");
     expect(error.statusText).toBe("Request Timeout");
+    expect(error.request).toBe("/api/v1/status/batch");
+    expect(error.requestMethod).toBe("POST");
   });
 
   it("should preserve raw error message for non-timeout failures with no response body", () => {

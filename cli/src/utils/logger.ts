@@ -462,6 +462,24 @@ export const logger = {
 
 		const prefix = context ? `[${context}] ` : "";
 
+		const formatRequest = (
+			request: unknown,
+			requestMethod: unknown,
+		): string | undefined => {
+			let target: string | undefined;
+			let method =
+				typeof requestMethod === "string" ? requestMethod : undefined;
+			if (typeof request === "string") target = request;
+			if (request instanceof URL) target = request.toString();
+			if (typeof Request !== "undefined" && request instanceof Request) {
+				target = request.url;
+				method ??= request.method;
+			}
+			if (!target) return undefined;
+			const normalizedMethod = method?.trim().toUpperCase();
+			return normalizedMethod ? `${normalizedMethod} ${target}` : target;
+		};
+
 		// SDK errors (RequestError and its PhalaCloudError subclasses share
 		// `status` / `statusText` / `detail` / `data` / `requestId` fields).
 		const isSdkError = (
@@ -471,6 +489,8 @@ export const logger = {
 			statusText?: string;
 			data?: unknown;
 			detail?: unknown;
+			request?: unknown;
+			requestMethod?: unknown;
 			requestId?: string;
 		} => {
 			return (
@@ -503,6 +523,10 @@ export const logger = {
 		// Avoids duplicating the primary error line.
 		if (isSdkError(error)) {
 			const lines: string[] = [];
+			const request = formatRequest(error.request, error.requestMethod);
+			if (request) {
+				lines.push(`${prefix}Request: ${request}`);
+			}
 			if (typeof error.status === "number" && error.status > 0) {
 				const statusText = error.statusText ?? "";
 				lines.push(
