@@ -1,6 +1,52 @@
 import type { Client } from "@phala/cloud";
-import { safeGetAppEnvEncryptPubKey } from "@phala/cloud";
+import {
+	safeGetAppEnvEncryptPubKey,
+	verifyEnvEncryptPublicKeyLegacy,
+	type GetAppEnvEncryptPubKey,
+} from "@phala/cloud";
 import { logger } from "@/src/utils/logger";
+
+function stripHexPrefix(value: string): string {
+	return value.startsWith("0x") ? value.slice(2) : value;
+}
+
+function normalizeHex(value: string): string {
+	return stripHexPrefix(value).toLowerCase();
+}
+
+function hexToBytes(value: string, field: string): Uint8Array {
+	const hex = stripHexPrefix(value);
+	if (hex.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(hex)) {
+		throw new Error(`Invalid ${field}`);
+	}
+	return new Uint8Array(Buffer.from(hex, "hex"));
+}
+
+export function verifyAndExtractEnvEncryptPubkey(
+	response: GetAppEnvEncryptPubKey,
+	appId: string,
+	expectedKmsPubkey?: string | null,
+): string {
+	if (!expectedKmsPubkey) {
+		throw new Error(
+			"KMS k256_pubkey is required to verify encryption public key",
+		);
+	}
+
+	const recoveredKmsPubkey = verifyEnvEncryptPublicKeyLegacy(
+		hexToBytes(response.public_key, "encryption public key"),
+		hexToBytes(response.signature, "encryption public key signature"),
+		appId,
+	);
+	if (!recoveredKmsPubkey) {
+		throw new Error("Invalid encryption public key signature");
+	}
+	if (normalizeHex(recoveredKmsPubkey) !== normalizeHex(expectedKmsPubkey)) {
+		throw new Error("Encryption public key signature does not match KMS");
+	}
+
+	return response.public_key;
+}
 
 /**
  * Resolve the encryption public key for a CVM.
@@ -16,6 +62,7 @@ export async function getEncryptPubkey(
 		kms_info?: {
 			chain_id?: number | null;
 			encrypted_env_pubkey?: string | null;
+			k256_pubkey?: string | null;
 		} | null;
 	},
 ): Promise<string> {
@@ -42,7 +89,11 @@ export async function getEncryptPubkey(
 			);
 		}
 
-		return resp.data.public_key;
+		return verifyAndExtractEnvEncryptPubkey(
+			resp.data,
+			cvm.app_id,
+			cvm.kms_info?.k256_pubkey,
+		);
 	}
 
 	// Centralized KMS

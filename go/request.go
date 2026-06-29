@@ -159,6 +159,40 @@ func (c *Client) doJSON(ctx context.Context, method, path string, reqBody, resul
 	return json.NewDecoder(resp.Body).Decode(result)
 }
 
+// doJSONVersioned is doJSON with the X-Phala-Version header pinned to a specific
+// API version for this request only.
+func (c *Client) doJSONVersioned(ctx context.Context, method, path, version string, reqBody, result any) error {
+	var body io.Reader
+	if reqBody != nil {
+		b, err := json.Marshal(reqBody)
+		if err != nil {
+			return fmt.Errorf("phala: marshal request: %w", err)
+		}
+		body = bytes.NewReader(b)
+	}
+
+	req, err := c.newRequest(ctx, method, path, body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Phala-Version", version)
+	if reqBody != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := c.do(ctx, req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if result == nil {
+		return nil
+	}
+
+	return json.NewDecoder(resp.Body).Decode(result)
+}
+
 // doText sends a request with a text body (YAML, plain text, etc.) and optional extra headers.
 func (c *Client) doText(ctx context.Context, method, path, contentType, body string, extraHeaders map[string]string, result any) error {
 	var reader io.Reader

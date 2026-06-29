@@ -70,7 +70,14 @@ from .models.cvms import (
     PaginatedCvmInfosV20260121,
     PaginatedCvmInfosV20260522,
 )
-from .models.kms import GetKmsListResponse, GetKmsOnChainDetailResponse, KmsInfo
+from .models.kms import (
+    GetKmsListResponse,
+    GetKmsOnChainDetailResponse,
+    KmsContract,
+    KmsInfo,
+    ListKmsContractNodesResponse,
+    ListKmsContractsResponse,
+)
 from .models.nodes import (
     AvailableNodes,
     CvmCreateResourceGraphV20260121,
@@ -322,8 +329,10 @@ class _ExtMixin:
 
         return None
 
-    def _model_for_response(self, method: str, path: str) -> Any | None:
+    def _model_for_response(self, method: str, path: str, version: str | None = None) -> Any | None:
         m = method.upper()
+        if version is None:
+            version = self.config.version
 
         if m == "GET" and path == "/auth/me":
             return (
@@ -346,7 +355,7 @@ class _ExtMixin:
                 return PaginatedCvmInfosV20260121
             return PaginatedCvmInfosV20260522
         if m == "GET" and path == "/kms":
-            return GetKmsListResponse
+            return ListKmsContractsResponse if version >= "2026-06-23" else GetKmsListResponse
         if m == "GET" and path == "/instance-types":
             return InstanceTypesAllResponse
         if m == "GET" and re.fullmatch(r"/instance-types/[^/]+", path):
@@ -407,8 +416,10 @@ class _ExtMixin:
             return self._v20260121_model(CvmInfoResponseV20260121, CvmInfoResponseV20260522)
         if m == "GET" and re.fullmatch(r"/kms/on-chain/[^/]+", path):
             return GetKmsOnChainDetailResponse
+        if m == "GET" and re.fullmatch(r"/kms/[^/]+/nodes", path):
+            return ListKmsContractNodesResponse
         if m == "GET" and re.fullmatch(r"/kms/[^/]+", path):
-            return KmsInfo
+            return KmsContract if version >= "2026-06-23" else KmsInfo
         if m == "GET" and re.fullmatch(r"/kms/[^/]+/pubkey/[^/]+", path):
             return AppEnvPubkeyResponse
         if m == "GET" and path == "/kms/phala/next_app_id":
@@ -507,7 +518,8 @@ class _ExtMixin:
 class PhalaCloud(_SyncBase, _ExtMixin):
     def request(self, method: str, path: str, **kwargs: Any) -> Any:
         data = super().request(method, path, **kwargs)
-        model = self._model_for_response(method, self._normalize_path(path))
+        version = (kwargs.get("headers") or {}).get("X-Phala-Version", self.config.version)
+        model = self._model_for_response(method, self._normalize_path(path), version)
         return self._validate_by_model(model, data)
 
     def get(self, path: str, *, params: Mapping[str, Any] | None = None) -> Any:
@@ -1020,14 +1032,24 @@ class PhalaCloud(_SyncBase, _ExtMixin):
 
     def get_kms_info(self, request: KmsInfoRequest | Mapping[str, Any]) -> Any:
         req = KmsInfoRequest.model_validate(request)
-        return self._loose_validate(self.get(f"/kms/{req.kms_id}"))
+        # Pinned to the node-keyed shape: {kms_id} resolves a KMS node. From API
+        # version 2026-06-23 the same path resolves a contract (get_kms_contract).
+        return self._loose_validate(
+            self.request("GET", f"/kms/{req.kms_id}", headers={"X-Phala-Version": "2026-05-22"})
+        )
 
     def safe_get_kms_info(self, request: KmsInfoRequest | Mapping[str, Any]) -> SafeResult[Any]:
         return self.safe(self.get_kms_info, request)
 
     def get_app_env_encrypt_pub_key(self, request: KmsPubkeyRequest | Mapping[str, Any]) -> Any:
         req = KmsPubkeyRequest.model_validate(request)
-        return self._loose_validate(self.get(f"/kms/{req.kms}/pubkey/{req.app_id}"))
+        return self._loose_validate(
+            self.request(
+                "GET",
+                f"/kms/{req.kms}/pubkey/{req.app_id}",
+                headers={"X-Phala-Version": "2026-05-22"},
+            )
+        )
 
     def safe_get_app_env_encrypt_pub_key(
         self, request: KmsPubkeyRequest | Mapping[str, Any]
@@ -1300,7 +1322,8 @@ class PhalaCloud(_SyncBase, _ExtMixin):
 class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
     async def request(self, method: str, path: str, **kwargs: Any) -> Any:
         data = await super().request(method, path, **kwargs)
-        model = self._model_for_response(method, self._normalize_path(path))
+        version = (kwargs.get("headers") or {}).get("X-Phala-Version", self.config.version)
+        model = self._model_for_response(method, self._normalize_path(path), version)
         return self._validate_by_model(model, data)
 
     async def get(self, path: str, *, params: Mapping[str, Any] | None = None) -> Any:
@@ -1827,7 +1850,13 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
 
     async def get_kms_info(self, request: KmsInfoRequest | Mapping[str, Any]) -> Any:
         req = KmsInfoRequest.model_validate(request)
-        return self._loose_validate(await self.get(f"/kms/{req.kms_id}"))
+        # Pinned to the node-keyed shape: {kms_id} resolves a KMS node. From API
+        # version 2026-06-23 the same path resolves a contract (get_kms_contract).
+        return self._loose_validate(
+            await self.request(
+                "GET", f"/kms/{req.kms_id}", headers={"X-Phala-Version": "2026-05-22"}
+            )
+        )
 
     async def safe_get_kms_info(
         self, request: KmsInfoRequest | Mapping[str, Any]
@@ -1838,7 +1867,13 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         self, request: KmsPubkeyRequest | Mapping[str, Any]
     ) -> Any:
         req = KmsPubkeyRequest.model_validate(request)
-        return self._loose_validate(await self.get(f"/kms/{req.kms}/pubkey/{req.app_id}"))
+        return self._loose_validate(
+            await self.request(
+                "GET",
+                f"/kms/{req.kms}/pubkey/{req.app_id}",
+                headers={"X-Phala-Version": "2026-05-22"},
+            )
+        )
 
     async def safe_get_app_env_encrypt_pub_key(
         self, request: KmsPubkeyRequest | Mapping[str, Any]

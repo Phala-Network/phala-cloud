@@ -50,6 +50,7 @@ import fs from "fs-extra";
 import inquirer from "inquirer";
 import type { DeployCommandInput } from "./command";
 import type { RuntimeProjectConfig } from "@/src/utils/project-config";
+import { verifyAndExtractEnvEncryptPubkey } from "@/src/commands/envs/get-encrypt-pubkey";
 
 type PrivacyConfig = Pick<
 	RuntimeProjectConfig,
@@ -901,12 +902,12 @@ const deployNewCvm = async (
 			);
 		}
 
-		// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
-		const pubkey_signature = resp.data as any;
-		const encrypted_env_vars = await encryptEnvVars(
-			envsWithSshKey,
-			pubkey_signature.public_key,
+		const pubkey = verifyAndExtractEnvEncryptPubkey(
+			resp.data,
+			deployed_contract.appId,
+			provisionKmsInfo.k256_pubkey,
 		);
+		const encrypted_env_vars = await encryptEnvVars(envsWithSshKey, pubkey);
 
 		commit_result = await safeCommitCvmProvision(client, {
 			app_id: deployed_contract.appId,
@@ -1005,9 +1006,12 @@ const updateCvm = async (
 					`Failed to get app env encrypt pubkey: ${resp.error.message}`,
 				);
 			}
-			// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
-			const pubkey_signature = resp.data as any;
-			encrypted_env = await encryptEnvVars(envs, pubkey_signature.public_key);
+			const pubkey = verifyAndExtractEnvEncryptPubkey(
+				resp.data,
+				cvm.app_id,
+				cvm.kms_info.k256_pubkey,
+			);
+			encrypted_env = await encryptEnvVars(envs, pubkey);
 		} else {
 			// Centralized KMS: use pubkey from CVM info
 			if (!cvm.encrypted_env_pubkey) {

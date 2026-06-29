@@ -1,4 +1,5 @@
-import { safeGetKmsOnChainDetail } from "@phala/cloud";
+import { safeGetKmsContract, safeGetKmsOnChainDetail } from "@phala/cloud";
+import { jsonOption } from "@/src/core/common-flags";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
@@ -9,6 +10,47 @@ import {
 	kmsChainCommandSchema,
 	type KmsChainCommandInput,
 } from "./command";
+
+// Block explorer base URL per chain id, for linking contract addresses.
+const CHAIN_EXPLORERS: Record<number, string> = {
+	1: "https://etherscan.io",
+	8453: "https://basescan.org",
+};
+
+function explorerUrl(chainId: number, address: string): string | null {
+	const base = CHAIN_EXPLORERS[chainId];
+	return base ? `${base}/address/${address}` : null;
+}
+
+function formatAllowed(allowed: boolean | null | undefined): string {
+	if (allowed === true) return "yes";
+	if (allowed === false) return "no";
+	return "-";
+}
+
+// Show hashes/pubkeys with a 0x prefix so they read as hex values.
+function hex(value: string | null | undefined): string {
+	if (!value) return "-";
+	return value.startsWith("0x") ? value : `0x${value}`;
+}
+
+const LABEL_WIDTH = 13;
+function kv(label: string, value: string): void {
+	console.log(`${label.padEnd(LABEL_WIDTH)}${value}`);
+}
+
+// Descending semver-ish comparison: split on ".", compare numerically segment
+// by segment so 0.5.10 sorts above 0.5.4.1 above 0.5.4.
+function compareVersionDesc(a: string, b: string): number {
+	const pa = a.split(".").map((s) => Number.parseInt(s, 10) || 0);
+	const pb = b.split(".").map((s) => Number.parseInt(s, 10) || 0);
+	const len = Math.max(pa.length, pb.length);
+	for (let i = 0; i < len; i++) {
+		const diff = (pb[i] ?? 0) - (pa[i] ?? 0);
+		if (diff !== 0) return diff;
+	}
+	return 0;
+}
 
 function createChainHandler(chain: string) {
 	return async function runKmsChainCommand(
@@ -39,46 +81,67 @@ function createChainHandler(chain: string) {
 				return 0;
 			}
 
-			for (const contract of data.contracts) {
-				logger.info(
-					`Contract: ${contract.contract_address} (${contract.chain_name})`,
-				);
-				logger.break();
+			data.contracts.forEach((contract, index) => {
+				if (index > 0) console.log("");
 
-				// Devices table
+				kv("Contract", contract.contract_address);
+				const contractUrl = explorerUrl(
+					contract.chain_id,
+					contract.contract_address,
+				);
+				if (contractUrl) kv("", contractUrl);
+
+				if (contract.gateway_contract_address) {
+					kv("Gateway", contract.gateway_contract_address);
+					const gatewayUrl = explorerUrl(
+						contract.chain_id,
+						contract.gateway_contract_address,
+					);
+					if (gatewayUrl) kv("", gatewayUrl);
+				}
+
+				kv("K256 pubkey", hex(contract.k256_pubkey));
+				kv("CA pubkey", hex(contract.ca_pubkey));
+
+				console.log("");
+				console.log("Devices (nodes currently hosting this KMS)");
 				if (contract.devices.length > 0) {
-					logger.info("Devices:");
-					const deviceColumns = ["DEVICE_ID", "NODE"] as const;
+					const deviceColumns = ["DEVICE_ID", "NODE", "ON_CHAIN"] as const;
 					const deviceRows = contract.devices.map((d) => ({
-						DEVICE_ID: d.device_id,
+						DEVICE_ID: hex(d.device_id),
 						NODE:
 							typeof d.node_name === "string" && d.node_name.length > 0
 								? d.node_name
 								: "-",
+						ON_CHAIN: formatAllowed(d.on_chain_allowed),
 					}));
 					printTable(deviceColumns, deviceRows);
 				} else {
-					logger.info("Devices: none");
+					console.log("  none");
 				}
 
-				logger.break();
-
-				// OS Images table
+				console.log("");
+				console.log("Allowed OS Images (this KMS permits deploying)");
 				if (contract.os_images.length > 0) {
-					logger.info("OS Images:");
-					const imageColumns = ["NAME", "VERSION", "OS_IMAGE_HASH"] as const;
-					const imageRows = contract.os_images.map((img) => ({
-						NAME: img.name,
-						VERSION: img.version,
-						OS_IMAGE_HASH: img.os_image_hash ?? "-",
-					}));
+					const imageColumns = [
+						"NAME",
+						"VERSION",
+						"OS_IMAGE_HASH",
+						"ON_CHAIN",
+					] as const;
+					const imageRows = [...contract.os_images]
+						.sort((a, b) => compareVersionDesc(a.version, b.version))
+						.map((img) => ({
+							NAME: img.name,
+							VERSION: img.version,
+							OS_IMAGE_HASH: hex(img.os_image_hash),
+							ON_CHAIN: formatAllowed(img.on_chain_allowed),
+						}));
 					printTable(imageColumns, imageRows);
 				} else {
-					logger.info("OS Images: none");
+					console.log("  none");
 				}
-
-				logger.break();
-			}
+			});
 
 			return 0;
 		} catch (error) {
@@ -105,4 +168,57 @@ export const kmsBaseCommand = defineCommand({
 	meta: kmsChainCommandMeta("base"),
 	schema: kmsChainCommandSchema,
 	handler: createChainHandler("base"),
+});
+
+// The Phala KMS is off-chain (no chain, no device/OS whitelist), so it only
+// has its root keys to show.
+async function runKmsPhalaCommand(
+	input: KmsChainCommandInput,
+	context: CommandContext,
+): Promise<number> {
+	try {
+		const client = await getClient(context);
+		const result = await safeGetKmsContract(client, { slug: "phala" });
+
+		if (!result.success) {
+			context.fail(result.error.message);
+			return 1;
+		}
+
+		const contract = result.data;
+
+		if (input.json) {
+			context.success(contract);
+			return 0;
+		}
+
+		if (contract.label) kv("Name", contract.label);
+		kv("K256 pubkey", hex(contract.k256_pubkey));
+		kv("CA pubkey", hex(contract.ca_pubkey));
+		return 0;
+	} catch (error) {
+		logger.logDetailedError(error);
+		context.fail(
+			`Failed to get Phala KMS details: ${
+				error instanceof Error ? error.message : String(error)
+			}`,
+		);
+		return 1;
+	}
+}
+
+export const kmsPhalaCommand = defineCommand({
+	path: ["kms", "phala"],
+	meta: {
+		name: "phala",
+		description: "Show the off-chain Phala KMS root keys",
+		stability: "unstable",
+		options: [jsonOption],
+		examples: [
+			{ name: "Show Phala KMS keys", value: "phala kms phala" },
+			{ name: "Output as JSON", value: "phala kms phala --json" },
+		],
+	},
+	schema: kmsChainCommandSchema,
+	handler: runKmsPhalaCommand,
 });

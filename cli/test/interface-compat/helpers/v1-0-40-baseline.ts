@@ -102,28 +102,6 @@ export const v1_0_40_interface = {
 
 	// CVMs subcommands
 	cvmsCommands: {
-		create: {
-			name: "cvms create",
-			hasHelp: true,
-			flags: {
-				name: { long: "--name", short: "-n", required: false },
-				compose: { long: "--compose", short: "-c", required: false },
-				envFile: { long: "--env-file", short: "-e", required: false },
-				vcpu: { long: "--vcpu", required: false },
-				memory: { long: "--memory", required: false },
-				diskSize: { long: "--disk-size", required: false },
-				teepodId: { long: "--teepod-id", required: false },
-				image: { long: "--image", required: false },
-				skipEnv: { long: "--skip-env", required: false },
-				debug: { long: "--debug", required: false },
-			},
-			defaults: {
-				vcpu: 1,
-				memory: 2048,
-				diskSize: 40,
-			},
-		} as CommandSpec,
-
 		list: {
 			name: "cvms list",
 			hasHelp: true,

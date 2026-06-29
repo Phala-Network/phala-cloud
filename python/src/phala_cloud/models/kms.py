@@ -29,6 +29,52 @@ class GetKmsListResponse(CloudModel):
     pages: int
 
 
+class KmsContract(CloudModel):
+    """A KMS contract: a group of equivalent KMS node replicas sharing one root key.
+
+    ``contract_address`` is an on-chain address for ETHEREUM/BASE, or the sentinel
+    ``"phala"`` for the off-chain PHALA KMS (where ``chain_id`` is ``0``).
+    ``k256_pubkey`` / ``ca_pubkey`` are the verification anchors.
+
+    Available from API version 2026-06-23.
+    """
+
+    id: str
+    slug: str | None = None
+    label: str | None = None
+    contract_address: str
+    chain_id: int
+    k256_pubkey: str | None = None
+    ca_pubkey: str | None = None
+    node_count: int
+
+
+class ListKmsContractsResponse(CloudModel):
+    items: list[KmsContract]
+    total: int
+    page: int
+    page_size: int
+    pages: int
+
+
+class KmsContractNode(CloudModel):
+    """A single KMS node (replica) under a contract, with its RPC ``url``.
+
+    Available from API version 2026-06-23.
+    """
+
+    id: str
+    slug: str | None = None
+    url: str
+    version: str
+    kms_type: str
+
+
+class ListKmsContractNodesResponse(CloudModel):
+    items: list[KmsContractNode]
+    total: int
+
+
 class OnChainDevice(CloudModel):
     device_id: str
     node_name: str | None = None
@@ -46,6 +92,9 @@ class OnChainKmsContract(CloudModel):
     contract_address: str
     chain_id: int
     chain_name: str
+    k256_pubkey: str | None = None
+    ca_pubkey: str | None = None
+    gateway_contract_address: str | None = None
     devices: list[OnChainDevice] = Field(default_factory=list)
     os_images: list[OnChainOsImage] = Field(default_factory=list)
 

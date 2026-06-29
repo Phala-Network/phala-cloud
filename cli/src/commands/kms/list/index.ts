@@ -1,4 +1,4 @@
-import { safeGetKmsList } from "@phala/cloud";
+import { safeListKmsContracts } from "@phala/cloud";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext, CommandMeta } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
@@ -11,10 +11,15 @@ import {
 } from "./command";
 
 const CHAIN_NAMES: Record<number, string> = {
+	0: "phala",
 	1: "ethereum",
 	8453: "base",
 	31337: "anvil",
 };
+
+function chainName(chainId: number): string {
+	return CHAIN_NAMES[chainId] ?? `chain-${chainId}`;
+}
 
 async function runKmsListCommand(
 	input: KmsListCommandInput,
@@ -23,10 +28,7 @@ async function runKmsListCommand(
 	try {
 		const client = await getClient(context);
 
-		const result = await safeGetKmsList(client, {
-			is_onchain: true,
-			page_size: 100,
-		});
+		const result = await safeListKmsContracts(client, { page_size: 100 });
 
 		if (!result.success) {
 			context.fail(result.error.message);
@@ -40,36 +42,32 @@ async function runKmsListCommand(
 			return 0;
 		}
 
-		// Group by (contract_address, chain_id) to show unique contracts
-		const contracts = new Map<string, { address: string; chain: string }>();
-		for (const kms of data.items) {
-			const key = `${kms.kms_contract_address}:${kms.chain_id}`;
-			if (!contracts.has(key)) {
-				contracts.set(key, {
-					address: kms.kms_contract_address ?? "-",
-					chain: CHAIN_NAMES[kms.chain_id ?? 0] ?? `chain-${kms.chain_id}`,
-				});
-			}
-		}
-
-		const columns = ["CHAIN", "CONTRACT_ADDRESS"] as const;
-
-		const rows = [...contracts.values()].map((c) => ({
-			CHAIN: c.chain,
-			CONTRACT_ADDRESS: c.address,
-		}));
-
-		if (rows.length === 0) {
-			logger.info("No on-chain KMS contracts found");
+		if (data.items.length === 0) {
+			logger.info("No KMS contracts found");
 			return 0;
 		}
+
+		const columns = [
+			"SLUG",
+			"LABEL",
+			"CHAIN",
+			"CONTRACT_ADDRESS",
+			"NODES",
+		] as const;
+		const rows = data.items.map((c) => ({
+			SLUG: c.slug ?? "-",
+			LABEL: c.label ?? "-",
+			CHAIN: chainName(c.chain_id),
+			CONTRACT_ADDRESS: c.contract_address,
+			NODES: String(c.node_count),
+		}));
 
 		printTable(columns, rows);
 		return 0;
 	} catch (error) {
 		logger.logDetailedError(error);
 		context.fail(
-			`Failed to list KMS: ${
+			`Failed to list KMS contracts: ${
 				error instanceof Error ? error.message : String(error)
 			}`,
 		);
@@ -79,7 +77,7 @@ async function runKmsListCommand(
 
 const kmsRootCommandMeta: CommandMeta = {
 	name: "kms",
-	description: "List and manage on-chain KMS contracts",
+	description: "List and manage KMS contracts",
 	stability: "unstable",
 };
 

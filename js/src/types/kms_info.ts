@@ -18,6 +18,7 @@ const KmsInfoBaseSchema = z
       .string()
       .nullable()
       .transform((val) => val as Hex),
+    k256_pubkey: z.string().nullable().optional(),
   })
   .passthrough();
 

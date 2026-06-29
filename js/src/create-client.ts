@@ -116,6 +116,24 @@ import {
   type GetKmsListResponse,
 } from "./actions/kms/get_kms_list";
 import {
+  listKmsContracts,
+  safeListKmsContracts,
+  type ListKmsContractsRequest,
+  type ListKmsContractsResponse,
+} from "./actions/kms/list_kms_contracts";
+import {
+  getKmsContract,
+  safeGetKmsContract,
+  type GetKmsContractRequest,
+  type GetKmsContract,
+} from "./actions/kms/get_kms_contract";
+import {
+  listKmsContractNodes,
+  safeListKmsContractNodes,
+  type ListKmsContractNodesRequest,
+  type ListKmsContractNodesResponse,
+} from "./actions/kms/list_kms_contract_nodes";
+import {
   getAppEnvEncryptPubKey,
   safeGetAppEnvEncryptPubKey,
   type GetAppEnvEncryptPubKeyRequest,
@@ -269,6 +287,9 @@ import type { SafeResult } from "./types/client";
  * @returns Client extended with all available actions
  */
 export function createClient(
+  config: ClientConfig<"2026-06-23"> & { version: "2026-06-23" },
+): Client<"2026-06-23">;
+export function createClient(
   config: ClientConfig<"2026-05-22"> & { version: "2026-05-22" },
 ): Client<"2026-05-22">;
 export function createClient(
@@ -357,6 +378,12 @@ export function createClient<V extends ApiVersion = DefaultApiVersion>(
     readonly safeGetKmsInfo: typeof safeGetKmsInfo;
     readonly getKmsList: typeof getKmsList;
     readonly safeGetKmsList: typeof safeGetKmsList;
+    readonly listKmsContracts: typeof listKmsContracts;
+    readonly safeListKmsContracts: typeof safeListKmsContracts;
+    readonly getKmsContract: typeof getKmsContract;
+    readonly safeGetKmsContract: typeof safeGetKmsContract;
+    readonly listKmsContractNodes: typeof listKmsContractNodes;
+    readonly safeListKmsContractNodes: typeof safeListKmsContractNodes;
     readonly getAppEnvEncryptPubKey: typeof getAppEnvEncryptPubKey;
     readonly safeGetAppEnvEncryptPubKey: typeof safeGetAppEnvEncryptPubKey;
     readonly nextAppIds: typeof nextAppIds;
@@ -450,6 +477,12 @@ export function createClient<V extends ApiVersion = DefaultApiVersion>(
     safeGetKmsInfo,
     getKmsList,
     safeGetKmsList,
+    listKmsContracts,
+    safeListKmsContracts,
+    getKmsContract,
+    safeGetKmsContract,
+    listKmsContractNodes,
+    safeListKmsContractNodes,
     getAppEnvEncryptPubKey,
     safeGetAppEnvEncryptPubKey,
     nextAppIds,
@@ -614,6 +647,67 @@ export interface Client<V extends ApiVersion = DefaultApiVersion> extends BaseCl
   ): Promise<SafeResult<z.infer<T>>>;
   safeGetKmsList(
     request: GetKmsListRequest | undefined,
+    parameters: { schema: false },
+  ): Promise<SafeResult<unknown>>;
+
+  listKmsContracts(request?: ListKmsContractsRequest): Promise<ListKmsContractsResponse>;
+  listKmsContracts<T extends z.ZodTypeAny>(
+    request: ListKmsContractsRequest | undefined,
+    parameters: { schema: T },
+  ): Promise<z.infer<T>>;
+  listKmsContracts(
+    request: ListKmsContractsRequest | undefined,
+    parameters: { schema: false },
+  ): Promise<unknown>;
+
+  safeListKmsContracts(
+    request?: ListKmsContractsRequest,
+  ): Promise<SafeResult<ListKmsContractsResponse>>;
+  safeListKmsContracts<T extends z.ZodTypeAny>(
+    request: ListKmsContractsRequest | undefined,
+    parameters: { schema: T },
+  ): Promise<SafeResult<z.infer<T>>>;
+  safeListKmsContracts(
+    request: ListKmsContractsRequest | undefined,
+    parameters: { schema: false },
+  ): Promise<SafeResult<unknown>>;
+
+  getKmsContract(request: GetKmsContractRequest): Promise<GetKmsContract>;
+  getKmsContract<T extends z.ZodTypeAny>(
+    request: GetKmsContractRequest,
+    parameters: { schema: T },
+  ): Promise<z.infer<T>>;
+  getKmsContract(request: GetKmsContractRequest, parameters: { schema: false }): Promise<unknown>;
+
+  safeGetKmsContract(request: GetKmsContractRequest): Promise<SafeResult<GetKmsContract>>;
+  safeGetKmsContract<T extends z.ZodTypeAny>(
+    request: GetKmsContractRequest,
+    parameters: { schema: T },
+  ): Promise<SafeResult<z.infer<T>>>;
+  safeGetKmsContract(
+    request: GetKmsContractRequest,
+    parameters: { schema: false },
+  ): Promise<SafeResult<unknown>>;
+
+  listKmsContractNodes(request: ListKmsContractNodesRequest): Promise<ListKmsContractNodesResponse>;
+  listKmsContractNodes<T extends z.ZodTypeAny>(
+    request: ListKmsContractNodesRequest,
+    parameters: { schema: T },
+  ): Promise<z.infer<T>>;
+  listKmsContractNodes(
+    request: ListKmsContractNodesRequest,
+    parameters: { schema: false },
+  ): Promise<unknown>;
+
+  safeListKmsContractNodes(
+    request: ListKmsContractNodesRequest,
+  ): Promise<SafeResult<ListKmsContractNodesResponse>>;
+  safeListKmsContractNodes<T extends z.ZodTypeAny>(
+    request: ListKmsContractNodesRequest,
+    parameters: { schema: T },
+  ): Promise<SafeResult<z.infer<T>>>;
+  safeListKmsContractNodes(
+    request: ListKmsContractNodesRequest,
     parameters: { schema: false },
   ): Promise<SafeResult<unknown>>;
 

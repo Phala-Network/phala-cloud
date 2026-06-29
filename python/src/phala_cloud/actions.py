@@ -15,6 +15,12 @@ __all__ = [
     "safe_get_cvm_list",
     "get_kms_list",
     "safe_get_kms_list",
+    "list_kms_contracts",
+    "safe_list_kms_contracts",
+    "get_kms_contract",
+    "safe_get_kms_contract",
+    "list_kms_contract_nodes",
+    "safe_list_kms_contract_nodes",
     "list_all_instance_type_families",
     "safe_list_all_instance_type_families",
     "list_family_instance_types",
@@ -175,6 +181,30 @@ def get_kms_list(client: Any, *args: Any, **kwargs: Any) -> Any:
 
 def safe_get_kms_list(client: Any, *args: Any, **kwargs: Any) -> Any:
     return client.safe_get_kms_list(*args, **kwargs)
+
+
+def list_kms_contracts(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.list_kms_contracts(*args, **kwargs)
+
+
+def safe_list_kms_contracts(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.safe_list_kms_contracts(*args, **kwargs)
+
+
+def get_kms_contract(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.get_kms_contract(*args, **kwargs)
+
+
+def safe_get_kms_contract(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.safe_get_kms_contract(*args, **kwargs)
+
+
+def list_kms_contract_nodes(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.list_kms_contract_nodes(*args, **kwargs)
+
+
+def safe_list_kms_contract_nodes(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.safe_list_kms_contract_nodes(*args, **kwargs)
 
 
 def list_all_instance_type_families(client: Any, *args: Any, **kwargs: Any) -> Any:

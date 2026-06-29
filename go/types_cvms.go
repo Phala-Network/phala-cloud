@@ -105,6 +105,7 @@ type CvmKmsInfo struct {
 	DeployerAddress    *string `json:"deployer_address,omitempty"`
 	RPCEndpoint        *string `json:"rpc_endpoint,omitempty"`
 	EncryptedEnvPubkey *string `json:"encrypted_env_pubkey,omitempty"`
+	K256Pubkey         *string `json:"k256_pubkey,omitempty"`
 }
 
 // ChainName returns a human-readable chain name based on ChainID.

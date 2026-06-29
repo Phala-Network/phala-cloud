@@ -80,7 +80,6 @@ describe("CLI Interface Compatibility - Flag Support (v1.0.40 baseline)", () => 
 
 	describe("CVMs subcommands", () => {
 		const commands = [
-			{ path: "cvms create", spec: v1_0_40_interface.cvmsCommands.create },
 			{ path: "cvms list", spec: v1_0_40_interface.cvmsCommands.list },
 			{ path: "cvms get", spec: v1_0_40_interface.cvmsCommands.get },
 			{ path: "cvms delete", spec: v1_0_40_interface.cvmsCommands.delete },

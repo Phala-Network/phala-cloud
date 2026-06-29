@@ -9,11 +9,13 @@ import { getEncryptPubkey } from "./get-encrypt-pubkey";
 mock.module("@phala/cloud", () => ({
 	safeGetAppEnvEncryptPubKey: mock(async () => ({
 		success: true,
-		data: { public_key: "decentralized_pubkey_hex" },
+		data: { public_key: "aa", signature: "bb" },
 	})),
+	verifyEnvEncryptPublicKeyLegacy: mock(() => "0xexpected_kms_pubkey"),
 }));
 
-const { safeGetAppEnvEncryptPubKey } = await import("@phala/cloud");
+const { safeGetAppEnvEncryptPubKey, verifyEnvEncryptPublicKeyLegacy } =
+	await import("@phala/cloud");
 
 describe("getEncryptPubkey", () => {
 	const mockClient = {} as Parameters<typeof getEncryptPubkey>[0];
@@ -79,7 +81,38 @@ describe("getEncryptPubkey", () => {
 			(safeGetAppEnvEncryptPubKey as ReturnType<typeof mock>).mockResolvedValue(
 				{
 					success: true,
-					data: { public_key: "decentralized_pubkey_hex" },
+					data: {
+						public_key: "aa",
+						signature: "bb",
+					},
+				},
+			);
+			(
+				verifyEnvEncryptPublicKeyLegacy as ReturnType<typeof mock>
+			).mockReturnValue("0xexpected_kms_pubkey");
+
+			const cvm = {
+				app_id: "abc123def456abc123def456abc123def456abc1",
+				kms_type: "ethereum",
+				kms_info: {
+					chain_id: 1,
+					encrypted_env_pubkey: null,
+					k256_pubkey: "expected_kms_pubkey",
+				},
+			};
+
+			const result = await getEncryptPubkey(mockClient, cvm);
+			expect(result).toBe("aa");
+		});
+
+		test("throws when KMS k256_pubkey is missing", async () => {
+			(safeGetAppEnvEncryptPubKey as ReturnType<typeof mock>).mockResolvedValue(
+				{
+					success: true,
+					data: {
+						public_key: "aa",
+						signature: "bb",
+					},
 				},
 			);
 
@@ -92,8 +125,38 @@ describe("getEncryptPubkey", () => {
 				},
 			};
 
-			const result = await getEncryptPubkey(mockClient, cvm);
-			expect(result).toBe("decentralized_pubkey_hex");
+			await expect(getEncryptPubkey(mockClient, cvm)).rejects.toThrow(
+				"KMS k256_pubkey is required",
+			);
+		});
+
+		test("throws when signature recovers a different KMS key", async () => {
+			(safeGetAppEnvEncryptPubKey as ReturnType<typeof mock>).mockResolvedValue(
+				{
+					success: true,
+					data: {
+						public_key: "aa",
+						signature: "bb",
+					},
+				},
+			);
+			(
+				verifyEnvEncryptPublicKeyLegacy as ReturnType<typeof mock>
+			).mockReturnValue("0xother_kms_pubkey");
+
+			const cvm = {
+				app_id: "abc123def456abc123def456abc123def456abc1",
+				kms_type: "ethereum",
+				kms_info: {
+					chain_id: 1,
+					encrypted_env_pubkey: null,
+					k256_pubkey: "expected_kms_pubkey",
+				},
+			};
+
+			await expect(getEncryptPubkey(mockClient, cvm)).rejects.toThrow(
+				"does not match KMS",
+			);
 		});
 
 		test("throws when kms_type is missing", async () => {

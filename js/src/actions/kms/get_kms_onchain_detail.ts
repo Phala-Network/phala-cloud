@@ -27,6 +27,9 @@ export const OnChainKmsContractSchema = z
     contract_address: z.string(),
     chain_id: z.number(),
     chain_name: z.string(),
+    k256_pubkey: z.string().nullable().optional(),
+    ca_pubkey: z.string().nullable().optional(),
+    gateway_contract_address: z.string().nullable().optional(),
     devices: z.array(OnChainDeviceSchema),
     os_images: z.array(OnChainOsImageSchema),
   })
