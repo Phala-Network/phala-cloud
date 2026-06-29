@@ -69,7 +69,7 @@ jobs:
     steps:
       - name: Parse release command
         id: parse
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -231,6 +231,7 @@ jobs:
       group: release-${{ github.event_name == 'workflow_dispatch' && inputs.package || needs.parse.outputs.package }}-${{ github.event_name == 'workflow_dispatch' && inputs.ref || needs.parse.outputs.ref }}
       cancel-in-progress: false
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    environment: release
     env:
       PACKAGE: ${{ github.event_name == 'workflow_dispatch' && inputs.package || needs.parse.outputs.package }}
       RELEASE_TYPE: ${{ github.event_name == 'workflow_dispatch' && inputs.release_type || needs.parse.outputs.release_type }}
@@ -278,8 +279,16 @@ jobs:
             exit 1
           fi
 
+          case "$SOURCE_REF" in
+            main|refs/tags/v*) ;;
+            *)
+              echo "Unsupported source ref: $SOURCE_REF (must be main or refs/tags/v*)"
+              exit 1
+              ;;
+          esac
+
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
           ref: ${{ env.SOURCE_REF }}
@@ -290,13 +299,13 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: https://registry.npmjs.org/
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       - name: Install workspace dependencies
         run: bun install
@@ -377,7 +386,7 @@ jobs:
 
       - name: Generate changelog
         run: |
-          npm install -g conventional-changelog-cli conventional-changelog-conventionalcommits
+          npm install -g conventional-changelog-cli@5.0.0 conventional-changelog-conventionalcommits@8.0.0 --ignore-scripts
 
           # Update CHANGELOG.md (prepends latest release)
           # --commit-path must be relative to the repo root so git log filters
@@ -426,11 +435,12 @@ jobs:
           if grep -q '"@phala/cloud": "workspace:\*"' package.json; then
             JS_VERSION=$(node -e "console.log(require('../js/package.json').version)")
             echo "Resolving workspace:* to version $JS_VERSION"
+            export JS_VERSION
             node -e "
               const fs = require('fs');
               const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
               if (pkg.dependencies && pkg.dependencies['@phala/cloud'] === 'workspace:*') {
-                pkg.dependencies['@phala/cloud'] = '^$JS_VERSION';
+                pkg.dependencies['@phala/cloud'] = '^' + process.env.JS_VERSION;
                 fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
               }
             "
@@ -438,8 +448,8 @@ jobs:
 
       - name: Upgrade npm for trusted publishing
         run: |
-          # Ensure npm 11.5.1 or later for OIDC trusted publishing support
-          npm install -g npm@latest
+          # Ensure npm 11.17.0 or later for OIDC trusted publishing support
+          npm install -g npm@11.17.0 --ignore-scripts
           npm --version
 
       - name: Verify OIDC token and npm authentication
@@ -586,12 +596,14 @@ jobs:
 
       - name: Comment success
         if: ${{ success() && env.ISSUE_NUMBER != '' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          FILE_LIST: ${{ steps.pack_info.outputs.file_list }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const fileList = `${{ steps.pack_info.outputs.file_list }}`.split('\n').slice(0, 15).join('\n');
+            const fileList = process.env.FILE_LIST.split('\n').slice(0, 15).join('\n');
             const totalFiles = Number('${{ steps.pack_info.outputs.total_files }}');
             const hasMore = totalFiles > 15;
             const usedReleaseBranch = '${{ steps.push.outputs.used_release_branch }}' === 'true';
@@ -637,7 +649,7 @@ jobs:
 
       - name: Comment failure
         if: ${{ failure() && env.ISSUE_NUMBER != '' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
