@@ -55,6 +55,7 @@ export const ErrorCodes = {
 
   // Module 06: Auth
   OAUTH_EMAIL_INVALID: "ERR-06-001",
+  PERMISSION_DENIED: "ERR-06-006",
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

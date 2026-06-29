@@ -64,4 +64,5 @@ const (
 // Module 06: Auth
 const (
 	ErrOAuthEmailInvalid = "ERR-06-001"
+	ErrPermissionDenied  = "ERR-06-006"
 )

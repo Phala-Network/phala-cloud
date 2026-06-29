@@ -42,6 +42,14 @@ function extractRequestIdFromResponse(
   return response?.headers?.get("X-Request-ID") ?? undefined;
 }
 
+function extractRequestMethod(method: unknown): string | undefined {
+  if (typeof method !== "string") {
+    return undefined;
+  }
+  const normalized = method.trim().toUpperCase();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 /**
  * Structured validation error item from FastAPI/Pydantic
  */
@@ -67,6 +75,9 @@ export class PhalaCloudError extends Error {
     | Record<string, unknown>
     | Array<{ msg: string; type?: string; ctx?: Record<string, unknown> }>;
   public readonly requestId?: string;
+  public readonly request?: FetchRequest | undefined;
+  public readonly requestMethod?: string | undefined;
+  public readonly data?: unknown;
   /** Machine-readable error code (e.g. "TIMEOUT", HTTP status as string). */
   public readonly code?: string;
 
@@ -80,6 +91,9 @@ export class PhalaCloudError extends Error {
         | Record<string, unknown>
         | Array<{ msg: string; type?: string; ctx?: Record<string, unknown> }>;
       requestId?: string;
+      request?: FetchRequest | undefined;
+      requestMethod?: string | undefined;
+      data?: unknown;
       code?: string;
     },
   ) {
@@ -89,6 +103,9 @@ export class PhalaCloudError extends Error {
     this.statusText = data.statusText;
     this.detail = data.detail;
     this.requestId = data.requestId;
+    this.request = data.request;
+    this.requestMethod = data.requestMethod;
+    this.data = data.data;
     this.code = data.code;
 
     // Maintains proper stack trace for where error was thrown (only available on V8)
@@ -107,6 +124,7 @@ export class RequestError extends PhalaCloudError implements ApiError {
   public readonly isRequestError = true as const; // Type discriminator
   public readonly data?: unknown;
   public readonly request?: FetchRequest | undefined;
+  public readonly requestMethod?: string | undefined;
   public readonly response?: Response | undefined;
   public readonly type?: string | undefined;
 
@@ -117,6 +135,7 @@ export class RequestError extends PhalaCloudError implements ApiError {
       statusText?: string | undefined;
       data?: unknown;
       request?: FetchRequest | undefined;
+      requestMethod?: string | undefined;
       response?: Response | undefined;
       cause?: unknown;
       detail?:
@@ -140,11 +159,15 @@ export class RequestError extends PhalaCloudError implements ApiError {
       statusText: options?.statusText ?? "Unknown Error",
       detail: options?.detail || message,
       requestId: options?.requestId,
+      request: options?.request,
+      requestMethod: options?.requestMethod,
+      data: options?.data,
       code: options?.code,
     });
 
     this.data = options?.data;
     this.request = options?.request;
+    this.requestMethod = options?.requestMethod;
     this.response = options?.response;
     this.type = options?.type;
   }
@@ -156,6 +179,7 @@ export class RequestError extends PhalaCloudError implements ApiError {
     const bodyRequestId = extractRequestId(error.data);
     const headerRequestId = extractRequestIdFromResponse(error.response);
     const requestId = bodyRequestId ?? headerRequestId;
+    const requestMethod = extractRequestMethod(error.options?.method);
 
     // Try to parse the error response as ApiError
     const parseResult = ApiErrorSchema.safeParse(error.data);
@@ -175,6 +199,7 @@ export class RequestError extends PhalaCloudError implements ApiError {
         statusText: error.statusText ?? undefined,
         data: error.data,
         request: error.request ?? undefined,
+        requestMethod,
         response: error.response ?? undefined,
         detail: detail as
           | string
@@ -209,6 +234,7 @@ export class RequestError extends PhalaCloudError implements ApiError {
         statusText: "Request Timeout",
         data: error.data,
         request: error.request ?? undefined,
+        requestMethod,
         response: error.response ?? undefined,
         detail: message,
         code: "TIMEOUT",
@@ -224,6 +250,7 @@ export class RequestError extends PhalaCloudError implements ApiError {
       statusText: error.statusText ?? undefined,
       data: error.data,
       request: error.request ?? undefined,
+      requestMethod,
       response: error.response ?? undefined,
       detail: error.data?.detail || error.message || "Unknown API error",
       code: error.status?.toString() ?? undefined,
@@ -234,9 +261,10 @@ export class RequestError extends PhalaCloudError implements ApiError {
   /**
    * Create RequestError from generic Error
    */
-  static fromError(error: Error, request?: FetchRequest): RequestError {
+  static fromError(error: Error, request?: FetchRequest, requestMethod?: string): RequestError {
     return new RequestError(error.message, {
       request: request ?? undefined,
+      requestMethod: extractRequestMethod(requestMethod),
       detail: error.message,
     });
   }
@@ -268,6 +296,8 @@ export class ValidationError extends PhalaCloudError {
             [key: string]: unknown;
           }>;
       validationErrors: ValidationErrorItem[];
+      request?: FetchRequest | undefined;
+      data?: unknown;
     },
   ) {
     super(message, data);
@@ -501,6 +531,9 @@ export function parseApiError(requestError: RequestError): PhalaCloudError {
       statusText,
       detail,
       requestId: structured.request_id ?? requestError.requestId,
+      request: requestError.request,
+      requestMethod: requestError.requestMethod,
+      data: requestError.data,
       errorCode: structured.error_code,
       structuredDetails: structured.details,
       suggestions: structured.suggestions,
@@ -516,6 +549,9 @@ export function parseApiError(requestError: RequestError): PhalaCloudError {
     statusText,
     detail,
     requestId: requestError.requestId,
+    request: requestError.request,
+    requestMethod: requestError.requestMethod,
+    data: requestError.data,
     code: requestError.code,
   };
 
@@ -738,6 +774,9 @@ export class ResourceError extends BusinessError {
             [key: string]: unknown;
           }>;
       requestId?: string;
+      request?: FetchRequest | undefined;
+      requestMethod?: string | undefined;
+      data?: unknown;
       errorCode?: string;
       structuredDetails?: StructuredErrorDetail[];
       suggestions?: string[];
