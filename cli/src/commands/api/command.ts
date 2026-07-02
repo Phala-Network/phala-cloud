@@ -2,7 +2,7 @@ import { z } from "zod";
 import { commonAuthOptions } from "@/src/core/common-flags";
 import type { CommandMeta } from "@/src/core/types";
 
-const HTTP_METHODS = [
+export const HTTP_METHODS = [
 	"GET",
 	"POST",
 	"PUT",

@@ -6,7 +6,7 @@ import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 import { resolveAuthForContext } from "@/src/lib/client";
 import { applyJqFilter, formatJqOutput } from "./jq-filter";
-import { apiCommandMeta, apiCommandSchema } from "./command";
+import { apiCommandMeta, apiCommandSchema, HTTP_METHODS } from "./command";
 import type { ApiCommandInput } from "./command";
 
 // Get CLI version for User-Agent
@@ -227,6 +227,32 @@ type ResolvedRequest = {
 	body: Record<string, unknown> | string | undefined;
 };
 
+const HTTP_METHOD_SET = new Set<string>(HTTP_METHODS);
+
+function isHttpMethodToken(value: string): boolean {
+	return HTTP_METHOD_SET.has(value.toUpperCase());
+}
+
+export function getApiMethodPositionUsageError(
+	positionals: readonly string[],
+	executableName = "phala",
+): string | undefined {
+	const [first, second] = positionals;
+	if (!first || !second || !isHttpMethodToken(first)) {
+		return undefined;
+	}
+
+	const method = first.toUpperCase();
+	const endpoint = second.startsWith("/") ? second : `/${second}`;
+	return [
+		`Error: Invalid API command usage. "${first}" looks like an HTTP method, but methods must be passed with -X/--method.`,
+		"",
+		"Correct examples:",
+		`  ${executableName} api ${endpoint}`,
+		`  ${executableName} api ${endpoint} -X ${method}`,
+	].join("\n");
+}
+
 /**
  * Resolve the final HTTP method, endpoint, and body for an API request.
  *
@@ -258,6 +284,15 @@ export async function runApiCommand(
 	input: ApiCommandInput,
 	context: CommandContext,
 ): Promise<number | undefined> {
+	const usageError = getApiMethodPositionUsageError(
+		context.rawPositionals,
+		context.cli?.executableName,
+	);
+	if (usageError) {
+		context.stderr.write(`${usageError}\n`);
+		return 1;
+	}
+
 	const auth = resolveAuthForContext(context, { apiToken: input.apiToken });
 
 	if (!auth.apiKey) {

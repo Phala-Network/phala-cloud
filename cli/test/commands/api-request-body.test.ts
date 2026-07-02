@@ -4,9 +4,12 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
 	buildApiRequestBody,
+	getApiMethodPositionUsageError,
 	resolveRequest,
+	runApiCommand,
 } from "../../src/commands/api/index";
 import type { ApiCommandInput } from "../../src/commands/api/command";
+import type { CommandContext } from "../../src/core/types";
 
 function baseInput(overrides: Partial<ApiCommandInput> = {}): ApiCommandInput {
 	return {
@@ -17,6 +20,82 @@ function baseInput(overrides: Partial<ApiCommandInput> = {}): ApiCommandInput {
 		...overrides,
 	};
 }
+
+function makeApiCommandContext(rawPositionals: string[]): {
+	context: CommandContext;
+	readStderr: () => string;
+} {
+	let stderr = "";
+	const writeStderr = (chunk: string): boolean => {
+		stderr += chunk;
+		return true;
+	};
+
+	return {
+		context: {
+			argv: rawPositionals,
+			rawFlags: {},
+			rawPositionals,
+			cwd: process.cwd(),
+			env: {},
+			stdout: { write: () => true } as unknown as NodeJS.WriteStream,
+			stderr: { write: writeStderr } as unknown as NodeJS.WriteStream,
+			stdin: {} as unknown as NodeJS.ReadStream,
+			projectConfig: {},
+			cli: {
+				executableName: "phala",
+				packageName: "phala",
+				packageVersion: "0.0.0-test",
+				runtime: "bun",
+			},
+			success: () => {},
+			fail: () => {},
+		},
+		readStderr: () => stderr,
+	};
+}
+
+describe("getApiMethodPositionUsageError", () => {
+	test("rejects method-before-endpoint usage", () => {
+		const error = getApiMethodPositionUsageError(["get", "/cvms"], "phala");
+
+		expect(error).toContain("methods must be passed with -X/--method");
+		expect(error).toContain("phala api /cvms");
+		expect(error).toContain("phala api /cvms -X GET");
+	});
+
+	test("rejects method-before-endpoint usage case-insensitively", () => {
+		const error = getApiMethodPositionUsageError(["Post", "endpoint"], "phala");
+
+		expect(error).toContain('"Post" looks like an HTTP method');
+		expect(error).toContain("phala api /endpoint -X POST");
+	});
+
+	test("allows a single endpoint that matches a method name", () => {
+		const error = getApiMethodPositionUsageError(["get"], "phala");
+
+		expect(error).toBeUndefined();
+	});
+
+	test("allows normal endpoint usage", () => {
+		const error = getApiMethodPositionUsageError(["/cvms"], "phala");
+
+		expect(error).toBeUndefined();
+	});
+});
+
+describe("runApiCommand", () => {
+	test("rejects method-before-endpoint usage before authentication", async () => {
+		const { context, readStderr } = makeApiCommandContext(["get", "/cvms"]);
+
+		const code = await runApiCommand(baseInput({ endpoint: "get" }), context);
+
+		expect(code).toBe(1);
+		expect(readStderr()).toContain("methods must be passed with -X/--method");
+		expect(readStderr()).toContain("phala api /cvms -X GET");
+		expect(readStderr()).not.toContain("Not authenticated");
+	});
+});
 
 describe("buildApiRequestBody - -d/--data", () => {
 	test("parses JSON body from -d", () => {
