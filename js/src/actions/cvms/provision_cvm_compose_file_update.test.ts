@@ -59,7 +59,7 @@ describe("provisionCvmComposeFileUpdate", () => {
         ...mockAppCompose,
         update_env_vars: undefined
       });
-      expect(result).toEqual(mockProvisionResponse);
+      expect(result).toEqual({ ...mockProvisionResponse, compose_unchanged: false });
     });
 
     it("should include update_env_vars=true in request body when specified", async () => {
@@ -161,7 +161,7 @@ describe("provisionCvmComposeFileUpdate", () => {
 
       const result = await provisionCvmComposeFileUpdate(mockClient, mockProvisionRequest);
 
-      expect(result).toEqual(responseWithExtraFields);
+      expect(result).toEqual({ ...responseWithExtraFields, compose_unchanged: false });
     });
   });
 
@@ -173,7 +173,7 @@ describe("provisionCvmComposeFileUpdate", () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data).toEqual(mockProvisionResponse);
+        expect(result.data).toEqual({ ...mockProvisionResponse, compose_unchanged: false });
       }
     });
 

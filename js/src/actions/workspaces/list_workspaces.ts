@@ -75,6 +75,13 @@ export const WorkspaceResponseSchema = z
     is_default: z.boolean(),
     created_at: z.string(),
     confidential_models_enabled: z.boolean().optional(),
+    /**
+     * Billing lifecycle state. A suspended workspace still runs but owes money;
+     * an abandoned one is closed and read-only until its balance is settled.
+     */
+    billing_status: z.enum(["active", "suspended", "abandoned"]).default("active"),
+    /** When the workspace was suspended. Null unless billing_status is suspended. */
+    suspended_at: z.string().nullable().optional(),
   })
   .passthrough();
 
