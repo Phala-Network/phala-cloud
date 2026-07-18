@@ -207,6 +207,14 @@ export const deployCommandMeta: CommandMeta = {
 			group: "basic",
 		},
 		{
+			name: "force-stop",
+			description:
+				"Force stop an existing CVM if graceful shutdown exceeds 5 minutes",
+			type: "boolean",
+			target: "forceStop",
+			group: "advanced",
+		},
+		{
 			name: "ssh-pubkey",
 			description: "SSH public key path (default: ~/.ssh/id_rsa.pub)",
 			type: "string",
@@ -391,6 +399,7 @@ export const deployCommandSchema = z.object({
 	privateKey: z.string().optional(),
 	rpcUrl: z.string().optional(),
 	wait: z.boolean().default(false),
+	forceStop: z.boolean().default(false),
 	sshPubkey: z.string().optional(),
 	devOs: z.boolean().optional(),
 	publicLogs: z.boolean().optional(),

@@ -88,6 +88,7 @@ interface Options {
 	debug?: boolean;
 	apiToken?: string;
 	wait?: boolean;
+	forceStop?: boolean;
 	sshPubkey?: string;
 	devOs?: boolean;
 	publicLogs?: boolean;
@@ -102,6 +103,15 @@ interface Options {
 	composeHash?: string;
 	transactionHash?: string;
 	[key: string]: unknown;
+}
+
+export function applyForceStopOption(
+	patchBody: Record<string, unknown>,
+	forceStop: boolean | undefined,
+): void {
+	if (!forceStop) return;
+	patchBody.allow_force_stop = true;
+	patchBody.shutdown_timeout = 300;
 }
 
 /**
@@ -1043,6 +1053,7 @@ const updateCvm = async (
 	if (validatedOptions.publicSysinfo !== undefined) {
 		patchBody.public_sysinfo = validatedOptions.publicSysinfo;
 	}
+	applyForceStopOption(patchBody, validatedOptions.forceStop);
 
 	// Add prepareOnly flag if set
 	if (validatedOptions.prepareOnly) {
