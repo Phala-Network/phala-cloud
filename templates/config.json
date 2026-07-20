@@ -6127,5 +6127,74 @@
       "diskSize": 10
     },
     "tags": ["AI Agents", "Developer Tools", "Automation"]
+  },
+  {
+    "id": "chatwoot",
+    "name": "chatwoot/chatwoot",
+    "description": "Open-source customer support platform for live chat, shared inboxes, contacts, automation, and multi-channel conversations. This template deploys the official Chatwoot v4.16.0 Rails and Sidekiq images with locked PostgreSQL/pgvector and Redis versions.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/chatwoot",
+    "author": "chatwoot",
+    "icon": "chatwoot.svg",
+    "envs": [
+      {
+        "key": "SECRET_KEY_BASE",
+        "required": true,
+        "description": "Stable Rails encryption and signing secret. Generate with openssl rand -hex 64."
+      },
+      {
+        "key": "POSTGRES_PASSWORD",
+        "required": true,
+        "description": "Stable PostgreSQL password for the Chatwoot database. Generate with openssl rand -hex 32."
+      },
+      {
+        "key": "REDIS_PASSWORD",
+        "required": true,
+        "description": "Stable Redis password used by Rails and Sidekiq. Generate with openssl rand -hex 32."
+      },
+      {
+        "key": "FRONTEND_URL",
+        "required": false,
+        "description": "Optional public Chatwoot URL. The template derives the Phala app domain by default."
+      },
+      {
+        "key": "ENABLE_ACCOUNT_SIGNUP",
+        "required": false,
+        "default": "true",
+        "description": "Allows first-account registration. Set to false after bootstrap when public registration should close."
+      },
+      {
+        "key": "MAILER_SENDER_EMAIL",
+        "required": false,
+        "default": "Chatwoot <accounts@chatwoot.example>",
+        "description": "Sender address used for account and notification email."
+      },
+      {
+        "key": "SMTP_ADDRESS",
+        "required": false,
+        "description": "Optional SMTP server hostname for outbound email."
+      },
+      {
+        "key": "SMTP_PORT",
+        "required": false,
+        "default": "587",
+        "description": "SMTP server port."
+      },
+      {
+        "key": "SMTP_USERNAME",
+        "required": false,
+        "description": "Optional SMTP username."
+      },
+      {
+        "key": "SMTP_PASSWORD",
+        "required": false,
+        "description": "Optional SMTP password."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 4,
+      "memory": 8192,
+      "diskSize": 40
+    },
+    "tags": ["Web Apps", "Automation", "Data & Storage"]
   }
 ]

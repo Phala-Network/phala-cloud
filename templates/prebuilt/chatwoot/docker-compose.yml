@@ -1,0 +1,159 @@
+services:
+  proxy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    depends_on:
+      rails:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+
+  rails:
+    image: chatwoot/chatwoot:v4.16.0
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    environment: &chatwoot_environment
+      NODE_ENV: production
+      RAILS_ENV: production
+      INSTALLATION_ENV: docker
+      FRONTEND_URL: ${FRONTEND_URL:-https://${DSTACK_APP_DOMAIN:-localhost}}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      ENABLE_ACCOUNT_SIGNUP: ${ENABLE_ACCOUNT_SIGNUP:-true}
+      FORCE_SSL: ${FORCE_SSL:-false}
+      ACTIVE_STORAGE_SERVICE: local
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DATABASE: chatwoot
+      POSTGRES_USERNAME: chatwoot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      RAILS_LOG_TO_STDOUT: "true"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      MAILER_SENDER_EMAIL: ${MAILER_SENDER_EMAIL:-Chatwoot <accounts@chatwoot.example>}
+      SMTP_ADDRESS: ${SMTP_ADDRESS:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_AUTHENTICATION: ${SMTP_AUTHENTICATION:-plain}
+      SMTP_ENABLE_STARTTLS_AUTO: ${SMTP_ENABLE_STARTTLS_AUTO:-true}
+    entrypoint: docker/entrypoints/rails.sh
+    command:
+      - bundle
+      - exec
+      - rails
+      - server
+      - -p
+      - "3000"
+      - -b
+      - 0.0.0.0
+    volumes:
+      - chatwoot_storage:/app/storage
+    healthcheck:
+      test:
+        - CMD
+        - ruby
+        - -rnet/http
+        - -e
+        - "exit(Net::HTTP.get_response(URI('http://127.0.0.1:3000/api')).is_a?(Net::HTTPSuccess) ? 0 : 1)"
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+
+  sidekiq:
+    image: chatwoot/chatwoot:v4.16.0
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment: *chatwoot_environment
+    command:
+      - bundle
+      - exec
+      - sidekiq
+      - -C
+      - config/sidekiq.yml
+    volumes:
+      - chatwoot_storage:/app/storage
+
+  migrate:
+    image: chatwoot/chatwoot:v4.16.0
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment: *chatwoot_environment
+    command:
+      - bundle
+      - exec
+      - rails
+      - db:chatwoot_prepare
+
+  postgres:
+    image: pgvector/pgvector:0.8.1-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: chatwoot
+      POSTGRES_USER: chatwoot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U chatwoot -d chatwoot
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  redis:
+    image: redis:8.2.5-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - redis-cli -a "$$REDIS_PASSWORD" ping | grep PONG
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+volumes:
+  chatwoot_storage:
+  postgres_data:
+  redis_data:
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+        reverse_proxy rails:3000 {
+          header_up X-Forwarded-Proto https
+          header_up X-Forwarded-Port 443
+        }
+        encode gzip zstd
+      }
