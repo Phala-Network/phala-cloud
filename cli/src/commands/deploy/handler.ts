@@ -111,7 +111,6 @@ export function applyForceStopOption(
 ): void {
 	if (!forceStop) return;
 	patchBody.allow_force_stop = true;
-	patchBody.shutdown_timeout = 300;
 }
 
 /**

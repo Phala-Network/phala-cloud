@@ -209,7 +209,7 @@ export const deployCommandMeta: CommandMeta = {
 		{
 			name: "force-stop",
 			description:
-				"Force stop an existing CVM if graceful shutdown exceeds 5 minutes",
+				"Force stop an existing CVM instead of requesting graceful shutdown",
 			type: "boolean",
 			target: "forceStop",
 			group: "advanced",
