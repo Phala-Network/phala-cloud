@@ -15,9 +15,16 @@ export const CvmStatusSchema = z.object({
   in_progress: z.boolean(),
   boot_progress: z.string().nullable().optional(),
   boot_error: z.string().nullable().optional(),
-  operation_type: z.string().nullable().optional(),
-  operation_started_at: z.string().nullable().optional(),
-  correlation_id: z.string().nullable().optional(),
+  shutdown_progress: z.string().nullable().optional(),
+  operation: z
+    .object({
+      type: z.string().nullable().optional(),
+      phase: z.string().nullable().optional(),
+      started_at: z.string().nullable().optional(),
+      correlation_id: z.string().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export type CvmStatus = z.infer<typeof CvmStatusSchema>;

@@ -6,7 +6,29 @@
  */
 
 import { describe, test, expect } from "bun:test";
-import { buildProvisionPayload } from "./handler";
+import { deployCommandSchema } from "./command";
+import { applyForceStopOption, buildProvisionPayload } from "./handler";
+
+describe("deploy --force-stop", () => {
+	test("parses the optional update flag", () => {
+		const input = deployCommandSchema.parse({ forceStop: true });
+		expect(input.forceStop).toBe(true);
+	});
+
+	test("forces an update to stop without graceful shutdown", () => {
+		const patchBody: Record<string, unknown> = {};
+		applyForceStopOption(patchBody, true);
+		expect(patchBody.allow_force_stop).toBe(true);
+		expect(patchBody.shutdown_timeout).toBeUndefined();
+	});
+
+	test("keeps the default update behavior unchanged", () => {
+		const patchBody: Record<string, unknown> = {};
+		applyForceStopOption(patchBody, false);
+		expect(patchBody.allow_force_stop).toBeUndefined();
+		expect(patchBody.shutdown_timeout).toBeUndefined();
+	});
+});
 
 describe("buildProvisionPayload", () => {
 	const defaultName = "test-cvm";
