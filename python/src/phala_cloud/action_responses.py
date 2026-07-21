@@ -4,7 +4,7 @@ from pydantic import Field
 
 from .models.apps import AppRevisionDetailResponse as AppRevisionDetailResponse
 from .models.apps import AppRevisionsResponse as AppRevisionsResponse
-from .models.auth import CurrentUserV20251028, CurrentUserV20260121
+from .models.auth import CurrentUserV20251028, CurrentUserV20260121, FeatureFlag, UserInfo
 from .models.base import CloudModel
 from .models.cvms import (
     Certificate,
@@ -19,12 +19,21 @@ class GenericObject(CloudModel):
     pass
 
 
+class WorkspaceViewer(CloudModel):
+    """Browser-session viewer returned by GET /workspaces/{slug}."""
+
+    user: UserInfo
+    features: list[FeatureFlag] = Field(default_factory=list)
+
+
 class WorkspaceResponse(CloudModel):
     id: str
     name: str
     slug: str | None = None
     tier: str | None = None
     role: str | None = None
+    features: list[FeatureFlag] = Field(default_factory=list)
+    viewer: WorkspaceViewer | None = None
 
 
 class ListWorkspacesResponse(CloudModel):

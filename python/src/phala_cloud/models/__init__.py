@@ -14,7 +14,7 @@ from .apps import (
     DstackAppListResponseV20260121,
     DstackAppListResponseV20260522,
 )
-from .auth import CurrentUser, CurrentUserV20251028, CurrentUserV20260121
+from .auth import CurrentUser, CurrentUserV20251028, CurrentUserV20260121, FeatureFlag
 from .cvms import (
     AppCvmsBatchIsAllowedResponse,
     AppCvmsBatchIsAllowedResponseV20260121,
@@ -104,6 +104,7 @@ __all__ = [
     "CurrentUser",
     "CurrentUserV20251028",
     "CurrentUserV20260121",
+    "FeatureFlag",
     "CvmAttestation",
     "CvmGatewayInfoV20260121",
     "CvmInfoDetailV20260121",

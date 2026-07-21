@@ -1,8 +1,27 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
+
+from pydantic import Field
 
 from .base import CloudModel
+
+
+class FeatureFlag(CloudModel):
+    """Feature flag entry returned by bootstrap endpoints.
+
+    ``GET /auth/me`` (API version 2026-01-21) carries account-scoped flags;
+    ``GET /workspaces/{slug}`` carries workspace-scoped flags plus the
+    viewer's account-scoped flags for browser-session requests.
+    """
+
+    name: str
+    enabled: bool = True
+    options: list[str] | None = None
+    reason: str | None = None
+    action_text: str | None = None
+    action_url: str | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class UserInfo(CloudModel):
@@ -36,6 +55,7 @@ class CurrentUserV20260121(CloudModel):
     user: UserInfo
     workspace: WorkspaceInfo
     credits: CreditsInfo
+    features: list[FeatureFlag] = Field(default_factory=list)
 
 
 class CurrentUserV20251028(CloudModel):
