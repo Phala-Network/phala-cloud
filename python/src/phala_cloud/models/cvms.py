@@ -24,6 +24,8 @@ class GetCvmListRequest(CloudModel):
     node_id: int | None = Field(default=None, ge=1)
     teepod_id: int | None = Field(default=None, ge=1)
     user_id: str | None = None
+    family: Literal["all", "cpu", "gpu"] | None = None
+    instance_types: list[str] | None = None
 
 
 # 2026-01-21
@@ -35,6 +37,27 @@ class CvmResourceV20260121(CloudModel):
     gpus: int | None = None
     compute_billing_price: str | None = None
     billing_period: BillingPeriod | None = None
+
+
+class CvmHourlyRateV20260121(CloudModel):
+    total: str | None = None
+    compute: str | None = None
+    disk: str | None = None
+
+
+class CvmGpuRentalOrderInfoV20260121(CloudModel):
+    order_id: str
+    status: str
+    pricing_plan: str | None = None
+    commitment_days: int | None = None
+    agreed_hourly_rate: str | None = None
+    hourly_billing_start_time: str | None = None
+    activated_at: str | None = None
+    completed_at: str | None = None
+    cancelled_at: str | None = None
+    decoupled_at: str | None = None
+    sku_code: str | None = None
+    sku_display_name: str | None = None
 
 
 class CvmOsInfoV20260121(CloudModel):
@@ -153,6 +176,9 @@ class CvmInfoV20260121(CloudModel):
     features: list[str] | None = Field(default_factory=list)
     runner: str | None = None
     manifest_version: str | None = None
+    hourly_rate: CvmHourlyRateV20260121 | None = None
+    billing_interval: str | None = None
+    gpu_rental_order: CvmGpuRentalOrderInfoV20260121 | None = None
 
 
 class CvmInfoDetailV20260121(CvmInfoV20260121):
@@ -206,6 +232,9 @@ class CvmInfoV20260522(CloudModel):
     features: list[str] | None = Field(default_factory=list)
     runner: str | None = None
     manifest_version: str | None = None
+    hourly_rate: CvmHourlyRateV20260121 | None = None
+    billing_interval: str | None = None
+    gpu_rental_order: CvmGpuRentalOrderInfoV20260121 | None = None
 
 
 class CvmInfoDetailV20260522(CvmInfoV20260522):

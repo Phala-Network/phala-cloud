@@ -47,19 +47,7 @@ func (c *Client) CommitCVMProvisionV20260121(ctx context.Context, req *CommitCVM
 
 // GetCVMList returns a paginated list of CVMs.
 func (c *Client) GetCVMList(ctx context.Context, opts *GetCVMListOptions) (*PaginatedCVMInfos, error) {
-	path := "/cvms/paginated"
-	if opts != nil {
-		q := url.Values{}
-		if opts.Page != nil {
-			q.Set("page", fmt.Sprintf("%d", *opts.Page))
-		}
-		if opts.PageSize != nil {
-			q.Set("page_size", fmt.Sprintf("%d", *opts.PageSize))
-		}
-		if encoded := q.Encode(); encoded != "" {
-			path += "?" + encoded
-		}
-	}
+	path := buildCVMListPath(opts)
 	var result PaginatedCVMInfos
 	if err := c.doJSON(ctx, "GET", path, nil, &result); err != nil {
 		return nil, err
@@ -69,24 +57,36 @@ func (c *Client) GetCVMList(ctx context.Context, opts *GetCVMListOptions) (*Pagi
 
 // GetCVMListV20260121 returns a paginated list of CVMs using the v20260121 response schema.
 func (c *Client) GetCVMListV20260121(ctx context.Context, opts *GetCVMListOptions) (*PaginatedCVMInfosV20260121, error) {
-	path := "/cvms/paginated"
-	if opts != nil {
-		q := url.Values{}
-		if opts.Page != nil {
-			q.Set("page", fmt.Sprintf("%d", *opts.Page))
-		}
-		if opts.PageSize != nil {
-			q.Set("page_size", fmt.Sprintf("%d", *opts.PageSize))
-		}
-		if encoded := q.Encode(); encoded != "" {
-			path += "?" + encoded
-		}
-	}
+	path := buildCVMListPath(opts)
 	var result PaginatedCVMInfosV20260121
 	if err := c.doJSON(ctx, "GET", path, nil, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
+}
+
+func buildCVMListPath(opts *GetCVMListOptions) string {
+	path := "/cvms/paginated"
+	if opts == nil {
+		return path
+	}
+	q := url.Values{}
+	if opts.Page != nil {
+		q.Set("page", fmt.Sprintf("%d", *opts.Page))
+	}
+	if opts.PageSize != nil {
+		q.Set("page_size", fmt.Sprintf("%d", *opts.PageSize))
+	}
+	if opts.Family != nil {
+		q.Set("family", *opts.Family)
+	}
+	for _, t := range opts.InstanceTypes {
+		q.Add("instance_types", t)
+	}
+	if encoded := q.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	return path
 }
 
 // GetCVMInfo returns detailed information about a CVM.

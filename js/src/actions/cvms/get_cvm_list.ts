@@ -20,6 +20,8 @@ export const GetCvmListRequestSchema = z
     node_id: z.number().int().min(1).optional(),
     teepod_id: z.number().int().min(1).optional(),
     user_id: z.string().optional(),
+    family: z.enum(["all", "cpu", "gpu"]).optional(),
+    instance_types: z.array(z.string()).optional(),
   })
   .strict();
 
