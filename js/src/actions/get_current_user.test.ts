@@ -33,6 +33,7 @@ const mockAuthResponse: AuthResponse = {
     is_post_paid: false,
     outstanding_amount: null,
   },
+  features: [],
 };
 
 // Mock v20251028 flat response

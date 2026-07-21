@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { type Client } from "../../client";
+import { UserInfoSchema } from "../../credentials/current_user_v20260121";
+import { FeatureFlagSchema } from "../../types/feature_flag";
 import { defineAction } from "../../utils/define-action";
 
 /**
@@ -64,6 +66,14 @@ import { defineAction } from "../../utils/define-action";
  * ```
  */
 
+export const WorkspaceViewerSchema = z
+  .object({
+    user: UserInfoSchema,
+    /** Account-scoped feature flags for the viewer. */
+    features: z.array(FeatureFlagSchema).default([]),
+  })
+  .passthrough();
+
 export const WorkspaceResponseSchema = z
   .object({
     id: z.string(),
@@ -82,6 +92,16 @@ export const WorkspaceResponseSchema = z
     billing_status: z.enum(["active", "suspended", "abandoned"]).default("active"),
     /** When the workspace was suspended. Null unless billing_status is suspended. */
     suspended_at: z.string().nullable().optional(),
+    /**
+     * Workspace-scoped feature flags. Populated by GET /workspaces/{slug} for
+     * browser-session requests; empty for API-key requests and list items.
+     */
+    features: z.array(FeatureFlagSchema).default([]),
+    /**
+     * Current browser-session viewer with account-scoped feature flags.
+     * Null for API-key requests and workspace list items.
+     */
+    viewer: WorkspaceViewerSchema.nullable().optional(),
   })
   .passthrough();
 
@@ -100,6 +120,7 @@ export const ListWorkspacesSchema = z
   })
   .passthrough();
 
+export type WorkspaceViewer = z.infer<typeof WorkspaceViewerSchema>;
 export type WorkspaceResponse = z.infer<typeof WorkspaceResponseSchema>;
 export type PaginationMetadata = z.infer<typeof PaginationMetadataSchema>;
 export type ListWorkspaces = z.infer<typeof ListWorkspacesSchema>;

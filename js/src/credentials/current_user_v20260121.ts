@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FeatureFlagSchema } from "../types/feature_flag";
 
 /**
  * Current user schema for API version 2026-01-21 (three-layer structure)
@@ -48,6 +49,8 @@ export const CurrentUserV20260121Schema = z
     user: UserInfoSchema,
     workspace: WorkspaceInfoSchema,
     credits: CreditsInfoSchema,
+    /** Account-scoped feature flags. Empty until the server ships them. */
+    features: z.array(FeatureFlagSchema).default([]),
   })
   .passthrough();
 
