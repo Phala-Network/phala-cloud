@@ -5,6 +5,20 @@ type CurrentUser struct {
 	User      UserInfo      `json:"user"`
 	Workspace WorkspaceInfo `json:"workspace"`
 	Credits   CreditsInfo   `json:"credits"`
+	// Features contains account-scoped feature flags.
+	Features []FeatureFlag `json:"features,omitempty"`
+}
+
+// FeatureFlag is a feature flag entry returned by bootstrap endpoints
+// (GET /auth/me and GET /workspaces/{slug}).
+type FeatureFlag struct {
+	Name       string        `json:"name"`
+	Enabled    bool          `json:"enabled"`
+	Options    []string      `json:"options,omitempty"`
+	Reason     *string       `json:"reason,omitempty"`
+	ActionText *string       `json:"action_text,omitempty"`
+	ActionURL  *string       `json:"action_url,omitempty"`
+	Metadata   GenericObject `json:"metadata,omitempty"`
 }
 
 // UserInfo contains user profile information.

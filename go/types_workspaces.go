@@ -7,6 +7,19 @@ type Workspace struct {
 	Slug   *string `json:"slug,omitempty"`
 	Tier   string  `json:"tier"`
 	Avatar *string `json:"avatar,omitempty"`
+	// Features contains workspace-scoped feature flags. Populated by
+	// GET /workspaces/{slug} for browser-session requests; empty for
+	// API-key requests and list items.
+	Features []FeatureFlag `json:"features,omitempty"`
+	// Viewer is the current browser-session viewer with account-scoped
+	// feature flags. Nil for API-key requests and list items.
+	Viewer *WorkspaceViewer `json:"viewer,omitempty"`
+}
+
+// WorkspaceViewer is the browser-session viewer returned by workspace bootstrap.
+type WorkspaceViewer struct {
+	User     UserInfo      `json:"user"`
+	Features []FeatureFlag `json:"features,omitempty"`
 }
 
 // ListWorkspacesResponse is the response for listing workspaces.
