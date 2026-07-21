@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, Literal
 
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, model_validator
 
 from .base import AliasModel, CloudModel
 from .kms import KmsInfo
@@ -21,11 +22,19 @@ SUPPORTED_CHAINS: dict[int, dict[str, Any]] = {
 class GetCvmListRequest(CloudModel):
     page: int | None = Field(default=None, ge=1)
     page_size: int | None = Field(default=None, ge=1)
-    node_id: int | None = Field(default=None, ge=1)
-    teepod_id: int | None = Field(default=None, ge=1)
-    user_id: str | None = None
     family: Literal["all", "cpu", "gpu"] | None = None
     instance_types: list[str] | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_removed_filters(cls, value: Any) -> Any:
+        if isinstance(value, Mapping):
+            removed_filters = {"user_id", "teepod_id", "node_id"}
+            provided_filters = removed_filters.intersection(value)
+            if provided_filters:
+                names = ", ".join(sorted(provided_filters))
+                raise ValueError(f"Unsupported CVM list filters: {names}")
+        return value
 
 
 # 2026-01-21

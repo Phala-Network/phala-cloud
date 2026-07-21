@@ -1,6 +1,8 @@
 import httpx
+import pytest
 
 from phala_cloud import PhalaCloud
+from phala_cloud.models import GetCvmListRequest
 
 
 def test_get_app_attestation_decodes_typed_response() -> None:
@@ -51,6 +53,18 @@ def test_get_app_attestation_decodes_typed_response() -> None:
         assert attestation.instances[0].mr_config_id == "0xmrconfigid"
         assert attestation.instances[0].tcb_info is not None
         assert attestation.instances[0].tcb_info.rtmr3 == "rtmr3"
+
+
+@pytest.mark.parametrize("filter_name", ["user_id", "teepod_id", "node_id"])
+def test_get_cvm_list_rejects_removed_filters(filter_name: str) -> None:
+    with pytest.raises(ValueError, match=f"Unsupported CVM list filters: {filter_name}"):
+        GetCvmListRequest.model_validate({filter_name: "deprecated"})
+
+
+def test_get_cvm_list_preserves_unknown_filters() -> None:
+    request = GetCvmListRequest.model_validate({"future_filter": "value"})
+
+    assert request.model_dump(exclude_none=True) == {"future_filter": "value"}
 
 
 def test_get_current_user_sync() -> None:

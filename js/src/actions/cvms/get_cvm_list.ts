@@ -17,9 +17,6 @@ export const GetCvmListRequestSchema = z
   .object({
     page: z.number().int().min(1).optional(),
     page_size: z.number().int().min(1).optional(),
-    node_id: z.number().int().min(1).optional(),
-    teepod_id: z.number().int().min(1).optional(),
-    user_id: z.string().optional(),
     family: z.enum(["all", "cpu", "gpu"]).optional(),
     instance_types: z.array(z.string()).optional(),
   })
@@ -40,7 +37,8 @@ function getSchemaForVersion(version: ApiVersion) {
  * @param request - Optional request parameters for pagination and filtering
  * @param request.page - Page number (1-based)
  * @param request.page_size - Number of items per page
- * @param request.node_id - Filter by node ID
+ * @param request.family - Filter by instance family
+ * @param request.instance_types - Filter by one or more instance type IDs
  * @returns Paginated list of CVMs with type based on client API version
  *
  * @example
