@@ -12,6 +12,8 @@ export const CvmResourceUsageSchema = z.object({
   cpu_percent: z.number().nullable().optional(),
   memory_used_bytes: z.number().nullable().optional(),
   memory_total_bytes: z.number().nullable().optional(),
+  disk_used_bytes: z.number().nullable().optional(),
+  disk_total_bytes: z.number().nullable().optional(),
   egress_bytes: z.number().nullable().optional(),
 });
 
