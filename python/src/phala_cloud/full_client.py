@@ -64,6 +64,7 @@ from .models.cvms import (
     CheckCvmIsAllowedRequest,
     CvmInfoV20260121,
     CvmInfoV20260522,
+    CvmStatus,
     IsAllowedResultV20260121,
     IsAllowedResultV20260522,
     PaginatedCvmInfosV20251028,
@@ -1107,13 +1108,19 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     def safe_sync_github_ssh_keys(self) -> SafeResult[Any]:
         return self.safe(self.sync_github_ssh_keys)
 
-    def get_cvm_status_batch(self, request: StatusBatchRequest | Mapping[str, Any]) -> Any:
+    def get_cvm_status_batch(
+        self, request: StatusBatchRequest | Mapping[str, Any]
+    ) -> dict[str, CvmStatus]:
         req = StatusBatchRequest.model_validate(request)
-        return self._loose_validate(self.post("/status/batch", json={"vm_uuids": req.vm_uuids}))
+        raw = self.post("/status/batch", json={"vm_uuids": req.vm_uuids})
+        return {
+            k: CvmStatus.model_validate(v if isinstance(v, dict) else v.model_dump())
+            for k, v in raw.items()
+        }
 
     def safe_get_cvm_status_batch(
         self, request: StatusBatchRequest | Mapping[str, Any]
-    ) -> SafeResult[Any]:
+    ) -> SafeResult[dict[str, CvmStatus]]:
         return self.safe(self.get_cvm_status_batch, request)
 
     def get_cvm_user_config(self, request: CvmIdRequest | Mapping[str, Any]) -> Any:
@@ -1937,15 +1944,19 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
     async def safe_sync_github_ssh_keys(self) -> SafeResult[Any]:
         return await self.safe(self.sync_github_ssh_keys)
 
-    async def get_cvm_status_batch(self, request: StatusBatchRequest | Mapping[str, Any]) -> Any:
+    async def get_cvm_status_batch(
+        self, request: StatusBatchRequest | Mapping[str, Any]
+    ) -> dict[str, CvmStatus]:
         req = StatusBatchRequest.model_validate(request)
-        return self._loose_validate(
-            await self.post("/status/batch", json={"vm_uuids": req.vm_uuids})
-        )
+        raw = await self.post("/status/batch", json={"vm_uuids": req.vm_uuids})
+        return {
+            k: CvmStatus.model_validate(v if isinstance(v, dict) else v.model_dump())
+            for k, v in raw.items()
+        }
 
     async def safe_get_cvm_status_batch(
         self, request: StatusBatchRequest | Mapping[str, Any]
-    ) -> SafeResult[Any]:
+    ) -> SafeResult[dict[str, CvmStatus]]:
         return await self.safe(self.get_cvm_status_batch, request)
 
     async def get_cvm_user_config(self, request: CvmIdRequest | Mapping[str, Any]) -> Any:
