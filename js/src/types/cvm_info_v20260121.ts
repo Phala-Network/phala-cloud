@@ -37,6 +37,29 @@ export const CvmResourceInfoV20260121Schema = z.object({
 });
 export type CvmResourceInfoV20260121 = z.infer<typeof CvmResourceInfoV20260121Schema>;
 
+export const CvmHourlyRateV20260121Schema = z.object({
+  total: z.string().nullable().optional(),
+  compute: z.string().nullable().optional(),
+  disk: z.string().nullable().optional(),
+});
+export type CvmHourlyRateV20260121 = z.infer<typeof CvmHourlyRateV20260121Schema>;
+
+export const CvmGpuRentalOrderInfoV20260121Schema = z.object({
+  order_id: z.string(),
+  status: z.string(),
+  pricing_plan: z.string().nullable().optional(),
+  commitment_days: z.number().int().nullable().optional(),
+  agreed_hourly_rate: z.string().nullable().optional(),
+  hourly_billing_start_time: z.string().nullable().optional(),
+  activated_at: z.string().nullable().optional(),
+  completed_at: z.string().nullable().optional(),
+  cancelled_at: z.string().nullable().optional(),
+  decoupled_at: z.string().nullable().optional(),
+  sku_code: z.string().nullable().optional(),
+  sku_display_name: z.string().nullable().optional(),
+});
+export type CvmGpuRentalOrderInfoV20260121 = z.infer<typeof CvmGpuRentalOrderInfoV20260121Schema>;
+
 export const CvmOsInfoV20260121Schema = z.object({
   name: z.string().nullable().optional(),
   version: z.string().nullable().optional(),
@@ -144,6 +167,9 @@ export const CvmInfoV20260121Schema = z.object({
   created_at: z.string().nullable().optional(),
   deleted_at: z.string().nullable().optional(),
   project_type: z.string().nullable().optional(),
+  hourly_rate: CvmHourlyRateV20260121Schema.nullable().optional(),
+  billing_interval: z.string().nullable().optional(),
+  gpu_rental_order: CvmGpuRentalOrderInfoV20260121Schema.nullable().optional(),
 });
 export type CvmInfoV20260121 = z.infer<typeof CvmInfoV20260121Schema>;
 

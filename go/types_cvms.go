@@ -2,45 +2,71 @@ package phala
 
 import "fmt"
 
+// CVMHourlyRate contains split hourly pricing for a CVM.
+type CVMHourlyRate struct {
+	Total   *string `json:"total,omitempty"`
+	Compute *string `json:"compute,omitempty"`
+	Disk    *string `json:"disk,omitempty"`
+}
+
+// CVMGpuRentalOrderInfo contains a slimmed-down GPU rental order reference.
+type CVMGpuRentalOrderInfo struct {
+	OrderID                string  `json:"order_id"`
+	Status                 string  `json:"status"`
+	PricingPlan            *string `json:"pricing_plan,omitempty"`
+	CommitmentDays         *int    `json:"commitment_days,omitempty"`
+	AgreedHourlyRate       *string `json:"agreed_hourly_rate,omitempty"`
+	HourlyBillingStartTime *string `json:"hourly_billing_start_time,omitempty"`
+	ActivatedAt            *string `json:"activated_at,omitempty"`
+	CompletedAt            *string `json:"completed_at,omitempty"`
+	CancelledAt            *string `json:"cancelled_at,omitempty"`
+	DecoupledAt            *string `json:"decoupled_at,omitempty"`
+	SkuCode                *string `json:"sku_code,omitempty"`
+	SkuDisplayName         *string `json:"sku_display_name,omitempty"`
+}
+
 // CVMInfoFields contains fields shared by versioned CVM response schemas.
 type CVMInfoFields struct {
-	Name                string           `json:"name"`
-	AppID               *string          `json:"app_id,omitempty"`
-	VMUUID              *string          `json:"vm_uuid,omitempty"`
-	InstanceID          *string          `json:"instance_id,omitempty"`
-	Resource            CvmResource      `json:"resource"`
-	NodeInfo            *NodeRef         `json:"node_info,omitempty"`
-	OS                  *CvmOsInfo       `json:"os,omitempty"`
-	KMSType             *string          `json:"kms_type,omitempty"`
-	KMSInfo             *CvmKmsInfo      `json:"kms_info,omitempty"`
-	Status              string           `json:"status"`
-	Progress            *CvmProgressInfo `json:"progress,omitempty"`
-	ComposeHash         *string          `json:"compose_hash,omitempty"`
-	DockerComposeHash   *string          `json:"docker_compose_hash,omitempty"`
-	PreLaunchScriptHash *string          `json:"pre_launch_script_hash,omitempty"`
-	Gateway             *CvmGatewayInfo  `json:"gateway,omitempty"`
-	Logs                *CVMLogURLs      `json:"logs,omitempty"`
-	Services            []any            `json:"services,omitempty"`
-	Endpoints           []CVMEndpoint    `json:"endpoints,omitempty"`
-	PublicLogs          *bool            `json:"public_logs,omitempty"`
-	PublicSysinfo       *bool            `json:"public_sysinfo,omitempty"`
-	PublicTcbinfo       *bool            `json:"public_tcbinfo,omitempty"`
-	GatewayEnabled      *bool            `json:"gateway_enabled,omitempty"`
-	SecureTime          *bool            `json:"secure_time,omitempty"`
-	Listed              bool             `json:"listed"`
-	StorageFS           *string          `json:"storage_fs,omitempty"`
-	Workspace           *WorkspaceRef    `json:"workspace,omitempty"`
-	Creator             *UserRef         `json:"creator,omitempty"`
-	CreatedAt           *string          `json:"created_at,omitempty"`
-	DeletedAt           *string          `json:"deleted_at,omitempty"`
-	ProjectType         *string          `json:"project_type,omitempty"`
-	UpdatedAt           *string          `json:"updated_at,omitempty"`
-	AppURL              *string          `json:"app_url,omitempty"`
-	BaseImage           *string          `json:"base_image,omitempty"`
-	Features            []string         `json:"features,omitempty"`
-	Runner              *string          `json:"runner,omitempty"`
-	ManifestVer         *string          `json:"manifest_version,omitempty"`
-	ComposeFile         any              `json:"compose_file,omitempty"`
+	Name                string                 `json:"name"`
+	AppID               *string                `json:"app_id,omitempty"`
+	VMUUID              *string                `json:"vm_uuid,omitempty"`
+	InstanceID          *string                `json:"instance_id,omitempty"`
+	Resource            CvmResource            `json:"resource"`
+	NodeInfo            *NodeRef               `json:"node_info,omitempty"`
+	OS                  *CvmOsInfo             `json:"os,omitempty"`
+	KMSType             *string                `json:"kms_type,omitempty"`
+	KMSInfo             *CvmKmsInfo            `json:"kms_info,omitempty"`
+	Status              string                 `json:"status"`
+	Progress            *CvmProgressInfo       `json:"progress,omitempty"`
+	ComposeHash         *string                `json:"compose_hash,omitempty"`
+	DockerComposeHash   *string                `json:"docker_compose_hash,omitempty"`
+	PreLaunchScriptHash *string                `json:"pre_launch_script_hash,omitempty"`
+	Gateway             *CvmGatewayInfo        `json:"gateway,omitempty"`
+	Logs                *CVMLogURLs            `json:"logs,omitempty"`
+	Services            []any                  `json:"services,omitempty"`
+	Endpoints           []CVMEndpoint          `json:"endpoints,omitempty"`
+	PublicLogs          *bool                  `json:"public_logs,omitempty"`
+	PublicSysinfo       *bool                  `json:"public_sysinfo,omitempty"`
+	PublicTcbinfo       *bool                  `json:"public_tcbinfo,omitempty"`
+	GatewayEnabled      *bool                  `json:"gateway_enabled,omitempty"`
+	SecureTime          *bool                  `json:"secure_time,omitempty"`
+	Listed              bool                   `json:"listed"`
+	StorageFS           *string                `json:"storage_fs,omitempty"`
+	Workspace           *WorkspaceRef          `json:"workspace,omitempty"`
+	Creator             *UserRef               `json:"creator,omitempty"`
+	CreatedAt           *string                `json:"created_at,omitempty"`
+	DeletedAt           *string                `json:"deleted_at,omitempty"`
+	ProjectType         *string                `json:"project_type,omitempty"`
+	UpdatedAt           *string                `json:"updated_at,omitempty"`
+	AppURL              *string                `json:"app_url,omitempty"`
+	BaseImage           *string                `json:"base_image,omitempty"`
+	Features            []string               `json:"features,omitempty"`
+	Runner              *string                `json:"runner,omitempty"`
+	ManifestVer         *string                `json:"manifest_version,omitempty"`
+	HourlyRate          *CVMHourlyRate         `json:"hourly_rate,omitempty"`
+	BillingInterval     *string                `json:"billing_interval,omitempty"`
+	GpuRentalOrder      *CVMGpuRentalOrderInfo `json:"gpu_rental_order,omitempty"`
+	ComposeFile         any                    `json:"compose_file,omitempty"`
 
 	// Additional fields used by the Terraform provider.
 	InProgress         bool          `json:"in_progress,omitempty"`
@@ -188,8 +214,10 @@ type PaginatedCVMInfos = PaginatedCVMInfosV20260522
 
 // GetCVMListOptions holds query parameters for listing CVMs.
 type GetCVMListOptions struct {
-	Page     *int `json:"page,omitempty"`
-	PageSize *int `json:"page_size,omitempty"`
+	Page          *int     `json:"page,omitempty"`
+	PageSize      *int     `json:"page_size,omitempty"`
+	Family        *string  `json:"family,omitempty"`
+	InstanceTypes []string `json:"instance_types,omitempty"`
 }
 
 // ProvisionCVMRequest is the request body for provisioning a CVM.

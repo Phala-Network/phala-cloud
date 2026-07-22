@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createClient } from "../../client";
 import {
   getCvmList,
+  GetCvmListRequestSchema,
   safeGetCvmList,
   type GetCvmListResponse,
 } from "./get_cvm_list";
@@ -127,18 +128,26 @@ describe("getCvmList", () => {
       const result = await getCvmList(client, {
         page: 2,
         page_size: 20,
-        node_id: 123,
+        family: "gpu",
+        instance_types: ["h200.small", "h200.large"],
       });
 
       expect(mockGet).toHaveBeenCalledWith("/cvms/paginated", {
         params: {
           page: 2,
           page_size: 20,
-          node_id: 123,
+          family: "gpu",
+          instance_types: ["h200.small", "h200.large"],
         },
       });
       expect(result).toMatchObject(mockCvmListData);
       expect((result as GetCvmListResponse).items).toHaveLength(1);
+    });
+  });
+
+  describe("request validation", () => {
+    it.each(["user_id", "teepod_id", "node_id"])("rejects removed %s filter", (filterName) => {
+      expect(() => GetCvmListRequestSchema.parse({ [filterName]: "deprecated" })).toThrow();
     });
   });
 
@@ -192,14 +201,16 @@ describe("getCvmList", () => {
       await safeGetCvmList(client, {
         page: 2,
         page_size: 20,
-        node_id: 123,
+        family: "cpu",
+        instance_types: ["tdx.small"],
       });
 
       expect(mockGet).toHaveBeenCalledWith("/cvms/paginated", {
         params: {
           page: 2,
           page_size: 20,
-          node_id: 123,
+          family: "cpu",
+          instance_types: ["tdx.small"],
         },
       });
     });
