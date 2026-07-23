@@ -20,6 +20,7 @@ import {
 	type ErrorLink,
 	CvmIdSchema,
 	MAX_COMPOSE_PAYLOAD_BYTES,
+	RequestError,
 	ResourceError,
 	createClient,
 	encryptEnvVars,
@@ -133,6 +134,68 @@ function handleProvisionError(
 			};
 		}
 		return formatStructuredError(error);
+	}
+
+	// RequestError from the SDK: .detail is extracted from the response body
+	// (e.g. { error_code: "ERR-02-009", message: "...", ... })
+	if (
+		error instanceof RequestError &&
+		typeof error.detail === "object" &&
+		error.detail !== null &&
+		"error_code" in error.detail
+	) {
+		const { error_code, message, details, suggestions, links } =
+			error.detail as {
+				error_code: string;
+				message: string;
+				details?: Array<{
+					field?: string;
+					value?: unknown;
+					message?: string;
+				}>;
+				suggestions?: string[];
+				links?: Array<{ url: string; label: string }>;
+			};
+
+		if (options.json) {
+			return {
+				success: false,
+				error_code,
+				message,
+				details,
+				suggestions,
+				links,
+			};
+		}
+
+		let output = `\nError [${error_code}]: ${message}\n`;
+
+		if (details && details.length > 0) {
+			output += "\nDetails:\n";
+			for (const d of details) {
+				if (d.message) {
+					output += `  - ${d.message}\n`;
+				} else if (d.field && d.value !== undefined) {
+					output += `  - ${d.field}: ${d.value}\n`;
+				}
+			}
+		}
+
+		if (suggestions && suggestions.length > 0) {
+			output += "\nSuggestions:\n";
+			for (const s of suggestions) {
+				output += `  - ${s}\n`;
+			}
+		}
+
+		if (links && links.length > 0) {
+			output += "\nLearn more:\n";
+			for (const link of links) {
+				output += `  - ${link.label}: ${link.url}\n`;
+			}
+		}
+
+		return output;
 	}
 
 	// Parse structured error from plain object (backward compatibility)
