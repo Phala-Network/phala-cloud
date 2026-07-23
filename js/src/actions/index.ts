@@ -581,9 +581,11 @@ export {
 export {
   getCvmStatusBatch,
   safeGetCvmStatusBatch,
+  CvmResourceUsageSchema,
   CvmStatusSchema,
   GetCvmStatusBatchResponseSchema,
   GetCvmStatusBatchRequestSchema,
+  type CvmResourceUsage,
   type CvmStatus,
   type GetCvmStatusBatchResponse,
   type GetCvmStatusBatchRequest,

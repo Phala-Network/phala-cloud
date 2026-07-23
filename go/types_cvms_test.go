@@ -196,3 +196,87 @@ func TestCVMHashIDVersionContracts(t *testing.T) {
 		}
 	})
 }
+
+func TestCVMStatusBatchDeserialization(t *testing.T) {
+	t.Run("full response with resource_usage and events", func(t *testing.T) {
+		payload := []byte(`{
+			"uuid-1": {
+				"vm_uuid": "uuid-1",
+				"status": "running",
+				"in_progress": false,
+				"uptime": "2h30m",
+				"events": [{"event": "boot", "body": "kernel loaded", "timestamp": 1690000000}],
+				"resource_usage": {
+					"cpu_percent": 45.2,
+					"memory_used_bytes": 2147483648,
+					"memory_total_bytes": 4294967296,
+					"egress_bytes": 1048576
+				}
+			},
+			"uuid-2": {
+				"vm_uuid": "uuid-2",
+				"status": "maintenance",
+				"in_progress": false,
+				"events": [],
+				"resource_usage": null
+			}
+		}`)
+
+		var result map[string]CVMStatusEntry
+		if err := json.Unmarshal(payload, &result); err != nil {
+			t.Fatalf("unmarshal batch status: %v", err)
+		}
+		if len(result) != 2 {
+			t.Fatalf("expected 2 entries, got %d", len(result))
+		}
+
+		entry1 := result["uuid-1"]
+		if entry1.Status != "running" {
+			t.Errorf("uuid-1 status = %q, want running", entry1.Status)
+		}
+		if len(entry1.Events) != 1 || entry1.Events[0].Event != "boot" {
+			t.Errorf("uuid-1 events unexpected: %+v", entry1.Events)
+		}
+		if entry1.ResourceUsage == nil {
+			t.Fatal("uuid-1 resource_usage should not be nil")
+		}
+		if *entry1.ResourceUsage.CPUPercent != 45.2 {
+			t.Errorf("uuid-1 cpu_percent = %v, want 45.2", *entry1.ResourceUsage.CPUPercent)
+		}
+		if *entry1.ResourceUsage.MemoryUsedBytes != 2147483648 {
+			t.Errorf("uuid-1 memory_used_bytes = %v, want 2147483648", *entry1.ResourceUsage.MemoryUsedBytes)
+		}
+
+		entry2 := result["uuid-2"]
+		if entry2.Status != "maintenance" {
+			t.Errorf("uuid-2 status = %q, want maintenance", entry2.Status)
+		}
+		if entry2.ResourceUsage != nil {
+			t.Errorf("uuid-2 resource_usage should be nil, got %+v", entry2.ResourceUsage)
+		}
+	})
+
+	t.Run("forward-compatible with unknown fields", func(t *testing.T) {
+		payload := []byte(`{
+			"uuid-1": {
+				"vm_uuid": "uuid-1",
+				"status": "running",
+				"in_progress": false,
+				"events": [],
+				"future_field": "ignored",
+				"resource_usage": {
+					"cpu_percent": 10.0,
+					"gpu_percent": 99.0
+				}
+			}
+		}`)
+
+		var result map[string]CVMStatusEntry
+		if err := json.Unmarshal(payload, &result); err != nil {
+			t.Fatalf("unmarshal should succeed with unknown fields: %v", err)
+		}
+		if result["uuid-1"].ResourceUsage == nil || *result["uuid-1"].ResourceUsage.CPUPercent != 10.0 {
+			t.Errorf("expected cpu_percent=10.0, got %+v", result["uuid-1"].ResourceUsage)
+		}
+	})
+}

@@ -418,3 +418,39 @@ class AppCvmsBatchIsAllowedResponseAny(AppCvmsBatchIsAllowedResponseBase):
 
 
 AppCvmsBatchIsAllowedResponse = AppCvmsBatchIsAllowedResponseV20260522
+
+
+# --- Batch Status ---
+
+
+class CvmResourceUsage(CloudModel):
+    cpu_percent: float | None = None
+    memory_used_bytes: int | None = None
+    memory_total_bytes: int | None = None
+    egress_bytes: int | None = None
+
+
+class GuestEvent(CloudModel):
+    event: str
+    body: str
+    timestamp: float
+
+
+class CvmOperationStatus(CloudModel):
+    type: str | None = None
+    phase: str | None = None
+    started_at: str | None = None
+    correlation_id: str | None = None
+
+
+class CvmStatus(CloudModel):
+    vm_uuid: str
+    status: str
+    uptime: str | None = None
+    in_progress: bool = False
+    boot_progress: str | None = None
+    boot_error: str | None = None
+    shutdown_progress: str | None = None
+    events: list[GuestEvent] = Field(default_factory=list)
+    operation: CvmOperationStatus | None = None
+    resource_usage: CvmResourceUsage | None = None

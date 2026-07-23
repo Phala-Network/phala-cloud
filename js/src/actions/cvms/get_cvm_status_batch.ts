@@ -8,6 +8,17 @@ import { defineAction } from "../../utils/define-action";
  * CvmStatusSchema is used for /status/batch endpoint which returns status
  * information optimized for polling.
  */
+export const CvmResourceUsageSchema = z.object({
+  cpu_percent: z.number().nullable().optional(),
+  memory_used_bytes: z.number().nullable().optional(),
+  memory_total_bytes: z.number().nullable().optional(),
+  disk_used_bytes: z.number().nullable().optional(),
+  disk_total_bytes: z.number().nullable().optional(),
+  egress_bytes: z.number().nullable().optional(),
+});
+
+export type CvmResourceUsage = z.infer<typeof CvmResourceUsageSchema>;
+
 export const CvmStatusSchema = z.object({
   vm_uuid: z.string(),
   status: z.string(),
@@ -16,6 +27,15 @@ export const CvmStatusSchema = z.object({
   boot_progress: z.string().nullable().optional(),
   boot_error: z.string().nullable().optional(),
   shutdown_progress: z.string().nullable().optional(),
+  events: z
+    .array(
+      z.object({
+        event: z.string(),
+        body: z.string(),
+        timestamp: z.number(),
+      }),
+    )
+    .default([]),
   operation: z
     .object({
       type: z.string().nullable().optional(),
@@ -25,6 +45,7 @@ export const CvmStatusSchema = z.object({
     })
     .nullable()
     .optional(),
+  resource_usage: CvmResourceUsageSchema.nullable().optional(),
 });
 
 export type CvmStatus = z.infer<typeof CvmStatusSchema>;

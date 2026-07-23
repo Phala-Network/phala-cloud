@@ -322,6 +322,43 @@ func (r *CommitCVMProvisionResponseV20260121) CvmID() string {
 	return fmt.Sprintf("%d", r.ID)
 }
 
+// CVMResourceUsage contains live resource metrics from teescope.
+type CVMResourceUsage struct {
+	CPUPercent       *float64 `json:"cpu_percent,omitempty"`
+	MemoryUsedBytes  *int64   `json:"memory_used_bytes,omitempty"`
+	MemoryTotalBytes *int64   `json:"memory_total_bytes,omitempty"`
+	EgressBytes      *int64   `json:"egress_bytes,omitempty"`
+}
+
+// CVMGuestEvent represents a guest lifecycle event.
+type CVMGuestEvent struct {
+	Event     string  `json:"event"`
+	Body      string  `json:"body"`
+	Timestamp float64 `json:"timestamp"`
+}
+
+// CVMOperationStatus represents an in-progress async operation.
+type CVMOperationStatus struct {
+	Type          *string `json:"type,omitempty"`
+	Phase         *string `json:"phase,omitempty"`
+	StartedAt     *string `json:"started_at,omitempty"`
+	CorrelationID *string `json:"correlation_id,omitempty"`
+}
+
+// CVMStatusEntry represents a single CVM's status from the batch status endpoint.
+type CVMStatusEntry struct {
+	VMUUID           string              `json:"vm_uuid"`
+	Status           string              `json:"status"`
+	Uptime           *string             `json:"uptime,omitempty"`
+	InProgress       bool                `json:"in_progress"`
+	BootProgress     *string             `json:"boot_progress,omitempty"`
+	BootError        *string             `json:"boot_error,omitempty"`
+	ShutdownProgress *string             `json:"shutdown_progress,omitempty"`
+	Events           []CVMGuestEvent     `json:"events"`
+	Operation        *CVMOperationStatus `json:"operation,omitempty"`
+	ResourceUsage    *CVMResourceUsage   `json:"resource_usage,omitempty"`
+}
+
 // CVMState represents the state of a CVM.
 type CVMState = GenericObject
 

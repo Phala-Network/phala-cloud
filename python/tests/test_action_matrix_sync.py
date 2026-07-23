@@ -370,7 +370,22 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
         return _json_response({"id": "a", "name": "app"})
 
     if method == "POST" and path == "/api/v1/status/batch":
-        return _json_response({"vm1": {"status": "running"}})
+        return _json_response(
+            {
+                "vm1": {
+                    "vm_uuid": "vm1",
+                    "status": "running",
+                    "in_progress": False,
+                    "events": [],
+                    "resource_usage": {
+                        "cpu_percent": 12.5,
+                        "memory_used_bytes": 1073741824,
+                        "memory_total_bytes": 2147483648,
+                        "egress_bytes": 512000,
+                    },
+                }
+            }
+        )
 
     if method == "GET" and path == "/api/v1/os-images":
         return _json_response(
