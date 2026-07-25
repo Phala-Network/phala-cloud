@@ -235,10 +235,13 @@ jobs:
             exit 1
           fi
 
+          # PR-branch releases are intentional: parse already rejects forks and
+          # non-maintainer actors, then sets SOURCE_REF to the PR head ref.
+          # Push step writes version bumps back to that branch (or opens a
+          # release PR when SOURCE_REF is main). Only block obviously unsafe refs.
           case "$SOURCE_REF" in
-            main|refs/tags/v*) ;;
-            *)
-              echo "Unsupported source ref: $SOURCE_REF (must be main or refs/tags/v*)"
+            *..*|*[[:space:]]*|-*|refs/pull/*)
+              echo "Unsupported source ref: $SOURCE_REF"
               exit 1
               ;;
           esac
