@@ -6,6 +6,7 @@ import {
 	type Client,
 	type ErrorLink,
 	type EnvVar,
+	SUPPORTED_CHAINS,
 	safeAddComposeHash,
 	safeAddDevice,
 	safeCheckOnChainPrerequisites,
@@ -370,17 +371,19 @@ async function runInstancesAddCommand(
 				throw new Error("Prepare response did not include a commit token");
 			}
 
-			const chain = (
-				preparePayload.kmsInfo as
-					| {
-							chain?: Parameters<
-								typeof safeCheckOnChainPrerequisites
-							>[0]["chain"];
-					  }
-					| undefined
-			)?.chain;
+			// The prepare payload comes from raw HTTP 465 error.structuredDetails, so it
+			// does NOT pass through the SDK's KmsInfoSchema zod transform that injects
+			// `chain`. Resolve from chain_id directly.
+			const chainId = (
+				preparePayload.kmsInfo as { chain_id?: number } | undefined
+			)?.chain_id;
+			const chain = chainId != null ? SUPPORTED_CHAINS[chainId] : undefined;
 			if (!chain) {
-				throw new Error("App KMS info is missing chain configuration");
+				throw new Error(
+					chainId != null
+						? `Chain id ${chainId} is not supported by this CLI build`
+						: "App KMS info is missing chain_id",
+				);
 			}
 
 			const prereqs = await safeCheckOnChainPrerequisites({

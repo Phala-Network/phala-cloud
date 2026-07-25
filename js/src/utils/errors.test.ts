@@ -13,6 +13,7 @@ import {
   formatValidationErrors,
   formatErrorMessage,
   formatStructuredError,
+  formatStructuredErrorDetailValue,
 } from "./errors";
 
 describe("parseApiError", () => {
@@ -667,5 +668,57 @@ describe("RequestError.fromFetchError with timeout/network errors", () => {
     expect(requestError.message).toContain("ECONNREFUSED");
     expect(requestError.detail).toContain("ECONNREFUSED");
     expect(requestError.detail).not.toBe("Unknown API error");
+  });
+});
+
+describe("formatStructuredErrorDetailValue", () => {
+  it("returns strings unchanged", () => {
+    expect(formatStructuredErrorDetailValue("hello")).toBe("hello");
+  });
+
+  it("stringifies numbers and booleans", () => {
+    expect(formatStructuredErrorDetailValue(7)).toBe("7");
+    expect(formatStructuredErrorDetailValue(true)).toBe("true");
+    expect(formatStructuredErrorDetailValue(false)).toBe("false");
+  });
+
+  it("returns empty string for null/undefined", () => {
+    expect(formatStructuredErrorDetailValue(null)).toBe("");
+    expect(formatStructuredErrorDetailValue(undefined)).toBe("");
+  });
+
+  it("serializes objects to JSON", () => {
+    expect(formatStructuredErrorDetailValue({ chain_id: 1, slug: "kms-eth" })).toBe(
+      '{"chain_id":1,"slug":"kms-eth"}',
+    );
+  });
+
+  it("serializes arrays to JSON", () => {
+    expect(formatStructuredErrorDetailValue([1, 2, 3])).toBe("[1,2,3]");
+  });
+});
+
+describe("formatStructuredError details rendering", () => {
+  it("renders dict and array values via JSON instead of [object Object]", () => {
+    const error = new ResourceError("Compose hash registration required", {
+      status: 465,
+      statusText: "Compose hash registration required",
+      detail: undefined,
+      errorCode: "ERR-01-005",
+      structuredDetails: [
+        { field: "compose_hash", value: "428faa5" },
+        {
+          field: "kms_info",
+          value: { chain_id: 1, slug: "kms-eth-prod7" },
+        },
+        { field: "extras", value: [1, 2, 3] },
+      ],
+    });
+
+    const formatted = formatStructuredError(error);
+    expect(formatted).toContain("compose_hash: 428faa5");
+    expect(formatted).toContain('kms_info: {"chain_id":1,"slug":"kms-eth-prod7"}');
+    expect(formatted).toContain("extras: [1,2,3]");
+    expect(formatted).not.toContain("[object Object]");
   });
 });

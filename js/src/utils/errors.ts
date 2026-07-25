@@ -716,11 +716,37 @@ export function getErrorMessage(error: ApiError): string {
 
 /**
  * Structured error detail from new error format (ERR-xxxx codes)
+ *
+ * `value` is typed as `unknown` because the backend contract says it should be
+ * a primitive (string / number / boolean) but in practice some errors emit
+ * dict / array values (e.g. HashRegistrationRequired carries `kms_info` and
+ * `onchain_status` as objects). Consumers that need a string should use
+ * {@link formatStructuredErrorDetailValue}; consumers that need the original
+ * structure (e.g. CLI extracting `commit_token`) should access `value` directly.
  */
 export interface StructuredErrorDetail {
   field?: string;
   value?: unknown;
   message?: string;
+}
+
+/**
+ * Coerce a {@link StructuredErrorDetail} `value` to a renderable string.
+ *
+ * - `string` returned as-is
+ * - `number` / `boolean` stringified via `String(...)`
+ * - `null` / `undefined` returned as `""` so callers never interpolate `null` literally
+ * - anything else (dict, array) serialized via `JSON.stringify` with a fallback to `String(...)`
+ */
+export function formatStructuredErrorDetailValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 
 /**
@@ -886,7 +912,7 @@ export function formatStructuredError(
       if (d.message) {
         parts.push(`  - ${d.message}`);
       } else if (d.field && d.value !== undefined) {
-        parts.push(`  - ${d.field}: ${d.value}`);
+        parts.push(`  - ${d.field}: ${formatStructuredErrorDetailValue(d.value)}`);
       }
     });
   }
