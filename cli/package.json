@@ -57,7 +57,7 @@
 		"ora": "^6.3.1",
 		"prompts": "^2.4.2",
 		"semver": "^7.6.3",
-		"viem": "^2.52.2",
+		"viem": "^2.55.8",
 		"zod": "^3.24.1"
 	},
 	"devDependencies": {
