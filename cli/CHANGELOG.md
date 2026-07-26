@@ -1,3 +1,26 @@
+## [](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.20-beta.1...cli-v) (2026-07-26)
+
+### feat
+
+* **cli:** 0x-prefix hex values, clarify whitelists, add kms phala ([dcb18e6](https://github.com/Phala-Network/phala-cloud/commit/dcb18e6d9f69ed71766fa1f49ed401dad01b1f5d))
+* **cli:** add force-stop deploy option ([260b6dc](https://github.com/Phala-Network/phala-cloud/commit/260b6dcf1e3faa76cdb0db7798c215137cd060c9))
+* **cli:** list KMS contracts and contract nodes ([164d737](https://github.com/Phala-Network/phala-cloud/commit/164d737cdae9108d4fba0b1e16b95cd07c44a30e))
+* **sdk/cli:** surface KMS contract verification anchors in on-chain detail ([35a48a3](https://github.com/Phala-Network/phala-cloud/commit/35a48a3a81a4d762cb3a7b49bdcddfb196fd6db1))
+
+### fix
+
+* **cli:** include error code in deploy provision error output ([84a5118](https://github.com/Phala-Network/phala-cloud/commit/84a511857b221f287f15796b172eefd37418f0ab))
+* **cli:** make force-stop bypass graceful shutdown ([d245edd](https://github.com/Phala-Network/phala-cloud/commit/d245edd8ba9da2f4e7a326d09c29d1b8533a963f))
+* **cli:** plain, aligned layout for kms ethereum/base output ([5c21e87](https://github.com/Phala-Network/phala-cloud/commit/5c21e87f8a7b80384f25386b9beea8237a5ec4d6))
+* **cli:** reject api method before endpoint ([ad4f1ff](https://github.com/Phala-Network/phala-cloud/commit/ad4f1ff40db541f9488871ca6ceac97accafd483))
+* **cli:** remove legacy cvms create command ([cad4098](https://github.com/Phala-Network/phala-cloud/commit/cad409879b461630349347f32052a6b3d77a1cb8))
+* **cli:** resolve viem chain from chain_id, not the injected `chain` field ([9d7187b](https://github.com/Phala-Network/phala-cloud/commit/9d7187ba1a8e16e365d34ef30c69684039e83c14))
+* **cli:** surface request details in API errors ([c53a329](https://github.com/Phala-Network/phala-cloud/commit/c53a329b4cfa3027e05d27c7e3ed5bb8e0fbbfbb))
+* **cli:** verify KMS env encryption pubkeys ([0300d64](https://github.com/Phala-Network/phala-cloud/commit/0300d645970198ca08530caa724d3651a6eb833b))
+
+### refactor
+
+* migrate resize endpoint across all SDKs ([56638f1](https://github.com/Phala-Network/phala-cloud/commit/56638f1c1592a1a48dab7fedf9152b60c8e52a01))
 ## [](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.19...cli-v) (2026-06-17)
 
 ### feat
