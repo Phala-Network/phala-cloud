@@ -72,7 +72,10 @@ async function runSshKeysRemoveCommand(
 		const result = await safeDeleteSshKey(client, { keyId });
 
 		if (!result.success) {
-			context.fail(`Failed to remove SSH key: ${result.error.message}`);
+			context.failWithError(result.error.cause ?? result.error, {
+				operation: "Remove SSH key",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -84,8 +87,10 @@ async function runSshKeysRemoveCommand(
 		logger.success(`SSH key ${keyId} removed`);
 		return 0;
 	} catch (error) {
-		logger.logDetailedError(error);
-		context.fail("Failed to remove SSH key");
+		context.failWithError(error, {
+			operation: "Remove SSH key",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

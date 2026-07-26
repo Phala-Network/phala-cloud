@@ -24,7 +24,10 @@ async function runWhoamiCommand(
 	const result = await safeGetCurrentUser(client);
 
 	if (!result.success) {
-		context.fail(result.error?.message || "Failed to get user information");
+		context.failWithError(result.error.cause ?? result.error, {
+			operation: "Whoami",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 

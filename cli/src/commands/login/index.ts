@@ -286,8 +286,10 @@ export async function runLoginCommand(
 		);
 		return 0;
 	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
-		context.stderr.write(chalk.red(`Failed to authenticate: ${message}\n`));
+		context.failWithError(error, {
+			operation: "Login",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

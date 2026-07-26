@@ -20,7 +20,10 @@ async function runNodesListCommand(
 		// Get current workspace to obtain teamSlug
 		const userResult = await safeGetCurrentUser(client);
 		if (!userResult.success) {
-			context.fail(userResult.error.message);
+			context.failWithError(userResult.error.cause ?? userResult.error, {
+				operation: "List nodes",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -38,7 +41,10 @@ async function runNodesListCommand(
 		});
 
 		if (!result.success) {
-			context.fail(result.error.message);
+			context.failWithError(result.error.cause ?? result.error, {
+				operation: "List nodes",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -75,12 +81,10 @@ async function runNodesListCommand(
 		logger.info(`Page ${data.page}/${data.pages} (total ${data.total})`);
 		return 0;
 	} catch (error) {
-		logger.logDetailedError(error);
-		context.fail(
-			`Failed to list nodes: ${
-				error instanceof Error ? error.message : String(error)
-			}`,
-		);
+		context.failWithError(error, {
+			operation: "List nodes",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

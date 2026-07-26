@@ -4,7 +4,6 @@ import {
 	verifyEnvEncryptPublicKeyLegacy,
 	type GetAppEnvEncryptPubKey,
 } from "@phala/cloud";
-import { logger } from "@/src/utils/logger";
 
 function stripHexPrefix(value: string): string {
 	return value.startsWith("0x") ? value.slice(2) : value;
@@ -83,10 +82,7 @@ export async function getEncryptPubkey(
 		});
 
 		if (!resp.success) {
-			logger.logDetailedError(resp.error, "Get App Env Encrypt PubKey");
-			throw new Error(
-				`Failed to get encryption public key: ${resp.error.message}`,
-			);
+			throw resp.error;
 		}
 
 		return verifyAndExtractEnvEncryptPubkey(

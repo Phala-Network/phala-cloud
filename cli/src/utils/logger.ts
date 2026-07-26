@@ -1,11 +1,453 @@
 import chalk from "chalk";
 import ora, { type Ora } from "ora";
-import type { SafeResult } from "@phala/cloud";
+import {
+	PhalaCloudError,
+	RequestError,
+	ResourceError,
+	type SafeResult,
+} from "@phala/cloud";
 import type { ZodError } from "zod";
 import { isInJsonMode } from "@/src/core/json-mode";
 
 // Re-export setJsonMode for convenience
 export { setJsonMode } from "@/src/core/json-mode";
+
+export interface CliErrorRequest {
+	readonly method?: string;
+	readonly url: string;
+}
+
+export interface CliErrorLink {
+	readonly label: string;
+	readonly url: string;
+}
+
+export interface CliErrorEnvelope {
+	readonly message: string;
+	readonly errorCode?: string;
+	readonly requestId?: string;
+	readonly httpStatus?: number;
+	readonly statusText?: string;
+	readonly request?: CliErrorRequest;
+	readonly details?: unknown;
+	readonly suggestions?: readonly string[];
+	readonly links?: readonly CliErrorLink[];
+	readonly response?: unknown;
+	readonly stack?: string;
+}
+
+export interface CliErrorPresentationOptions {
+	readonly operation?: string;
+	readonly debug?: boolean;
+	/** Human-mode only guidance appended after the normalized fields. */
+	readonly guidance?: string;
+}
+
+export type HumanErrorRenderOptions = CliErrorPresentationOptions;
+export type JsonErrorRenderOptions = Pick<
+	CliErrorPresentationOptions,
+	"operation" | "debug"
+>;
+
+export interface JsonCliError {
+	readonly success: false;
+	readonly error: string;
+	readonly operation?: string;
+	readonly error_code?: string;
+	readonly request_id?: string;
+	readonly http_status?: number;
+	readonly status_text?: string;
+	readonly request?: CliErrorRequest;
+	readonly details?: unknown;
+	readonly suggestions?: readonly string[];
+	readonly links?: readonly CliErrorLink[];
+	readonly response?: unknown;
+	readonly stack?: string;
+}
+
+interface ResultErrorLike {
+	readonly message?: unknown;
+	readonly cause?: unknown;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === "object";
+}
+
+function isResultErrorLike(value: unknown): value is ResultErrorLike {
+	return isRecord(value) && "cause" in value;
+}
+
+function asNonEmptyString(value: unknown): string | undefined {
+	if (typeof value !== "string") return undefined;
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? value : undefined;
+}
+
+function asStringArray(value: unknown): readonly string[] | undefined {
+	if (!Array.isArray(value)) return undefined;
+	const items = value.filter((item): item is string => typeof item === "string");
+	return items.length > 0 ? items : undefined;
+}
+
+function asCliErrorLinks(value: unknown): readonly CliErrorLink[] | undefined {
+	if (!Array.isArray(value)) return undefined;
+	const links: CliErrorLink[] = [];
+	for (const item of value) {
+		if (!isRecord(item)) continue;
+		const label = asNonEmptyString(item.label);
+		const url = asNonEmptyString(item.url);
+		if (label && url) {
+			links.push({ label, url });
+		}
+	}
+	return links.length > 0 ? links : undefined;
+}
+
+function formatRequestUrl(request: unknown): string | undefined {
+	if (typeof request === "string") {
+		const trimmed = request.trim();
+		return trimmed.length > 0 ? trimmed : undefined;
+	}
+	if (request instanceof URL) {
+		return request.toString();
+	}
+	if (typeof Request !== "undefined" && request instanceof Request) {
+		return request.url;
+	}
+	if (isRecord(request)) {
+		const url = asNonEmptyString(request.url);
+		if (url) return url;
+		const href = asNonEmptyString(request.href);
+		if (href) return href;
+	}
+	return undefined;
+}
+
+function formatRequestMethod(
+	request: unknown,
+	requestMethod: unknown,
+): string | undefined {
+	const explicit = asNonEmptyString(requestMethod)?.toUpperCase();
+	if (explicit) return explicit;
+	if (typeof Request !== "undefined" && request instanceof Request) {
+		const method = asNonEmptyString(request.method)?.toUpperCase();
+		if (method) return method;
+	}
+	if (isRecord(request)) {
+		const method = asNonEmptyString(request.method)?.toUpperCase();
+		if (method) return method;
+	}
+	return undefined;
+}
+
+function buildRequest(
+	request: unknown,
+	requestMethod: unknown,
+): CliErrorRequest | undefined {
+	const url = formatRequestUrl(request);
+	if (!url) return undefined;
+	const method = formatRequestMethod(request, requestMethod);
+	return method ? { method, url } : { url };
+}
+
+function extractStructuredFields(source: unknown): {
+	message?: string;
+	errorCode?: string;
+	requestId?: string;
+	details?: unknown;
+	suggestions?: readonly string[];
+	links?: readonly CliErrorLink[];
+} {
+	if (!isRecord(source)) return {};
+
+	const errorCodeRaw = asNonEmptyString(source.error_code);
+	const errorCode =
+		errorCodeRaw && !/^\d+$/.test(errorCodeRaw) ? errorCodeRaw : undefined;
+
+	return {
+		message: asNonEmptyString(source.message) ?? asNonEmptyString(source.error),
+		errorCode,
+		requestId: asNonEmptyString(source.request_id),
+		details: source.details,
+		suggestions: asStringArray(source.suggestions),
+		links: asCliErrorLinks(source.links),
+	};
+}
+
+function extractMessageFromDetail(detail: unknown): string | undefined {
+	if (typeof detail === "string") {
+		return asNonEmptyString(detail);
+	}
+	if (isRecord(detail)) {
+		return (
+			asNonEmptyString(detail.message) ?? asNonEmptyString(detail.error)
+		);
+	}
+	return undefined;
+}
+
+function semanticErrorCode(code: unknown): string | undefined {
+	const value = asNonEmptyString(code);
+	if (!value) return undefined;
+	if (/^\d+$/.test(value)) return undefined;
+	return value;
+}
+
+function normalizeSdkError(
+	error: PhalaCloudError,
+	fallbackMessage?: string,
+): CliErrorEnvelope {
+	const dataFields = extractStructuredFields(error.data);
+	const detailFields = extractStructuredFields(error.detail);
+	const resource =
+		error instanceof ResourceError
+			? {
+					errorCode: error.errorCode,
+					details: error.structuredDetails,
+					suggestions: error.suggestions,
+					links: error.links?.map((link) => ({
+						label: link.label,
+						url: link.url,
+					})),
+				}
+			: undefined;
+
+	const message =
+		asNonEmptyString(resource ? error.message : undefined) ??
+		dataFields.message ??
+		detailFields.message ??
+		extractMessageFromDetail(error.detail) ??
+		asNonEmptyString(error.message) ??
+		fallbackMessage ??
+		"Unknown error";
+
+	const errorCode =
+		resource?.errorCode ??
+		dataFields.errorCode ??
+		detailFields.errorCode ??
+		semanticErrorCode((error as { code?: unknown }).code);
+
+	const requestId =
+		asNonEmptyString(error.requestId) ??
+		dataFields.requestId ??
+		detailFields.requestId;
+
+	const httpStatus =
+		typeof error.status === "number" && error.status > 0
+			? error.status
+			: undefined;
+	const statusText =
+		httpStatus !== undefined
+			? asNonEmptyString(error.statusText)
+			: undefined;
+
+	const details =
+		resource?.details ?? dataFields.details ?? detailFields.details;
+	const suggestions =
+		resource?.suggestions ??
+		dataFields.suggestions ??
+		detailFields.suggestions;
+	const links = resource?.links ?? dataFields.links ?? detailFields.links;
+
+	const response = error.data !== undefined ? error.data : undefined;
+	const request = buildRequest(error.request, error.requestMethod);
+
+	return {
+		message,
+		...(errorCode ? { errorCode } : {}),
+		...(requestId ? { requestId } : {}),
+		...(httpStatus !== undefined ? { httpStatus } : {}),
+		...(statusText ? { statusText } : {}),
+		...(request ? { request } : {}),
+		...(details !== undefined ? { details } : {}),
+		...(suggestions ? { suggestions } : {}),
+		...(links ? { links } : {}),
+		...(response !== undefined ? { response } : {}),
+		...(error.stack ? { stack: error.stack } : {}),
+	};
+}
+
+/**
+ * Normalize any thrown/returned CLI or SDK failure into a shared envelope.
+ */
+export function normalizeCliError(error: unknown): CliErrorEnvelope {
+	if (isResultErrorLike(error) && error.cause !== undefined) {
+		const nested = normalizeCliError(error.cause);
+		const outerMessage = asNonEmptyString(error.message);
+		if (nested.message && nested.message !== "Unknown error") {
+			return nested;
+		}
+		if (outerMessage) {
+			return { ...nested, message: outerMessage };
+		}
+		return nested;
+	}
+
+	if (error instanceof ResourceError || error instanceof RequestError) {
+		return normalizeSdkError(error);
+	}
+
+	if (error instanceof PhalaCloudError) {
+		return normalizeSdkError(error);
+	}
+
+	if (error instanceof Error) {
+		return {
+			message: asNonEmptyString(error.message) ?? "Unknown error",
+			...(error.stack ? { stack: error.stack } : {}),
+		};
+	}
+
+	const text = String(error || "Unknown error");
+	return { message: text.length > 0 ? text : "Unknown error" };
+}
+
+function formatDetailLines(details: unknown): string[] {
+	if (!Array.isArray(details)) {
+		if (details === undefined || details === null) return [];
+		return [`  - ${typeof details === "string" ? details : JSON.stringify(details)}`];
+	}
+
+	const lines: string[] = [];
+	for (const item of details) {
+		if (typeof item === "string") {
+			lines.push(`  - ${item}`);
+			continue;
+		}
+		if (!isRecord(item)) {
+			lines.push(`  - ${String(item)}`);
+			continue;
+		}
+		const message = asNonEmptyString(item.message);
+		if (message) {
+			lines.push(`  - ${message}`);
+			continue;
+		}
+		const field = asNonEmptyString(item.field);
+		if (field && item.value !== undefined) {
+			const value =
+				typeof item.value === "string" ||
+				typeof item.value === "number" ||
+				typeof item.value === "boolean"
+					? String(item.value)
+					: JSON.stringify(item.value);
+			lines.push(`  - ${field}: ${value}`);
+			continue;
+		}
+		lines.push(`  - ${JSON.stringify(item)}`);
+	}
+	return lines;
+}
+
+/**
+ * Render one human-readable failure block for stderr.
+ */
+export function renderHumanCliError(
+	envelope: CliErrorEnvelope,
+	options: HumanErrorRenderOptions = {},
+): string {
+	const lines: string[] = [];
+	const operation = asNonEmptyString(options.operation);
+
+	if (operation) {
+		lines.push(`${operation} failed.`);
+	}
+
+	if (envelope.errorCode) {
+		lines.push(`Error [${envelope.errorCode}]: ${envelope.message}`);
+	} else {
+		lines.push(`Message: ${envelope.message}`);
+	}
+
+	if (envelope.request) {
+		const method = envelope.request.method
+			? `${envelope.request.method} `
+			: "";
+		lines.push(`Request: ${method}${envelope.request.url}`);
+	}
+
+	if (envelope.httpStatus !== undefined) {
+		const statusText = envelope.statusText ? ` ${envelope.statusText}` : "";
+		lines.push(`HTTP: ${envelope.httpStatus}${statusText}`);
+	}
+
+	if (envelope.requestId) {
+		lines.push(`Request ID: ${envelope.requestId}`);
+	}
+
+	const detailLines = formatDetailLines(envelope.details);
+	if (detailLines.length > 0) {
+		lines.push("");
+		lines.push("Details:");
+		lines.push(...detailLines);
+	}
+
+	if (envelope.suggestions && envelope.suggestions.length > 0) {
+		lines.push("");
+		lines.push("Suggestions:");
+		for (const suggestion of envelope.suggestions) {
+			lines.push(`  - ${suggestion}`);
+		}
+	}
+
+	if (envelope.links && envelope.links.length > 0) {
+		lines.push("");
+		lines.push("Learn more:");
+		for (const link of envelope.links) {
+			lines.push(`  - ${link.label}: ${link.url}`);
+		}
+	}
+
+	const guidance = asNonEmptyString(options.guidance);
+	if (guidance) {
+		lines.push("");
+		lines.push(guidance);
+	}
+
+	if (options.debug) {
+		if (envelope.response !== undefined) {
+			lines.push("");
+			lines.push("Response:");
+			lines.push(JSON.stringify(envelope.response, null, 2));
+		}
+		if (envelope.stack) {
+			lines.push("");
+			lines.push("Stack:");
+			lines.push(envelope.stack);
+		}
+	}
+
+	return `${lines.join("\n")}\n`;
+}
+
+/**
+ * Build one JSON failure envelope for stdout.
+ */
+export function buildJsonCliError(
+	envelope: CliErrorEnvelope,
+	options: JsonErrorRenderOptions = {},
+): JsonCliError {
+	const operation = asNonEmptyString(options.operation);
+
+	return {
+		success: false,
+		error: envelope.message,
+		...(operation ? { operation } : {}),
+		...(envelope.errorCode ? { error_code: envelope.errorCode } : {}),
+		...(envelope.requestId ? { request_id: envelope.requestId } : {}),
+		...(envelope.httpStatus !== undefined
+			? { http_status: envelope.httpStatus }
+			: {}),
+		...(envelope.statusText ? { status_text: envelope.statusText } : {}),
+		...(envelope.request ? { request: envelope.request } : {}),
+		...(envelope.details !== undefined ? { details: envelope.details } : {}),
+		...(envelope.suggestions ? { suggestions: envelope.suggestions } : {}),
+		...(envelope.links ? { links: envelope.links } : {}),
+		...(envelope.response !== undefined ? { response: envelope.response } : {}),
+		...(options.debug && envelope.stack ? { stack: envelope.stack } : {}),
+	};
+}
 
 /**
  * Wraps text at the specified width by splitting on spaces.

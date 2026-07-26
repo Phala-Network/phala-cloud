@@ -33,7 +33,10 @@ async function runEnvsEncryptCommand(
 		const result = await safeGetCvmInfo(client, context.cvmId);
 
 		if (!result.success) {
-			context.fail(result.error.message);
+			context.failWithError(result.error.cause ?? result.error, {
+				operation: "Encrypt envs",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 

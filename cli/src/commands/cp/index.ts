@@ -107,15 +107,21 @@ async function runCpCommand(
 					);
 				}
 			} catch (error) {
-				if (error instanceof NoGatewayError) {
-					logger.error(error.message);
-				} else if (error instanceof CvmNotRunningError) {
-					logger.error(error.message);
-					logger.info("Please start the CVM first using: phala cvms start");
+				if (error instanceof NoGatewayError || error instanceof CvmNotRunningError) {
+					context.failWithError(error, {
+						operation: "Copy file",
+						debug: Boolean((input as { debug?: boolean }).debug),
+						guidance: (
+							error instanceof CvmNotRunningError
+								? "Please start the CVM first using: phala cvms start"
+								: undefined
+						),
+					});
 				} else {
-					logger.error(
-						error instanceof Error ? error.message : "Failed to fetch CVM info",
-					);
+					context.failWithError(error, {
+						operation: "Copy file",
+						debug: Boolean((input as { debug?: boolean }).debug),
+					});
 				}
 				return 1;
 			}

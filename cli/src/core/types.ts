@@ -128,6 +128,20 @@ export interface CommandContext {
 	 * In human mode, outputs error message to stderr.
 	 */
 	fail(message: string, details?: unknown): void;
+
+	/**
+	 * Normalize and present an API/local error exactly once.
+	 * JSON mode writes one object to stdout; human mode writes one block to stderr.
+	 * Does not throw; callers should return 1 immediately.
+	 */
+	failWithError(
+		error: unknown,
+		options?: {
+			readonly operation?: string;
+			readonly debug?: boolean;
+			readonly guidance?: string;
+		},
+	): void;
 }
 
 export interface CommandDefinition<Schema extends ZodTypeAny = ZodTypeAny> {

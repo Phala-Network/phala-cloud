@@ -11,7 +11,7 @@ import {
 } from "./command";
 
 async function runCvmsListNodesCommand(
-	_input: CvmsListNodesCommandInput,
+	input: CvmsListNodesCommandInput,
 	context: CommandContext,
 ): Promise<number> {
 	try {
@@ -107,8 +107,10 @@ async function runCvmsListNodesCommand(
 
 		return 0;
 	} catch (error) {
-		context.fail("Failed to list available nodes");
-		logger.logDetailedError(error);
+		context.failWithError(error, {
+			operation: "List CVM nodes",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

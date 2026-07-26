@@ -134,11 +134,10 @@ export function createLogsHandler<TInput extends BaseLogsInput, TOptions>(
 
 			return 0;
 		} catch (error) {
-			context.fail(
-				`Failed to fetch ${logTypeName} logs: ${
-					error instanceof Error ? error.message : String(error)
-				}`,
-			);
+			context.failWithError(error, {
+				operation: `Fetch ${logTypeName} logs`,
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			await checkAndWarnIfLogsDisabled(appId, context);
 			return 1;
 		}

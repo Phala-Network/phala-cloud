@@ -61,7 +61,10 @@ async function runSshKeysAddCommand(
 		});
 
 		if (!result.success) {
-			context.fail(`Failed to add SSH key: ${result.error.message}`);
+			context.failWithError(result.error.cause ?? result.error, {
+				operation: "Add SSH key",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -75,8 +78,10 @@ async function runSshKeysAddCommand(
 		);
 		return 0;
 	} catch (error) {
-		logger.logDetailedError(error);
-		context.fail("Failed to add SSH key");
+		context.failWithError(error, {
+			operation: "Add SSH key",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

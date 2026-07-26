@@ -81,8 +81,10 @@ async function runInstancesRmCommand(
 		const failed = results.filter((r) => !r.deleted);
 		return failed.length > 0 ? 1 : 0;
 	} catch (error) {
-		context.fail("Failed to delete instance");
-		logger.logDetailedError(error);
+		context.failWithError(error, {
+			operation: "Remove instance",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

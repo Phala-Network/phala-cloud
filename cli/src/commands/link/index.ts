@@ -396,7 +396,9 @@ async function runInteractiveLink(context: CommandContext): Promise<number> {
 	listSpinner.stop(true);
 
 	if (!cvmResult.success) {
-		context.fail(`Failed to fetch CVMs: ${cvmResult.error.message}`);
+		context.failWithError(cvmResult.error.cause ?? cvmResult.error, {
+			operation: "Link project",
+		});
 		return 1;
 	}
 

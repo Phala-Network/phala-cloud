@@ -20,7 +20,10 @@ async function runKmsNodesCommand(
 		const result = await safeListKmsContractNodes(client, { slug: input.slug });
 
 		if (!result.success) {
-			context.fail(result.error.message);
+			context.failWithError(result.error.cause ?? result.error, {
+				operation: "List KMS nodes",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -47,12 +50,10 @@ async function runKmsNodesCommand(
 		printTable(columns, rows);
 		return 0;
 	} catch (error) {
-		logger.logDetailedError(error);
-		context.fail(
-			`Failed to list KMS contract nodes: ${
-				error instanceof Error ? error.message : String(error)
-			}`,
-		);
+		context.failWithError(error, {
+			operation: "List KMS nodes",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

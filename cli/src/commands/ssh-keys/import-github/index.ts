@@ -27,7 +27,10 @@ async function runSshKeysImportGithubCommand(
 		spinner.stop(true);
 
 		if (!result.success) {
-			context.fail(`Failed to import SSH keys: ${result.error.message}`);
+			context.failWithError(result.error.cause ?? result.error, {
+				operation: "Import GitHub SSH keys",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -55,8 +58,10 @@ async function runSshKeysImportGithubCommand(
 
 		return 0;
 	} catch (error) {
-		logger.logDetailedError(error);
-		context.fail("Failed to import SSH keys");
+		context.failWithError(error, {
+			operation: "Import GitHub SSH keys",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

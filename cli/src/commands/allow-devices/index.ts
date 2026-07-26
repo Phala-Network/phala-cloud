@@ -480,7 +480,9 @@ async function resolveAppContract(
 	} else {
 		const infoResult = await safeGetCvmInfo(client, { id: cvmIdentifier });
 		if (!infoResult.success) {
-			context.fail(infoResult.error.message);
+			context.failWithError(infoResult.error.cause ?? infoResult.error, {
+				operation: "Manage devices",
+			});
 			return null;
 		}
 
@@ -501,7 +503,9 @@ async function resolveAppContract(
 		appId: normalizeAllowlistAppId(appId),
 	});
 	if (!allowlistResult.success) {
-		context.fail(allowlistResult.error.message);
+		context.failWithError(allowlistResult.error.cause ?? allowlistResult.error, {
+			operation: "Manage devices",
+		});
 		return null;
 	}
 
@@ -634,9 +638,9 @@ async function runList(
 		return 0;
 	} catch (error) {
 		maybeLogRpcHint(error, activeChain, effectiveRpc, input.json);
-		context.fail(
-			`Failed: ${error instanceof Error ? error.message : String(error)}`,
-		);
+		context.failWithError(error, {
+			operation: "Manage devices",
+		});
 		return 1;
 	}
 }
@@ -673,7 +677,9 @@ async function runAdd(
 			const client = await getClient(context);
 			const nodesResult = await safeGetAvailableNodes(client);
 			if (!nodesResult.success) {
-				context.fail(nodesResult.error.message);
+				context.failWithError(nodesResult.error.cause ?? nodesResult.error, {
+					operation: "Manage devices",
+				});
 				return 1;
 			}
 
@@ -761,7 +767,9 @@ async function runAdd(
 					effectiveRpc,
 					input.json,
 				);
-				context.fail(`Failed to add ${deviceId}: ${err.error.message}`);
+				context.failWithError(err.error, {
+					operation: `Add device ${deviceId}`,
+				});
 				return 1;
 			}
 
@@ -821,9 +829,9 @@ async function runAdd(
 			return 0;
 		}
 		maybeLogRpcHint(error, activeChain, effectiveRpc, input.json);
-		context.fail(
-			`Failed: ${error instanceof Error ? error.message : String(error)}`,
-		);
+		context.failWithError(error, {
+			operation: "Manage devices",
+		});
 		return 1;
 	}
 }
@@ -935,7 +943,9 @@ async function runRemove(
 					effectiveRpc,
 					input.json,
 				);
-				context.fail(`Failed to remove ${deviceId}: ${err.error.message}`);
+				context.failWithError(err.error, {
+					operation: `Remove device ${deviceId}`,
+				});
 				return 1;
 			}
 
@@ -1012,9 +1022,9 @@ async function runRemove(
 			return 0;
 		}
 		maybeLogRpcHint(error, activeChain, effectiveRpc, input.json);
-		context.fail(
-			`Failed: ${error instanceof Error ? error.message : String(error)}`,
-		);
+		context.failWithError(error, {
+			operation: "Manage devices",
+		});
 		return 1;
 	}
 }
@@ -1055,9 +1065,9 @@ async function runAllowAny(
 		});
 	} catch (error) {
 		maybeLogRpcHint(error, activeChain, effectiveRpc, input.json);
-		context.fail(
-			`Failed: ${error instanceof Error ? error.message : String(error)}`,
-		);
+		context.failWithError(error, {
+			operation: "Manage devices",
+		});
 		return 1;
 	}
 }
@@ -1086,9 +1096,9 @@ async function runDisallowAny(
 		});
 	} catch (error) {
 		maybeLogRpcHint(error, activeChain, effectiveRpc, input.json);
-		context.fail(
-			`Failed: ${error instanceof Error ? error.message : String(error)}`,
-		);
+		context.failWithError(error, {
+			operation: "Manage devices",
+		});
 		return 1;
 	}
 }
@@ -1127,9 +1137,9 @@ async function runToggleAllowAny(
 		});
 	} catch (error) {
 		maybeLogRpcHint(error, activeChain, effectiveRpc, input.json);
-		context.fail(
-			`Failed: ${error instanceof Error ? error.message : String(error)}`,
-		);
+		context.failWithError(error, {
+			operation: "Manage devices",
+		});
 		return 1;
 	}
 }

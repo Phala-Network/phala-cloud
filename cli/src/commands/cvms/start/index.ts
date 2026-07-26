@@ -35,7 +35,10 @@ async function runCvmsStartCommand(
 		spinner.stop(true);
 
 		if (!result.success) {
-			context.fail(`Failed to start CVM: ${result.error.message}`);
+			context.failWithError(result.error.cause ?? result.error, {
+				operation: "Start CVM",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -67,8 +70,10 @@ ${CLOUD_URL}/dashboard/cvms/app_${response.app_id}`,
 		);
 		return 0;
 	} catch (error) {
-		context.fail("Failed to start CVM");
-		logger.logDetailedError(error);
+		context.failWithError(error, {
+			operation: "Start CVM",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

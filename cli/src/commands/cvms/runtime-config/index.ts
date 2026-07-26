@@ -3,7 +3,6 @@ import { defineCommand } from "@/src/core/define-command";
 import { isInJsonMode } from "@/src/core/json-mode";
 import type { CommandContext } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
-import { logger } from "@/src/utils/logger";
 import {
 	cvmsRuntimeConfigCommandMeta,
 	cvmsRuntimeConfigCommandSchema,
@@ -11,7 +10,7 @@ import {
 } from "./command";
 
 async function runCvmsRuntimeConfigCommand(
-	_input: CvmsRuntimeConfigCommandInput,
+	input: CvmsRuntimeConfigCommandInput,
 	context: CommandContext,
 ): Promise<number> {
 	if (!context.cvmId) {
@@ -26,7 +25,10 @@ async function runCvmsRuntimeConfigCommand(
 		const result = await safeGetCvmUserConfig(client, context.cvmId);
 
 		if (!result.success) {
-			context.fail(`Failed to get runtime config: ${result.error.message}`);
+			context.failWithError(result.error.cause ?? result.error, {
+				operation: "Get runtime config",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -53,8 +55,10 @@ async function runCvmsRuntimeConfigCommand(
 
 		return 0;
 	} catch (error) {
-		logger.logDetailedError(error);
-		context.fail("Failed to get CVM runtime config");
+		context.failWithError(error, {
+			operation: "Get runtime config",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }
@@ -65,5 +69,3 @@ export const cvmsRuntimeConfigCommand = defineCommand({
 	schema: cvmsRuntimeConfigCommandSchema,
 	handler: runCvmsRuntimeConfigCommand,
 });
-
-export default cvmsRuntimeConfigCommand;

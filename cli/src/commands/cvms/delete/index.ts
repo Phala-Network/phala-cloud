@@ -29,7 +29,10 @@ async function runCvmsDeleteCommand(
 		const infoResult = await safeGetCvmInfo(client, context.cvmId);
 
 		if (!infoResult.success) {
-			context.fail(infoResult.error.message);
+			context.failWithError(infoResult.error.cause ?? infoResult.error, {
+				operation: "Delete CVM",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -71,9 +74,10 @@ async function runCvmsDeleteCommand(
 		spinner.stop(true);
 
 		if (!result.success) {
-			context.fail(
-				`Failed to delete CVM ${cvmIdentifier}: ${result.error.message}`,
-			);
+			context.failWithError(result.error.cause ?? result.error, {
+				operation: "Delete CVM",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -85,8 +89,10 @@ async function runCvmsDeleteCommand(
 		logger.success(`CVM ${cvmIdentifier} deleted successfully`);
 		return 0;
 	} catch (error) {
-		context.fail("Failed to delete CVM");
-		logger.logDetailedError(error);
+		context.failWithError(error, {
+			operation: "Delete CVM",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

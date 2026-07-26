@@ -17,15 +17,11 @@ import { parseDiskSizeInput, parseMemoryInput } from "@/src/utils/units";
 import {
 	type Client,
 	type EnvVar,
-	type ErrorLink,
 	CvmIdSchema,
 	MAX_COMPOSE_PAYLOAD_BYTES,
-	RequestError,
-	ResourceError,
 	SUPPORTED_CHAINS,
 	createClient,
 	encryptEnvVars,
-	formatStructuredError,
 	parseEnvVars,
 	safeAddComposeHash,
 	safeAddDevice,
@@ -113,168 +109,6 @@ export function applyForceStopOption(
 ): void {
 	if (!forceStop) return;
 	patchBody.allow_force_stop = true;
-}
-
-/**
- * Handle provision error with structured error response
- */
-function handleProvisionError(
-	error: unknown,
-	options: Options,
-): string | object {
-	// Check if it's a ResourceError with structured details
-	if (error instanceof ResourceError) {
-		if (options.json) {
-			return {
-				success: false,
-				error_code: error.errorCode,
-				message: error.message,
-				details: error.structuredDetails,
-				suggestions: error.suggestions,
-				links: error.links,
-			};
-		}
-		return formatStructuredError(error);
-	}
-
-	// RequestError from the SDK: .detail is extracted from the response body
-	// (e.g. { error_code: "ERR-02-009", message: "...", ... })
-	if (
-		error instanceof RequestError &&
-		typeof error.detail === "object" &&
-		error.detail !== null &&
-		"error_code" in error.detail
-	) {
-		const { error_code, message, details, suggestions, links } =
-			error.detail as {
-				error_code: string;
-				message: string;
-				details?: Array<{
-					field?: string;
-					value?: unknown;
-					message?: string;
-				}>;
-				suggestions?: string[];
-				links?: Array<{ url: string; label: string }>;
-			};
-
-		if (options.json) {
-			return {
-				success: false,
-				error_code,
-				message,
-				details,
-				suggestions,
-				links,
-			};
-		}
-
-		let output = `\nError [${error_code}]: ${message}\n`;
-
-		if (details && details.length > 0) {
-			output += "\nDetails:\n";
-			for (const d of details) {
-				if (d.message) {
-					output += `  - ${d.message}\n`;
-				} else if (d.field && d.value !== undefined) {
-					output += `  - ${d.field}: ${d.value}\n`;
-				}
-			}
-		}
-
-		if (suggestions && suggestions.length > 0) {
-			output += "\nSuggestions:\n";
-			for (const s of suggestions) {
-				output += `  - ${s}\n`;
-			}
-		}
-
-		if (links && links.length > 0) {
-			output += "\nLearn more:\n";
-			for (const link of links) {
-				output += `  - ${link.label}: ${link.url}\n`;
-			}
-		}
-
-		return output;
-	}
-
-	// Parse structured error from plain object (backward compatibility)
-	if (error && typeof error === "object" && "response" in error) {
-		const errorWithResponse = error as {
-			response?: {
-				data?: {
-					detail?: unknown;
-				};
-			};
-		};
-		const errorData = errorWithResponse.response?.data?.detail;
-		if (
-			errorData &&
-			typeof errorData === "object" &&
-			"error_code" in errorData
-		) {
-			const { error_code, message, details, suggestions, links } =
-				errorData as {
-					error_code: string;
-					message: string;
-					details?: Array<{
-						field?: string;
-						value?: unknown;
-						message?: string;
-					}>;
-					suggestions?: string[];
-					links?: Array<{ url: string; label: string }>;
-				};
-
-			if (options.json) {
-				return {
-					success: false,
-					error_code,
-					message,
-					details,
-					suggestions,
-					links,
-				};
-			}
-
-			let output = `\nError [${error_code}]: ${message}\n`;
-
-			if (details && details.length > 0) {
-				output += "\nDetails:\n";
-				for (const d of details) {
-					if (d.message) {
-						output += `  - ${d.message}\n`;
-					} else if (d.field && d.value !== undefined) {
-						output += `  - ${d.field}: ${d.value}\n`;
-					}
-				}
-			}
-
-			if (suggestions && suggestions.length > 0) {
-				output += "\nSuggestions:\n";
-				for (const s of suggestions) {
-					output += `  - ${s}\n`;
-				}
-			}
-
-			if (links && links.length > 0) {
-				output += "\nLearn more:\n";
-				for (const link of links) {
-					output += `  - ${link.label}: ${link.url}\n`;
-				}
-			}
-
-			return output;
-		}
-	}
-
-	// Fallback to generic error
-	const message =
-		error instanceof Error ? error.message : String(error || "Unknown error");
-	return options.json
-		? { success: false, error: message }
-		: `\nError: ${message}\n`;
 }
 
 const API_VERSION = "2026-05-22" as const;
@@ -882,11 +716,6 @@ const deployNewCvm = async (
 	// Provision - backend will auto-match resources
 	const provision_result = await safeProvisionCvm(client, payload);
 	if (!provision_result.success) {
-		const formattedError = handleProvisionError(
-			provision_result.error,
-			validatedOptions,
-		);
-		logger.error("Error in provisioning CVM:", formattedError);
 		throw provision_result.error;
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
@@ -945,12 +774,8 @@ const deployNewCvm = async (
 		});
 
 		if (!deploy_result.success) {
-			logger.logDetailedError(deploy_result, "Deploy App Auth");
-			const errorMsg =
-				typeof deploy_result === "object" && deploy_result !== null
-					? JSON.stringify(deploy_result)
-					: String(deploy_result);
-			throw new Error(`Deployment contract failed: ${errorMsg}`);
+			const failure = deploy_result as { error?: unknown };
+			throw failure.error ?? new Error("Deployment contract failed");
 		}
 
 		// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
@@ -969,10 +794,7 @@ const deployNewCvm = async (
 		});
 
 		if (!resp.success) {
-			logger.logDetailedError(resp.error, "Get App Env Encrypt PubKey");
-			throw new Error(
-				`Failed to get app env encrypt pubkey: ${resp.error.message}`,
-			);
+			throw resp.error;
 		}
 
 		const pubkey = verifyAndExtractEnvEncryptPubkey(
@@ -1006,10 +828,7 @@ const deployNewCvm = async (
 	}
 
 	if (!commit_result.success) {
-		logger.logDetailedError(commit_result.error, "Commit CVM Provision");
-		throw new Error(
-			`Failed to commit CVM provision: ${commit_result.error.message}`,
-		);
+		throw commit_result.error;
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
 	const cvm = commit_result.data as any;
@@ -1054,8 +873,7 @@ const updateCvm = async (
 		id: validatedOptions.uuid,
 	});
 	if (!cvm_result.success) {
-		logger.logDetailedError(cvm_result.error, "Get CVM Info");
-		throw new Error(`Failed to get cvm info: ${cvm_result.error.message}`);
+		throw cvm_result.error;
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
 	const cvm = cvm_result.data as any;
@@ -1074,10 +892,7 @@ const updateCvm = async (
 				kms: kmsSlug,
 			});
 			if (!resp.success) {
-				logger.logDetailedError(resp.error, "Get App Env Encrypt PubKey");
-				throw new Error(
-					`Failed to get app env encrypt pubkey: ${resp.error.message}`,
-				);
+				throw resp.error;
 			}
 			const pubkey = verifyAndExtractEnvEncryptPubkey(
 				resp.data,
@@ -1127,11 +942,6 @@ const updateCvm = async (
 	// biome-ignore lint/suspicious/noExplicitAny: dynamic patch body
 	const patchResult = await safePatchCvm(client, patchBody as any);
 	if (!patchResult.success) {
-		const formattedError = handleProvisionError(
-			patchResult.error,
-			validatedOptions,
-		);
-		logger.error("Error updating CVM:", formattedError);
 		throw patchResult.error;
 	}
 
@@ -1373,7 +1183,6 @@ const updateCvm = async (
 				context,
 			);
 		} catch (error: unknown) {
-			logger.logDetailedError(error, "Wait for CVM Ready");
 			throw new Error(
 				`Wait failed: ${error instanceof Error ? error.message : String(error)}`,
 			);
@@ -1464,7 +1273,7 @@ const commitCvmUpdate = async (
 export async function runDeploy(
 	input: DeployCommandInput,
 	context: CommandContext,
-): Promise<void> {
+): Promise<number> {
 	try {
 		// Handle --commit mode: skip compose file reading entirely
 		// commit-update endpoint is token-based (no API key required),
@@ -1589,25 +1398,16 @@ export async function runDeploy(
 				preLaunchScriptContent,
 			);
 		}
+		return 0;
 	} catch (error) {
-		if (input.json !== false) {
-			context.stderr.write(
-				`${JSON.stringify(
-					{
-						success: false,
-						error: error instanceof Error ? error.message : String(error),
-						stack:
-							input.debug && error instanceof Error ? error.stack : undefined,
-					},
-					null,
-					2,
-				)}\n`,
-			);
-		} else {
-			context.stderr.write(
-				`${dedent`${error instanceof Error ? error.message : String(error)}`}\n`,
-			);
-		}
-		throw error;
+		const isUpdate = Boolean(context.cvmId);
+		context.failWithError(error, {
+			operation: isUpdate ? "CVM update" : "CVM deployment",
+			debug: input.debug,
+			guidance: isUpdate
+				? "Check the CVM status before retrying. Include the Request ID when contacting support."
+				: undefined,
+		});
+		return 1;
 	}
 }
