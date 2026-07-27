@@ -53,7 +53,10 @@ async function runEnvsUpdateCommand(
 		const cvmResult = await safeGetCvmInfo(client, context.cvmId);
 
 		if (!cvmResult.success) {
-			context.fail(cvmResult.error.message);
+			context.failWithError(cvmResult.error.cause ?? cvmResult.error, {
+				operation: "Update envs",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -88,7 +91,10 @@ async function runEnvsUpdateCommand(
 		});
 
 		if (!updateResult.success) {
-			context.fail(updateResult.error.message);
+			context.failWithError(updateResult.error.cause ?? updateResult.error, {
+				operation: "Update envs",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -135,8 +141,11 @@ async function runEnvsUpdateCommand(
 			});
 
 			if (!addHashResult.success) {
-				logger.logDetailedError(addHashResult, "Add Compose Hash");
-				context.fail("Failed to register compose hash on-chain.");
+				const failure = addHashResult as { error?: unknown };
+				context.failWithError(failure.error ?? addHashResult, {
+					operation: "Update envs",
+					debug: Boolean((input as { debug?: boolean }).debug),
+				});
 				return 1;
 			}
 
@@ -154,9 +163,12 @@ async function runEnvsUpdateCommand(
 			});
 
 			if (!retryResult.success) {
-				context.fail(retryResult.error.message);
-				return 1;
-			}
+			context.failWithError(retryResult.error.cause ?? retryResult.error, {
+				operation: "Update envs",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
+			return 1;
+		}
 
 			if (retryResult.data.status === "in_progress") {
 				logger.success(

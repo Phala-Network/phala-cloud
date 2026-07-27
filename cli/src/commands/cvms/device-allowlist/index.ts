@@ -27,7 +27,10 @@ async function runCvmsDeviceAllowlistCommand(
 
 		const infoResult = await safeGetCvmInfo(client, context.cvmId);
 		if (!infoResult.success) {
-			context.fail(infoResult.error.message);
+			context.failWithError(infoResult.error.cause ?? infoResult.error, {
+				operation: "Manage device allowlist",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -45,7 +48,10 @@ async function runCvmsDeviceAllowlistCommand(
 
 		const result = await safeGetAppDeviceAllowlist(client, { appId });
 		if (!result.success) {
-			context.fail(result.error.message);
+			context.failWithError(result.error.cause ?? result.error, {
+				operation: "Manage device allowlist",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -86,12 +92,10 @@ async function runCvmsDeviceAllowlistCommand(
 
 		return 0;
 	} catch (error) {
-		logger.logDetailedError(error);
-		context.fail(
-			`Failed to get device allowlist: ${
-				error instanceof Error ? error.message : String(error)
-			}`,
-		);
+		context.failWithError(error, {
+			operation: "Manage device allowlist",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

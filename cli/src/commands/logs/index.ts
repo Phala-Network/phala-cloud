@@ -203,11 +203,10 @@ async function runCvmMode(
 
 		return 0;
 	} catch (error) {
-		context.fail(
-			`Failed to fetch CVM ${channel} logs: ${
-				error instanceof Error ? error.message : String(error)
-			}`,
-		);
+		context.failWithError(error, {
+			operation: `Fetch CVM ${channel} logs`,
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }
@@ -290,11 +289,10 @@ async function runContainerMode(
 		}
 		return 0;
 	} catch (error) {
-		context.fail(
-			`Failed to fetch container logs: ${
-				error instanceof Error ? error.message : String(error)
-			}`,
-		);
+		context.failWithError(error, {
+			operation: "Fetch container logs",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		await checkAndWarnIfLogsDisabled(appId);
 		return 1;
 	}

@@ -65,9 +65,12 @@ function createChainHandler(chain: string) {
 			});
 
 			if (!result.success) {
-				context.fail(result.error.message);
-				return 1;
-			}
+			context.failWithError(result.error.cause ?? result.error, {
+				operation: "List KMS chains",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
+			return 1;
+		}
 
 			const data = result.data;
 
@@ -145,12 +148,10 @@ function createChainHandler(chain: string) {
 
 			return 0;
 		} catch (error) {
-			logger.logDetailedError(error);
-			context.fail(
-				`Failed to get KMS details for ${chain}: ${
-					error instanceof Error ? error.message : String(error)
-				}`,
-			);
+			context.failWithError(error, {
+				operation: "List KMS chains",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 	};
@@ -181,7 +182,10 @@ async function runKmsPhalaCommand(
 		const result = await safeGetKmsContract(client, { slug: "phala" });
 
 		if (!result.success) {
-			context.fail(result.error.message);
+			context.failWithError(result.error.cause ?? result.error, {
+				operation: "List KMS chains",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -197,12 +201,10 @@ async function runKmsPhalaCommand(
 		kv("CA pubkey", hex(contract.ca_pubkey));
 		return 0;
 	} catch (error) {
-		logger.logDetailedError(error);
-		context.fail(
-			`Failed to get Phala KMS details: ${
-				error instanceof Error ? error.message : String(error)
-			}`,
-		);
+		context.failWithError(error, {
+			operation: "List KMS chains",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

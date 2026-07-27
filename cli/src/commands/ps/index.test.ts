@@ -55,15 +55,16 @@ function makeContext(overrides: Partial<CommandContext> = {}): CommandContext {
 		projectConfig: {},
 		success() {},
 		fail() {},
+		failWithError() {},
 		...overrides,
-	};
+	} as CommandContext;
 }
 
 describe("ps command", () => {
 	let consoleSpy: ReturnType<typeof spyOn>;
 
 	beforeEach(() => {
-		mockSafeGetCvmContainersStats.mockReset();
+		mockSafeGetCvmContainersStats.mockClear();
 		consoleSpy = spyOn(console, "log").mockImplementation(() => {});
 	});
 
@@ -227,17 +228,17 @@ describe("ps command", () => {
 			error: { message: "Unauthorized" },
 		});
 
-		const failMessages: string[] = [];
+		const failErrors: unknown[] = [];
 		const code = await psCommand.run(
 			{ cvmId: "test-app", json: false, interactive: false },
 			makeContext({
 				cvmId: { id: "test-app" },
-				fail: (msg: string) => {
-					failMessages.push(msg);
+				failWithError: (error: unknown) => {
+					failErrors.push(error);
 				},
 			}),
 		);
 		expect(code).toBe(1);
-		expect(failMessages[0]).toBe("Unauthorized");
+		expect(failErrors[0]).toEqual({ message: "Unauthorized" });
 	});
 });

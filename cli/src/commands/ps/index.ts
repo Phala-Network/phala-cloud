@@ -39,7 +39,13 @@ async function runPsCommand(
 		const result = await safeGetCvmContainersStats(client, context.cvmId);
 
 		if (!result.success) {
-			context.fail(result.error.message);
+			context.failWithError(
+				(result.error as { cause?: unknown }).cause ?? result.error,
+				{
+					operation: "List containers",
+					debug: Boolean((input as { debug?: boolean }).debug),
+				},
+			);
 			return 1;
 		}
 
@@ -94,12 +100,10 @@ async function runPsCommand(
 
 		return 0;
 	} catch (error) {
-		logger.logDetailedError(error);
-		context.fail(
-			`Failed to list containers: ${
-				error instanceof Error ? error.message : String(error)
-			}`,
-		);
+		context.failWithError(error, {
+			operation: "List containers",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

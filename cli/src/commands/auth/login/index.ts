@@ -129,8 +129,10 @@ async function runLoginCommand(
 		logger.info(`Open in Web UI at ${CLOUD_URL}/dashboard/`);
 		return 0;
 	} catch (error) {
-		logger.error("Failed to set API key");
-		logger.logDetailedError(error);
+		context.failWithError(error, {
+			operation: "Login",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

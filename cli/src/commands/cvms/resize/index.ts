@@ -84,7 +84,10 @@ async function runCvmsResizeCommand(
 		const infoResult = await safeGetCvmInfo(client, context.cvmId);
 
 		if (!infoResult.success) {
-			context.fail(infoResult.error.message);
+			context.failWithError(infoResult.error.cause ?? infoResult.error, {
+				operation: "Resize CVM",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -237,9 +240,10 @@ ${CLOUD_URL}/dashboard/cvms/app_${resolvedAppId}`,
 		}
 		return 0;
 	} catch (error) {
-		logger.error("Failed to resize CVM");
-		logger.logDetailedError(error);
-		context.fail(error instanceof Error ? error.message : String(error));
+		context.failWithError(error, {
+			operation: "Resize CVM",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

@@ -119,12 +119,10 @@ async function runInstancesLsCommand(
 		printTable(columns, rows);
 		return 0;
 	} catch (error) {
-		logger.logDetailedError(error);
-		context.fail(
-			`Failed to list instances: ${
-				error instanceof Error ? error.message : String(error)
-			}`,
-		);
+		context.failWithError(error, {
+			operation: "List instances",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

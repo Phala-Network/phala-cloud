@@ -11,12 +11,7 @@ async function handler(
 	input: DeployCommandInput,
 	context: CommandContext,
 ): Promise<number> {
-	try {
-		await runDeploy(input, context);
-		return 0;
-	} catch (error) {
-		return 1;
-	}
+	return runDeploy(input, context);
 }
 
 export const deployCommand = defineCommand({

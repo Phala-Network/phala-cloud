@@ -31,7 +31,10 @@ async function runCvmsRestartCommand(
 		const infoResult = await safeGetCvmInfo(client, context.cvmId);
 
 		if (!infoResult.success) {
-			context.fail(infoResult.error.message);
+			context.failWithError(infoResult.error.cause ?? infoResult.error, {
+				operation: "Restart CVM",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -57,7 +60,10 @@ async function runCvmsRestartCommand(
 		spinner.stop(true);
 
 		if (!result.success) {
-			context.fail(`Failed to restart CVM: ${result.error.message}`);
+			context.failWithError(result.error.cause ?? result.error, {
+				operation: "Restart CVM",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -92,8 +98,10 @@ ${CLOUD_URL}/dashboard/cvms/app_${response.app_id}`,
 		);
 		return 0;
 	} catch (error) {
-		context.fail("Failed to restart CVM");
-		logger.logDetailedError(error);
+		context.failWithError(error, {
+			operation: "Restart CVM",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

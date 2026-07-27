@@ -11,6 +11,11 @@ import { isInJsonMode, setJsonMode } from "./json-mode";
 import { getProjectConfig } from "@/src/utils/project-config";
 import { selectCvm } from "@/src/api/cvms";
 import { checkForUpdates, getCachedUpdateNotice } from "./update-check";
+import {
+	buildJsonCliError,
+	normalizeCliError,
+	renderHumanCliError,
+} from "@/src/utils/logger";
 
 export interface DispatchOptions {
 	readonly registry: CommandRegistry;
@@ -348,6 +353,32 @@ export async function dispatchCommand(
 						stderr.write(`${JSON.stringify(details, null, 2)}\n`);
 					}
 				}
+			},
+
+			failWithError(
+				error: unknown,
+				options?: {
+					readonly operation?: string;
+					readonly debug?: boolean;
+					readonly guidance?: string;
+				},
+			): void {
+				const envelope = normalizeCliError(error);
+				if (isInJsonMode()) {
+					const payload = buildJsonCliError(envelope, {
+						operation: options?.operation,
+						debug: options?.debug,
+					});
+					stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+					return;
+				}
+				stderr.write(
+					renderHumanCliError(envelope, {
+						operation: options?.operation,
+						debug: options?.debug,
+						guidance: options?.guidance,
+					}),
+				);
 			},
 		};
 

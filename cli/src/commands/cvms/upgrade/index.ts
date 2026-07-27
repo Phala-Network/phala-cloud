@@ -58,7 +58,10 @@ async function runCvmsUpgradeCommand(
 		const infoResult = await safeGetCvmInfo(client, context.cvmId);
 
 		if (!infoResult.success) {
-			context.fail(infoResult.error.message);
+			context.failWithError(infoResult.error.cause ?? infoResult.error, {
+				operation: "Upgrade CVM",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 

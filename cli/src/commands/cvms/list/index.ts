@@ -53,11 +53,14 @@ async function runCvmsListCommand(
 
 		if (result.success === false) {
 			const cause = result.error.cause;
-			logger.logDetailedError(cause ?? result.error);
-			const message = isTimeoutCause(cause)
-				? formatTimeoutMessage(resolveTimeoutSeconds(context))
-				: result.error.message;
-			context.fail(message);
+			if (isTimeoutCause(cause)) {
+				context.fail(formatTimeoutMessage(resolveTimeoutSeconds(context)));
+				return 1;
+			}
+			context.failWithError(cause ?? result.error, {
+				operation: "List CVMs",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -85,12 +88,10 @@ async function runCvmsListCommand(
 		logger.info(`Page ${data.page}/${data.totalPages} (total ${data.total})`);
 		return 0;
 	} catch (error) {
-		logger.logDetailedError(error);
-		context.fail(
-			`Failed to list CVMs: ${
-				error instanceof Error ? error.message : String(error)
-			}`,
-		);
+		context.failWithError(error, {
+			operation: "List CVMs",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

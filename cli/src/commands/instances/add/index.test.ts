@@ -73,8 +73,9 @@ function makeContext(overrides: Partial<CommandContext> = {}): CommandContext {
 		projectConfig: {},
 		success() {},
 		fail() {},
+		failWithError() {},
 		...overrides,
-	};
+	} as CommandContext;
 }
 
 describe("instances add command", () => {

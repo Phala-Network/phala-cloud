@@ -36,11 +36,10 @@ export async function runStatusCommand(
 		const result = await safeGetCurrentUser(client);
 
 		if (!result.success) {
-			logger.error("Failed to get user information");
-			if (result.error) {
-				logger.error(`Error: ${result.error.message}`);
-			}
-			context.fail(result.error?.message || "Failed to get user information");
+			context.failWithError(result.error.cause ?? result.error, {
+				operation: "Status",
+				debug,
+			});
 			return 1;
 		}
 
@@ -88,17 +87,11 @@ export async function runStatusCommand(
 
 		return 0;
 	} catch (error) {
-		logger.error(
-			"Authentication failed. Your API key may be invalid or expired.",
-		);
-		logger.info('Please set a new API key with "phala login"');
-
-		if (debug) {
-			logger.logDetailedError(error);
-		}
-		context.fail(
-			"Authentication failed. Your API key may be invalid or expired.",
-		);
+		context.failWithError(error, {
+			operation: "Status",
+			debug,
+			guidance: 'Please set a new API key with "phala login".',
+		});
 		return 1;
 	}
 }

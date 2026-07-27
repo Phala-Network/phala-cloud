@@ -28,7 +28,10 @@ async function runCvmsAttestationCommand(
 		const infoResult = await safeGetCvmInfo(client, context.cvmId);
 
 		if (!infoResult.success) {
-			context.fail(infoResult.error.message);
+			context.failWithError(infoResult.error.cause ?? infoResult.error, {
+				operation: "Get attestation",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -148,12 +151,10 @@ async function runCvmsAttestationCommand(
 			throw error;
 		}
 	} catch (error) {
-		logger.logDetailedError(error);
-		context.fail(
-			`Failed to get attestation information: ${
-				error instanceof Error ? error.message : String(error)
-			}`,
-		);
+		context.failWithError(error, {
+			operation: "Get attestation",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

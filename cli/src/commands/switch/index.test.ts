@@ -31,6 +31,7 @@ function makeContext(): CommandContext {
 		projectConfig: {},
 		success() {},
 		fail() {},
+		failWithError() {},
 	};
 }
 

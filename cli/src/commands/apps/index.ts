@@ -40,9 +40,10 @@ async function runAppsCommand(
 		});
 
 		if (result.success === false) {
-			const cause = result.error.cause;
-			logger.logDetailedError(cause ?? result.error);
-			context.fail(result.error.message);
+			context.failWithError(result.error.cause ?? result.error, {
+				operation: "List apps",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -70,12 +71,10 @@ async function runAppsCommand(
 		logger.info(`Page ${data.page}/${data.totalPages} (total ${data.total})`);
 		return 0;
 	} catch (error) {
-		logger.logDetailedError(error);
-		context.fail(
-			`Failed to list apps: ${
-				error instanceof Error ? error.message : String(error)
-			}`,
-		);
+		context.failWithError(error, {
+			operation: "List apps",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

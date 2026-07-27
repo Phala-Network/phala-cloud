@@ -31,7 +31,10 @@ async function runCvmsGetCommand(
 		spinner.stop(true);
 
 		if (!result.success) {
-			context.fail(result.error.message);
+			context.failWithError(result.error.cause ?? result.error, {
+				operation: "Get CVM",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -75,12 +78,10 @@ async function runCvmsGetCommand(
 
 		return 0;
 	} catch (error) {
-		logger.logDetailedError(error);
-		context.fail(
-			`Failed to get CVM details: ${
-				error instanceof Error ? error.message : String(error)
-			}`,
-		);
+		context.failWithError(error, {
+			operation: "Get CVM",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

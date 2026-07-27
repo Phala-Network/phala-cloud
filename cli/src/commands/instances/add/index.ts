@@ -1,10 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
-	type PhalaCloudError,
 	ResourceError,
 	type Client,
-	type ErrorLink,
 	type EnvVar,
 	SUPPORTED_CHAINS,
 	safeAddComposeHash,
@@ -14,8 +12,6 @@ import {
 	safeGetAppCvms,
 	safeGetCvmInfo,
 	encryptEnvVars,
-	formatErrorMessage,
-	formatStructuredError,
 } from "@phala/cloud";
 import { getClient } from "@/src/lib/client";
 import { getEncryptPubkey } from "@/src/commands/envs/get-encrypt-pubkey";
@@ -23,7 +19,6 @@ import { defineCommand } from "@/src/core/define-command";
 import { isInJsonMode } from "@/src/core/json-mode";
 import type { CommandContext } from "@/src/core/types";
 import { CLOUD_URL } from "@/src/utils/constants";
-import { logger } from "@/src/utils/logger";
 import {
 	instancesAddCommandMeta,
 	instancesAddCommandSchema,
@@ -502,22 +497,10 @@ async function runInstancesAddCommand(
 			return 0;
 		}
 	} catch (error) {
-		logger.error("Failed to create app instance");
-		if (error instanceof ResourceError) {
-			process.stderr.write(`${formatStructuredError(error)}\n`);
-			const links = error.links as ErrorLink[] | undefined;
-			if (links && links.length > 0) {
-				for (const link of links) {
-					process.stderr.write(`  ${link.label}: ${link.url}\n`);
-				}
-			}
-			return 1;
-		}
-		if (error instanceof Error) {
-			process.stderr.write(`${formatErrorMessage(error as PhalaCloudError)}\n`);
-			return 1;
-		}
-		logger.logDetailedError(error);
+		context.failWithError(error, {
+			operation: "Add instance",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }

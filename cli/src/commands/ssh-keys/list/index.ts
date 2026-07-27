@@ -12,7 +12,7 @@ import {
 } from "./command";
 
 async function runSshKeysListCommand(
-	_input: SshKeysListCommandInput,
+	input: SshKeysListCommandInput,
 	context: CommandContext,
 ): Promise<number> {
 	try {
@@ -20,7 +20,10 @@ async function runSshKeysListCommand(
 		const result = await safeListSshKeys(client);
 
 		if (!result.success) {
-			context.fail(`Failed to list SSH keys: ${result.error.message}`);
+			context.failWithError(result.error.cause ?? result.error, {
+				operation: "List SSH keys",
+				debug: Boolean((input as { debug?: boolean }).debug),
+			});
 			return 1;
 		}
 
@@ -56,8 +59,10 @@ async function runSshKeysListCommand(
 		printTable(columns, rows);
 		return 0;
 	} catch (error) {
-		logger.logDetailedError(error);
-		context.fail("Failed to list SSH keys");
+		context.failWithError(error, {
+			operation: "List SSH keys",
+			debug: Boolean((input as { debug?: boolean }).debug),
+		});
 		return 1;
 	}
 }
@@ -68,5 +73,3 @@ export const sshKeysListCommand = defineCommand({
 	schema: sshKeysListCommandSchema,
 	handler: runSshKeysListCommand,
 });
-
-export default sshKeysListCommand;

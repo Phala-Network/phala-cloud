@@ -206,9 +206,9 @@ describe("getEncryptPubkey", () => {
 				},
 			};
 
-			await expect(getEncryptPubkey(mockClient, cvm)).rejects.toThrow(
-				"Failed to get encryption public key",
-			);
+			await expect(getEncryptPubkey(mockClient, cvm)).rejects.toEqual({
+				message: "KMS not found",
+			});
 		});
 	});
 });
