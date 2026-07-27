@@ -12,5 +12,5 @@ const (
 	DefaultBaseURL = "https://cloud-api.phala.com/api/v1"
 
 	// sdkVersion is the version of this SDK, used in User-Agent.
-	sdkVersion = "0.1.1"
+	sdkVersion = "0.2.0"
 )

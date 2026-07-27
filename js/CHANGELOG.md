@@ -1,3 +1,40 @@
+## [](https://github.com/Phala-Network/phala-cloud/compare/js-v0.3.0...js-v) (2026-07-25)
+
+### ⚠ BREAKING CHANGE
+
+* **sdk:** reject deprecated user_id/teepod_id/node_id CVM list filters
+
+### feat
+
+* add algorithm_version to DeviceIdEntry ([701ac00](https://github.com/Phala-Network/phala-cloud/commit/701ac0017acc5fb7851e285e27cc1e9ba7af05cd))
+* add device_ids matrix to node schemas ([de36a3a](https://github.com/Phala-Network/phala-cloud/commit/de36a3af84b1f16abdadeada607d00843817e244))
+* add kms_contract_id to CVM SDK schemas, deprecate kms_id ([16734b9](https://github.com/Phala-Network/phala-cloud/commit/16734b9d22c2e6584c3c320b64d2bd48cdcb5a2b))
+* drop os_image_ids from DeviceIdEntry ([8509162](https://github.com/Phala-Network/phala-cloud/commit/8509162d47b0973333e6bb2526ec6ae5261c69aa))
+* **js,cli:** add compose types and mr_config_id computation ([c5e321f](https://github.com/Phala-Network/phala-cloud/commit/c5e321fafd91d2063395a76b541cd2b72c8f41ff))
+* **js:** add compose_unchanged and no_change status to SDK schemas ([33699d8](https://github.com/Phala-Network/phala-cloud/commit/33699d8c8d836ce94c2e09e1bf5d98635be6ac58))
+* **js:** add disk_used_bytes and disk_total_bytes to CvmResourceUsageSchema ([5d5d385](https://github.com/Phala-Network/phala-cloud/commit/5d5d3855ed6197775a377a0133cdb0afa2333a4c))
+* **js:** add resource_usage and events to CvmStatusSchema ([fbb4ee6](https://github.com/Phala-Network/phala-cloud/commit/fbb4ee6ff407b255616786113b093f1c177afcbd))
+* **js:** declare billing_status and suspended_at on the workspace schema ([2fd4205](https://github.com/Phala-Network/phala-cloud/commit/2fd4205dd678c04909bba8f6ee0a41ee7977a0a8))
+* **js:** expose CVM shutdown operation phase ([c9fdbd3](https://github.com/Phala-Network/phala-cloud/commit/c9fdbd3fd2d0abe2bcb7908782ac87f12089e9ec))
+* **js:** expose mr_config_id in app attestations ([a1e7454](https://github.com/Phala-Network/phala-cloud/commit/a1e74547e8a38786f7aa5bf3aaca99de728e37d6))
+* **js:** model CVM operation status as an object ([1c4292a](https://github.com/Phala-Network/phala-cloud/commit/1c4292a7b219b87482c4cfd68f7fe08b64f4d623))
+* **sdk/cli:** surface KMS contract verification anchors in on-chain detail ([35a48a3](https://github.com/Phala-Network/phala-cloud/commit/35a48a3a81a4d762cb3a7b49bdcddfb196fd6db1))
+* **sdk:** add hourly_rate, billing_interval, gpu_rental_order to CVM v20260121 ([0f665eb](https://github.com/Phala-Network/phala-cloud/commit/0f665ebaa68158804a835488be4dd76cf1708895))
+* **sdk:** contract-centric KMS API, default to version 2026-06-23 ([0fb89e2](https://github.com/Phala-Network/phala-cloud/commit/0fb89e23c2c7a62bca6ef7f32649d06c9eabf2e4))
+
+### fix
+
+* **cli:** surface request details in API errors ([c53a329](https://github.com/Phala-Network/phala-cloud/commit/c53a329b4cfa3027e05d27c7e3ed5bb8e0fbbfbb))
+* **cli:** verify KMS env encryption pubkeys ([0300d64](https://github.com/Phala-Network/phala-cloud/commit/0300d645970198ca08530caa724d3651a6eb833b))
+* **js:** correct kms_info.chain_id type in app attestation schema ([f11735e](https://github.com/Phala-Network/phala-cloud/commit/f11735e927f1f006e36622dffdb3d9b88a81a607))
+* **js:** render dict/array StructuredErrorDetail values as JSON ([90d4f0b](https://github.com/Phala-Network/phala-cloud/commit/90d4f0bdbdaf3c5b551cfa7d3db3a58d75a88114))
+* **js:** type kms_info.chain_id as number in app attestation schema ([c403f86](https://github.com/Phala-Network/phala-cloud/commit/c403f8648dd0ceda2d1b6f14b1cb0fe61e3afc0d))
+* **js:** update provision assertions for the compose_unchanged default ([ced4741](https://github.com/Phala-Network/phala-cloud/commit/ced4741e9676a1fd38342fcf654a556d3dcfa973)), closes [#468](https://github.com/Phala-Network/phala-cloud/issues/468)
+* **sdk:** reject deprecated user_id/teepod_id/node_id CVM list filters ([399cea5](https://github.com/Phala-Network/phala-cloud/commit/399cea5a56054f7566b36ba6f950e4e8eb4bfeef))
+
+### refactor
+
+* **sdk:** migrate updateCvmResources to unified PATCH /cvms/{id} ([c881889](https://github.com/Phala-Network/phala-cloud/commit/c8818894012f318d82b1230e113c53c0cb42f81e))
 ## [0.3.0](https://github.com/Phala-Network/phala-cloud/compare/js-v0.2.10...js-v0.3.0) (2026-06-02)
 
 ### fix
