@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { type Client, type SafeResult } from "../../client";
+import type { Client, SafeResult } from "../../client";
 import type { ApiVersion } from "../../types/client";
-import { CvmIdSchema, CvmIdObjectSchema, refineCvmId } from "../../types/cvm_id";
-import { getVMSchemaForVersion, type VMForVersion } from "../../types/cvm_info";
+import { CvmIdObjectSchema, CvmIdSchema, refineCvmId } from "../../types/cvm_id";
+import { type VMForVersion, getVMSchemaForVersion } from "../../types/cvm_info";
 
 /**
  * Replicate (scale up) a CVM by creating a new replica
@@ -39,6 +39,7 @@ import { getVMSchemaForVersion, type VMForVersion } from "../../types/cvm_info";
 export const ReplicateCvmRequestSchema = refineCvmId(
   CvmIdObjectSchema.extend({
     node_id: z.number().optional(),
+    os_image: z.string().min(1).optional(),
   }),
 );
 
@@ -54,8 +55,11 @@ export async function replicateCvm<V extends ApiVersion>(
 ): Promise<VMForVersion<V>> {
   const parsed = ReplicateCvmRequestSchema.parse(request);
   const { cvmId } = CvmIdSchema.parse(parsed);
-  const { node_id } = parsed;
-  const response = await client.post(`/cvms/${cvmId}/replicas`, { node_id });
+  const { node_id, os_image } = parsed;
+  const response = await client.post(`/cvms/${cvmId}/replicas`, {
+    node_id,
+    os_image,
+  });
   return getVMSchemaForVersion(client.config.version).parse(response) as VMForVersion<V>;
 }
 
