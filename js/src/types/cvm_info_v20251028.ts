@@ -99,6 +99,7 @@ export const CvmDetailV20251028Schema = z.object({
   instance_type: z.string().optional().nullable(),
   public_sysinfo: z.boolean().optional().default(false),
   public_logs: z.boolean().optional().default(false),
+  managed_env: z.boolean().optional().default(false),
   dapp_dashboard_url: z.string().optional().nullable(),
   syslog_endpoint: z.string().optional().nullable(),
   kms_info: KmsInfoSchema.optional().nullable(),
