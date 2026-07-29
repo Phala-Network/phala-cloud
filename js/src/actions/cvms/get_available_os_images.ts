@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CvmIdSchema, type CvmIdInput } from "../../types/cvm_id";
+import { type CvmIdInput, CvmIdSchema } from "../../types/cvm_id";
 import { defineAction } from "../../utils/define-action";
 
 /**
@@ -7,8 +7,10 @@ import { defineAction } from "../../utils/define-action";
  */
 export const OSImageVariantSchema = z.object({
   name: z.string(),
+  slug: z.string(),
   os_image_hash: z.string().nullable(),
   is_current: z.boolean(),
+  enabled: z.boolean(),
 });
 
 export type OSImageVariant = z.infer<typeof OSImageVariantSchema>;
