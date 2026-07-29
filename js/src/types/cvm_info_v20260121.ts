@@ -160,6 +160,7 @@ export const CvmInfoV20260121Schema = z.object({
   public_tcbinfo: z.boolean().optional(),
   gateway_enabled: z.boolean().optional(),
   secure_time: z.boolean().optional(),
+  managed_env: z.boolean().optional().default(false),
   listed: z.boolean().optional().default(false),
   storage_fs: z.string().optional(),
   workspace: WorkspaceRefSchema.nullable().optional(),
