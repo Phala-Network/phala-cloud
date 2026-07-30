@@ -10,6 +10,7 @@ import { authCommands } from "./commands/auth";
 import { configCommands } from "./commands/config";
 import { cvmsCommands } from "./commands/cvms";
 import { deployCommand } from "./commands/deploy";
+import { docsCommands } from "./commands/docs";
 import { envsCommands } from "./commands/envs";
 import { helpCommand } from "./commands/help";
 import { linkCommand } from "./commands/link";
@@ -100,6 +101,11 @@ for (const command of authCommands.commands) {
 
 registry.registerGroup(configCommands.group);
 for (const command of configCommands.commands) {
+	registry.registerCommand(command);
+}
+
+registry.registerGroup(docsCommands.group);
+for (const command of docsCommands.commands) {
 	registry.registerCommand(command);
 }
 

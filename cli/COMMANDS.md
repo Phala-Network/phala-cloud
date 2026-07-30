@@ -193,6 +193,46 @@ export DSTACK_SIMULATOR_ENDPOINT=/path/to/dstack.sock
 export TAPPD_SIMULATOR_ENDPOINT=/path/to/tappd.sock
 ```
 
+## Documentation Commands
+
+### `phala docs`
+
+Search and read the live Phala documentation (docs.phala.com) directly from the terminal. No authentication required. Especially useful for AI coding agents: everything published on the docs site is explorable through these commands, so an agent with the CLI installed always has current documentation.
+
+#### Subcommands:
+
+- **`search <query...>`**: Full-text search with relevance ranking. Returns titles, links, and content excerpts.
+
+- **`read <page...>`**: Read one or more pages in full. Accepts page paths (e.g. `/dstack/overview`) or `docs.phala.com` URLs.
+
+- **`tree [path]`**: Show the docs site structure as a directory tree.
+  - Options:
+    - `-L, --depth <n>`: Maximum depth to display (default: 2)
+
+- **`grep <pattern> [path]`**: Regex search across all docs content (ripgrep, smart-case).
+  - Options:
+    - `-l, --files`: Only list matching page paths
+
+- **`feedback <page> <message...>`**: Report incorrect or outdated documentation to the docs team.
+
+All subcommands support `-j, --json`. Set `PHALA_DOCS_MCP_URL` to override the docs server endpoint.
+
+#### Usage Examples:
+
+```bash
+# Search the docs
+phala docs search deploy a CVM with GPU
+
+# Explore the docs structure
+phala docs tree /phala-cloud --depth 3
+
+# Read a full page
+phala docs read /dstack/getting-started
+
+# Find every mention of an env var
+phala docs grep PHALA_CLOUD_API_KEY --files
+```
+
 ## Examples
 
 Here are some examples of how to use the Phala Cloud CLI:
