@@ -1,6 +1,6 @@
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
-import { callDocsTool, resolveDocsMcpUrl } from "@/src/lib/docs-mcp";
+import { callDocsTool, resolveDocsToolOptions } from "@/src/lib/docs-mcp";
 import {
 	type DocsSearchCommandInput,
 	docsSearchCommandMeta,
@@ -16,7 +16,7 @@ async function runDocsSearchCommand(
 		const results = await callDocsTool(
 			"search_phala",
 			{ query },
-			{ url: resolveDocsMcpUrl(context.env) },
+			resolveDocsToolOptions(context),
 		);
 		if (input.json) {
 			context.success({ query, results });

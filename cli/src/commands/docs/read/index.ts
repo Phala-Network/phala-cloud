@@ -4,7 +4,7 @@ import {
 	type DocsFsResult,
 	type DocsToolOptions,
 	normalizeDocPath,
-	resolveDocsMcpUrl,
+	resolveDocsToolOptions,
 	runDocsFsCommand,
 	shellQuote,
 } from "@/src/lib/docs-mcp";
@@ -67,7 +67,7 @@ async function runDocsReadCommand(
 	input: DocsReadCommandInput,
 	context: CommandContext,
 ): Promise<number> {
-	const options = { url: resolveDocsMcpUrl(context.env) };
+	const options = resolveDocsToolOptions(context);
 	try {
 		const results: PageResult[] = [];
 		for (const page of input.pages) {
