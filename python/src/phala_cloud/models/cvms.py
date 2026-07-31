@@ -59,6 +59,10 @@ class CvmGpuRentalOrderInfoV20260121(CloudModel):
     status: str
     pricing_plan: str | None = None
     commitment_days: int | None = None
+    auto_renew: bool = False
+    expires_at: str | None = None
+    renewal_in_progress: bool = False
+    renewal_next_attempt_at: str | None = None
     agreed_hourly_rate: str | None = None
     hourly_billing_start_time: str | None = None
     activated_at: str | None = None

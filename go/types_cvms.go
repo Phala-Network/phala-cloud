@@ -15,6 +15,10 @@ type CVMGpuRentalOrderInfo struct {
 	Status                 string  `json:"status"`
 	PricingPlan            *string `json:"pricing_plan,omitempty"`
 	CommitmentDays         *int    `json:"commitment_days,omitempty"`
+	AutoRenew              *bool   `json:"auto_renew,omitempty"`
+	ExpiresAt              *string `json:"expires_at,omitempty"`
+	RenewalInProgress      *bool   `json:"renewal_in_progress,omitempty"`
+	RenewalNextAttemptAt   *string `json:"renewal_next_attempt_at,omitempty"`
 	AgreedHourlyRate       *string `json:"agreed_hourly_rate,omitempty"`
 	HourlyBillingStartTime *string `json:"hourly_billing_start_time,omitempty"`
 	ActivatedAt            *string `json:"activated_at,omitempty"`
