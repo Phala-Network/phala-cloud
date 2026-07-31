@@ -85,12 +85,18 @@ describe("CLI Interface Compatibility - Error Handling (v1.0.40 baseline)", () =
 		];
 
 		for (const { cmd, reason, timeout } of errorTests) {
-			test(`${reason}: ${cmd.split(" ")[0]}`, async () => {
-				const result = await runCommand(cmd, { expectError: true, timeout });
+			// Give bun's test timeout headroom above the execa timeout; the
+			// default 5s is shorter than the 10s some cases allow the command.
+			test(
+				`${reason}: ${cmd.split(" ")[0]}`,
+				async () => {
+					const result = await runCommand(cmd, { expectError: true, timeout });
 
-				expect(result.exitCode).toBeGreaterThan(0);
-				expect((result.stdout + result.stderr).length).toBeGreaterThan(0);
-			});
+					expect(result.exitCode).toBeGreaterThan(0);
+					expect((result.stdout + result.stderr).length).toBeGreaterThan(0);
+				},
+				(timeout ?? 3000) + 5000,
+			);
 		}
 	});
 
