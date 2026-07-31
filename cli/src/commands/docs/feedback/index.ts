@@ -28,7 +28,7 @@ async function runDocsFeedbackCommand(
 			return 0;
 		}
 		context.stdout.write(
-			`${response.trim() || "Feedback submitted."} Thanks for helping improve the docs.\n`,
+			`${response.trim() || "Feedback submitted. Thanks for helping improve the docs."}\n`,
 		);
 		return 0;
 	} catch (error) {
