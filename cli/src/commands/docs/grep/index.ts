@@ -20,7 +20,7 @@ async function runDocsGrepCommand(
 	const flags = input.files ? "-Sl" : "-Sn";
 	try {
 		const result = await runDocsFsCommand(
-			`rg ${flags} ${shellQuote(input.pattern)} ${shellQuote(path)}`,
+			`rg ${flags} -e ${shellQuote(input.pattern)} ${shellQuote(path)}`,
 			{ url: resolveDocsMcpUrl(context.env) },
 		);
 		// rg exits 1 on "no matches" with empty stderr
