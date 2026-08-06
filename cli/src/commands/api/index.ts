@@ -61,19 +61,27 @@ function parseJsonValue(value: string): unknown {
  * Parse -f query params into key=value pairs.
  * Supports @file syntax: key=@file.txt reads file content as value.
  */
+type QueryParamValue = string | string[];
+
 function parseQueryParams(
 	fields: string[] | undefined,
-): Record<string, string> {
-	const result: Record<string, string> = {};
+): Record<string, QueryParamValue> {
+	const result: Record<string, QueryParamValue> = {};
 	for (const field of fields ?? []) {
 		const eqIdx = field.indexOf("=");
 		if (eqIdx > 0) {
 			const key = field.slice(0, eqIdx);
-			const value = field.slice(eqIdx + 1);
-			if (value.startsWith("@")) {
-				result[key] = readFileContent(value.slice(1));
-			} else {
+			const rawValue = field.slice(eqIdx + 1);
+			const value = rawValue.startsWith("@")
+				? readFileContent(rawValue.slice(1))
+				: rawValue;
+			const existing = result[key];
+			if (existing === undefined) {
 				result[key] = value;
+			} else if (Array.isArray(existing)) {
+				existing.push(value);
+			} else {
+				result[key] = [existing, value];
 			}
 		}
 	}
@@ -271,7 +279,9 @@ export function resolveRequest(
 	if (Object.keys(queryParams).length > 0) {
 		const params = new URLSearchParams();
 		for (const [key, value] of Object.entries(queryParams)) {
-			params.append(key, value);
+			for (const item of Array.isArray(value) ? value : [value]) {
+				params.append(key, item);
+			}
 		}
 		const separator = finalEndpoint.includes("?") ? "&" : "?";
 		finalEndpoint = `${finalEndpoint}${separator}${params.toString()}`;

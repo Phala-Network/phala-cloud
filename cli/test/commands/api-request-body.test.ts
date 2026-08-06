@@ -223,6 +223,15 @@ describe("resolveRequest - -f query params", () => {
 		expect(result.body).toBeUndefined();
 	});
 
+	test("-f preserves repeated query keys", () => {
+		const result = resolveRequest(
+			baseInput({ query: ["compose_q=runner", "compose_q=base64"] }),
+			"/cvms",
+		);
+
+		expect(result.endpoint).toBe("/cvms?compose_q=runner&compose_q=base64");
+	});
+
 	test("-f appends with & when URL already has query string", () => {
 		const result = resolveRequest(
 			baseInput({ query: ["page=2"] }),
