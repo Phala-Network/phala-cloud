@@ -341,11 +341,13 @@ export async function runApiCommand(
 			return 1;
 		}
 
-		// Execute request with full response
-		const response = await client.requestFull(resolved.endpoint, {
+		// Always fetch as ArrayBuffer so binary exports (xlsx/zip/pdf) are preserved.
+		// Default ofetch JSON parsing turns non-JSON bodies into empty objects ({}).
+		const response = await client.requestFull<ArrayBuffer>(resolved.endpoint, {
 			method: resolved.method,
 			body: resolved.body,
 			headers: customHeaders,
+			responseType: "arrayBuffer",
 		});
 
 		// Output: status + headers (if -i/--include)
@@ -361,7 +363,53 @@ export async function runApiCommand(
 
 		// Output: body (unless --silent)
 		if (!input.silent && response.data !== undefined) {
-			let output: unknown = response.data;
+			const contentType = (
+				response.headers.get("content-type") || ""
+			).toLowerCase();
+			const contentDisposition = (
+				response.headers.get("content-disposition") || ""
+			).toLowerCase();
+			const raw = Buffer.from(response.data);
+
+			const looksJson =
+				contentType.includes("application/json") ||
+				contentType.includes("+json") ||
+				contentType.includes("text/json");
+			const looksText =
+				contentType.startsWith("text/") ||
+				contentType.includes("application/xml") ||
+				contentType.includes("application/javascript");
+			const looksBinaryAttachment =
+				contentDisposition.includes("attachment") ||
+				contentType.includes("application/octet-stream") ||
+				contentType.includes("application/zip") ||
+				contentType.includes("application/pdf") ||
+				contentType.includes("application/vnd.") ||
+				contentType.includes("spreadsheet") ||
+				contentType.includes("application/x-");
+
+			// Binary path: write raw bytes, no trailing newline, no jq.
+			if (looksBinaryAttachment && !looksJson) {
+				if (input.jq) {
+					context.stderr.write(
+						"Error: jq filter (-q) cannot be applied to binary responses.\n",
+					);
+					return 1;
+				}
+				context.stdout.write(raw);
+				return response.ok ? 0 : 1;
+			}
+
+			const text = raw.toString("utf8");
+			let output: unknown = text;
+			if (looksJson || (!looksText && text.length > 0)) {
+				try {
+					output = JSON.parse(text);
+				} catch {
+					// Keep as text when body is not valid JSON.
+					output = text;
+				}
+			}
 
 			// Apply jq filter if provided
 			if (input.jq) {
