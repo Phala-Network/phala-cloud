@@ -70,6 +70,7 @@ export const WorkspaceResponseSchema = z
     name: z.string(),
     slug: z.string().nullable(),
     avatar_url: z.string().nullable().optional(),
+    description: z.string().nullable().optional(),
     tier: z.string(),
     role: z.string(),
     is_default: z.boolean(),
