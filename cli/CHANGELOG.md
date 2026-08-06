@@ -1,3 +1,18 @@
+## [](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.20...cli-v) (2026-08-06)
+
+### feat
+
+* **cli:** add `phala docs` — explore live docs from the terminal (agent-friendly) (#485) ([d8da13c](https://github.com/Phala-Network/phala-cloud/commit/d8da13c5d3fdd5737db68923e609e4ded3d53d31)), closes [#485](https://github.com/Phala-Network/phala-cloud/issues/485)
+
+### fix
+
+* **cli:** add request timeout to docs MCP calls ([db34bf9](https://github.com/Phala-Network/phala-cloud/commit/db34bf9d72cef4ea4d7c4a363e65ddd535d9a37d))
+* **cli:** pass docs grep pattern via -e to rg ([b06e5e2](https://github.com/Phala-Network/phala-cloud/commit/b06e5e20c7e5bbcb60b934281b870768a01fcadf))
+* **cli:** preserve binary bodies in phala api ([43fd62a](https://github.com/Phala-Network/phala-cloud/commit/43fd62a6bc47a5e0ca0566992db337afcc46d4ca))
+
+### refactor
+
+* **cli:** centralize API error presentation ([abad667](https://github.com/Phala-Network/phala-cloud/commit/abad667702e8ad380e3c4d10305429f29d34c3c7))
 ## [](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.20-beta.1...cli-v) (2026-07-26)
 
 ### feat
