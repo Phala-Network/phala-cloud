@@ -2,7 +2,7 @@ import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 import {
 	normalizeDocPath,
-	resolveDocsMcpUrl,
+	resolveDocsToolOptions,
 	runDocsFsCommand,
 	shellQuote,
 } from "@/src/lib/docs-mcp";
@@ -20,7 +20,7 @@ async function runDocsTreeCommand(
 	try {
 		const result = await runDocsFsCommand(
 			`tree ${shellQuote(path)} -L ${input.depth}`,
-			{ url: resolveDocsMcpUrl(context.env) },
+			resolveDocsToolOptions(context),
 		);
 		if (result.exit !== 0) {
 			context.fail(result.stderr.trim() || `Failed to list ${path}`);

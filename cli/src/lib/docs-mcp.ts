@@ -7,7 +7,13 @@
  * instead of pulling in an MCP client library.
  */
 
+import type { CommandContext } from "@/src/core/types";
+import { resolveTimeoutSeconds } from "./client";
+
 const DEFAULT_DOCS_MCP_URL = "https://docs.phala.com/mcp";
+
+/** Default request timeout for docs MCP calls; overridable per call. */
+const DEFAULT_DOCS_TIMEOUT_MS = 60_000;
 
 export function resolveDocsMcpUrl(
 	env: NodeJS.ProcessEnv = process.env,
@@ -17,6 +23,7 @@ export function resolveDocsMcpUrl(
 
 export interface DocsToolOptions {
 	readonly url?: string;
+	readonly timeoutMs?: number;
 }
 
 interface JsonRpcMessage {
@@ -54,10 +61,12 @@ export async function callDocsTool(
 	options: DocsToolOptions = {},
 ): Promise<string> {
 	const url = options.url ?? resolveDocsMcpUrl();
+	const timeoutMs = options.timeoutMs ?? DEFAULT_DOCS_TIMEOUT_MS;
 	let response: Response;
 	try {
 		response = await fetch(url, {
 			method: "POST",
+			signal: AbortSignal.timeout(timeoutMs),
 			headers: {
 				"Content-Type": "application/json",
 				Accept: "application/json, text/event-stream",
@@ -70,6 +79,13 @@ export async function callDocsTool(
 			}),
 		});
 	} catch (error) {
+		if (error instanceof DOMException && error.name === "TimeoutError") {
+			throw new Error(
+				`Phala docs server at ${url} did not respond within ${Math.round(
+					timeoutMs / 1000,
+				)}s. Try again shortly, or browse https://docs.phala.com directly.`,
+			);
+		}
 		throw new Error(
 			`Could not reach the Phala docs server at ${url}. Check your network connection, or browse https://docs.phala.com directly. (${
 				error instanceof Error ? error.message : String(error)
@@ -167,6 +183,19 @@ export async function runDocsFsCommand(
 /** Single-quote a value for the docs virtual filesystem shell. */
 export function shellQuote(value: string): string {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * Build DocsToolOptions from a command context: docs server URL from the
+ * environment, request timeout from the global --timeout flag.
+ */
+export function resolveDocsToolOptions(
+	context: CommandContext,
+): DocsToolOptions {
+	return {
+		url: resolveDocsMcpUrl(context.env),
+		timeoutMs: resolveTimeoutSeconds(context) * 1000,
+	};
 }
 
 /**

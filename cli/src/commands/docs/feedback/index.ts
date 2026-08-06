@@ -3,7 +3,7 @@ import type { CommandContext } from "@/src/core/types";
 import {
 	callDocsTool,
 	normalizeDocPath,
-	resolveDocsMcpUrl,
+	resolveDocsToolOptions,
 } from "@/src/lib/docs-mcp";
 import {
 	type DocsFeedbackCommandInput,
@@ -21,7 +21,7 @@ async function runDocsFeedbackCommand(
 		const response = await callDocsTool(
 			"submit_feedback",
 			{ path, feedback },
-			{ url: resolveDocsMcpUrl(context.env) },
+			resolveDocsToolOptions(context),
 		);
 		if (input.json) {
 			context.success({ path, feedback, response });

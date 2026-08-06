@@ -2,7 +2,7 @@ import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 import {
 	normalizeDocPath,
-	resolveDocsMcpUrl,
+	resolveDocsToolOptions,
 	runDocsFsCommand,
 	shellQuote,
 } from "@/src/lib/docs-mcp";
@@ -20,8 +20,8 @@ async function runDocsGrepCommand(
 	const flags = input.files ? "-Sl" : "-Sn";
 	try {
 		const result = await runDocsFsCommand(
-			`rg ${flags} ${shellQuote(input.pattern)} ${shellQuote(path)}`,
-			{ url: resolveDocsMcpUrl(context.env) },
+			`rg ${flags} -e ${shellQuote(input.pattern)} ${shellQuote(path)}`,
+			resolveDocsToolOptions(context),
 		);
 		// rg exits 1 on "no matches" with empty stderr
 		if (result.exit !== 0 && result.stderr.trim()) {
