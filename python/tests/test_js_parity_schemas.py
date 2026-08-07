@@ -6,7 +6,7 @@ drift from the wire contract again.
 
 from __future__ import annotations
 
-from phala_cloud.models.cvms import CvmInfoV20260121, CvmInfoV20260522
+from phala_cloud.models.cvms import CvmInfoV20260121, CvmInfoV20260522, CvmResourceUsage
 
 
 def _cvm_info(**overrides: object) -> dict:
@@ -35,3 +35,19 @@ class TestManagedEnv:
         payload = _cvm_info(managed_env=True)
         assert CvmInfoV20260121.model_validate(payload).managed_env is True
         assert CvmInfoV20260522.model_validate(payload).managed_env is True
+
+
+class TestCvmResourceUsageDisk:
+    def test_disk_fields_are_declared(self) -> None:
+        assert "disk_used_bytes" in CvmResourceUsage.model_fields
+        assert "disk_total_bytes" in CvmResourceUsage.model_fields
+
+    def test_reads_wire_values(self) -> None:
+        usage = CvmResourceUsage.model_validate({"disk_used_bytes": 1024, "disk_total_bytes": 8192})
+        assert usage.disk_used_bytes == 1024
+        assert usage.disk_total_bytes == 8192
+
+    def test_defaults_to_none_when_absent(self) -> None:
+        usage = CvmResourceUsage.model_validate({"cpu_percent": 1.5})
+        assert usage.disk_used_bytes is None
+        assert usage.disk_total_bytes is None

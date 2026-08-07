@@ -332,6 +332,8 @@ type CVMResourceUsage struct {
 	CPUPercent       *float64 `json:"cpu_percent,omitempty"`
 	MemoryUsedBytes  *int64   `json:"memory_used_bytes,omitempty"`
 	MemoryTotalBytes *int64   `json:"memory_total_bytes,omitempty"`
+	DiskUsedBytes    *int64   `json:"disk_used_bytes,omitempty"`
+	DiskTotalBytes   *int64   `json:"disk_total_bytes,omitempty"`
 	EgressBytes      *int64   `json:"egress_bytes,omitempty"`
 }
 

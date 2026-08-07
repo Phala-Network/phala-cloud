@@ -433,6 +433,8 @@ class CvmResourceUsage(CloudModel):
     cpu_percent: float | None = None
     memory_used_bytes: int | None = None
     memory_total_bytes: int | None = None
+    disk_used_bytes: int | None = None
+    disk_total_bytes: int | None = None
     egress_bytes: int | None = None
 
 
