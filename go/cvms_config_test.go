@@ -104,3 +104,30 @@ func TestProvisionComposeUpdateComposeUnchanged(t *testing.T) {
 		t.Fatal("ComposeUnchanged = false, want true")
 	}
 }
+
+// TestUpdateResultNoChangeStatus covers the no-op variant of the compose and
+// pre-launch script update responses. Without a Status field the whole payload
+// decoded to a zero UpdateResult, indistinguishable from an accepted update.
+func TestUpdateResultNoChangeStatus(t *testing.T) {
+	var noChange UpdateResult
+	if err := json.Unmarshal([]byte(`{"status":"no_change","message":"compose unchanged"}`), &noChange); err != nil {
+		t.Fatalf("unmarshal no_change result: %v", err)
+	}
+	if noChange.Status != UpdateStatusNoChange {
+		t.Fatalf("Status = %q, want %q", noChange.Status, UpdateStatusNoChange)
+	}
+	if noChange.Message != "compose unchanged" {
+		t.Fatalf("Message = %q, want %q", noChange.Message, "compose unchanged")
+	}
+
+	var inProgress UpdateResult
+	if err := json.Unmarshal([]byte(`{"status":"in_progress","message":"queued","correlation_id":"corr-1"}`), &inProgress); err != nil {
+		t.Fatalf("unmarshal in_progress result: %v", err)
+	}
+	if inProgress.Status != UpdateStatusInProgress {
+		t.Fatalf("Status = %q, want %q", inProgress.Status, UpdateStatusInProgress)
+	}
+	if inProgress.CorrelationID != "corr-1" {
+		t.Fatalf("CorrelationID = %q, want corr-1", inProgress.CorrelationID)
+	}
+}
