@@ -417,7 +417,7 @@ class _ExtMixin:
             r"/cvms/[^/]+/pre-launch-script/upgrade-to-latest-official", path
         ):
             return InProgressResponse | ComposeHashPreconditionResponse
-        if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/(resources|os-image)", path):
+        if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/os-image", path):
             return type(None)
         if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/compose_file", path):
             return type(None)
@@ -896,9 +896,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     ) -> SafeResult[Any]:
         return self.safe(self.get_cvm_attestation, request)
 
-    def update_cvm_resources(
-        self, request: UpdateResourcesRequest | Mapping[str, Any]
-    ) -> dict[str, str]:
+    def update_cvm_resources(self, request: UpdateResourcesRequest | Mapping[str, Any]) -> Any:
         req = UpdateResourcesRequest.model_validate(request)
         body = req.model_dump(exclude_none=True)
         body.pop("id", None)
@@ -911,7 +909,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
 
     def safe_update_cvm_resources(
         self, request: UpdateResourcesRequest | Mapping[str, Any]
-    ) -> SafeResult[dict[str, str]]:
+    ) -> SafeResult[Any]:
         return self.safe(self.update_cvm_resources, request)
 
     def update_cvm_visibility(self, request: UpdateVisibilityRequest | Mapping[str, Any]) -> Any:
@@ -1759,17 +1757,16 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
 
     async def update_cvm_resources(
         self, request: UpdateResourcesRequest | Mapping[str, Any]
-    ) -> None:
+    ) -> Any:
         req = UpdateResourcesRequest.model_validate(request)
         body = req.model_dump(exclude_none=True)
         for k in ["id", "uuid", "app_id", "instance_id", "cvm_id", "cvmId"]:
             body.pop(k, None)
-        await self.request("PATCH", f"/cvms/{req.resolved}/resources", json=body)
-        return None
+        return await self.request("PATCH", f"/cvms/{req.resolved}", json=body)
 
     async def safe_update_cvm_resources(
         self, request: UpdateResourcesRequest | Mapping[str, Any]
-    ) -> SafeResult[None]:
+    ) -> SafeResult[Any]:
         return await self.safe(self.update_cvm_resources, request)
 
     async def update_cvm_visibility(
