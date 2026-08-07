@@ -36,11 +36,10 @@ type TeepodCapacity struct {
 	KMSList           []string         `json:"kms_list,omitempty"`
 }
 
-// DeviceIDEntry is one of a node's device_ids and the OS images it covers.
+// DeviceIDEntry is one of a node's device_ids, keyed by KMS algorithm version.
 type DeviceIDEntry struct {
 	DeviceID         string `json:"device_id"`
 	AlgorithmVersion string `json:"algorithm_version"`
-	OSImageIDs       []int  `json:"os_image_ids"`
 	Enabled          bool   `json:"enabled"`
 }
 

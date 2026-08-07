@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from phala_cloud.action_responses import WorkspaceResponse
 from phala_cloud.models.cvms import CvmInfoV20260121, CvmInfoV20260522, CvmResourceUsage
+from phala_cloud.models.nodes import DeviceIdEntry
 
 
 def _cvm_info(**overrides: object) -> dict:
@@ -85,3 +86,18 @@ class TestWorkspaceResponse:
         assert workspace.billing_status == "suspended"
         assert workspace.suspended_at == "2026-08-01T00:00:00Z"
         assert workspace.avatar_url == "https://example.test/a.png"
+
+
+class TestDeviceIdEntry:
+    def test_no_longer_declares_os_image_ids(self) -> None:
+        # device_id is keyed by (physical node, KMS algorithm version) alone;
+        # the OS image list was dropped from the wire contract.
+        assert "os_image_ids" not in DeviceIdEntry.model_fields
+
+    def test_decodes_the_current_wire_shape(self) -> None:
+        entry = DeviceIdEntry.model_validate(
+            {"device_id": "0xdev", "algorithm_version": "v1", "enabled": True}
+        )
+        assert entry.device_id == "0xdev"
+        assert entry.algorithm_version == "v1"
+        assert entry.enabled is True
