@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import time
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
@@ -36,6 +36,7 @@ from .action_responses import (
     InstanceTypesFamilyResponse,
     ListWorkspacesResponse,
     NextAppIdsResponse,
+    PreLaunchScriptUpgradeStatus,
     ProvisionCvmComposeFileUpdateResult,
     ProvisionCvmResponse,
     RefreshInstanceIdResponseV20260121,
@@ -193,6 +194,27 @@ class StatusBatchRequest(_AliasModel):
 
 class RestartCvmRequest(CvmIdRequest):
     force: bool = False
+
+
+class UpgradePreLaunchScriptRequest(CvmIdRequest):
+    """Phase 2 fields are only needed for contract-owned KMS (ETHEREUM/BASE).
+
+    The first call returns precondition_required with a compose hash to
+    register on-chain; the retry carries that hash and the transaction that
+    registered it.
+    """
+
+    compose_hash: str | None = None
+    transaction_hash: str | None = None
+
+
+def _upgrade_pre_launch_script_headers(req: UpgradePreLaunchScriptRequest) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    if req.compose_hash:
+        headers["X-Compose-Hash"] = req.compose_hash
+    if req.transaction_hash:
+        headers["X-Transaction-Hash"] = req.transaction_hash
+    return headers
 
 
 class ReplicateCvmRequest(CvmIdRequest):
@@ -388,6 +410,12 @@ class _ExtMixin:
         if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/docker-compose", path):
             return InProgressResponse | ComposeHashPreconditionResponse
         if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/pre-launch-script", path):
+            return InProgressResponse | ComposeHashPreconditionResponse
+        if m == "GET" and re.fullmatch(r"/cvms/[^/]+/pre-launch-script/upgrade-status", path):
+            return PreLaunchScriptUpgradeStatus
+        if m == "POST" and re.fullmatch(
+            r"/cvms/[^/]+/pre-launch-script/upgrade-to-latest-official", path
+        ):
             return InProgressResponse | ComposeHashPreconditionResponse
         if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/(resources|os-image)", path):
             return type(None)
@@ -751,6 +779,43 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         self, request: CvmIdRequest | Mapping[str, Any]
     ) -> SafeResult[str]:
         return self.safe(self.get_cvm_pre_launch_script, request)
+
+    def get_pre_launch_script_upgrade_status(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> PreLaunchScriptUpgradeStatus:
+        cvm_id = CvmIdRequest.model_validate(request).resolved
+        return cast(
+            PreLaunchScriptUpgradeStatus,
+            self._loose_validate(self.get(f"/cvms/{cvm_id}/pre-launch-script/upgrade-status")),
+        )
+
+    def safe_get_pre_launch_script_upgrade_status(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> SafeResult[PreLaunchScriptUpgradeStatus]:
+        return self.safe(self.get_pre_launch_script_upgrade_status, request)
+
+    def upgrade_pre_launch_script(
+        self, request: UpgradePreLaunchScriptRequest | Mapping[str, Any]
+    ) -> Any:
+        req = UpgradePreLaunchScriptRequest.model_validate(request)
+        try:
+            return self._loose_validate(
+                self.request(
+                    "POST",
+                    f"/cvms/{req.resolved}/pre-launch-script/upgrade-to-latest-official",
+                    headers=_upgrade_pre_launch_script_headers(req),
+                ),
+            )
+        except Exception as exc:
+            fields = self._extract_465_fields(exc)
+            if fields is not None:
+                return self._loose_validate({"status": "precondition_required", **fields})
+            raise
+
+    def safe_upgrade_pre_launch_script(
+        self, request: UpgradePreLaunchScriptRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
+        return self.safe(self.upgrade_pre_launch_script, request)
 
     def start_cvm(self, request: CvmIdRequest | Mapping[str, Any]) -> Any:
         cvm_id = CvmIdRequest.model_validate(request).resolved
@@ -1567,6 +1632,45 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         self, request: CvmIdRequest | Mapping[str, Any]
     ) -> SafeResult[str]:
         return await self.safe(self.get_cvm_pre_launch_script, request)
+
+    async def get_pre_launch_script_upgrade_status(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> PreLaunchScriptUpgradeStatus:
+        cvm_id = CvmIdRequest.model_validate(request).resolved
+        return cast(
+            PreLaunchScriptUpgradeStatus,
+            self._loose_validate(
+                await self.get(f"/cvms/{cvm_id}/pre-launch-script/upgrade-status")
+            ),
+        )
+
+    async def safe_get_pre_launch_script_upgrade_status(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> SafeResult[PreLaunchScriptUpgradeStatus]:
+        return await self.safe(self.get_pre_launch_script_upgrade_status, request)
+
+    async def upgrade_pre_launch_script(
+        self, request: UpgradePreLaunchScriptRequest | Mapping[str, Any]
+    ) -> Any:
+        req = UpgradePreLaunchScriptRequest.model_validate(request)
+        try:
+            return self._loose_validate(
+                await self.request(
+                    "POST",
+                    f"/cvms/{req.resolved}/pre-launch-script/upgrade-to-latest-official",
+                    headers=_upgrade_pre_launch_script_headers(req),
+                ),
+            )
+        except Exception as exc:
+            fields = self._extract_465_fields(exc)
+            if fields is not None:
+                return self._loose_validate({"status": "precondition_required", **fields})
+            raise
+
+    async def safe_upgrade_pre_launch_script(
+        self, request: UpgradePreLaunchScriptRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
+        return await self.safe(self.upgrade_pre_launch_script, request)
 
     async def start_cvm(self, request: CvmIdRequest | Mapping[str, Any]) -> Any:
         cvm_id = CvmIdRequest.model_validate(request).resolved

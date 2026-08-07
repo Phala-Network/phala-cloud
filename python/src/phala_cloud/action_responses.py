@@ -81,6 +81,20 @@ class ProvisionCvmComposeFileUpdateResult(CloudModel):
     compose_unchanged: bool = False
 
 
+class PreLaunchScriptUpgradeStatus(CloudModel):
+    """Whether a CVM runs an unmodified official pre-launch script.
+
+    can_upgrade is the one flag callers act on: it is true only when the CVM is
+    on an official script that is not the latest one.
+    """
+
+    current_hash: str | None = None
+    latest_official_hash: str
+    is_official: bool
+    is_latest: bool
+    can_upgrade: bool
+
+
 class CommitCvmProvisionResponseBase(CloudModel):
     name: str
     status: str

@@ -53,6 +53,10 @@ __all__ = [
     "safe_update_pre_launch_script",
     "get_cvm_pre_launch_script",
     "safe_get_cvm_pre_launch_script",
+    "get_pre_launch_script_upgrade_status",
+    "safe_get_pre_launch_script_upgrade_status",
+    "upgrade_pre_launch_script",
+    "safe_upgrade_pre_launch_script",
     "start_cvm",
     "safe_start_cvm",
     "stop_cvm",
@@ -333,6 +337,22 @@ def get_cvm_pre_launch_script(client: Any, *args: Any, **kwargs: Any) -> Any:
 
 def safe_get_cvm_pre_launch_script(client: Any, *args: Any, **kwargs: Any) -> Any:
     return client.safe_get_cvm_pre_launch_script(*args, **kwargs)
+
+
+def get_pre_launch_script_upgrade_status(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.get_pre_launch_script_upgrade_status(*args, **kwargs)
+
+
+def safe_get_pre_launch_script_upgrade_status(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.safe_get_pre_launch_script_upgrade_status(*args, **kwargs)
+
+
+def upgrade_pre_launch_script(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.upgrade_pre_launch_script(*args, **kwargs)
+
+
+def safe_upgrade_pre_launch_script(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.safe_upgrade_pre_launch_script(*args, **kwargs)
 
 
 def start_cvm(client: Any, *args: Any, **kwargs: Any) -> Any:
