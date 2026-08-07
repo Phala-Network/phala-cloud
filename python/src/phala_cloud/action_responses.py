@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import Field
 
 from .models.apps import AppRevisionDetailResponse as AppRevisionDetailResponse
@@ -23,8 +25,18 @@ class WorkspaceResponse(CloudModel):
     id: str
     name: str
     slug: str | None = None
+    avatar_url: str | None = None
+    description: str | None = None
     tier: str | None = None
     role: str | None = None
+    is_default: bool | None = None
+    created_at: str | None = None
+    confidential_models_enabled: bool | None = None
+    # Billing lifecycle state. A suspended workspace still runs but owes money;
+    # an abandoned one is closed and read-only until its balance is settled.
+    billing_status: Literal["active", "suspended", "abandoned"] = "active"
+    # When the workspace was suspended. None unless billing_status is suspended.
+    suspended_at: str | None = None
 
 
 class ListWorkspacesResponse(CloudModel):

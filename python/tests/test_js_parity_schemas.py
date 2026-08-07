@@ -6,6 +6,7 @@ drift from the wire contract again.
 
 from __future__ import annotations
 
+from phala_cloud.action_responses import WorkspaceResponse
 from phala_cloud.models.cvms import CvmInfoV20260121, CvmInfoV20260522, CvmResourceUsage
 
 
@@ -51,3 +52,36 @@ class TestCvmResourceUsageDisk:
         usage = CvmResourceUsage.model_validate({"cpu_percent": 1.5})
         assert usage.disk_used_bytes is None
         assert usage.disk_total_bytes is None
+
+
+class TestWorkspaceResponse:
+    def test_declares_the_full_js_field_set(self) -> None:
+        expected = {
+            "avatar_url",
+            "description",
+            "is_default",
+            "created_at",
+            "confidential_models_enabled",
+            "billing_status",
+            "suspended_at",
+        }
+        assert expected <= set(WorkspaceResponse.model_fields)
+
+    def test_billing_status_defaults_to_active(self) -> None:
+        workspace = WorkspaceResponse.model_validate({"id": "wks_1", "name": "acme"})
+        assert workspace.billing_status == "active"
+        assert workspace.suspended_at is None
+
+    def test_reads_suspended_state(self) -> None:
+        workspace = WorkspaceResponse.model_validate(
+            {
+                "id": "wks_1",
+                "name": "acme",
+                "avatar_url": "https://example.test/a.png",
+                "billing_status": "suspended",
+                "suspended_at": "2026-08-01T00:00:00Z",
+            }
+        )
+        assert workspace.billing_status == "suspended"
+        assert workspace.suspended_at == "2026-08-01T00:00:00Z"
+        assert workspace.avatar_url == "https://example.test/a.png"
