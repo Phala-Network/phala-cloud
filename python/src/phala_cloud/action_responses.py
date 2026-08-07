@@ -76,6 +76,9 @@ class ProvisionCvmComposeFileUpdateResult(CloudModel):
     compose_hash: str
     kms_info: GenericObject | None = None
     compose_hash_registered: bool = False
+    # True when the submitted compose matched the deployed one, meaning the
+    # commit step is a no-op and can be skipped.
+    compose_unchanged: bool = False
 
 
 class CommitCvmProvisionResponseBase(CloudModel):

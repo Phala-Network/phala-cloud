@@ -85,3 +85,22 @@ func TestReplicateCVMForwardsOSImage(t *testing.T) {
 		t.Fatal("os_image present in the body when unset, want it omitted")
 	}
 }
+
+// TestProvisionComposeUpdateComposeUnchanged covers the no-op signal returned
+// when the submitted compose matches the deployed one.
+func TestProvisionComposeUpdateComposeUnchanged(t *testing.T) {
+	var resp ProvisionCVMResponse
+	if err := json.Unmarshal([]byte(`{"app_id":"app-1","compose_hash":"abc"}`), &resp); err != nil {
+		t.Fatalf("unmarshal provision response: %v", err)
+	}
+	if resp.ComposeUnchanged {
+		t.Fatal("ComposeUnchanged = true when absent from the payload, want false")
+	}
+
+	if err := json.Unmarshal([]byte(`{"app_id":"app-1","compose_hash":"abc","compose_unchanged":true}`), &resp); err != nil {
+		t.Fatalf("unmarshal provision response with compose_unchanged: %v", err)
+	}
+	if !resp.ComposeUnchanged {
+		t.Fatal("ComposeUnchanged = false, want true")
+	}
+}

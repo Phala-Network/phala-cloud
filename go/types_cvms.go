@@ -285,6 +285,10 @@ type ProvisionCVMResponse struct {
 	KMSID                 string `json:"kms_id,omitempty"`
 	KMSContractID         string `json:"kms_contract_id,omitempty"`
 	ComposeHashRegistered bool   `json:"compose_hash_registered,omitempty"`
+	// ComposeUnchanged is set only by ProvisionCVMComposeFileUpdate: true means
+	// the submitted compose matched the deployed one, so the commit step is a
+	// no-op and can be skipped. Always false for a fresh provision.
+	ComposeUnchanged bool `json:"compose_unchanged,omitempty"`
 }
 
 // CommitCVMProvisionRequest is the request for committing a CVM provision.

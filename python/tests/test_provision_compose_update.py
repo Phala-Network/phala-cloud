@@ -83,3 +83,15 @@ async def test_provision_cvm_compose_file_update_async() -> None:
         assert isinstance(result, ProvisionCvmComposeFileUpdateResult)
         assert result.compose_hash_registered is False
         assert result.device_id is None
+
+
+def test_provision_cvm_compose_file_update_result_compose_unchanged() -> None:
+    default = ProvisionCvmComposeFileUpdateResult.model_validate(
+        {"app_id": "app-123", "compose_hash": "abc123"}
+    )
+    assert default.compose_unchanged is False
+
+    unchanged = ProvisionCvmComposeFileUpdateResult.model_validate(
+        {"app_id": "app-123", "compose_hash": "abc123", "compose_unchanged": True}
+    )
+    assert unchanged.compose_unchanged is True
