@@ -176,6 +176,7 @@ class CvmInfoV20260121(CloudModel):
     public_tcbinfo: bool | None = None
     gateway_enabled: bool | None = None
     secure_time: bool | None = None
+    managed_env: bool = False
     listed: bool = False
     storage_fs: str | None = None
     workspace: WorkspaceRef | None = None
@@ -232,6 +233,7 @@ class CvmInfoV20260522(CloudModel):
     public_tcbinfo: bool | None = None
     gateway_enabled: bool | None = None
     secure_time: bool | None = None
+    managed_env: bool = False
     listed: bool = False
     storage_fs: str | None = None
     workspace: WorkspaceRef | None = None

@@ -54,6 +54,7 @@ type CVMInfoFields struct {
 	PublicTcbinfo       *bool                  `json:"public_tcbinfo,omitempty"`
 	GatewayEnabled      *bool                  `json:"gateway_enabled,omitempty"`
 	SecureTime          *bool                  `json:"secure_time,omitempty"`
+	ManagedEnv          bool                   `json:"managed_env"`
 	Listed              bool                   `json:"listed"`
 	StorageFS           *string                `json:"storage_fs,omitempty"`
 	Workspace           *WorkspaceRef          `json:"workspace,omitempty"`

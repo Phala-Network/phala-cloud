@@ -280,3 +280,20 @@ func TestCVMStatusBatchDeserialization(t *testing.T) {
 		}
 	})
 }
+
+func TestCVMInfoManagedEnv(t *testing.T) {
+	var info CVMInfo
+	if err := json.Unmarshal([]byte(`{"id":"cvm_ykL5lbAn","name":"cvm-1","resource":{},"status":"running"}`), &info); err != nil {
+		t.Fatalf("unmarshal CVM info: %v", err)
+	}
+	if info.ManagedEnv {
+		t.Fatal("ManagedEnv = true when absent from the payload, want false")
+	}
+
+	if err := json.Unmarshal([]byte(`{"id":"cvm_ykL5lbAn","name":"cvm-1","resource":{},"status":"running","managed_env":true}`), &info); err != nil {
+		t.Fatalf("unmarshal CVM info with managed_env: %v", err)
+	}
+	if !info.ManagedEnv {
+		t.Fatal("ManagedEnv = false, want true")
+	}
+}
