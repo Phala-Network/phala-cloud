@@ -1,5 +1,7 @@
 package phala
 
+import "time"
+
 const (
 	// DefaultAPIVersion is the default Phala Cloud API version.
 	DefaultAPIVersion = "2026-06-23"
@@ -10,6 +12,10 @@ const (
 
 	// DefaultBaseURL is the default Phala Cloud API base URL.
 	DefaultBaseURL = "https://cloud-api.phala.com/api/v1"
+
+	// DefaultTimeout is the default per-request HTTP timeout, matching the JS
+	// and Python SDKs. Override it with WithTimeout.
+	DefaultTimeout = 60 * time.Second
 
 	// sdkVersion is the version of this SDK, used in User-Agent.
 	sdkVersion = "0.2.0"

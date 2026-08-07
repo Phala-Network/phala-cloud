@@ -6,7 +6,9 @@ drift from the wire contract again.
 
 from __future__ import annotations
 
+from phala_cloud import AsyncPhalaCloud, PhalaCloud
 from phala_cloud.action_responses import WorkspaceResponse
+from phala_cloud.client import DEFAULT_TIMEOUT
 from phala_cloud.models.cvms import CvmInfoV20260121, CvmInfoV20260522, CvmResourceUsage
 from phala_cloud.models.nodes import DeviceIdEntry
 
@@ -101,3 +103,12 @@ class TestDeviceIdEntry:
         assert entry.device_id == "0xdev"
         assert entry.algorithm_version == "v1"
         assert entry.enabled is True
+
+
+class TestDefaultTimeout:
+    def test_matches_the_js_sixty_second_default(self) -> None:
+        assert DEFAULT_TIMEOUT == 60.0
+
+    def test_clients_apply_it(self) -> None:
+        assert PhalaCloud(api_key="k").config.timeout == 60.0
+        assert AsyncPhalaCloud(api_key="k").config.timeout == 60.0
