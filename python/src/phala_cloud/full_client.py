@@ -197,6 +197,7 @@ class RestartCvmRequest(CvmIdRequest):
 
 class ReplicateCvmRequest(CvmIdRequest):
     node_id: int | None = None
+    os_image: str | None = Field(default=None, min_length=1)
 
 
 class UpdateResourcesRequest(CvmIdRequest):
@@ -1162,7 +1163,10 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     def replicate_cvm(self, request: ReplicateCvmRequest | Mapping[str, Any]) -> Any:
         req = ReplicateCvmRequest.model_validate(request)
         return self._loose_validate(
-            self.post(f"/cvms/{req.resolved}/replicas", json={"node_id": req.node_id})
+            self.post(
+                f"/cvms/{req.resolved}/replicas",
+                json={"node_id": req.node_id, "os_image": req.os_image},
+            )
         )
 
     def safe_replicate_cvm(
@@ -2000,7 +2004,10 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
     async def replicate_cvm(self, request: ReplicateCvmRequest | Mapping[str, Any]) -> Any:
         req = ReplicateCvmRequest.model_validate(request)
         return self._loose_validate(
-            await self.post(f"/cvms/{req.resolved}/replicas", json={"node_id": req.node_id})
+            await self.post(
+                f"/cvms/{req.resolved}/replicas",
+                json={"node_id": req.node_id, "os_image": req.os_image},
+            )
         )
 
     async def safe_replicate_cvm(

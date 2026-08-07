@@ -405,6 +405,9 @@ type CVMActionResponse = CVMActionResponseV20260522
 // ReplicateCVMOptions holds options for replicating a CVM.
 type ReplicateCVMOptions struct {
 	NodeID *int `json:"node_id,omitempty"`
+	// OSImage pins the replica to a specific OS image slug. Empty means the
+	// replica inherits the source CVM's image.
+	OSImage string `json:"os_image,omitempty"`
 }
 
 // PatchCVMRequest is the request for patching a CVM (multi-field update).

@@ -41,3 +41,47 @@ func TestUpdateCVMListed(t *testing.T) {
 		t.Fatalf("UpdateCVMListed: %v", err)
 	}
 }
+
+// TestReplicateCVMForwardsOSImage covers replica OS image selection: the
+// replica can be pinned to a specific image instead of inheriting the source
+// CVM's one.
+func TestReplicateCVMForwardsOSImage(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/cvms/cvm-123/replicas" {
+			t.Errorf("path = %q, want /cvms/cvm-123/replicas", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"cvm_ykL5lbAn","name":"cvm-1","status":"starting"}`))
+	}))
+	defer srv.Close()
+
+	client, err := NewClient(WithAPIKey("k"), WithBaseURL(srv.URL))
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	nodeID := 42
+	if _, err := client.ReplicateCVM(context.Background(), "cvm-123", &ReplicateCVMOptions{
+		NodeID:  &nodeID,
+		OSImage: "dstack-0.5.4",
+	}); err != nil {
+		t.Fatalf("ReplicateCVM: %v", err)
+	}
+	if got := body["os_image"]; got != "dstack-0.5.4" {
+		t.Fatalf("os_image = %v, want dstack-0.5.4", got)
+	}
+
+	body = nil
+	if _, err := client.ReplicateCVM(context.Background(), "cvm-123", &ReplicateCVMOptions{
+		NodeID: &nodeID,
+	}); err != nil {
+		t.Fatalf("ReplicateCVM without OS image: %v", err)
+	}
+	if _, ok := body["os_image"]; ok {
+		t.Fatal("os_image present in the body when unset, want it omitted")
+	}
+}
