@@ -1044,11 +1044,12 @@ class PhalaCloud(_SyncBase, _ExtMixin):
 
     def get_app_env_encrypt_pub_key(self, request: KmsPubkeyRequest | Mapping[str, Any]) -> Any:
         req = KmsPubkeyRequest.model_validate(request)
+        # `kms` accepts a contract slug, a kms_type, or a kms_ node id: the
+        # server resolves node-era identifiers onto their contract.
         return self._loose_validate(
             self.request(
                 "GET",
                 f"/kms/{req.kms}/pubkey/{req.app_id}",
-                headers={"X-Phala-Version": "2026-05-22"},
             )
         )
 
@@ -1874,11 +1875,12 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         self, request: KmsPubkeyRequest | Mapping[str, Any]
     ) -> Any:
         req = KmsPubkeyRequest.model_validate(request)
+        # `kms` accepts a contract slug, a kms_type, or a kms_ node id: the
+        # server resolves node-era identifiers onto their contract.
         return self._loose_validate(
             await self.request(
                 "GET",
                 f"/kms/{req.kms}/pubkey/{req.app_id}",
-                headers={"X-Phala-Version": "2026-05-22"},
             )
         )
 

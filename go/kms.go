@@ -68,11 +68,12 @@ func (c *Client) NextAppIDs(ctx context.Context) (*NextAppIDsResponse, error) {
 
 // GetAppEnvEncryptPubKey returns the environment encryption public key for an app.
 //
-// Pinned to the node-keyed shape: kmsType is a KMS node id/slug.
+// kmsType accepts a contract slug, a kms_type, or a kms_ node id: the server
+// resolves node-era identifiers onto their contract.
 func (c *Client) GetAppEnvEncryptPubKey(ctx context.Context, kmsType, appID string) (*AppEnvPubKeyResponse, error) {
 	var result AppEnvPubKeyResponse
 	path := fmt.Sprintf("/kms/%s/pubkey/%s", kmsType, appID)
-	if err := c.doJSONVersioned(ctx, "GET", path, "2026-05-22", nil, &result); err != nil {
+	if err := c.doJSON(ctx, "GET", path, nil, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil

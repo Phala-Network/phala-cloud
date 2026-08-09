@@ -30,11 +30,10 @@ const { action: getAppEnvEncryptPubKey, safeAction: safeGetAppEnvEncryptPubKey }
   typeof GetAppEnvEncryptPubKeySchema
 >(GetAppEnvEncryptPubKeySchema, async (client, payload) => {
   const validatedRequest = GetAppEnvEncryptPubKeyRequestSchema.parse(payload);
-  // Pinned to the node-keyed shape: {kms} is a KMS node id/slug, and the
-  // endpoint serves the env pubkey for that node (not a contract slug).
-  return await client.get(`/kms/${validatedRequest.kms}/pubkey/${validatedRequest.app_id}`, {
-    headers: { "X-Phala-Version": "2026-05-22" },
-  });
+  // {kms} accepts a contract slug, a kms_type, or a kms_ node id: the server
+  // resolves node-era identifiers onto their contract. Callers holding a
+  // cvm.kms_type keep working without translating it first.
+  return await client.get(`/kms/${validatedRequest.kms}/pubkey/${validatedRequest.app_id}`);
 });
 
 export { getAppEnvEncryptPubKey, safeGetAppEnvEncryptPubKey };
