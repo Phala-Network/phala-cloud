@@ -1,4 +1,8 @@
-import { createClient, type Client } from "@phala/cloud";
+import {
+	createClient,
+	safeRevokeCurrentApiToken,
+	type Client,
+} from "@phala/cloud";
 import { getApiVersionOverride } from "@/src/core/api-version";
 import type { CommandContext } from "@/src/core/types";
 import { getProjectConfig } from "@/src/utils/project-config";
@@ -93,4 +97,55 @@ export async function getClientWithKey(
 		baseURL: options?.baseURL,
 		version,
 	}) as CliApiClient;
+}
+
+export type RevokeTokenOutcome =
+	| "revoked"
+	| "already-invalid"
+	| "unsupported"
+	| "failed";
+
+export interface RevokeTokenResult {
+	readonly outcome: RevokeTokenOutcome;
+	readonly message?: string;
+}
+
+/**
+ * Best-effort server-side revocation of an API token via DELETE /tokens/self.
+ *
+ * Never throws — callers (logout / profiles delete / profiles refresh) treat
+ * every outcome as non-fatal:
+ * - "already-invalid" (401): the token was already revoked or expired
+ * - "unsupported" (404): the server predates the self-revoke endpoint
+ * - "failed": network or unexpected error
+ */
+export async function tryRevokeApiToken(options: {
+	apiKey: string;
+	baseURL: string;
+}): Promise<RevokeTokenResult> {
+	try {
+		const client = await getClientWithKey(options.apiKey, {
+			baseURL: options.baseURL,
+		});
+		const result = await safeRevokeCurrentApiToken(client);
+		if (result.success) {
+			return { outcome: "revoked" };
+		}
+		const status =
+			"status" in result.error && typeof result.error.status === "number"
+				? result.error.status
+				: undefined;
+		if (status === 401) {
+			return { outcome: "already-invalid" };
+		}
+		if (status === 404) {
+			return { outcome: "unsupported" };
+		}
+		return { outcome: "failed", message: result.error.message };
+	} catch (error) {
+		return {
+			outcome: "failed",
+			message: error instanceof Error ? error.message : String(error),
+		};
+	}
 }

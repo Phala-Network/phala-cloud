@@ -26,6 +26,7 @@ import {
 	profilesUseCommand,
 	profilesRenameCommand,
 	profilesDeleteCommand,
+	profilesRefreshCommand,
 } from "./commands/profiles";
 import { switchCommand } from "./commands/switch";
 import { completionCommand } from "./commands/completion";
@@ -81,6 +82,7 @@ registry.registerCommand(profilesCommand);
 registry.registerCommand(profilesUseCommand);
 registry.registerCommand(profilesRenameCommand);
 registry.registerCommand(profilesDeleteCommand);
+registry.registerCommand(profilesRefreshCommand);
 registry.registerCommand(switchCommand);
 registry.registerCommand(apiCommand);
 registry.registerCommand(statusCommand);

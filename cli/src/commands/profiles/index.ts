@@ -79,5 +79,6 @@ export const profilesCommand = defineCommand({
 export { profilesUseCommand } from "./use";
 export { profilesRenameCommand } from "./rename";
 export { profilesDeleteCommand } from "./delete";
+export { profilesRefreshCommand } from "./refresh";
 
 export default profilesCommand;

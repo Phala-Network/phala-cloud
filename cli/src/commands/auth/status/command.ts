@@ -8,7 +8,7 @@ import {
 
 export const authStatusCommandMeta: CommandMeta = {
 	name: "status",
-	description: "Check auth status (use 'phala status' instead)",
+	description: "Removed. Use 'phala status' instead.",
 	stability: "deprecated",
 	options: [...commonAuthOptions, jsonOption, debugOption],
 };
