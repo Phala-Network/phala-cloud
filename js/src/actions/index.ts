@@ -639,6 +639,11 @@ export {
   type SyncGithubSshKeysResponse,
 } from "./ssh_keys/sync_github_ssh_keys";
 
+export {
+  revokeCurrentApiToken,
+  safeRevokeCurrentApiToken,
+} from "./api_tokens/revoke_current_api_token";
+
 // CVM Is-Allowed Check
 export {
   checkCvmIsAllowed,
