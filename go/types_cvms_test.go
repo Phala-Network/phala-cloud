@@ -280,3 +280,41 @@ func TestCVMStatusBatchDeserialization(t *testing.T) {
 		}
 	})
 }
+
+func TestCVMInfoManagedEnv(t *testing.T) {
+	var info CVMInfo
+	if err := json.Unmarshal([]byte(`{"id":"cvm_ykL5lbAn","name":"cvm-1","resource":{},"status":"running"}`), &info); err != nil {
+		t.Fatalf("unmarshal CVM info: %v", err)
+	}
+	if info.ManagedEnv {
+		t.Fatal("ManagedEnv = true when absent from the payload, want false")
+	}
+
+	if err := json.Unmarshal([]byte(`{"id":"cvm_ykL5lbAn","name":"cvm-1","resource":{},"status":"running","managed_env":true}`), &info); err != nil {
+		t.Fatalf("unmarshal CVM info with managed_env: %v", err)
+	}
+	if !info.ManagedEnv {
+		t.Fatal("ManagedEnv = false, want true")
+	}
+}
+
+func TestCVMResourceUsageDiskFields(t *testing.T) {
+	var usage CVMResourceUsage
+	if err := json.Unmarshal([]byte(`{"disk_used_bytes":1024,"disk_total_bytes":8192}`), &usage); err != nil {
+		t.Fatalf("unmarshal resource usage: %v", err)
+	}
+	if usage.DiskUsedBytes == nil || *usage.DiskUsedBytes != 1024 {
+		t.Fatalf("DiskUsedBytes = %v, want 1024", usage.DiskUsedBytes)
+	}
+	if usage.DiskTotalBytes == nil || *usage.DiskTotalBytes != 8192 {
+		t.Fatalf("DiskTotalBytes = %v, want 8192", usage.DiskTotalBytes)
+	}
+
+	var absent CVMResourceUsage
+	if err := json.Unmarshal([]byte(`{"cpu_percent":1.5}`), &absent); err != nil {
+		t.Fatalf("unmarshal resource usage without disk fields: %v", err)
+	}
+	if absent.DiskUsedBytes != nil || absent.DiskTotalBytes != nil {
+		t.Fatal("disk fields set when absent from the payload, want nil")
+	}
+}

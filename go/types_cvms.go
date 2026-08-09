@@ -54,6 +54,7 @@ type CVMInfoFields struct {
 	PublicTcbinfo       *bool                  `json:"public_tcbinfo,omitempty"`
 	GatewayEnabled      *bool                  `json:"gateway_enabled,omitempty"`
 	SecureTime          *bool                  `json:"secure_time,omitempty"`
+	ManagedEnv          bool                   `json:"managed_env"`
 	Listed              bool                   `json:"listed"`
 	StorageFS           *string                `json:"storage_fs,omitempty"`
 	Workspace           *WorkspaceRef          `json:"workspace,omitempty"`
@@ -284,6 +285,10 @@ type ProvisionCVMResponse struct {
 	KMSID                 string `json:"kms_id,omitempty"`
 	KMSContractID         string `json:"kms_contract_id,omitempty"`
 	ComposeHashRegistered bool   `json:"compose_hash_registered,omitempty"`
+	// ComposeUnchanged is set only by ProvisionCVMComposeFileUpdate: true means
+	// the submitted compose matched the deployed one, so the commit step is a
+	// no-op and can be skipped. Always false for a fresh provision.
+	ComposeUnchanged bool `json:"compose_unchanged,omitempty"`
 }
 
 // CommitCVMProvisionRequest is the request for committing a CVM provision.
@@ -331,6 +336,8 @@ type CVMResourceUsage struct {
 	CPUPercent       *float64 `json:"cpu_percent,omitempty"`
 	MemoryUsedBytes  *int64   `json:"memory_used_bytes,omitempty"`
 	MemoryTotalBytes *int64   `json:"memory_total_bytes,omitempty"`
+	DiskUsedBytes    *int64   `json:"disk_used_bytes,omitempty"`
+	DiskTotalBytes   *int64   `json:"disk_total_bytes,omitempty"`
 	EgressBytes      *int64   `json:"egress_bytes,omitempty"`
 }
 
@@ -402,6 +409,9 @@ type CVMActionResponse = CVMActionResponseV20260522
 // ReplicateCVMOptions holds options for replicating a CVM.
 type ReplicateCVMOptions struct {
 	NodeID *int `json:"node_id,omitempty"`
+	// OSImage pins the replica to a specific OS image slug. Empty means the
+	// replica inherits the source CVM's image.
+	OSImage string `json:"os_image,omitempty"`
 }
 
 // PatchCVMRequest is the request for patching a CVM (multi-field update).

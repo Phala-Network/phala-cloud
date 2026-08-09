@@ -176,3 +176,27 @@ func TestWithTimeout(t *testing.T) {
 		t.Errorf("timeout = %v, want 30s", c.httpClient.Timeout)
 	}
 }
+
+// TestDefaultTimeout pins the 60s per-request timeout shared with the JS and
+// Python SDKs. Go's zero-valued http.Client means no timeout at all, so a
+// hung connection used to block a caller forever.
+func TestDefaultTimeout(t *testing.T) {
+	client, err := NewClient(WithAPIKey("k"))
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	if client.httpClient.Timeout != DefaultTimeout {
+		t.Fatalf("timeout = %v, want %v", client.httpClient.Timeout, DefaultTimeout)
+	}
+	if DefaultTimeout != 60*time.Second {
+		t.Fatalf("DefaultTimeout = %v, want 60s", DefaultTimeout)
+	}
+
+	overridden, err := NewClient(WithAPIKey("k"), WithTimeout(5*time.Second))
+	if err != nil {
+		t.Fatalf("NewClient with timeout: %v", err)
+	}
+	if overridden.httpClient.Timeout != 5*time.Second {
+		t.Fatalf("overridden timeout = %v, want 5s", overridden.httpClient.Timeout)
+	}
+}

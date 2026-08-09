@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import time
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
@@ -36,6 +36,7 @@ from .action_responses import (
     InstanceTypesFamilyResponse,
     ListWorkspacesResponse,
     NextAppIdsResponse,
+    PreLaunchScriptUpgradeStatus,
     ProvisionCvmComposeFileUpdateResult,
     ProvisionCvmResponse,
     RefreshInstanceIdResponseV20260121,
@@ -195,8 +196,30 @@ class RestartCvmRequest(CvmIdRequest):
     force: bool = False
 
 
+class UpgradePreLaunchScriptRequest(CvmIdRequest):
+    """Phase 2 fields are only needed for contract-owned KMS (ETHEREUM/BASE).
+
+    The first call returns precondition_required with a compose hash to
+    register on-chain; the retry carries that hash and the transaction that
+    registered it.
+    """
+
+    compose_hash: str | None = None
+    transaction_hash: str | None = None
+
+
+def _upgrade_pre_launch_script_headers(req: UpgradePreLaunchScriptRequest) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    if req.compose_hash:
+        headers["X-Compose-Hash"] = req.compose_hash
+    if req.transaction_hash:
+        headers["X-Transaction-Hash"] = req.transaction_hash
+    return headers
+
+
 class ReplicateCvmRequest(CvmIdRequest):
     node_id: int | None = None
+    os_image: str | None = Field(default=None, min_length=1)
 
 
 class UpdateResourcesRequest(CvmIdRequest):
@@ -388,7 +411,13 @@ class _ExtMixin:
             return InProgressResponse | ComposeHashPreconditionResponse
         if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/pre-launch-script", path):
             return InProgressResponse | ComposeHashPreconditionResponse
-        if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/(resources|os-image)", path):
+        if m == "GET" and re.fullmatch(r"/cvms/[^/]+/pre-launch-script/upgrade-status", path):
+            return PreLaunchScriptUpgradeStatus
+        if m == "POST" and re.fullmatch(
+            r"/cvms/[^/]+/pre-launch-script/upgrade-to-latest-official", path
+        ):
+            return InProgressResponse | ComposeHashPreconditionResponse
+        if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/os-image", path):
             return type(None)
         if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/compose_file", path):
             return type(None)
@@ -751,6 +780,43 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     ) -> SafeResult[str]:
         return self.safe(self.get_cvm_pre_launch_script, request)
 
+    def get_pre_launch_script_upgrade_status(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> PreLaunchScriptUpgradeStatus:
+        cvm_id = CvmIdRequest.model_validate(request).resolved
+        return cast(
+            PreLaunchScriptUpgradeStatus,
+            self._loose_validate(self.get(f"/cvms/{cvm_id}/pre-launch-script/upgrade-status")),
+        )
+
+    def safe_get_pre_launch_script_upgrade_status(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> SafeResult[PreLaunchScriptUpgradeStatus]:
+        return self.safe(self.get_pre_launch_script_upgrade_status, request)
+
+    def upgrade_pre_launch_script(
+        self, request: UpgradePreLaunchScriptRequest | Mapping[str, Any]
+    ) -> Any:
+        req = UpgradePreLaunchScriptRequest.model_validate(request)
+        try:
+            return self._loose_validate(
+                self.request(
+                    "POST",
+                    f"/cvms/{req.resolved}/pre-launch-script/upgrade-to-latest-official",
+                    headers=_upgrade_pre_launch_script_headers(req),
+                ),
+            )
+        except Exception as exc:
+            fields = self._extract_465_fields(exc)
+            if fields is not None:
+                return self._loose_validate({"status": "precondition_required", **fields})
+            raise
+
+    def safe_upgrade_pre_launch_script(
+        self, request: UpgradePreLaunchScriptRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
+        return self.safe(self.upgrade_pre_launch_script, request)
+
     def start_cvm(self, request: CvmIdRequest | Mapping[str, Any]) -> Any:
         cvm_id = CvmIdRequest.model_validate(request).resolved
         return self._loose_validate(self.post(f"/cvms/{cvm_id}/start"))
@@ -830,9 +896,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     ) -> SafeResult[Any]:
         return self.safe(self.get_cvm_attestation, request)
 
-    def update_cvm_resources(
-        self, request: UpdateResourcesRequest | Mapping[str, Any]
-    ) -> dict[str, str]:
+    def update_cvm_resources(self, request: UpdateResourcesRequest | Mapping[str, Any]) -> Any:
         req = UpdateResourcesRequest.model_validate(request)
         body = req.model_dump(exclude_none=True)
         body.pop("id", None)
@@ -845,7 +909,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
 
     def safe_update_cvm_resources(
         self, request: UpdateResourcesRequest | Mapping[str, Any]
-    ) -> SafeResult[dict[str, str]]:
+    ) -> SafeResult[Any]:
         return self.safe(self.update_cvm_resources, request)
 
     def update_cvm_visibility(self, request: UpdateVisibilityRequest | Mapping[str, Any]) -> Any:
@@ -1163,7 +1227,10 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     def replicate_cvm(self, request: ReplicateCvmRequest | Mapping[str, Any]) -> Any:
         req = ReplicateCvmRequest.model_validate(request)
         return self._loose_validate(
-            self.post(f"/cvms/{req.resolved}/replicas", json={"node_id": req.node_id})
+            self.post(
+                f"/cvms/{req.resolved}/replicas",
+                json={"node_id": req.node_id, "os_image": req.os_image},
+            )
         )
 
     def safe_replicate_cvm(
@@ -1565,6 +1632,45 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
     ) -> SafeResult[str]:
         return await self.safe(self.get_cvm_pre_launch_script, request)
 
+    async def get_pre_launch_script_upgrade_status(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> PreLaunchScriptUpgradeStatus:
+        cvm_id = CvmIdRequest.model_validate(request).resolved
+        return cast(
+            PreLaunchScriptUpgradeStatus,
+            self._loose_validate(
+                await self.get(f"/cvms/{cvm_id}/pre-launch-script/upgrade-status")
+            ),
+        )
+
+    async def safe_get_pre_launch_script_upgrade_status(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> SafeResult[PreLaunchScriptUpgradeStatus]:
+        return await self.safe(self.get_pre_launch_script_upgrade_status, request)
+
+    async def upgrade_pre_launch_script(
+        self, request: UpgradePreLaunchScriptRequest | Mapping[str, Any]
+    ) -> Any:
+        req = UpgradePreLaunchScriptRequest.model_validate(request)
+        try:
+            return self._loose_validate(
+                await self.request(
+                    "POST",
+                    f"/cvms/{req.resolved}/pre-launch-script/upgrade-to-latest-official",
+                    headers=_upgrade_pre_launch_script_headers(req),
+                ),
+            )
+        except Exception as exc:
+            fields = self._extract_465_fields(exc)
+            if fields is not None:
+                return self._loose_validate({"status": "precondition_required", **fields})
+            raise
+
+    async def safe_upgrade_pre_launch_script(
+        self, request: UpgradePreLaunchScriptRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
+        return await self.safe(self.upgrade_pre_launch_script, request)
+
     async def start_cvm(self, request: CvmIdRequest | Mapping[str, Any]) -> Any:
         cvm_id = CvmIdRequest.model_validate(request).resolved
         return self._loose_validate(await self.post(f"/cvms/{cvm_id}/start"))
@@ -1652,17 +1758,16 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
 
     async def update_cvm_resources(
         self, request: UpdateResourcesRequest | Mapping[str, Any]
-    ) -> None:
+    ) -> Any:
         req = UpdateResourcesRequest.model_validate(request)
         body = req.model_dump(exclude_none=True)
         for k in ["id", "uuid", "app_id", "instance_id", "cvm_id", "cvmId"]:
             body.pop(k, None)
-        await self.request("PATCH", f"/cvms/{req.resolved}/resources", json=body)
-        return None
+        return await self.request("PATCH", f"/cvms/{req.resolved}", json=body)
 
     async def safe_update_cvm_resources(
         self, request: UpdateResourcesRequest | Mapping[str, Any]
-    ) -> SafeResult[None]:
+    ) -> SafeResult[Any]:
         return await self.safe(self.update_cvm_resources, request)
 
     async def update_cvm_visibility(
@@ -2002,7 +2107,10 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
     async def replicate_cvm(self, request: ReplicateCvmRequest | Mapping[str, Any]) -> Any:
         req = ReplicateCvmRequest.model_validate(request)
         return self._loose_validate(
-            await self.post(f"/cvms/{req.resolved}/replicas", json={"node_id": req.node_id})
+            await self.post(
+                f"/cvms/{req.resolved}/replicas",
+                json={"node_id": req.node_id, "os_image": req.os_image},
+            )
         )
 
     async def safe_replicate_cvm(

@@ -18,8 +18,22 @@ type Paginated[T any] struct {
 	Pages    int `json:"pages"`
 }
 
+// Update result statuses returned by the compose and pre-launch script update
+// endpoints.
+const (
+	UpdateStatusInProgress           = "in_progress"
+	UpdateStatusPreconditionRequired = "precondition_required"
+	UpdateStatusNoChange             = "no_change"
+)
+
 // UpdateResult represents the result of an update operation that may require on-chain confirmation.
 type UpdateResult struct {
+	// Status discriminates the response variants: in_progress (the update was
+	// accepted), precondition_required (the compose hash needs on-chain
+	// registration first) and no_change (the submitted content matches what is
+	// already deployed, so nothing was done).
+	Status string `json:"status,omitempty"`
+
 	// Normal success fields.
 	RequiresOnChainHash *bool  `json:"requires_on_chain_hash,omitempty"`
 	CorrelationID       string `json:"correlation_id,omitempty"`

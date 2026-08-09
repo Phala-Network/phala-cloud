@@ -191,3 +191,28 @@ func TestProvisionCVMRequest_MarshalResourceMatchingFields(t *testing.T) {
 		t.Error("skip_gateway = false, want true")
 	}
 }
+
+// TestDeviceIDEntryShape pins the current device_ids wire contract: an entry is
+// keyed by (device_id, algorithm_version) alone. The os_image_ids list was
+// dropped from the API and must not reappear in the struct.
+func TestDeviceIDEntryShape(t *testing.T) {
+	var entry DeviceIDEntry
+	if err := json.Unmarshal([]byte(`{"device_id":"0xdev","algorithm_version":"v1","enabled":true}`), &entry); err != nil {
+		t.Fatalf("unmarshal device ID entry: %v", err)
+	}
+	if entry.DeviceID != "0xdev" || entry.AlgorithmVersion != "v1" || !entry.Enabled {
+		t.Fatalf("entry = %+v, want 0xdev / v1 / enabled", entry)
+	}
+
+	encoded, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("marshal device ID entry: %v", err)
+	}
+	var roundTripped map[string]any
+	if err := json.Unmarshal(encoded, &roundTripped); err != nil {
+		t.Fatalf("unmarshal round-tripped entry: %v", err)
+	}
+	if _, ok := roundTripped["os_image_ids"]; ok {
+		t.Fatal("os_image_ids present in the encoded entry, want it gone")
+	}
+}

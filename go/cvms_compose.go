@@ -116,3 +116,56 @@ func (c *Client) UpdatePreLaunchScript(ctx context.Context, cvmID, script string
 	}
 	return &result, nil
 }
+
+// PreLaunchScriptUpgradeStatus reports whether a CVM runs an unmodified
+// official pre-launch script and whether a newer official version exists.
+// CanUpgrade is the flag callers act on: it is true only when the CVM is on an
+// official script that is not the latest one.
+type PreLaunchScriptUpgradeStatus struct {
+	CurrentHash        *string `json:"current_hash"`
+	LatestOfficialHash string  `json:"latest_official_hash"`
+	IsOfficial         bool    `json:"is_official"`
+	IsLatest           bool    `json:"is_latest"`
+	CanUpgrade         bool    `json:"can_upgrade"`
+}
+
+// GetPreLaunchScriptUpgradeStatus returns the pre-launch script upgrade status for a CVM.
+func (c *Client) GetPreLaunchScriptUpgradeStatus(ctx context.Context, cvmID string) (*PreLaunchScriptUpgradeStatus, error) {
+	var result PreLaunchScriptUpgradeStatus
+	err := c.doWithRetry(ctx, func() error {
+		return c.doJSON(ctx, "GET", cvmPath(cvmID, "pre-launch-script", "upgrade-status"), nil, &result)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// UpgradePreLaunchScript replaces a CVM's pre-launch script with the latest
+// official version. The script content lives server-side, so only the CVM ID is
+// needed.
+//
+// For contract-owned KMS (ETHEREUM/BASE) the first call fails with a 465
+// APIError carrying the compose hash to register on-chain. Use
+// IsComposePrecondition and ComposePrecondition to read it, then retry with
+// opts carrying the compose hash and the registering transaction hash.
+func (c *Client) UpgradePreLaunchScript(ctx context.Context, cvmID string, opts *ComposeUpdateOptions) (*UpdateResult, error) {
+	headers := map[string]string{}
+	if opts != nil {
+		if opts.ComposeHash != "" {
+			headers["X-Compose-Hash"] = opts.ComposeHash
+		}
+		if opts.TransactionHash != "" {
+			headers["X-Transaction-Hash"] = opts.TransactionHash
+		}
+	}
+
+	var result UpdateResult
+	err := c.doWithRetry(ctx, func() error {
+		return c.doText(ctx, "POST", cvmPath(cvmID, "pre-launch-script", "upgrade-to-latest-official"), "", "", headers, &result)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}

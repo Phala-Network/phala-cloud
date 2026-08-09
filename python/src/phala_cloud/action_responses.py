@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import Field
 
 from .models.apps import AppRevisionDetailResponse as AppRevisionDetailResponse
@@ -23,8 +25,18 @@ class WorkspaceResponse(CloudModel):
     id: str
     name: str
     slug: str | None = None
+    avatar_url: str | None = None
+    description: str | None = None
     tier: str | None = None
     role: str | None = None
+    is_default: bool | None = None
+    created_at: str | None = None
+    confidential_models_enabled: bool | None = None
+    # Billing lifecycle state. A suspended workspace still runs but owes money;
+    # an abandoned one is closed and read-only until its balance is settled.
+    billing_status: Literal["active", "suspended", "abandoned"] = "active"
+    # When the workspace was suspended. None unless billing_status is suspended.
+    suspended_at: str | None = None
 
 
 class ListWorkspacesResponse(CloudModel):
@@ -64,6 +76,23 @@ class ProvisionCvmComposeFileUpdateResult(CloudModel):
     compose_hash: str
     kms_info: GenericObject | None = None
     compose_hash_registered: bool = False
+    # True when the submitted compose matched the deployed one, meaning the
+    # commit step is a no-op and can be skipped.
+    compose_unchanged: bool = False
+
+
+class PreLaunchScriptUpgradeStatus(CloudModel):
+    """Whether a CVM runs an unmodified official pre-launch script.
+
+    can_upgrade is the one flag callers act on: it is true only when the CVM is
+    on an official script that is not the latest one.
+    """
+
+    current_hash: str | None = None
+    latest_official_hash: str
+    is_official: bool
+    is_latest: bool
+    can_upgrade: bool
 
 
 class CommitCvmProvisionResponseBase(CloudModel):

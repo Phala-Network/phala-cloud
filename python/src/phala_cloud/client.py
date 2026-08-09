@@ -49,6 +49,9 @@ SUPPORTED_API_VERSIONS: tuple[ApiVersion, ...] = (
 )
 DEFAULT_API_VERSION: ApiVersion = "2026-06-23"
 DEFAULT_BASE_URL = "https://cloud-api.phala.com/api/v1"
+# Per-request HTTP timeout, matching the JS and Go SDKs. Provisioning and
+# attestation calls routinely exceed the previous 30s.
+DEFAULT_TIMEOUT = 60.0
 
 # The contract-centric KMS API exists from this version onward; the contract
 # methods pin it per request.
@@ -99,7 +102,7 @@ class AsyncPhalaCloud:
         api_key: str | None = None,
         base_url: str | None = None,
         version: ApiVersion = DEFAULT_API_VERSION,
-        timeout: float = 30.0,
+        timeout: float = DEFAULT_TIMEOUT,
         use_cookie_auth: bool = False,
         headers: Mapping[str, str] | None = None,
         http_client: httpx.AsyncClient | None = None,
@@ -380,7 +383,7 @@ class PhalaCloud:
         api_key: str | None = None,
         base_url: str | None = None,
         version: ApiVersion = DEFAULT_API_VERSION,
-        timeout: float = 30.0,
+        timeout: float = DEFAULT_TIMEOUT,
         use_cookie_auth: bool = False,
         headers: Mapping[str, str] | None = None,
         http_client: httpx.Client | None = None,
