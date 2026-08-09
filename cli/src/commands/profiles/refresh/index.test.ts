@@ -116,6 +116,71 @@ describe("profiles refresh command", () => {
 		expect(mockRunDeviceAuthFlow).not.toHaveBeenCalled();
 	});
 
+	test("defaults to the current profile when no name is given", async () => {
+		saveCredentialsFile({
+			schema_version: 1,
+			current_profile: "alpha",
+			profiles: { alpha: profile("phak_oldtoken"), beta: profile("phak_beta") },
+		});
+
+		const code = await profilesRefreshCommand.run({}, makeContext());
+
+		expect(code).toBe(0);
+		const saved = loadCredentialsFile();
+		expect(saved?.profiles.alpha.token).toBe("phak_newtoken");
+		expect(saved?.profiles.beta.token).toBe("phak_beta");
+		expect(saved?.current_profile).toBe("alpha");
+	});
+
+	test("fails when no name is given and there is no current profile", async () => {
+		const code = await profilesRefreshCommand.run({}, makeContext());
+
+		expect(code).toBe(1);
+		expect(mockRunDeviceAuthFlow).not.toHaveBeenCalled();
+	});
+
+	test("passes the profile workspace slug to the device flow", async () => {
+		saveCredentialsFile({
+			schema_version: 1,
+			current_profile: "alpha",
+			profiles: { alpha: profile("phak_oldtoken") },
+		});
+
+		const code = await profilesRefreshCommand.run(
+			{ profileName: "alpha" },
+			makeContext(),
+		);
+
+		expect(code).toBe(0);
+		expect(mockRunDeviceAuthFlow).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.objectContaining({ workspaceSlug: "alpha-ws" }),
+		);
+	});
+
+	test("refuses to save a token bound to a different workspace", async () => {
+		mockValidateApiKey.mockImplementationOnce(() =>
+			Promise.resolve({
+				user: { username: "alice", email: "alice@example.test" },
+				workspace: { name: "Other WS", slug: "other-ws" },
+			}),
+		);
+		saveCredentialsFile({
+			schema_version: 1,
+			current_profile: "alpha",
+			profiles: { alpha: profile("phak_oldtoken") },
+		});
+
+		const code = await profilesRefreshCommand.run(
+			{ profileName: "alpha" },
+			makeContext(),
+		);
+
+		expect(code).toBe(1);
+		// Profile untouched: still holds the old token
+		expect(loadCredentialsFile()?.profiles.alpha.token).toBe("phak_oldtoken");
+	});
+
 	test("revokes the old token, then stores the new one", async () => {
 		saveCredentialsFile({
 			schema_version: 1,

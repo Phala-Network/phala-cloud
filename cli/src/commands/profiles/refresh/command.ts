@@ -9,8 +9,8 @@ export const profilesRefreshCommandMeta: CommandMeta = {
 	arguments: [
 		{
 			name: "profile-name",
-			description: "Profile name",
-			required: true,
+			description: "Profile name (defaults to the current profile)",
+			required: false,
 			target: "profileName",
 		},
 	],
@@ -29,7 +29,11 @@ export const profilesRefreshCommandMeta: CommandMeta = {
 	],
 	examples: [
 		{
-			name: "Refresh a profile via device flow",
+			name: "Refresh the current profile via device flow",
+			value: "phala profiles refresh",
+		},
+		{
+			name: "Refresh a specific profile",
 			value: "phala profiles refresh my-profile",
 		},
 		{
@@ -40,7 +44,7 @@ export const profilesRefreshCommandMeta: CommandMeta = {
 };
 
 export const profilesRefreshCommandSchema = z.object({
-	profileName: z.string().min(1),
+	profileName: z.string().min(1).optional(),
 	manual: z.boolean().optional(),
 	noOpen: z.boolean().optional(),
 });

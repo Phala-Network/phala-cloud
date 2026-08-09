@@ -100,6 +100,13 @@ export async function runDeviceAuthFlow(
 		noOpen?: boolean;
 		printToken?: boolean;
 		baseURL: string;
+		/**
+		 * Workspace slug to pre-bind on the verification page. Used by
+		 * `profiles refresh` so the page locks workspace selection to the
+		 * profile's existing workspace. The page treats it as a hint; the
+		 * backend re-validates workspace access at token issue time.
+		 */
+		workspaceSlug?: string;
 	},
 ): Promise<string> {
 	const client = createClient({
@@ -124,6 +131,10 @@ export async function runDeviceAuthFlow(
 		expires_in,
 	} = codeResponse;
 
+	const verificationUrl = options.workspaceSlug
+		? `${verification_uri_complete}&workspace=${encodeURIComponent(options.workspaceSlug)}`
+		: verification_uri_complete;
+
 	// Polling interval - can be increased on slow_down per RFC 8628
 	let pollingInterval = initialInterval;
 
@@ -131,7 +142,7 @@ export async function runDeviceAuthFlow(
 	const infoStream = options.printToken ? context.stderr : context.stdout;
 	writeLine(infoStream);
 	writeLine(infoStream, chalk.bold("To authenticate, visit:"));
-	writeLine(infoStream, chalk.cyan(verification_uri_complete));
+	writeLine(infoStream, chalk.cyan(verificationUrl));
 	writeLine(infoStream);
 	writeLine(
 		infoStream,
@@ -142,7 +153,7 @@ export async function runDeviceAuthFlow(
 	// Step 3: Open browser (optional)
 	if (!options.noOpen) {
 		try {
-			await open(verification_uri_complete);
+			await open(verificationUrl);
 			writeLine(infoStream, "Opening browser automatically...");
 		} catch {
 			writeLine(
