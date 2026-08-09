@@ -40,7 +40,7 @@ function writeLine(stream: NodeJS.WriteStream, message = ""): void {
 	stream.write(`${message}\n`);
 }
 
-async function validateApiKey(options: {
+export async function validateApiKey(options: {
 	apiKey: string;
 	baseURL: string;
 }): Promise<AuthResponse> {
@@ -56,7 +56,7 @@ async function validateApiKey(options: {
 	return result.data;
 }
 
-async function promptForApiKey(options: {
+export async function promptForApiKey(options: {
 	baseURL: string;
 }): Promise<{ apiKey: string; user: AuthResponse }> {
 	let cachedUser: AuthResponse | undefined;
@@ -94,7 +94,7 @@ async function promptForApiKey(options: {
 	return { apiKey: response.apiKey, user: cachedUser };
 }
 
-async function runDeviceAuthFlow(
+export async function runDeviceAuthFlow(
 	context: CommandContext,
 	options: {
 		noOpen?: boolean;
