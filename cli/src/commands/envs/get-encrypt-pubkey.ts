@@ -50,7 +50,10 @@ export function verifyAndExtractEnvEncryptPubkey(
 /**
  * Resolve the encryption public key for a CVM.
  *
- * Centralized KMS (phala/legacy): uses kms_info.encrypted_env_pubkey directly.
+ * Centralized KMS (phala/legacy):
+ * - 2026-01-21+: kms_info.encrypted_env_pubkey
+ * - 2025-10-28: top-level encrypted_env_pubkey
+ *
  * Decentralized KMS (ethereum/base): fetches from KMS endpoint.
  */
 export async function getEncryptPubkey(
@@ -58,17 +61,24 @@ export async function getEncryptPubkey(
 	cvm: {
 		app_id?: string | null;
 		kms_type?: string | null;
+		/** Legacy top-level field from API version 2025-10-28. */
+		encrypted_env_pubkey?: string | null;
 		kms_info?: {
 			chain_id?: number | null;
 			encrypted_env_pubkey?: string | null;
 			k256_pubkey?: string | null;
+			slug?: string | null;
+			id?: string | number | null;
 		} | null;
 	},
 ): Promise<string> {
 	const isDecentralized = cvm.kms_info?.chain_id != null;
 
 	if (isDecentralized) {
-		const kmsSlug = cvm.kms_type;
+		const kmsSlug =
+			cvm.kms_type ||
+			cvm.kms_info?.slug ||
+			(cvm.kms_info?.id != null ? String(cvm.kms_info.id) : null);
 		if (!kmsSlug) {
 			throw new Error("KMS type is required for decentralized KMS");
 		}
@@ -92,8 +102,9 @@ export async function getEncryptPubkey(
 		);
 	}
 
-	// Centralized KMS
-	const pubkey = cvm.kms_info?.encrypted_env_pubkey;
+	// Centralized KMS: nested field first (current schema), then legacy top-level.
+	const pubkey =
+		cvm.kms_info?.encrypted_env_pubkey ?? cvm.encrypted_env_pubkey ?? null;
 	if (!pubkey) {
 		throw new Error(
 			"CVM does not have an encryption public key. The CVM may not support encrypted environment variables.",
