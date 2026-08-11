@@ -136,23 +136,28 @@ describe("CLI Interface Compatibility - Flag Support (v1.0.40 baseline)", () => 
 			expect(hasFlag(helpText, "-j")).toBe(true);
 		});
 
-		test("all JSON-capable commands support both -j and --json", async () => {
-			const jsonCommands = [
-				"status",
-				"cvms list",
-				"cvms get",
-				"cvms attestation",
-				"cvms resize",
-				"nodes list",
-				"config list",
-			];
+		// Spawns one CLI process per command; keep above the default 5s suite timeout.
+		test(
+			"all JSON-capable commands support both -j and --json",
+			async () => {
+				const jsonCommands = [
+					"status",
+					"cvms list",
+					"cvms get",
+					"cvms attestation",
+					"cvms resize",
+					"nodes list",
+					"config list",
+				];
 
-			for (const cmd of jsonCommands) {
-				const helpText = await getHelpText(cmd);
+				for (const cmd of jsonCommands) {
+					const helpText = await getHelpText(cmd);
 
-				expect(hasFlag(helpText, "--json")).toBe(true);
-				expect(hasFlag(helpText, "-j")).toBe(true);
-			}
-		});
+					expect(hasFlag(helpText, "--json")).toBe(true);
+					expect(hasFlag(helpText, "-j")).toBe(true);
+				}
+			},
+			{ timeout: 30_000 },
+		);
 	});
 });

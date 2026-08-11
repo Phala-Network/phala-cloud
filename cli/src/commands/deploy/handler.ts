@@ -1,7 +1,12 @@
 import path from "node:path";
 import os from "node:os";
 import type { CommandContext } from "@/src/core/types";
-import { resolveAuthForContext } from "@/src/lib/client";
+import {
+	getClient,
+	getClientWithKey,
+	resolveAuthForContext,
+	type CliApiClient,
+} from "@/src/lib/client";
 import { logger } from "@/src/utils/logger";
 import {
 	CLOUD_URL,
@@ -15,12 +20,10 @@ import { detectFileInCurrentDir, promptForFile } from "@/src/utils/prompts";
 import { dedupeEnvVars, parseEnvInputs } from "@/src/utils/env-parsing";
 import { parseDiskSizeInput, parseMemoryInput } from "@/src/utils/units";
 import {
-	type Client,
 	type EnvVar,
 	CvmIdSchema,
 	MAX_COMPOSE_PAYLOAD_BYTES,
 	SUPPORTED_CHAINS,
-	createClient,
 	encryptEnvVars,
 	parseEnvVars,
 	safeAddComposeHash,
@@ -48,7 +51,10 @@ import fs from "fs-extra";
 import inquirer from "inquirer";
 import type { DeployCommandInput } from "./command";
 import type { RuntimeProjectConfig } from "@/src/utils/project-config";
-import { verifyAndExtractEnvEncryptPubkey } from "@/src/commands/envs/get-encrypt-pubkey";
+import {
+	getEncryptPubkey,
+	verifyAndExtractEnvEncryptPubkey,
+} from "@/src/commands/envs/get-encrypt-pubkey";
 
 type PrivacyConfig = Pick<
 	RuntimeProjectConfig,
@@ -111,8 +117,6 @@ export function applyForceStopOption(
 	patchBody.allow_force_stop = true;
 }
 
-const API_VERSION = "2026-05-22" as const;
-
 async function getApiClient({
 	context,
 	apiToken,
@@ -121,14 +125,11 @@ async function getApiClient({
 	Pick<Options, "apiToken" | "interactive"> & {
 		context?: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">;
 	}
->): Promise<Client<typeof API_VERSION>> {
+>): Promise<CliApiClient> {
 	const resolved = resolveAuthForContext(context, { apiToken });
 	if (resolved.apiKey) {
-		return createClient({
-			apiKey: resolved.apiKey,
-			baseURL: resolved.baseURL,
-			version: API_VERSION,
-		});
+		// Honors global --api-version via getClient (no hardcoded version).
+		return getClient(context, { apiToken });
 	}
 
 	if (interactive) {
@@ -141,11 +142,7 @@ async function getApiClient({
 					input.trim() ? true : "API token is required",
 			},
 		]);
-		return createClient({
-			apiKey: promptedToken,
-			baseURL: resolved.baseURL,
-			version: API_VERSION,
-		});
+		return getClientWithKey(promptedToken, { baseURL: resolved.baseURL });
 	}
 
 	throw new Error(
@@ -674,7 +671,7 @@ const deployNewCvm = async (
 	validatedOptions: Options,
 	docker_compose_yml: string,
 	envs: EnvVar[],
-	client: Client<typeof API_VERSION>,
+	client: CliApiClient,
 	stdout: NodeJS.WriteStream,
 	stderr: NodeJS.WriteStream,
 	projectConfig?: PrivacyConfig,
@@ -864,7 +861,7 @@ const updateCvm = async (
 	validatedOptions: Options,
 	docker_compose_yml: string,
 	envs: EnvVar[] | undefined,
-	client: Client<typeof API_VERSION>,
+	client: CliApiClient,
 	stdout: NodeJS.WriteStream,
 	context?: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
 	preLaunchScriptContent?: string,
@@ -878,37 +875,12 @@ const updateCvm = async (
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
 	const cvm = cvm_result.data as any;
 
-	// Encrypt env vars before patching (backend stores the full body in Redis for two-phase)
+	// Encrypt env vars before patching (backend stores the full body in Redis for two-phase).
+	// getEncryptPubkey handles current (kms_info.*) and legacy top-level shapes.
 	let encrypted_env: string | undefined;
 	if (envs && envs.length > 0) {
-		if (cvm.kms_info?.chain_id) {
-			// On-chain KMS: fetch encrypt pubkey from API
-			const kmsSlug = cvm.kms_info?.slug || cvm.kms_info?.id;
-			if (!kmsSlug) {
-				throw new Error("KMS slug or id is required for decentralized KMS");
-			}
-			const resp = await safeGetAppEnvEncryptPubKey(client, {
-				app_id: cvm.app_id,
-				kms: kmsSlug,
-			});
-			if (!resp.success) {
-				throw resp.error;
-			}
-			const pubkey = verifyAndExtractEnvEncryptPubkey(
-				resp.data,
-				cvm.app_id,
-				cvm.kms_info.k256_pubkey,
-			);
-			encrypted_env = await encryptEnvVars(envs, pubkey);
-		} else {
-			// Centralized KMS: use pubkey from CVM info
-			if (!cvm.encrypted_env_pubkey) {
-				throw new Error(
-					"CVM encrypted_env_pubkey is required for centralized KMS",
-				);
-			}
-			encrypted_env = await encryptEnvVars(envs, cvm.encrypted_env_pubkey);
-		}
+		const pubkey = await getEncryptPubkey(client, cvm);
+		encrypted_env = await encryptEnvVars(envs, pubkey);
 	}
 
 	// Build unified patch request
@@ -1214,7 +1186,7 @@ const updateCvm = async (
  */
 const commitCvmUpdate = async (
 	validatedOptions: Options,
-	client: Client<typeof API_VERSION>,
+	client: CliApiClient,
 	stdout: NodeJS.WriteStream,
 ) => {
 	if (!validatedOptions.token) {
@@ -1279,14 +1251,8 @@ export async function runDeploy(
 		// commit-update endpoint is token-based (no API key required),
 		// but we still need a client with the correct base URL.
 		if (input.commit) {
-			const resolved = resolveAuthForContext(context, {
-				apiToken: input.apiToken,
-			});
-			const client = createClient({
-				apiKey: resolved.apiKey,
-				baseURL: resolved.baseURL,
-				version: API_VERSION,
-			});
+			// Token-based commit still needs the correct base URL / API version.
+			const client = await getClient(context, { apiToken: input.apiToken });
 
 			const uuid = context.cvmId
 				? CvmIdSchema.parse(context.cvmId).cvmId

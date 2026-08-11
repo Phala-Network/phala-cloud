@@ -35,23 +35,28 @@ describe("CLI Interface Compatibility - Command Existence (v1.0.40 baseline)", (
 		);
 	}
 
-	test("command aliases still work", async () => {
-		// Test known aliases from v1.0.40
-		const aliases = [
-			{ command: "cvms ls", original: "cvms list" },
-			{ command: "nodes ls", original: "nodes list" },
-			{ command: "config ls", original: "config list" },
-		];
+	// Six CLI help spawns; stay above the default 5s suite timeout under load.
+	test(
+		"command aliases still work",
+		async () => {
+			// Test known aliases from v1.0.40
+			const aliases = [
+				{ command: "cvms ls", original: "cvms list" },
+				{ command: "nodes ls", original: "nodes list" },
+				{ command: "config ls", original: "config list" },
+			];
 
-		for (const { command, original } of aliases) {
-			const aliasHelp = await getHelpText(command);
-			const originalHelp = await getHelpText(original);
+			for (const { command, original } of aliases) {
+				const aliasHelp = await getHelpText(command);
+				const originalHelp = await getHelpText(original);
 
-			// Aliases should show the same help as the original
-			expect(aliasHelp.length).toBeGreaterThan(0);
-			expect(originalHelp.length).toBeGreaterThan(0);
-		}
-	});
+				// Aliases should show the same help as the original
+				expect(aliasHelp.length).toBeGreaterThan(0);
+				expect(originalHelp.length).toBeGreaterThan(0);
+			}
+		},
+		{ timeout: 30_000 },
+	);
 
 	test("all commands respond to --help", async () => {
 		const allCommands = getAllCommands();

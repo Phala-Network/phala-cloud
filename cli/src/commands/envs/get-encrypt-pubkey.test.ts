@@ -48,6 +48,36 @@ describe("getEncryptPubkey", () => {
 			expect(result).toBe("some_pubkey");
 		});
 
+		test("falls back to legacy top-level encrypted_env_pubkey", async () => {
+			const cvm = {
+				app_id: "abc123",
+				kms_type: "phala",
+				encrypted_env_pubkey: "legacy_top_level_pubkey",
+				kms_info: {
+					chain_id: null,
+					encrypted_env_pubkey: null,
+				},
+			};
+
+			const result = await getEncryptPubkey(mockClient, cvm);
+			expect(result).toBe("legacy_top_level_pubkey");
+		});
+
+		test("prefers kms_info.encrypted_env_pubkey over top-level", async () => {
+			const cvm = {
+				app_id: "abc123",
+				kms_type: "phala",
+				encrypted_env_pubkey: "legacy_top_level_pubkey",
+				kms_info: {
+					chain_id: null,
+					encrypted_env_pubkey: "nested_pubkey",
+				},
+			};
+
+			const result = await getEncryptPubkey(mockClient, cvm);
+			expect(result).toBe("nested_pubkey");
+		});
+
 		test("throws when encrypted_env_pubkey is missing", async () => {
 			const cvm = {
 				app_id: "abc123",
@@ -63,7 +93,7 @@ describe("getEncryptPubkey", () => {
 			);
 		});
 
-		test("throws when kms_info is null", async () => {
+		test("throws when kms_info is null and top-level is missing", async () => {
 			const cvm = {
 				app_id: "abc123",
 				kms_type: "phala",
@@ -73,6 +103,18 @@ describe("getEncryptPubkey", () => {
 			await expect(getEncryptPubkey(mockClient, cvm)).rejects.toThrow(
 				"CVM does not have an encryption public key",
 			);
+		});
+
+		test("returns top-level pubkey when kms_info is null", async () => {
+			const cvm = {
+				app_id: "abc123",
+				kms_type: "phala",
+				encrypted_env_pubkey: "legacy_only_pubkey",
+				kms_info: null,
+			};
+
+			const result = await getEncryptPubkey(mockClient, cvm);
+			expect(result).toBe("legacy_only_pubkey");
 		});
 	});
 
