@@ -72,11 +72,15 @@ profiles.
 
 ### Refresh a profile
 
-Use `phala profiles refresh <name>` when a profile's token stopped working
-(for example `phala whoami` reports "Invalid API key"). The CLI first tries
-to revoke the old token on the server, then re-authenticates via the device
-flow (or `--manual` to paste a new API key) and stores the fresh token under
-the same profile name.
+Use `phala profiles refresh [name]` when a profile's token stopped working
+(for example `phala whoami` reports "Invalid API key"). Without a name it
+refreshes the current profile. The CLI first tries to revoke the old token on
+the server, then re-authenticates via the device flow (or `--manual` to paste
+a new API key) and stores the fresh token under the same profile name.
+
+The verification page is opened with the profile's workspace pinned, so a
+refresh cannot accidentally move the profile to another workspace; if the new
+token ends up bound to a different workspace, the CLI refuses to save it.
 
 ```bash
 $ phala profiles refresh work

@@ -26,10 +26,25 @@ async function runProfilesRefreshCommand(
 
 	try {
 		const credentials = loadCredentialsFile();
-		const existing = credentials?.profiles[input.profileName];
+
+		// Default to the current profile when no name is given.
+		const profileName =
+			input.profileName ?? credentials?.current_profile ?? undefined;
+		if (!profileName) {
+			const message =
+				"No profile specified and no current profile. Please login first.";
+			if (isJson) {
+				context.fail(message);
+				return 1;
+			}
+			logger.error(message);
+			return 1;
+		}
+
+		const existing = credentials?.profiles[profileName];
 
 		if (!existing) {
-			const message = `Profile "${input.profileName}" not found`;
+			const message = `Profile "${profileName}" not found`;
 			if (isJson) {
 				context.fail(message);
 				return 1;
@@ -71,12 +86,22 @@ async function runProfilesRefreshCommand(
 			apiKey = await runDeviceAuthFlow(context, {
 				noOpen: input.noOpen,
 				baseURL,
+				workspaceSlug: existing.workspace.slug,
 			});
 			user = await validateApiKey({ apiKey, baseURL });
 		}
 
+		// A refresh must not silently move the profile to another workspace.
+		const previousSlug = existing.workspace.slug;
+		const newSlug = user.workspace.slug;
+		if (previousSlug && newSlug && previousSlug !== newSlug) {
+			throw new Error(
+				`Workspace mismatch: profile "${profileName}" belongs to workspace "${previousSlug}", but the new token is bound to "${newSlug}". Run the refresh again and authorize against "${previousSlug}".`,
+			);
+		}
+
 		upsertProfile({
-			profileName: input.profileName,
+			profileName,
 			token: apiKey,
 			apiPrefix: baseURL,
 			workspaceName: user.workspace.name || existing.workspace.name,
@@ -87,18 +112,18 @@ async function runProfilesRefreshCommand(
 			},
 			// Keep the current profile unchanged unless the refreshed profile
 			// is the current one.
-			setCurrent: credentials?.current_profile === input.profileName,
+			setCurrent: credentials?.current_profile === profileName,
 		});
 
 		if (isJson) {
 			context.success({
-				refreshed: input.profileName,
+				refreshed: profileName,
 				username: user.user.username,
 			});
 			return 0;
 		}
 		logger.success(
-			`Profile "${input.profileName}" refreshed (user: ${user.user.username})`,
+			`Profile "${profileName}" refreshed (user: ${user.user.username})`,
 		);
 		return 0;
 	} catch (error) {
