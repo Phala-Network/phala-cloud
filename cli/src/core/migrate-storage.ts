@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { createClient, safeGetCurrentUser } from "@phala/cloud";
+import { CLI_USER_AGENT } from "@/src/utils/cli-version";
 
 import {
 	DEFAULT_API_PREFIX,
@@ -107,7 +108,11 @@ export type FetchCurrentUser = (options: {
 
 function defaultFetchCurrentUser(): FetchCurrentUser {
 	return async ({ token, baseURL }) => {
-		const client = createClient({ apiKey: token, baseURL });
+		const client = createClient({
+			apiKey: token,
+			baseURL,
+			headers: { "User-Agent": CLI_USER_AGENT },
+		});
 		const result = await safeGetCurrentUser(client);
 		if (!result.success) return { success: false };
 		return {

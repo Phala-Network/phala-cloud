@@ -15,6 +15,7 @@ import {
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 import { getClientWithKey } from "@/src/lib/client";
+import { CLI_USER_AGENT } from "@/src/utils/cli-version";
 import { DEFAULT_API_PREFIX, upsertProfile } from "@/src/utils/credentials";
 
 import { loginCommandMeta, loginCommandSchema } from "./command";
@@ -112,6 +113,9 @@ export async function runDeviceAuthFlow(
 	const client = createClient({
 		useCookieAuth: true,
 		baseURL: options.baseURL,
+		headers: {
+			"User-Agent": CLI_USER_AGENT,
+		},
 	});
 
 	// Step 1: Request device authorization codes
