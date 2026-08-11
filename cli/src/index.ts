@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { once } from "node:events";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -157,6 +158,21 @@ for (const command of allowDevicesCommands.commands) {
 process.on("SIGINT", () => process.exit(0));
 process.on("SIGTERM", () => process.exit(0));
 
+// Piped stdout is async in Node.js. Calling process.exit() before the stream
+// drains discards everything still in the user-space buffer — with the default
+// 64KB kernel pipe buffer, output to a pipe truncates at exactly 65536 bytes
+// while output to a file (synchronous) is complete. Wait for the buffer to
+// flush first; the timeout only caps a wedged reader, it never speeds up exit.
+async function flushStream(stream: NodeJS.WriteStream): Promise<void> {
+	if (stream.destroyed || stream.writableLength === 0) {
+		return;
+	}
+	await Promise.race([
+		once(stream, "drain"),
+		new Promise((resolve) => setTimeout(resolve, 5000)),
+	]);
+}
+
 async function main(): Promise<void> {
 	await migrateStorage({ env: process.env, stderr: process.stderr });
 
@@ -175,10 +191,12 @@ async function main(): Promise<void> {
 		stdin: process.stdin,
 	});
 
+	await Promise.all([flushStream(process.stdout), flushStream(process.stderr)]);
 	process.exit(exitCode);
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
 	console.error("An error occurred:", error);
+	await Promise.all([flushStream(process.stdout), flushStream(process.stderr)]);
 	process.exit(1);
 });
