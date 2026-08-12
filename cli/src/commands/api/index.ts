@@ -1,25 +1,12 @@
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { createClient } from "@phala/cloud";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 import { resolveAuthForContext } from "@/src/lib/client";
+import { CLI_USER_AGENT } from "@/src/utils/cli-version";
 import { applyJqFilter, formatJqOutput } from "./jq-filter";
 import { apiCommandMeta, apiCommandSchema, HTTP_METHODS } from "./command";
 import type { ApiCommandInput } from "./command";
-
-// Get CLI version for User-Agent
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const packageJsonPath = join(__dirname, "../../../package.json");
-let CLI_VERSION = "unknown";
-try {
-	const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
-	CLI_VERSION = packageJson.version || "unknown";
-} catch {
-	// Ignore errors reading package.json
-}
 
 /**
  * Read content from file or stdin.
@@ -317,7 +304,7 @@ export async function runApiCommand(
 		apiKey: auth.apiKey,
 		baseURL: auth.baseURL,
 		headers: {
-			"User-Agent": `phala-cli/${CLI_VERSION}`,
+			"User-Agent": CLI_USER_AGENT,
 		},
 	});
 

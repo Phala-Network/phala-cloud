@@ -7,6 +7,7 @@ import { getApiVersionOverride } from "@/src/core/api-version";
 import type { CommandContext } from "@/src/core/types";
 import { getProjectConfig } from "@/src/utils/project-config";
 import { resolveAuth, type ResolvedAuth } from "@/src/utils/credentials";
+import { CLI_USER_AGENT } from "@/src/utils/cli-version";
 
 const API_VERSION = "2026-06-23" as const;
 
@@ -68,6 +69,9 @@ export async function getClient(
 		baseURL: auth.baseURL,
 		version,
 		timeout: timeoutSeconds * 1000,
+		headers: {
+			"User-Agent": CLI_USER_AGENT,
+		},
 	}) as CliApiClient;
 }
 
@@ -96,6 +100,9 @@ export async function getClientWithKey(
 		apiKey,
 		baseURL: options?.baseURL,
 		version,
+		headers: {
+			"User-Agent": CLI_USER_AGENT,
+		},
 	}) as CliApiClient;
 }
 
