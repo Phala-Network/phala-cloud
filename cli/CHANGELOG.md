@@ -1,3 +1,27 @@
+## [](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.20...cli-v) (2026-08-13)
+
+### feat
+
+* **cli:** add `phala docs` — explore live docs from the terminal (agent-friendly) (#485) ([d8da13c](https://github.com/Phala-Network/phala-cloud/commit/d8da13c5d3fdd5737db68923e609e4ded3d53d31)), closes [#485](https://github.com/Phala-Network/phala-cloud/issues/485)
+* **cli:** add profiles refresh command ([4020c3d](https://github.com/Phala-Network/phala-cloud/commit/4020c3d7f66905c4ca8384d8985690c6b4106f3c))
+* **cli:** remove deprecated auth subcommands ([53a265e](https://github.com/Phala-Network/phala-cloud/commit/53a265ee3b9809f155bc441386002a95509812b1))
+* **cli:** revoke API tokens server-side on logout and profiles delete ([e5ff349](https://github.com/Phala-Network/phala-cloud/commit/e5ff349fd035ea51ac4b656b9556c604ff76482f))
+* **cli:** show SSH key fingerprints in runtime-config ([272560d](https://github.com/Phala-Network/phala-cloud/commit/272560d365195120984da84d2253daa83cd2bf3b))
+
+### fix
+
+* **cli:** add request timeout to docs MCP calls ([db34bf9](https://github.com/Phala-Network/phala-cloud/commit/db34bf9d72cef4ea4d7c4a363e65ddd535d9a37d))
+* **cli:** flush piped stdout before process exit ([2362e23](https://github.com/Phala-Network/phala-cloud/commit/2362e232eb67716bc0e24ded81b02b4c00147d7f))
+* **cli:** pass docs grep pattern via -e to rg ([b06e5e2](https://github.com/Phala-Network/phala-cloud/commit/b06e5e20c7e5bbcb60b934281b870768a01fcadf))
+* **cli:** pin workspace and default to current profile in profiles refresh ([644ccbc](https://github.com/Phala-Network/phala-cloud/commit/644ccbc837fc107771c053d50871dac6616b23df))
+* **cli:** preserve binary bodies in phala api ([43fd62a](https://github.com/Phala-Network/phala-cloud/commit/43fd62a6bc47a5e0ca0566992db337afcc46d4ca))
+* **cli:** preserve repeated API query parameters ([fcd2bcc](https://github.com/Phala-Network/phala-cloud/commit/fcd2bcc9255ea43a395b5778478eee440be09e5d))
+* **cli:** read env encrypt pubkey from current CVM schema on deploy ([a057b41](https://github.com/Phala-Network/phala-cloud/commit/a057b4151d2c7500dda1aadcdd78781bd78f1d49))
+* **cli:** send phala-cli/{version} User-Agent on all HTTP clients ([31f4a45](https://github.com/Phala-Network/phala-cloud/commit/31f4a454b86c35530bbb4230216ebca4148b145a))
+
+### refactor
+
+* **cli:** centralize API error presentation ([abad667](https://github.com/Phala-Network/phala-cloud/commit/abad667702e8ad380e3c4d10305429f29d34c3c7))
 ## [](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.20...cli-v) (2026-08-06)
 
 ### feat
