@@ -1,10 +1,44 @@
 import { execSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { basename, join } from "node:path";
 import type { ApiVersion, Client } from "@phala/cloud";
 import chalk from "chalk";
 import { logger } from "./logger";
+
+/**
+ * SHA256 fingerprint of an OpenSSH public key line, in the format
+ * `ssh-keygen -lf` and GitHub display.
+ *
+ * The fingerprint covers the base64-decoded wire-format key blob, not the
+ * textual line, so it is independent of the trailing comment. Returns
+ * undefined when the line is not a well-formed public key: the blob carries
+ * its own algorithm name, and a blob whose name disagrees with the line's
+ * first field is not something we should print a fingerprint for.
+ */
+export function sshKeyFingerprint(publicKeyLine: string): string | undefined {
+	const [keyType, blob] = publicKeyLine.trim().split(/\s+/);
+	if (!keyType || !blob) {
+		return undefined;
+	}
+
+	const decoded = Buffer.from(blob, "base64");
+	if (decoded.length < 4) {
+		return undefined;
+	}
+
+	const nameLength = decoded.readUInt32BE(0);
+	if (nameLength === 0 || decoded.length < 4 + nameLength) {
+		return undefined;
+	}
+	if (decoded.subarray(4, 4 + nameLength).toString("utf-8") !== keyType) {
+		return undefined;
+	}
+
+	const digest = createHash("sha256").update(decoded).digest("base64");
+	return `SHA256:${digest.replace(/=+$/, "")}`;
+}
 
 /**
  * Custom error for CVM not running
