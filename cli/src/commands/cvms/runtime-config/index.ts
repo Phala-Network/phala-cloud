@@ -3,6 +3,7 @@ import { defineCommand } from "@/src/core/define-command";
 import { isInJsonMode } from "@/src/core/json-mode";
 import type { CommandContext } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
+import { sshKeyFingerprint } from "@/src/utils/ssh-utils";
 import {
 	cvmsRuntimeConfigCommandMeta,
 	cvmsRuntimeConfigCommandSchema,
@@ -49,7 +50,10 @@ async function runCvmsRuntimeConfigCommand(
 			console.log();
 			console.log("SSH Authorized Keys:");
 			for (const key of config.ssh_authorized_keys) {
-				console.log(`  ${key}`);
+				// The fingerprint is what `phala ssh-keys list`, GitHub, and the
+				// CVM boot log all show, so print it above the key it belongs to.
+				console.log(`  ${sshKeyFingerprint(key) ?? "SHA256:<unrecognized>"}`);
+				console.log(`    ${key}`);
 			}
 		}
 
