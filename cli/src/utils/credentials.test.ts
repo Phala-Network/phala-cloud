@@ -29,12 +29,16 @@ describe("credentials", () => {
 	let oldHome: string | undefined;
 	let oldApiKey: string | undefined;
 	let oldApiPrefix: string | undefined;
+	let oldOidc: string | undefined;
+	let oldWorkspace: string | undefined;
 	let oldCloudDir: string | undefined;
 
 	beforeEach(() => {
 		oldHome = process.env.HOME;
 		oldApiKey = process.env.PHALA_CLOUD_API_KEY;
 		oldApiPrefix = process.env.PHALA_CLOUD_API_PREFIX;
+		oldOidc = process.env.PHALA_OIDC_TOKEN;
+		oldWorkspace = process.env.PHALA_CLOUD_WORKSPACE;
 		oldCloudDir = process.env.PHALA_CLOUD_DIR;
 
 		tempHome = makeTempHome();
@@ -42,6 +46,8 @@ describe("credentials", () => {
 		process.env.PHALA_CLOUD_DIR = path.join(tempHome, ".phala-cloud");
 		process.env.PHALA_CLOUD_API_KEY = undefined;
 		process.env.PHALA_CLOUD_API_PREFIX = undefined;
+		process.env.PHALA_OIDC_TOKEN = undefined;
+		process.env.PHALA_CLOUD_WORKSPACE = undefined;
 	});
 
 	afterEach(() => {
@@ -52,6 +58,10 @@ describe("credentials", () => {
 		if (oldApiPrefix !== undefined)
 			process.env.PHALA_CLOUD_API_PREFIX = oldApiPrefix;
 		else process.env.PHALA_CLOUD_API_PREFIX = undefined;
+		if (oldOidc !== undefined) process.env.PHALA_OIDC_TOKEN = oldOidc;
+		else process.env.PHALA_OIDC_TOKEN = undefined;
+		if (oldWorkspace !== undefined) process.env.PHALA_CLOUD_WORKSPACE = oldWorkspace;
+		else process.env.PHALA_CLOUD_WORKSPACE = undefined;
 		if (oldCloudDir !== undefined) process.env.PHALA_CLOUD_DIR = oldCloudDir;
 		else process.env.PHALA_CLOUD_DIR = undefined;
 
@@ -296,4 +306,23 @@ describe("credentials", () => {
 		switchProfile("  trimmed  ");
 		expect(getCurrentProfile()?.name).toBe("trimmed");
 	});
+	test("resolveAuth falls back to PHALA_OIDC_TOKEN when no API key", () => {
+		process.env.PHALA_OIDC_TOKEN = "oidc-jwt";
+		process.env.PHALA_CLOUD_WORKSPACE = "acme-ws";
+		const resolved = resolveAuth({ env: process.env });
+		expect(resolved.apiKey).toBeNull();
+		expect(resolved.bearerToken).toBe("oidc-jwt");
+		expect(resolved.workspace).toBe("acme-ws");
+		expect(resolved.tokenSource).toBe("oidc_env");
+	});
+
+	test("resolveAuth prefers API key over OIDC token", () => {
+		process.env.PHALA_CLOUD_API_KEY = "env-token";
+		process.env.PHALA_OIDC_TOKEN = "oidc-jwt";
+		const resolved = resolveAuth({ env: process.env });
+		expect(resolved.apiKey).toBe("env-token");
+		expect(resolved.bearerToken).toBeNull();
+		expect(resolved.tokenSource).toBe("env");
+	});
+
 });

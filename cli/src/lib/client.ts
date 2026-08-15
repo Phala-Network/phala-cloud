@@ -66,6 +66,8 @@ export async function getClient(
 	const timeoutSeconds = resolveTimeoutSeconds(context);
 	return createClient({
 		apiKey: auth.apiKey ?? undefined,
+		bearerToken: auth.bearerToken ?? undefined,
+		workspace: auth.workspace ?? undefined,
 		baseURL: auth.baseURL,
 		version,
 		timeout: timeoutSeconds * 1000,
