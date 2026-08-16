@@ -15,11 +15,14 @@ func cvmPath(cvmID string, subpath ...string) string {
 	return p
 }
 
-// ProvisionCVM provisions a new CVM.
+// ProvisionCVM prepares a new CVM creation (phase 1 of the two-phase create).
+// It POSTs the provision payload to /cvms and returns app_id, compose_hash, the
+// env-encryption pubkey, and a one-time commit token. The legacy
+// POST /cvms/provision endpoint remains available but is deprecated.
 func (c *Client) ProvisionCVM(ctx context.Context, req *ProvisionCVMRequest) (*ProvisionCVMResponse, error) {
 	var result ProvisionCVMResponse
 	err := c.doWithRetry(ctx, func() error {
-		return c.doJSON(ctx, "POST", "/cvms/provision", req, &result)
+		return c.doJSON(ctx, "POST", "/cvms", req, &result)
 	})
 	if err != nil {
 		return nil, err
