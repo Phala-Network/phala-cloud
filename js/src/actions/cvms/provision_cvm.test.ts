@@ -295,7 +295,7 @@ describe("provisionCvm (wire-level)", () => {
     const calls = (mockClient.post as ReturnType<typeof vi.fn>).mock.calls;
     expect(calls).toHaveLength(1);
     const [path, body] = calls[0];
-    expect(path).toBe("/cvms/provision");
+    expect(path).toBe("/cvms");
     return body as Record<string, unknown>;
   }
 
