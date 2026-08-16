@@ -802,6 +802,8 @@ const deployNewCvm = async (
 		const encrypted_env_vars = await encryptEnvVars(envsWithSshKey, pubkey);
 
 		commit_result = await safeCommitCvmProvision(client, {
+			// Same-path two-phase create: prefer the one-time commit token.
+			token: app.token,
 			app_id: deployed_contract.appId,
 			encrypted_env: encrypted_env_vars,
 			compose_hash: app.compose_hash,
@@ -817,6 +819,8 @@ const deployNewCvm = async (
 				: undefined;
 
 		commit_result = await safeCommitCvmProvision(client, {
+			// Same-path two-phase create: prefer the one-time commit token.
+			token: app.token,
 			app_id: app.app_id,
 			encrypted_env: encrypted_env_vars,
 			compose_hash: app.compose_hash,
