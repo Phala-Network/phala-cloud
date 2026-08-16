@@ -634,12 +634,21 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         return self.safe(self.get_cvm_info, request)
 
     def provision_cvm(self, request: Mapping[str, Any]) -> Any:
+        """Prepare a CVM creation (phase 1 of the two-phase create).
+
+        POSTs the provision payload to /cvms and returns app_id, compose_hash,
+        the env-encryption pubkey, and a one-time commit token. The legacy
+        POST /cvms/provision endpoint remains available but is deprecated.
+        """
         body = dict(request)
         if "compose_file" in body:
             cf = dict(body["compose_file"])
             cf.setdefault("name", "")
             body["compose_file"] = cf
-        return self._loose_validate(self.post("/cvms/provision", json=body))
+        # Bypass path-based response dispatch: POST /cvms maps to the commit
+        # response model, but this call returns a provision response.
+        data = _SyncBase.request(self, "POST", "/cvms", json=body)
+        return self._validate_by_model(ProvisionCvmResponse, data)
 
     def safe_provision_cvm(self, request: Mapping[str, Any]) -> SafeResult[Any]:
         return self.safe(self.provision_cvm, request)
@@ -647,9 +656,11 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     def commit_cvm_provision(self, request: Mapping[str, Any]) -> Any:
         """Commit a provisioned CVM, creating the actual instance.
 
-        This endpoint is idempotent: submitting the same app_id + compose_hash
-        again returns the existing CVM. A different compose_hash for the same
-        app_id raises ResourceError with error_code CVM_APP_ID_CONFLICT (409).
+        Pass the token from provision_cvm (preferred), or app_id + compose_hash
+        for the legacy commit. This endpoint is idempotent: submitting the same
+        app_id + compose_hash again returns the existing CVM. A different
+        compose_hash for the same app_id raises ResourceError with error_code
+        CVM_APP_ID_CONFLICT (409).
         """
         return self._loose_validate(self.post("/cvms", json=dict(request)))
 
@@ -1482,12 +1493,21 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         return await self.safe(self.get_cvm_info, request)
 
     async def provision_cvm(self, request: Mapping[str, Any]) -> Any:
+        """Prepare a CVM creation (phase 1 of the two-phase create).
+
+        POSTs the provision payload to /cvms and returns app_id, compose_hash,
+        the env-encryption pubkey, and a one-time commit token. The legacy
+        POST /cvms/provision endpoint remains available but is deprecated.
+        """
         body = dict(request)
         if "compose_file" in body:
             cf = dict(body["compose_file"])
             cf.setdefault("name", "")
             body["compose_file"] = cf
-        return self._loose_validate(await self.post("/cvms/provision", json=body))
+        # Bypass path-based response dispatch: POST /cvms maps to the commit
+        # response model, but this call returns a provision response.
+        data = await _AsyncBase.request(self, "POST", "/cvms", json=body)
+        return self._validate_by_model(ProvisionCvmResponse, data)
 
     async def safe_provision_cvm(self, request: Mapping[str, Any]) -> SafeResult[Any]:
         return await self.safe(self.provision_cvm, request)
@@ -1495,9 +1515,11 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
     async def commit_cvm_provision(self, request: Mapping[str, Any]) -> Any:
         """Commit a provisioned CVM, creating the actual instance.
 
-        This endpoint is idempotent: submitting the same app_id + compose_hash
-        again returns the existing CVM. A different compose_hash for the same
-        app_id raises ResourceError with error_code CVM_APP_ID_CONFLICT (409).
+        Pass the token from provision_cvm (preferred), or app_id + compose_hash
+        for the legacy commit. This endpoint is idempotent: submitting the same
+        app_id + compose_hash again returns the existing CVM. A different
+        compose_hash for the same app_id raises ResourceError with error_code
+        CVM_APP_ID_CONFLICT (409).
         """
         return self._loose_validate(await self.post("/cvms", json=dict(request)))
 

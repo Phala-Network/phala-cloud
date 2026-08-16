@@ -58,6 +58,9 @@ class ProvisionCvmResponse(CloudModel):
     app_id: str | None = None
     app_env_encrypt_pubkey: str | None = None
     compose_hash: str
+    # One-time commit token for the same-path two-phase create. Present when the
+    # backend supports token commit on POST /cvms; absent against older backends.
+    token: str | None = None
     kms_info: GenericObject | None = None
     fmspc: str | None = None
     device_id: str | None = None
