@@ -43,8 +43,10 @@ import {
 	safeCommitCvmUpdate,
 	convertToHostname,
 	isValidHostname,
-	getMrConfigId,
-	type MrConfigIdInput,
+	buildMrConfigV3Document,
+	canonicalizeMrConfigV3Document,
+	getMrConfigIdV3,
+	type MrConfigV3Input,
 } from "@phala/cloud";
 import dedent from "dedent";
 import fs from "fs-extra";
@@ -667,6 +669,36 @@ export const buildProvisionPayload = (
 	return payload;
 };
 
+/**
+ * Report the MrConfigV3 measurement dstack will enforce at boot.
+ *
+ * The document binds a random per-instance `instance_id` that the VMM only
+ * mints when the VM first starts, so right after provision the id is not yet
+ * knowable — in that case report the document inputs instead of a value that
+ * would be wrong. See `dstack/vmm/src/app/mr_config.rs`.
+ */
+const reportMrConfigV3 = (input: MrConfigV3Input, mayHaveGpus: boolean) => {
+	if (!input.compose_hash) return;
+
+	if (input.instance_id) {
+		const document = buildMrConfigV3Document(input);
+		logger.info(`mr_config_id (v3): ${getMrConfigIdV3(document)}`);
+		logger.info(
+			`mr_config document: ${canonicalizeMrConfigV3Document(document)}`,
+		);
+		return;
+	}
+
+	logger.info("mr_config_id (v3): finalized on first boot (instance_id)");
+	logger.info(`  compose_hash:    ${input.compose_hash}`);
+	logger.info(`  app_id:          ${input.app_id || "(not assigned)"}`);
+	logger.info(`  key_provider:    ${input.key_provider}`);
+	logger.info(`  key_provider_id: ${input.key_provider_id || "(none)"}`);
+	if (mayHaveGpus) {
+		logger.info("  gpu_policy_hash: bound at boot when the node attaches GPUs");
+	}
+};
+
 const deployNewCvm = async (
 	validatedOptions: Options,
 	docker_compose_yml: string,
@@ -720,22 +752,6 @@ const deployNewCvm = async (
 	let commit_result;
 
 	const provisionKmsInfo = app.kms_info;
-
-	if (
-		validatedOptions.experimentalKeyProviderType &&
-		app.app_id &&
-		app.compose_hash
-	) {
-		const kpType = validatedOptions.experimentalKeyProviderType;
-		const kpId = provisionKmsInfo?.k256_pubkey || "";
-		const mrConfigId = getMrConfigId({
-			compose_hash: `0x${app.compose_hash}`,
-			app_id: `0x${app.app_id}`,
-			key_provider_type: kpType,
-			key_provider_id: kpId ? `0x${kpId}` : "0x",
-		});
-		logger.info(`mr_config_id (v2): ${mrConfigId}`);
-	}
 
 	const needsOnchainKms =
 		!app.app_id &&
@@ -829,6 +845,19 @@ const deployNewCvm = async (
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
 	const cvm = commit_result.data as any;
+
+	if (validatedOptions.experimentalKeyProviderType) {
+		reportMrConfigV3(
+			{
+				app_id: cvm.app_id || app.app_id || "",
+				compose_hash: app.compose_hash || "",
+				key_provider: validatedOptions.experimentalKeyProviderType,
+				key_provider_id: provisionKmsInfo?.k256_pubkey || "",
+				instance_id: cvm.instance_id || "",
+			},
+			!!validatedOptions.instanceType,
+		);
+	}
 
 	if (validatedOptions?.json !== false) {
 		stdout.write(
