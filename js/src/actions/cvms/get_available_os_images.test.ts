@@ -10,6 +10,7 @@ describe("GetAvailableOSImagesResponseSchema", () => {
           name: "dstack-0.5.8",
           slug: "dstack-0.5.8-target",
           os_image_hash: "0x1234",
+          requires_gpu: false,
           is_current: false,
           enabled: false,
         },
@@ -19,5 +20,6 @@ describe("GetAvailableOSImagesResponseSchema", () => {
 
     expect(result[0]?.prod?.slug).toBe("dstack-0.5.8-target");
     expect(result[0]?.prod?.enabled).toBe(false);
+    expect(result[0]?.prod?.requires_gpu).toBe(false);
   });
 });

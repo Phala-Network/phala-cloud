@@ -9,6 +9,7 @@ export const OSImageVariantSchema = z.object({
   name: z.string(),
   slug: z.string(),
   os_image_hash: z.string().nullable(),
+  requires_gpu: z.boolean(),
   is_current: z.boolean(),
   enabled: z.boolean(),
 });
