@@ -162,8 +162,8 @@ func (c *Client) GetCVMUserConfig(ctx context.Context, cvmID string) (*CVMUserCo
 }
 
 // GetAvailableOSImages returns available OS images for a CVM.
-func (c *Client) GetAvailableOSImages(ctx context.Context, cvmID string) ([]GenericObject, error) {
-	var result []GenericObject
+func (c *Client) GetAvailableOSImages(ctx context.Context, cvmID string) ([]CvmAvailableOSImage, error) {
+	var result []CvmAvailableOSImage
 	if err := c.doJSON(ctx, "GET", cvmPath(cvmID, "available-os-images"), nil, &result); err != nil {
 		return nil, err
 	}
