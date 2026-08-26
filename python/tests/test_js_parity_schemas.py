@@ -9,7 +9,12 @@ from __future__ import annotations
 from phala_cloud import AsyncPhalaCloud, PhalaCloud
 from phala_cloud.action_responses import WorkspaceResponse
 from phala_cloud.client import DEFAULT_TIMEOUT
-from phala_cloud.models.cvms import CvmInfoV20260121, CvmInfoV20260522, CvmResourceUsage
+from phala_cloud.models.cvms import (
+    CvmAvailableOSImage,
+    CvmInfoV20260121,
+    CvmInfoV20260522,
+    CvmResourceUsage,
+)
 from phala_cloud.models.nodes import DeviceIdEntry
 
 
@@ -22,6 +27,30 @@ def _cvm_info(**overrides: object) -> dict:
     }
     payload.update(overrides)
     return payload
+
+
+class TestCvmAvailableOSImages:
+    def test_decodes_variants_and_four_part_version(self) -> None:
+        image = CvmAvailableOSImage.model_validate(
+            {
+                "version": [0, 5, 9, 1],
+                "prod": {
+                    "name": "dstack-0.5.9",
+                    "slug": "dstack-0.5.9-bd369a8c",
+                    "os_image_hash": "0ximage",
+                    "requires_gpu": True,
+                    "is_current": True,
+                    "enabled": True,
+                },
+                "dev": None,
+            }
+        )
+
+        assert image.version == (0, 5, 9, 1)
+        assert image.dev is None
+        assert image.prod is not None
+        assert image.prod.requires_gpu is True
+        assert image.prod.os_image_hash == "0ximage"
 
 
 class TestManagedEnv:

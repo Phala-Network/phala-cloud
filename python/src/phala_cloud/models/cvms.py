@@ -80,6 +80,21 @@ class CvmOsInfoV20260121(CloudModel):
     os_image_hash: str | None = None
 
 
+class CvmAvailableOSImageVariant(CloudModel):
+    name: str
+    slug: str
+    os_image_hash: str | None
+    requires_gpu: bool
+    is_current: bool
+    enabled: bool
+
+
+class CvmAvailableOSImage(CloudModel):
+    version: tuple[int, int, int] | tuple[int, int, int, int]
+    prod: CvmAvailableOSImageVariant | None
+    dev: CvmAvailableOSImageVariant | None
+
+
 class CvmKmsInfoV20260121(CloudModel):
     chain_id: int | None = None
     dstack_kms_address: str | None = None

@@ -63,6 +63,7 @@ from .models.cvms import (
     CheckAppCvmsIsAllowedRequest,
     CheckAppIsAllowedRequest,
     CheckCvmIsAllowedRequest,
+    CvmAvailableOSImage,
     CvmInfoV20260121,
     CvmInfoV20260522,
     CvmStatus,
@@ -425,7 +426,7 @@ class _ExtMixin:
         if m == "GET" and re.fullmatch(r"/cvms/[^/]+/state", path):
             return self._v20260121_model(CvmInfoResponseV20260121, CvmInfoResponseV20260522)
         if m == "GET" and re.fullmatch(r"/cvms/[^/]+/available-os-images", path):
-            return list[GenericObject]
+            return list[CvmAvailableOSImage]
         if m == "GET" and re.fullmatch(r"/cvms/[^/]+/pre-launch-script", path):
             return str
         if m == "GET" and re.fullmatch(r"/cvms/[^/]+/docker-compose\.yml", path):
@@ -928,7 +929,9 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     ) -> SafeResult[Any]:
         return self.safe(self.update_cvm_visibility, request)
 
-    def get_available_os_images(self, request: CvmIdRequest | Mapping[str, Any]) -> Any:
+    def get_available_os_images(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> list[CvmAvailableOSImage]:
         cvm_id = CvmIdRequest.model_validate(request).resolved
         return self._loose_validate(self.get(f"/cvms/{cvm_id}/available-os-images"))
 
@@ -1788,7 +1791,9 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
     ) -> SafeResult[Any]:
         return await self.safe(self.update_cvm_visibility, request)
 
-    async def get_available_os_images(self, request: CvmIdRequest | Mapping[str, Any]) -> Any:
+    async def get_available_os_images(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> list[CvmAvailableOSImage]:
         cvm_id = CvmIdRequest.model_validate(request).resolved
         return self._loose_validate(await self.get(f"/cvms/{cvm_id}/available-os-images"))
 
