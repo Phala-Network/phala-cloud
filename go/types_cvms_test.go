@@ -36,6 +36,45 @@ func intPtr(v int) *int {
 	return &v
 }
 
+func TestCvmAvailableOSImageDeserialization(t *testing.T) {
+	var images []CvmAvailableOSImage
+	if err := json.Unmarshal([]byte(`[
+		{
+			"version":[0,5,9,1],
+			"prod":{
+				"name":"dstack-0.5.9",
+				"slug":"dstack-0.5.9-bd369a8c",
+				"os_image_hash":null,
+				"requires_gpu":true,
+				"is_current":true,
+				"enabled":true
+			},
+			"dev":null
+		}
+	]`), &images); err != nil {
+		t.Fatalf("unmarshal available OS images: %v", err)
+	}
+	if len(images) != 1 {
+		t.Fatalf("available OS image count = %d, want 1", len(images))
+	}
+	image := images[0]
+	if len(image.Version) != 4 || image.Version[3] != 1 {
+		t.Fatalf("version = %v, want [0 5 9 1]", image.Version)
+	}
+	if image.Dev != nil {
+		t.Fatalf("dev = %#v, want nil", image.Dev)
+	}
+	if image.Prod == nil {
+		t.Fatal("prod is nil, want variant")
+	}
+	if image.Prod.RequiresGPU != true {
+		t.Fatal("requires_gpu = false, want true")
+	}
+	if image.Prod.OSImageHash != nil {
+		t.Fatalf("os_image_hash = %v, want nil", image.Prod.OSImageHash)
+	}
+}
+
 func TestCVMHashIDVersionContracts(t *testing.T) {
 	t.Run("CVM info", func(t *testing.T) {
 		var oldInfo CVMInfoV20260121
