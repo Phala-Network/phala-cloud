@@ -157,13 +157,14 @@ const { action: patchCvm, safeAction: safePatchCvm } = defineAction<
 
   try {
     const response = prepareOnly
-      ? await client.patch<{ correlation_id: string }>(`/cvms/${cvmId}`, body, {
+      ? await client.patch<{ correlation_id?: string; status?: string }>(`/cvms/${cvmId}`, body, {
           headers: { "X-Prepare-Only": "true" },
         })
-      : await client.patch<{ correlation_id: string }>(`/cvms/${cvmId}`, body);
+      : await client.patch<{ correlation_id?: string; status?: string }>(`/cvms/${cvmId}`, body);
     return {
       requiresOnChainHash: false as const,
-      correlationId: response.correlation_id,
+      // no_change (unchanged compose) has no correlation_id; CLI still requires a string.
+      correlationId: response.correlation_id ?? "",
     };
   } catch (error) {
     if (error instanceof PhalaCloudError && error.status === 465) {
