@@ -1401,7 +1401,7 @@ export async function runDeploy(
 			debug: input.debug,
 			guidance: isUpdate
 				? "Check the CVM status before retrying. Include the Request ID when contacting support."
-				: undefined,
+				: "Include the Request ID when contacting support.",
 		});
 		return 1;
 	}
