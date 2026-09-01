@@ -95,6 +95,8 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
     this.emitter = mitt<ClientEvents>();
     // Resolve configuration with environment variables
     const resolvedApiKey = config.apiKey || process?.env?.PHALA_CLOUD_API_KEY;
+    const resolvedBearerToken = config.bearerToken || process?.env?.PHALA_OIDC_TOKEN;
+    const resolvedWorkspace = config.workspace || process?.env?.PHALA_CLOUD_WORKSPACE;
     const resolvedBaseURL =
       config.baseURL ||
       process?.env?.PHALA_CLOUD_API_PREFIX ||
@@ -109,13 +111,24 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
     this.config = {
       ...config,
       apiKey: resolvedApiKey,
+      bearerToken: resolvedBearerToken,
+      workspace: resolvedWorkspace,
       baseURL: resolvedBaseURL,
       version,
     } as ResolvedClientConfig<V>;
 
     // Extract our custom options and pass the rest to ofetch
-    const { apiKey, baseURL, timeout, headers, useCookieAuth, onResponseError, ...fetchOptions } =
-      this.config;
+    const {
+      apiKey,
+      bearerToken,
+      workspace,
+      baseURL,
+      timeout,
+      headers,
+      useCookieAuth,
+      onResponseError,
+      ...fetchOptions
+    } = this.config;
 
     const requestHeaders: Record<string, string> = {
       "X-Phala-Version": version,
@@ -131,9 +144,16 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
       });
     }
 
-    // Only add API key header when not using cookie auth
+    // Only add API key / bearer headers when not using cookie auth.
+    // Prefer X-API-Key when both are present so existing API-key flows stay unchanged.
     if (!useCookieAuth && apiKey) {
       requestHeaders["X-API-Key"] = apiKey;
+    } else if (!useCookieAuth && bearerToken) {
+      requestHeaders["Authorization"] = `Bearer ${bearerToken}`;
+    }
+
+    if (workspace && typeof workspace === "string" && workspace.trim().length > 0) {
+      requestHeaders["X-Phala-Workspace"] = workspace.trim();
     }
 
     this.fetchInstance = ofetch.create({

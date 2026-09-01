@@ -99,11 +99,15 @@ export function saveCredentialsFile(file: CredentialsFileV1): void {
 	});
 }
 
-export type TokenSource = "flag" | "env" | "file" | "none";
+export type TokenSource = "flag" | "env" | "file" | "oidc_env" | "none";
 export type ApiPrefixSource = "env" | "file" | "default";
 
 export interface ResolvedAuth {
 	readonly apiKey: string | null;
+	/** GitHub Actions OIDC JWT when authenticating without an API key. */
+	readonly bearerToken: string | null;
+	/** Workspace slug for X-Phala-Workspace (from PHALA_CLOUD_WORKSPACE). */
+	readonly workspace: string | null;
 	readonly baseURL: string;
 	readonly profileName: string;
 	readonly tokenSource: TokenSource;
@@ -160,10 +164,17 @@ export function resolveAuth(options: {
 			? "file"
 			: "default";
 
-	// Token resolution: flag > env > profile
+	const workspace = isNonEmptyString(options.env.PHALA_CLOUD_WORKSPACE)
+		? options.env.PHALA_CLOUD_WORKSPACE.trim()
+		: null;
+
+	// Token resolution: API key flag/env/profile first, then OIDC bearer env.
+	// API key remains preferred when both are present so existing flows stay unchanged.
 	if (isNonEmptyString(options.apiToken)) {
 		return {
 			apiKey: options.apiToken,
+			bearerToken: null,
+			workspace,
 			baseURL,
 			profileName: selectedProfile,
 			tokenSource: "flag",
@@ -174,6 +185,8 @@ export function resolveAuth(options: {
 	if (isNonEmptyString(options.env.PHALA_CLOUD_API_KEY)) {
 		return {
 			apiKey: options.env.PHALA_CLOUD_API_KEY,
+			bearerToken: null,
+			workspace,
 			baseURL,
 			profileName: selectedProfile,
 			tokenSource: "env",
@@ -185,6 +198,8 @@ export function resolveAuth(options: {
 	if (isNonEmptyString(tokenFromFile)) {
 		return {
 			apiKey: tokenFromFile,
+			bearerToken: null,
+			workspace,
 			baseURL,
 			profileName: selectedProfile,
 			tokenSource: "file",
@@ -192,8 +207,22 @@ export function resolveAuth(options: {
 		};
 	}
 
+	if (isNonEmptyString(options.env.PHALA_OIDC_TOKEN)) {
+		return {
+			apiKey: null,
+			bearerToken: options.env.PHALA_OIDC_TOKEN,
+			workspace,
+			baseURL,
+			profileName: selectedProfile,
+			tokenSource: "oidc_env",
+			apiPrefixSource,
+		};
+	}
+
 	return {
 		apiKey: null,
+		bearerToken: null,
+		workspace,
 		baseURL,
 		profileName: selectedProfile,
 		tokenSource: "none",

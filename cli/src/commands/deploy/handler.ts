@@ -129,8 +129,9 @@ async function getApiClient({
 	}
 >): Promise<CliApiClient> {
 	const resolved = resolveAuthForContext(context, { apiToken });
-	if (resolved.apiKey) {
+	if (resolved.apiKey || resolved.bearerToken) {
 		// Honors global --api-version via getClient (no hardcoded version).
+		// OIDC: PHALA_OIDC_TOKEN -> Authorization Bearer (deploy routes only on server).
 		return getClient(context, { apiToken });
 	}
 
@@ -148,7 +149,7 @@ async function getApiClient({
 	}
 
 	throw new Error(
-		"API token is required. Please run 'phala login' or set PHALA_CLOUD_API_KEY environment variable",
+		"Authentication required. Run 'phala login', set PHALA_CLOUD_API_KEY, or set PHALA_OIDC_TOKEN for GitHub Actions OIDC deploy.",
 	);
 }
 

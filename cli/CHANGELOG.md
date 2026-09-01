@@ -1,3 +1,8 @@
+## [](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.21...cli-v) (2026-08-15)
+
+### feat
+
+* **cli,js:** support GitHub Actions OIDC bearer auth ([bfa8db2](https://github.com/Phala-Network/phala-cloud/commit/bfa8db201781b83b03316a6bfc24c45099b479d4))
 ## [](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.21-beta.2...cli-v) (2026-08-14)
 ## [](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.20...cli-v) (2026-08-13)
 

@@ -56,6 +56,8 @@ export type SafeResult<T, E = SafeError> =
  *
  * Environment Variables:
  * - PHALA_CLOUD_API_KEY: API key for authentication
+ * - PHALA_OIDC_TOKEN: GitHub Actions OIDC JWT (Authorization Bearer)
+ * - PHALA_CLOUD_WORKSPACE: Workspace slug (X-Phala-Workspace)
  * - PHALA_CLOUD_API_PREFIX: Base URL prefix for the API
  */
 export interface ClientConfig<V extends ApiVersion = ApiVersion> extends FetchOptions {
@@ -65,6 +67,22 @@ export interface ClientConfig<V extends ApiVersion = ApiVersion> extends FetchOp
    * Not required when useCookieAuth is true
    */
   apiKey?: string;
+
+  /**
+   * Bearer token for authentication (e.g. GitHub Actions OIDC JWT).
+   * Sent as `Authorization: Bearer <token>`.
+   * If not provided, will read from PHALA_OIDC_TOKEN environment variable.
+   * When both apiKey and bearerToken are set, apiKey (X-API-Key) takes precedence
+   * unless only bearer is intended — prefer passing one method explicitly.
+   * Not used when useCookieAuth is true.
+   */
+  bearerToken?: string;
+
+  /**
+   * Workspace slug sent as `X-Phala-Workspace`.
+   * If not provided, will read from PHALA_CLOUD_WORKSPACE environment variable.
+   */
+  workspace?: string;
 
   /**
    * Base URL for the API (overrides FetchOptions baseURL)
