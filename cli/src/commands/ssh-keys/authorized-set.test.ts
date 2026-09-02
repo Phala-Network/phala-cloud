@@ -1,5 +1,5 @@
+import { describe, expect, test } from "bun:test";
 import type { CvmSshKey } from "@phala/cloud";
-import { describe, expect, it } from "vitest";
 import { keyIds, keysToRevoke, sameKeyIds } from "./authorized-set";
 
 const alice: CvmSshKey = {
@@ -27,21 +27,21 @@ const bob: CvmSshKey = {
 };
 
 describe("keysToRevoke", () => {
-	it("drops every key owned by the nickname", () => {
+	test("drops every key owned by the nickname", () => {
 		expect(keysToRevoke([alice, bob], "alice", undefined)).toEqual([alice]);
 	});
 
-	it("drops a key by id", () => {
+	test("drops a key by id", () => {
 		expect(keysToRevoke([alice, bob], undefined, "sshkey_b")).toEqual([bob]);
 	});
 
-	it("returns nothing when the nickname is not authorized", () => {
+	test("returns nothing when the nickname is not authorized", () => {
 		expect(keysToRevoke([alice], "bob", undefined)).toEqual([]);
 	});
 });
 
 describe("sameKeyIds", () => {
-	it("ignores order", () => {
+	test("ignores order", () => {
 		expect(sameKeyIds(keyIds([alice, bob]), ["sshkey_b", "sshkey_a"])).toBe(
 			true,
 		);
