@@ -170,6 +170,11 @@ export const ProvisionCvmSchema = z
     device_id: z.string().nullable().optional(),
     os_image_hash: z.string().nullable().optional(),
     instance_type: z.string().nullable().optional(),
+    /**
+     * One-time commit token for the same-path two-phase create. Present when the
+     * backend supports token commit on POST /cvms; absent against older backends.
+     */
+    token: z.string().nullable().optional(),
     teepod_id: z.number().nullable().optional(), // Will be transformed to node_id
     node_id: z.number().nullable().optional(),
     /** @deprecated Identifies a KMS node, not the on-chain KMS contract. Use kms_contract_id. */
@@ -324,7 +329,9 @@ const { action: provisionCvm, safeAction: safeProvisionCvm } = defineAction<
     console.warn("[phala/cloud] teepod_id is deprecated, please use node_id instead.");
   }
 
-  return await client.post("/cvms/provision", body);
+  // Same-path two-phase create: prepare POSTs to /cvms and returns a commit token.
+  // The legacy POST /cvms/provision endpoint remains available but is deprecated.
+  return await client.post("/cvms", body);
 });
 
 export { provisionCvm, safeProvisionCvm };

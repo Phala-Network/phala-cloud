@@ -1,3 +1,5 @@
+import json
+
 import httpx
 
 from phala_cloud import AsyncPhalaCloud
@@ -132,6 +134,10 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
     if method == "POST" and path == "/api/v1/cvms/provision":
         return httpx.Response(200, json={"compose_hash": "h"})
     if method == "POST" and path == "/api/v1/cvms":
+        # Same-path two-phase create: prepare carries compose_file, commit does not.
+        body = json.loads(request.content) if request.content else {}
+        if "compose_file" in body:
+            return httpx.Response(200, json={"compose_hash": "h", "token": "tok_1"})
         return httpx.Response(200, json={"id": "cvm_1", "name": "n", "status": "running"})
     if method == "GET" and path.startswith("/api/v1/cvms/"):
         if path.endswith("/state"):

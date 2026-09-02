@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 import httpx
@@ -244,6 +245,10 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
     if method == "POST" and path == "/api/v1/cvms/provision":
         return _json_response({"compose_hash": "hash", "app_id": "app_1"})
     if method == "POST" and path == "/api/v1/cvms":
+        # Same-path two-phase create: prepare carries compose_file, commit does not.
+        body = json.loads(request.content) if request.content else {}
+        if "compose_file" in body:
+            return _json_response({"compose_hash": "hash", "app_id": "app_1", "token": "tok_1"})
         return _json_response({"id": "cvm_1", "name": "n", "status": "running"})
     if method == "POST" and path.endswith("/compose_file/provision"):
         return _json_response({"compose_hash": "hash", "app_id": "app_1"})

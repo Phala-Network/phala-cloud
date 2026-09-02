@@ -74,10 +74,12 @@ import type { CommitCvmProvisionResponse } from "../../types/version-mappings";
  *
  * ## Required Parameters
  *
- * - **app_id**: Application identifier
+ * - **token**: One-time commit token from the `provisionCvm()` response (preferred).
+ *   When sent, `app_id` and `compose_hash` are resolved server-side from the token.
+ * - **app_id**: Application identifier (legacy commit; optional when `token` is sent)
  *   - For PHALA KMS: Use `provision.app_id` from `provisionCvm()` response
  *   - For ETHEREUM/BASE KMS (on-chain): Obtain from your on-chain KMS contract deployment
- * - **compose_hash**: Must be obtained from `provisionCvm()` response (used to retrieve provision data from Redis)
+ * - **compose_hash**: From `provisionCvm()` response (legacy commit; optional when `token` is sent)
  *
  * ## Optional Parameters
  *
@@ -201,8 +203,14 @@ export type CommitCvmProvision = z.infer<typeof CommitCvmProvisionSchema>;
 export const CommitCvmProvisionRequestSchema = z
   .object({
     encrypted_env: z.string().optional().nullable(),
-    app_id: z.string(),
-    compose_hash: z.string(),
+    /**
+     * One-time commit token returned by `provisionCvm`. When present, the backend
+     * resolves app_id and compose_hash from the token; sending them anyway is
+     * accepted as long as they match the token.
+     */
+    token: z.string().optional(),
+    app_id: z.string().optional(),
+    compose_hash: z.string().optional(),
     /** @deprecated Identifies a KMS node, not the on-chain KMS contract. Use kms_contract_id. */
     kms_id: z.string().optional(),
     kms_contract_id: z.union([z.string(), z.number()]).optional(),
