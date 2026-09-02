@@ -290,6 +290,12 @@ cd go && go test ./...
 - dstack: <https://github.com/Dstack-TEE/dstack>
 - Phala Network: <https://phala.network>
 
+## Responsible Disclosure
+
+Report security vulnerabilities to <cert@phala.com>. See
+[SECURITY.md](./SECURITY.md) for scope, reporting requirements, and bounty
+ranges.
+
 ## Contributing
 
 Issues and pull requests are welcome. For templates, include validation output
