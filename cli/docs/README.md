@@ -30,7 +30,7 @@ For installation and quick start, see the [README](../README.md).
 | [cvms](./cvms.md) | Manage CVMs (start, stop, restart, delete, resize, ...) |
 | [link](./link.md) | Link a local directory to a CVM |
 | [nodes](./nodes.md) | List TEE worker nodes |
-| [ssh-keys](./ssh-keys.md) | Manage SSH keys (list, add, remove, import from GitHub) |
+| [ssh-keys](./ssh-keys.md) | Manage account SSH keys and per-CVM authorization |
 
 ## CVM Operations
 

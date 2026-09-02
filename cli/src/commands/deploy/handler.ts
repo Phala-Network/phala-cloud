@@ -1,13 +1,12 @@
-import path from "node:path";
 import os from "node:os";
+import path from "node:path";
 import type { CommandContext } from "@/src/core/types";
 import {
+	type CliApiClient,
 	getClient,
 	getClientWithKey,
 	resolveAuthForContext,
-	type CliApiClient,
 } from "@/src/lib/client";
-import { logger } from "@/src/utils/logger";
 import {
 	CLOUD_URL,
 	DEFAULT_DISK_SIZE,
@@ -15,48 +14,49 @@ import {
 	DEFAULT_VCPU,
 } from "@/src/utils/constants";
 import { waitForCvmReady } from "@/src/utils/cvms";
+import { logger } from "@/src/utils/logger";
 
-import { detectFileInCurrentDir, promptForFile } from "@/src/utils/prompts";
+import {
+	getEncryptPubkey,
+	verifyAndExtractEnvEncryptPubkey,
+} from "@/src/commands/envs/get-encrypt-pubkey";
 import { dedupeEnvVars, parseEnvInputs } from "@/src/utils/env-parsing";
+import type { RuntimeProjectConfig } from "@/src/utils/project-config";
+import { detectFileInCurrentDir, promptForFile } from "@/src/utils/prompts";
 import { parseDiskSizeInput, parseMemoryInput } from "@/src/utils/units";
 import {
-	type EnvVar,
 	CvmIdSchema,
+	type EnvVar,
 	MAX_COMPOSE_PAYLOAD_BYTES,
+	type MrConfigV3Input,
 	SUPPORTED_CHAINS,
+	buildMrConfigV3Document,
+	canonicalizeMrConfigV3Document,
+	convertToHostname,
 	encryptEnvVars,
+	getMrConfigIdV3,
+	isValidHostname,
 	parseEnvVars,
 	safeAddComposeHash,
 	safeAddDevice,
 	safeCheckOnChainPrerequisites,
 	safeCommitCvmProvision,
+	safeCommitCvmUpdate,
 	safeConfirmCvmPatch,
 	safeDeployAppAuth,
 	safeGetAppEnvEncryptPubKey,
 	safeGetAvailableNodes,
+	safeGetCurrentUser,
 	safeGetCvmInfo,
 	safeGetCvmList,
-	safeGetCurrentUser,
 	safePatchCvm,
 	safeProvisionCvm,
 	safeUpdateCvmVisibility,
-	safeCommitCvmUpdate,
-	convertToHostname,
-	isValidHostname,
-	buildMrConfigV3Document,
-	canonicalizeMrConfigV3Document,
-	getMrConfigIdV3,
-	type MrConfigV3Input,
 } from "@phala/cloud";
 import dedent from "dedent";
 import fs from "fs-extra";
 import inquirer from "inquirer";
 import type { DeployCommandInput } from "./command";
-import type { RuntimeProjectConfig } from "@/src/utils/project-config";
-import {
-	getEncryptPubkey,
-	verifyAndExtractEnvEncryptPubkey,
-} from "@/src/commands/envs/get-encrypt-pubkey";
 
 type PrivacyConfig = Pick<
 	RuntimeProjectConfig,
@@ -401,6 +401,12 @@ const resolveEnvVars = async (
  */
 const readSshPubkey = async (options: Options): Promise<string | undefined> => {
 	let sshPubkeyPath = options.sshPubkey;
+
+	if (options.sshPubkey) {
+		logger.warn(
+			"--ssh-pubkey is deprecated. Register the key with `phala ssh-keys add` and manage per-CVM access with `phala ssh-keys grant`. Provision already authorizes all of your account keys by default, so this flag is usually unnecessary.",
+		);
+	}
 
 	// --no-dev-os: never inject SSH key
 	if (options.devOs === false) {
