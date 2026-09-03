@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B0F14"/>
+      <stop offset="1" stop-color="#1C2530"/>
+    </linearGradient>
+    <mask id="notch">
+      <rect width="32" height="32" fill="#fff"/>
+      <rect x="16.1" y="2.6" width="8.4" height="8.4" fill="#000"/>
+    </mask>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="url(#bg)"/>
+  <path mask="url(#notch)" fill="#fff" fill-rule="evenodd"
+    d="M7 27.5V4.5h9a9 9 0 0 1 0 18h-4.5v5zM11.5 17.5h4.3a4 4 0 0 0 0-8h-4.3z"/>
+  <rect x="18.5" y="3.6" width="5.2" height="5.2" rx="1.6" fill="#72F1B8"/>
+</svg>
