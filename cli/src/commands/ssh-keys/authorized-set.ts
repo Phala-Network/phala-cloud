@@ -27,35 +27,35 @@ export function keysToRevoke(
 	});
 }
 
-export function printAuthorizedSet(
+export function printRestartHint(
 	result: CvmSshKeysResponse,
-	options?: { skipRestartHint?: boolean },
+	applyNow: boolean,
 ): void {
-	if (result.keys.length === 0) {
-		logger.info("This CVM authorizes no SSH keys.");
-	} else {
-		const columns = [
-			"ID",
-			"OWNER",
-			"EMAIL",
-			"NAME",
-			"TYPE",
-			"FINGERPRINT",
-		] as const;
-		const rows = result.keys.map((key) => ({
-			ID: key.id,
-			OWNER: key.owner_username,
-			EMAIL: key.owner_email ?? "",
-			NAME: key.name,
-			TYPE: key.key_type,
-			FINGERPRINT: key.fingerprint,
-		}));
-		printTable(columns, rows);
+	if (applyNow) {
+		logger.info("The CVM is being restarted.");
+		return;
 	}
-
-	if (result.restart_required && !options?.skipRestartHint) {
+	if (result.restart_required) {
 		logger.info(
 			"The stored set has not been applied to the running VM yet. Pass --apply-now or run `phala cvms restart`.",
 		);
 	}
+}
+
+export function printAuthorizedSet(result: CvmSshKeysResponse): void {
+	if (result.keys.length === 0) {
+		logger.info("This CVM authorizes no SSH keys.");
+		printRestartHint(result, false);
+		return;
+	}
+	const columns = ["ID", "OWNER", "NAME", "TYPE", "FINGERPRINT"] as const;
+	const rows = result.keys.map((key) => ({
+		ID: key.id,
+		OWNER: key.owner_username,
+		NAME: key.name,
+		TYPE: key.key_type,
+		FINGERPRINT: key.fingerprint,
+	}));
+	printTable(columns, rows);
+	printRestartHint(result, false);
 }

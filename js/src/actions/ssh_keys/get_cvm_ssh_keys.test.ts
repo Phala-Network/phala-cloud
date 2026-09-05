@@ -17,7 +17,6 @@ describe("getCvmSshKeys", () => {
         id: "sshkey_abc",
         owner_user_id: "usr_1",
         owner_username: "alice",
-        owner_email: "alice@example.com",
         added_by_user_id: "usr_1",
         name: "laptop",
         public_key: "ssh-ed25519 AAAA...",
@@ -38,7 +37,7 @@ describe("getCvmSshKeys", () => {
     expect(result.restart_required).toBe(false);
   });
 
-  it("should reject a response missing owner fields", () => {
+  it("should reject a response missing owner_username", () => {
     const result = CvmSshKeysResponseSchema.safeParse({
       keys: [
         {

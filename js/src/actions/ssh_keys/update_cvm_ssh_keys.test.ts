@@ -21,7 +21,6 @@ describe("updateCvmSshKeys", () => {
         id: "sshkey_abc",
         owner_user_id: "usr_1",
         owner_username: "alice",
-        owner_email: "alice@example.com",
         added_by_user_id: "usr_2",
         name: "laptop",
         public_key: "ssh-ed25519 AAAA...",

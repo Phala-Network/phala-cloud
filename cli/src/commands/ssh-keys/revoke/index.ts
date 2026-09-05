@@ -11,7 +11,7 @@ import {
 import {
 	keyIds,
 	keysToRevoke,
-	printAuthorizedSet,
+	printRestartHint,
 	sameKeyIds,
 } from "../authorized-set";
 import {
@@ -68,7 +68,6 @@ async function runSshKeysRevokeCommand(
 				return 0;
 			}
 			logger.info("not authorized");
-			printAuthorizedSet(current.data);
 			return 0;
 		}
 
@@ -92,6 +91,8 @@ async function runSshKeysRevokeCommand(
 
 		if (sameKeyIds(keyIds(current.data.keys), keyIds(updated.data.keys))) {
 			logger.info("not authorized");
+		} else {
+			logger.success("Revoked SSH keys.");
 		}
 
 		const me = await safeGetCurrentUser(client);
@@ -108,10 +109,7 @@ async function runSshKeysRevokeCommand(
 			);
 		}
 
-		printAuthorizedSet(updated.data, { skipRestartHint: input.applyNow });
-		if (input.applyNow) {
-			logger.info("The CVM is being restarted.");
-		}
+		printRestartHint(updated.data, input.applyNow);
 		return 0;
 	} catch (error) {
 		context.failWithError(error, {

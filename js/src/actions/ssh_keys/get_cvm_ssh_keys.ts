@@ -6,7 +6,6 @@ export const CvmSshKeySchema = z.object({
   id: z.string(),
   owner_user_id: z.string(),
   owner_username: z.string(),
-  owner_email: z.string().nullable(),
   added_by_user_id: z.string(),
   name: z.string(),
   public_key: z.string(),

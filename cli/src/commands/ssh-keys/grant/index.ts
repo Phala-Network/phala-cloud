@@ -4,7 +4,7 @@ import type { CommandContext } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
 import { logger } from "@/src/utils/logger";
 import { safeGetCvmSshKeys, safeUpdateCvmSshKeys } from "@phala/cloud";
-import { keyIds, printAuthorizedSet, sameKeyIds } from "../authorized-set";
+import { keyIds, printRestartHint, sameKeyIds } from "../authorized-set";
 import {
 	type SshKeysGrantCommandInput,
 	sshKeysGrantCommandMeta,
@@ -64,12 +64,10 @@ async function runSshKeysGrantCommand(
 
 		if (sameKeyIds(keyIds(current.data.keys), keyIds(updated.data.keys))) {
 			logger.info("already authorized");
+		} else {
+			logger.success("Granted SSH keys.");
 		}
-
-		printAuthorizedSet(updated.data, { skipRestartHint: input.applyNow });
-		if (input.applyNow) {
-			logger.info("The CVM is being restarted.");
-		}
+		printRestartHint(updated.data, input.applyNow);
 		return 0;
 	} catch (error) {
 		context.failWithError(error, {
