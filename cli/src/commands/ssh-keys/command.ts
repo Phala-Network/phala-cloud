@@ -5,7 +5,7 @@ export const sshKeysGroup: CommandGroup = {
 	meta: {
 		name: "ssh-keys",
 		category: "manage",
-		description: "Manage SSH keys",
+		description: "Manage account SSH keys and per-CVM authorization",
 		stability: "stable",
 	},
 };

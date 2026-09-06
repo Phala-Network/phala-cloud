@@ -1,6 +1,8 @@
 # phala ssh-keys
 
-Manage SSH keys associated with your Phala Cloud account.
+Manage SSH keys associated with your Phala Cloud account, and which of those keys a CVM authorizes.
+
+Account commands (`list` / `add` / `rm` / `import-github`) change the keys on your account. CVM commands (`show` / `grant` / `revoke`) change which existing workspace-member keys a CVM boots with. They are different objects: revoking an authorization leaves the account key intact.
 
 ## Usage
 
@@ -95,3 +97,63 @@ Import SSH keys from a GitHub user's public profile. Keys that already exist are
 
     $ phala ssh-keys import-github octocat
     $ phala ssh-keys import-github myuser --json
+
+---
+
+### ssh-keys show
+
+Show the SSH keys a CVM is configured to authorize, including owner username/email and whether a restart is needed. This is the stored set, not the live `user_config` printed by `phala runtime-config`.
+
+#### Usage
+
+    phala ssh-keys show [cvm_id] [options]
+
+#### Examples
+
+    $ phala ssh-keys show app_123
+    $ phala ssh-keys show
+
+---
+
+### ssh-keys grant
+
+Authorize a workspace member's keys on a CVM. The nickname is resolved server-side to every active key that member holds. `--id` grants a single key. The two may be combined.
+
+#### Usage
+
+    phala ssh-keys grant [cvm_id] [user_nickname] [options]
+
+#### Options
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--id <sshkey_id>` | | | SSH key hashid to grant |
+| `--apply-now` | | false | Restart the CVM so the change takes effect immediately |
+
+#### Examples
+
+    $ phala ssh-keys grant app_123 alice
+    $ phala ssh-keys grant app_123 --id sshkey_abc
+    $ phala ssh-keys grant app_123 alice --apply-now
+
+---
+
+### ssh-keys revoke
+
+Withdraw SSH keys from a CVM. The account key is left intact and can be re-granted.
+
+#### Usage
+
+    phala ssh-keys revoke [cvm_id] [user_nickname] [options]
+
+#### Options
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--id <sshkey_id>` | | | SSH key hashid to withdraw |
+| `--apply-now` | | false | Restart the CVM so the change takes effect immediately |
+
+#### Examples
+
+    $ phala ssh-keys revoke app_123 alice
+    $ phala ssh-keys revoke app_123 --id sshkey_abc

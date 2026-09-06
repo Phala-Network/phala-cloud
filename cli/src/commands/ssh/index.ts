@@ -1,6 +1,4 @@
 import { spawn } from "node:child_process";
-import chalk from "chalk";
-import { CvmIdSchema } from "@phala/cloud";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
@@ -18,10 +16,12 @@ import {
 	selectPort,
 	shellEscape,
 } from "@/src/utils/ssh-utils";
+import { CvmIdSchema } from "@phala/cloud";
+import chalk from "chalk";
 import {
+	type SshCommandInput,
 	sshCommandMeta,
 	sshCommandSchema,
-	type SshCommandInput,
 } from "./command";
 
 /**
@@ -98,15 +98,17 @@ async function runSshCommand(
 					);
 				}
 			} catch (error) {
-				if (error instanceof NoGatewayError || error instanceof CvmNotRunningError) {
+				if (
+					error instanceof NoGatewayError ||
+					error instanceof CvmNotRunningError
+				) {
 					context.failWithError(error, {
 						operation: "SSH connect",
 						debug: Boolean((input as { debug?: boolean }).debug),
-						guidance: (
+						guidance:
 							error instanceof CvmNotRunningError
 								? "Please start the CVM first using: phala cvms start"
-								: undefined
-						),
+								: undefined,
 					});
 				} else {
 					context.failWithError(error, {
@@ -182,6 +184,18 @@ async function runSshCommand(
 					resolve(0);
 				} else {
 					logger.error(`Connection failed with code ${code}`);
+					if (code === 255) {
+						const shownId =
+							context.cvmId?.id ??
+							context.cvmId?.app_id ??
+							context.cvmId?.uuid ??
+							context.cvmId?.instance_id ??
+							context.cvmId?.name ??
+							"<cvm-id>";
+						logger.info(
+							`If this was an authentication failure, check authorized keys with: phala ssh-keys show ${shownId}`,
+						);
+					}
 					resolve(code ?? 1);
 				}
 			});
