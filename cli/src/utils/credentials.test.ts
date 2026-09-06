@@ -24,6 +24,11 @@ function cleanupDir(dir: string): void {
 	}
 }
 
+function setEnv(key: string, value: string | undefined): void {
+	if (value === undefined) delete process.env[key];
+	else process.env[key] = value;
+}
+
 describe("credentials", () => {
 	let tempHome: string;
 	let oldHome: string | undefined;
@@ -44,26 +49,19 @@ describe("credentials", () => {
 		tempHome = makeTempHome();
 		process.env.HOME = tempHome;
 		process.env.PHALA_CLOUD_DIR = path.join(tempHome, ".phala-cloud");
-		process.env.PHALA_CLOUD_API_KEY = undefined;
-		process.env.PHALA_CLOUD_API_PREFIX = undefined;
-		process.env.PHALA_OIDC_TOKEN = undefined;
-		process.env.PHALA_CLOUD_WORKSPACE = undefined;
+		setEnv("PHALA_CLOUD_API_KEY", undefined);
+		setEnv("PHALA_CLOUD_API_PREFIX", undefined);
+		setEnv("PHALA_OIDC_TOKEN", undefined);
+		setEnv("PHALA_CLOUD_WORKSPACE", undefined);
 	});
 
 	afterEach(() => {
-		if (oldHome !== undefined) process.env.HOME = oldHome;
-		else process.env.HOME = undefined;
-		if (oldApiKey !== undefined) process.env.PHALA_CLOUD_API_KEY = oldApiKey;
-		else process.env.PHALA_CLOUD_API_KEY = undefined;
-		if (oldApiPrefix !== undefined)
-			process.env.PHALA_CLOUD_API_PREFIX = oldApiPrefix;
-		else process.env.PHALA_CLOUD_API_PREFIX = undefined;
-		if (oldOidc !== undefined) process.env.PHALA_OIDC_TOKEN = oldOidc;
-		else process.env.PHALA_OIDC_TOKEN = undefined;
-		if (oldWorkspace !== undefined) process.env.PHALA_CLOUD_WORKSPACE = oldWorkspace;
-		else process.env.PHALA_CLOUD_WORKSPACE = undefined;
-		if (oldCloudDir !== undefined) process.env.PHALA_CLOUD_DIR = oldCloudDir;
-		else process.env.PHALA_CLOUD_DIR = undefined;
+		setEnv("HOME", oldHome);
+		setEnv("PHALA_CLOUD_API_KEY", oldApiKey);
+		setEnv("PHALA_CLOUD_API_PREFIX", oldApiPrefix);
+		setEnv("PHALA_OIDC_TOKEN", oldOidc);
+		setEnv("PHALA_CLOUD_WORKSPACE", oldWorkspace);
+		setEnv("PHALA_CLOUD_DIR", oldCloudDir);
 
 		cleanupDir(tempHome);
 	});
@@ -324,5 +322,4 @@ describe("credentials", () => {
 		expect(resolved.bearerToken).toBeNull();
 		expect(resolved.tokenSource).toBe("env");
 	});
-
 });

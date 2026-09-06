@@ -1,3 +1,18 @@
+## [](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.22-beta.1...cli-v) (2026-09-06)
+
+### feat
+
+* **cli:** add ssh-keys show, grant, and revoke ([12a9c58](https://github.com/Phala-Network/phala-cloud/commit/12a9c58ac4b1ffe0d4a6f4aad2b24cf2aa339bf6))
+* **cli:** deprecate deploy --ssh-pubkey and hint on ssh 255 ([ba97785](https://github.com/Phala-Network/phala-cloud/commit/ba977856096e2b5231a8c312f69bee962a8dee73))
+* **cli:** report the MrConfigV3 measurement after deploy ([567d73d](https://github.com/Phala-Network/phala-cloud/commit/567d73d8a9db5b27f668803064d80c1db052b513))
+
+### fix
+
+* **cli:** include Request ID guidance on new CVM deploys ([6165d19](https://github.com/Phala-Network/phala-cloud/commit/6165d19d0ba0858bfe5e440fe4aae74f00b0b08c))
+* **cli:** keep unit tests isolated from inherited Cloud env ([4ff72a6](https://github.com/Phala-Network/phala-cloud/commit/4ff72a6551b1fb33d349da9417d322d11d1a4527))
+* **cli:** tighten CVM SSH key command output ([f969882](https://github.com/Phala-Network/phala-cloud/commit/f96988275d7d489439d1457d7c90825574912722))
+* **cli:** typecheck CVM SSH key tests with bun:test ([e97eb44](https://github.com/Phala-Network/phala-cloud/commit/e97eb44c73c52acbc62f3118b553d4e7cbbd696d))
+* use Phala Discord redirect ([b6f176c](https://github.com/Phala-Network/phala-cloud/commit/b6f176cc4eeb57a394b6964adf0c5554573beabc))
 ## [](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.21...cli-v) (2026-08-15)
 
 ### feat
