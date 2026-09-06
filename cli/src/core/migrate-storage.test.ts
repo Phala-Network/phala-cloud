@@ -40,6 +40,11 @@ function cleanupDir(dir: string): void {
 	}
 }
 
+function setEnv(key: string, value: string | undefined): void {
+	if (value === undefined) delete process.env[key];
+	else process.env[key] = value;
+}
+
 function legacyEncrypt(plain: string): string {
 	const machineParts = [
 		os.hostname(),
@@ -73,19 +78,15 @@ describe("migrateStorage", () => {
 		tempHome = makeTempHome();
 		process.env.HOME = tempHome;
 		process.env.PHALA_CLOUD_DIR = path.join(tempHome, ".phala-cloud");
-		process.env.PHALA_CLOUD_API_PREFIX = undefined;
+		setEnv("PHALA_CLOUD_API_PREFIX", undefined);
 
 		fs.mkdirSync(process.env.PHALA_CLOUD_DIR, { recursive: true });
 	});
 
 	afterEach(() => {
-		if (oldHome !== undefined) process.env.HOME = oldHome;
-		else process.env.HOME = undefined;
-		if (oldApiPrefix !== undefined)
-			process.env.PHALA_CLOUD_API_PREFIX = oldApiPrefix;
-		else process.env.PHALA_CLOUD_API_PREFIX = undefined;
-		if (oldCloudDir !== undefined) process.env.PHALA_CLOUD_DIR = oldCloudDir;
-		else process.env.PHALA_CLOUD_DIR = undefined;
+		setEnv("HOME", oldHome);
+		setEnv("PHALA_CLOUD_API_PREFIX", oldApiPrefix);
+		setEnv("PHALA_CLOUD_DIR", oldCloudDir);
 
 		cleanupDir(tempHome);
 	});
