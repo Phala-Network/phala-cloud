@@ -30,7 +30,7 @@ const VMBaseSchema = z.object({
   vcpu: z.number(),
   memory: z.number(),
   disk_size: z.number(),
-  manifest_version: z.number().optional().nullable(),
+  manifest_version: z.coerce.number().optional().nullable(),
   version: z.string().optional().nullable(),
   runner: z.string().optional().nullable(),
   docker_compose_file: z.string().optional().nullable(),
