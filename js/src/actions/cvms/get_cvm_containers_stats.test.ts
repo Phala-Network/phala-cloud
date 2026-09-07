@@ -65,6 +65,39 @@ describe("getCvmContainersStats", () => {
       expect(result.containers?.[0].names).toEqual(["/app"]);
     });
 
+    it("should accept manifest_version as numeric string (dstack 0.6.0+)", async () => {
+      // dstack 0.6.0+ serializes manifest_version as "3" instead of 3
+      const mockResponse = {
+        is_online: true,
+        is_public: true,
+        error: null,
+        docker_compose_file: "services:\n  app:\n    image: nginx",
+        manifest_version: "3",
+        version: null,
+        runner: "docker-compose",
+        features: ["kms", "tproxy-net"],
+        containers: [
+          {
+            id: "container-123",
+            names: ["/dstack-app-1"],
+            image: "nginx:latest",
+            image_id: "sha256:abc123",
+            command: null,
+            created: 1672531200,
+            state: "running",
+            status: "Up About an hour (healthy)",
+            log_endpoint: "https://logs.example.com/app",
+          },
+        ],
+      };
+
+      (mockClient.get as jest.Mock).mockResolvedValue(mockResponse);
+
+      const result = await getCvmContainersStats(mockClient as Client, { id: "test-cvm-id" });
+
+      expect(result.manifest_version).toBe(3);
+    });
+
     it("should throw error for invalid id", async () => {
       await expect(getCvmContainersStats(mockClient as Client, { id: "" })).rejects.toThrow();
     });

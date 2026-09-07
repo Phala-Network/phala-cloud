@@ -48,7 +48,7 @@ export const CvmContainersStatsSchema = z.object({
   is_public: z.boolean().default(true),
   error: z.string().nullable(),
   docker_compose_file: z.string().nullable(),
-  manifest_version: z.number().nullable(),
+  manifest_version: z.coerce.number().nullable(),
   version: z.string().nullable(),
   runner: z.string().nullable(),
   features: z.array(z.string()).nullable(),
