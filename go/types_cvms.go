@@ -134,15 +134,19 @@ type CvmAvailableOSImageVariant struct {
 	Slug        string  `json:"slug"`
 	OSImageHash *string `json:"os_image_hash,omitempty"`
 	RequiresGPU bool    `json:"requires_gpu"`
+	SupportsCPU bool    `json:"supports_cpu"`
+	SupportsGPU bool    `json:"supports_gpu"`
 	IsCurrent   bool    `json:"is_current"`
 	Enabled     bool    `json:"enabled"`
 }
 
 // CvmAvailableOSImage groups production and development variants by version.
 type CvmAvailableOSImage struct {
-	Version []int                       `json:"version"`
-	Prod    *CvmAvailableOSImageVariant `json:"prod"`
-	Dev     *CvmAvailableOSImageVariant `json:"dev"`
+	Version     []int                       `json:"version"`
+	Release     string                      `json:"release"`
+	PublishedAt *string                     `json:"published_at"`
+	Prod        *CvmAvailableOSImageVariant `json:"prod"`
+	Dev         *CvmAvailableOSImageVariant `json:"dev"`
 }
 
 // CvmKmsInfo holds CVM KMS information.

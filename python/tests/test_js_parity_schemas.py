@@ -15,7 +15,7 @@ from phala_cloud.models.cvms import (
     CvmInfoV20260522,
     CvmResourceUsage,
 )
-from phala_cloud.models.nodes import DeviceIdEntry
+from phala_cloud.models.nodes import AvailableOSImage, DeviceIdEntry
 
 
 def _cvm_info(**overrides: object) -> dict:
@@ -33,12 +33,16 @@ class TestCvmAvailableOSImages:
     def test_decodes_variants_and_four_part_version(self) -> None:
         image = CvmAvailableOSImage.model_validate(
             {
-                "version": [0, 5, 9, 1],
+                "version": [0, 6, 0],
+                "release": "0.6.0-rc1",
+                "published_at": "2026-09-07T12:00:00Z",
                 "prod": {
                     "name": "dstack-0.5.9",
                     "slug": "dstack-0.5.9-bd369a8c",
                     "os_image_hash": "0ximage",
-                    "requires_gpu": True,
+                    "requires_gpu": False,
+                    "supports_cpu": True,
+                    "supports_gpu": True,
                     "is_current": True,
                     "enabled": True,
                 },
@@ -46,11 +50,37 @@ class TestCvmAvailableOSImages:
             }
         )
 
-        assert image.version == (0, 5, 9, 1)
+        assert image.version == (0, 6, 0)
+        assert image.release == "0.6.0-rc1"
+        assert image.published_at == "2026-09-07T12:00:00Z"
         assert image.dev is None
         assert image.prod is not None
-        assert image.prod.requires_gpu is True
+        assert image.prod.requires_gpu is False
+        assert image.prod.supports_cpu is True
+        assert image.prod.supports_gpu is True
         assert image.prod.os_image_hash == "0ximage"
+
+
+class TestAvailableNodeOSImages:
+    def test_declares_unified_image_support(self) -> None:
+        image = AvailableOSImage.model_validate(
+            {
+                "name": "dstack",
+                "slug": "dstack-0.6.0-rc1",
+                "release": "0.6.0-rc1",
+                "published_at": "2026-09-07T12:00:00Z",
+                "is_dev": False,
+                "version": [0, 6, 0],
+                "requires_gpu": False,
+                "supports_cpu": True,
+                "supports_gpu": True,
+                "enabled": True,
+            }
+        )
+
+        assert image.release == "0.6.0-rc1"
+        assert image.supports_cpu is True
+        assert image.supports_gpu is True
 
 
 class TestManagedEnv:

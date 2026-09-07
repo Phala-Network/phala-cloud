@@ -85,12 +85,16 @@ class CvmAvailableOSImageVariant(CloudModel):
     slug: str
     os_image_hash: str | None
     requires_gpu: bool
+    supports_cpu: bool
+    supports_gpu: bool
     is_current: bool
     enabled: bool
 
 
 class CvmAvailableOSImage(CloudModel):
     version: tuple[int, int, int] | tuple[int, int, int, int]
+    release: str
+    published_at: str | None
     prod: CvmAvailableOSImageVariant | None
     dev: CvmAvailableOSImageVariant | None
 
