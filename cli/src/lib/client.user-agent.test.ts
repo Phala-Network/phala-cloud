@@ -7,20 +7,8 @@ mock.module("@phala/cloud", () => ({
 	safeRevokeCurrentApiToken: mock(() => Promise.resolve({ success: true })),
 }));
 
-mock.module("@/src/utils/credentials", () => ({
-	resolveAuth: () => ({
-		apiKey: "phak_test",
-		baseURL: "https://cloud-api.phala.com/api/v1",
-		profile: "default",
-	}),
-}));
-
 mock.module("@/src/core/api-version", () => ({
 	getApiVersionOverride: () => undefined,
-}));
-
-mock.module("@/src/utils/project-config", () => ({
-	getProjectConfig: () => ({}),
 }));
 
 describe("CLI client User-Agent", () => {
@@ -32,9 +20,9 @@ describe("CLI client User-Agent", () => {
 		const { getClient } = await import("./client");
 		const { CLI_USER_AGENT } = await import("@/src/utils/cli-version");
 		await getClient({
-			env: process.env,
+			env: {},
 			projectConfig: {},
-			globalOptions: {},
+			globalOptions: { apiToken: "phak_test" },
 		} as never);
 		expect(createClientMock).toHaveBeenCalled();
 		const config = createClientMock.mock.calls[0]?.[0] as {
