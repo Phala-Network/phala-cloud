@@ -36,6 +36,58 @@ func intPtr(v int) *int {
 	return &v
 }
 
+func TestCvmAvailableOSImageDeserialization(t *testing.T) {
+	var images []CvmAvailableOSImage
+	if err := json.Unmarshal([]byte(`[
+		{
+			"version":[0,6,0],
+			"release":"0.6.0-rc1",
+			"published_at":"2026-09-07T12:00:00Z",
+			"prod":{
+				"name":"dstack-0.5.9",
+				"slug":"dstack-0.5.9-bd369a8c",
+				"os_image_hash":null,
+				"requires_gpu":false,
+				"supports_cpu":true,
+				"supports_gpu":true,
+				"is_current":true,
+				"enabled":true
+			},
+			"dev":null
+		}
+	]`), &images); err != nil {
+		t.Fatalf("unmarshal available OS images: %v", err)
+	}
+	if len(images) != 1 {
+		t.Fatalf("available OS image count = %d, want 1", len(images))
+	}
+	image := images[0]
+	if len(image.Version) != 3 || image.Version[1] != 6 {
+		t.Fatalf("version = %v, want [0 6 0]", image.Version)
+	}
+	if image.Release != "0.6.0-rc1" {
+		t.Fatalf("release = %q, want 0.6.0-rc1", image.Release)
+	}
+	if image.PublishedAt == nil || *image.PublishedAt != "2026-09-07T12:00:00Z" {
+		t.Fatalf("published_at = %v, want 2026-09-07T12:00:00Z", image.PublishedAt)
+	}
+	if image.Dev != nil {
+		t.Fatalf("dev = %#v, want nil", image.Dev)
+	}
+	if image.Prod == nil {
+		t.Fatal("prod is nil, want variant")
+	}
+	if image.Prod.RequiresGPU {
+		t.Fatal("requires_gpu = true, want false")
+	}
+	if !image.Prod.SupportsCPU || !image.Prod.SupportsGPU {
+		t.Fatal("unified image support was not decoded")
+	}
+	if image.Prod.OSImageHash != nil {
+		t.Fatalf("os_image_hash = %v, want nil", image.Prod.OSImageHash)
+	}
+}
+
 func TestCVMHashIDVersionContracts(t *testing.T) {
 	t.Run("CVM info", func(t *testing.T) {
 		var oldInfo CVMInfoV20260121

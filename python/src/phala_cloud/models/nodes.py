@@ -8,9 +8,16 @@ from .kms import KmsInfo
 
 class AvailableOSImage(CloudModel):
     name: str
+    slug: str | None = None
+    release: str | None = None
+    published_at: str | None = None
     is_dev: bool
     version: tuple[int, int, int] | tuple[int, int, int, int]
     os_image_hash: str | None = None
+    requires_gpu: bool | None = None
+    supports_cpu: bool | None = None
+    supports_gpu: bool | None = None
+    enabled: bool | None = None
 
 
 class DeviceIdEntry(CloudModel):
