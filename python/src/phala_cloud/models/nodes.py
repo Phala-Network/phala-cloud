@@ -55,6 +55,7 @@ class ProductGpuAvailability(CloudModel):
     product_id: str
     display_name: str | None = None
     count: int = 0
+    max_placeable_count: int = 0
 
 
 class GpuAvailability(CloudModel):

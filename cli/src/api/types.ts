@@ -281,6 +281,7 @@ export interface ProductGpuAvailability {
 	product_id: string;
 	display_name?: string | null;
 	count: number;
+	max_placeable_count?: number;
 }
 
 export interface GpuAvailability {
