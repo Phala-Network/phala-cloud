@@ -12,6 +12,7 @@ export const InstanceTypeSchema = z
     memory_mb: z.number(),
     hourly_rate: z.string(),
     requires_gpu: z.boolean(),
+    requires_gpu_count: z.number().int().min(0).default(0),
     requires_gpu_product_id: z.string().nullable().optional(),
     default_disk_size_gb: z.number().default(20),
     family: z.string().nullable(),
