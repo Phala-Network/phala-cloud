@@ -272,8 +272,15 @@ export interface CvmCreateInstanceTypeResource {
 	default_disk_size_gb: number;
 	requires_gpu: boolean;
 	requires_gpu_count: number;
+	requires_gpu_product_id?: string | null;
 	family?: string | null;
 	display_order?: number | null;
+}
+
+export interface ProductGpuAvailability {
+	product_id: string;
+	display_name?: string | null;
+	count: number;
 }
 
 export interface GpuAvailability {
@@ -281,6 +288,7 @@ export interface GpuAvailability {
 	reserved_gpu_count: number;
 	has_public_gpus: boolean;
 	public_gpu_count: number;
+	available_by_product?: ProductGpuAvailability[];
 }
 
 export interface CvmCreateResourcesResponse {

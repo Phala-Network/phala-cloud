@@ -10,12 +10,21 @@ import type { ApiVersion } from "../types/client";
 const ResourceIdV20260121Schema = z.union([z.number(), z.string()]);
 const HashIdSchema = z.string();
 
+export const ProductGpuAvailabilitySchema = z
+  .object({
+    product_id: z.string(),
+    display_name: z.string().nullable().optional(),
+    count: z.number(),
+  })
+  .passthrough();
+
 export const GpuAvailabilitySchema = z
   .object({
     has_reserved_gpus: z.boolean(),
     reserved_gpu_count: z.number(),
     has_public_gpus: z.boolean(),
     public_gpu_count: z.number(),
+    available_by_product: z.array(ProductGpuAvailabilitySchema).default([]),
   })
   .passthrough();
 
@@ -80,6 +89,7 @@ export const CvmCreateInstanceTypeResourceSchema = z
     default_disk_size_gb: z.number(),
     requires_gpu: z.boolean(),
     requires_gpu_count: z.number(),
+    requires_gpu_product_id: z.string().nullable().optional(),
     family: z.string().nullable().optional(),
     display_order: z.number().nullable().optional(),
   })
@@ -107,6 +117,7 @@ export const CvmCreateResourceGraphV20260522Schema = CvmCreateResourceGraphV2026
 export const CvmCreateResourceGraphSchema = CvmCreateResourceGraphV20260522Schema;
 
 export type GpuAvailability = z.infer<typeof GpuAvailabilitySchema>;
+export type ProductGpuAvailability = z.infer<typeof ProductGpuAvailabilitySchema>;
 export type CvmCreateKmsResourceV20260121 = z.infer<typeof CvmCreateKmsResourceV20260121Schema>;
 export type CvmCreateNodeKmsRelationV20260121 = z.infer<
   typeof CvmCreateNodeKmsRelationV20260121Schema
