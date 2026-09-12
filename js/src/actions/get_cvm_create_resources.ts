@@ -15,6 +15,7 @@ export const ProductGpuAvailabilitySchema = z
     product_id: z.string(),
     display_name: z.string().nullable().optional(),
     count: z.number(),
+    max_placeable_count: z.number(),
   })
   .passthrough();
 

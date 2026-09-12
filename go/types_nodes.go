@@ -53,9 +53,10 @@ type AvailableImage struct {
 
 // ProductGPUAvailability describes usable GPU count for one product ID.
 type ProductGPUAvailability struct {
-	ProductID   string  `json:"product_id"`
-	DisplayName *string `json:"display_name,omitempty"`
-	Count       int     `json:"count"`
+	ProductID         string  `json:"product_id"`
+	DisplayName       *string `json:"display_name,omitempty"`
+	Count             int     `json:"count"`
+	MaxPlaceableCount int     `json:"max_placeable_count"`
 }
 
 // GPUAvailability describes GPU access for the current workspace.
