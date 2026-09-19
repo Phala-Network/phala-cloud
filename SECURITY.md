@@ -79,7 +79,13 @@ We follow the [Linux kernel guidelines for tool-generated content](https://www.k
 - We will handle your report with strict confidentiality and will not pass on your personal details to third parties without your permission.
 - We will keep you informed of material progress where practical.
 - We will tell you whether the report is accepted as a valid security issue or denied because it is out of scope, not reproducible, already known, or does not demonstrate qualifying security impact.
-- In public information concerning the reported issue, we will credit you as the discoverer unless you prefer otherwise.
+- Public credit requires your explicit prior opt-in consent and coordinated
+  disclosure approval. Our [Security Hall of Fame](HALL_OF_FAME.md) may recognize
+  meaningful, verified Phala Cloud security improvements even without a severity
+  rating or bounty. Only the earliest substantive report per root cause is
+  considered for recognition and bounty review; later duplicates receive no
+  separate recognition or reward. Substantively distinct root causes are
+  reviewed separately.
 - As a token of our gratitude, we offer rewards for accepted reports of security issues that were not yet known to us. The type and amount of any reward are determined based on severity, impact, exploitability, report quality, and remediation complexity.
 
 | Severity: | Critical | High     | Medium   | Low       |
