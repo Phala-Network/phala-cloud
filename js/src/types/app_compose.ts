@@ -32,7 +32,10 @@ export const LooseAppComposeSchema = z
     docker_compose_file: z.string(),
     features: z.array(z.string()).optional(),
     name: z.string().optional(),
-    manifest_version: z.number().optional(),
+    // dstack serialises manifest_version as a string ("3") from manifest v3 on;
+    // numeric is legacy-only. Keep the value as sent: this schema also builds
+    // update payloads, and rewriting "3" as 3 yields a compose dstack rejects.
+    manifest_version: z.union([z.number(), z.string()]).optional(),
     runner: z.string().optional(),
     kms_enabled: z.boolean().optional(),
     gateway_enabled: z.boolean().optional(),
