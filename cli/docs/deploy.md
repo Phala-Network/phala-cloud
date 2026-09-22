@@ -21,7 +21,6 @@ Creates a new CVM by default. If `--cvm-id` is provided or `phala.toml` contains
 | `-e, --env <value>` | | Environment variable (KEY=VALUE) or path to .env file. Repeatable |
 | `--kms <type>` | phala | KMS type: phala, ethereum/eth, or base |
 | `--wait` | false | Wait for deployment/update to complete |
-| `--ssh-pubkey <path>` | ~/.ssh/id_rsa.pub | SSH public key path for access |
 | `--dev-os` | false | Use development OS image (requires SSH key) |
 | `--public-logs` | true | Make CVM logs publicly accessible |
 | `--no-public-logs` | | Disable public log access |
@@ -54,6 +53,9 @@ The following options are deprecated and will be removed in future versions:
 - `--env-file <path>` - Use `-e <path>` instead
 - `--kms-id <id>` - Use `--custom-app-id` instead
 - `--uuid <uuid>` - Use `--custom-app-id` instead
+- `--ssh-pubkey <path>` - Register the key with `phala ssh-keys add` and manage per-CVM access with `phala ssh-keys grant`. Provision already authorizes all of your account keys by default.
+
+`--ssh-pubkey` still injects `DSTACK_AUTHORIZED_KEYS` into the encrypted env. That path only works when the CVM compose includes the platform pre-launch script, and it has no effect on images that do not ship an SSH server.
 
 ## Examples
 

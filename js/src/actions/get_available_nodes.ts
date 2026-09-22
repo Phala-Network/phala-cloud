@@ -66,12 +66,19 @@ import { defineSimpleAction } from "../utils/define-action";
 export const AvailableOSImageSchema = z
   .object({
     name: z.string(),
+    slug: z.string().optional(),
+    release: z.string().nullable().optional(),
+    published_at: z.string().nullable().optional(),
     is_dev: z.boolean(),
     version: z.union([
       z.tuple([z.number(), z.number(), z.number()]),
       z.tuple([z.number(), z.number(), z.number(), z.number()]),
     ]),
     os_image_hash: z.string().nullable().optional(),
+    requires_gpu: z.boolean().optional(),
+    supports_cpu: z.boolean().optional(),
+    supports_gpu: z.boolean().optional(),
+    enabled: z.boolean().optional(),
   })
   .passthrough();
 

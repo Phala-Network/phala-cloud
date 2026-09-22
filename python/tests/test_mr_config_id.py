@@ -3,10 +3,16 @@
 Test vectors match dstack-types/src/mr_config.rs and the JS/Go SDK tests.
 """
 
+import pytest
+
 from phala_cloud.utils import (
+    build_mr_config_v3_document,
+    canonicalize_mr_config_v3_document,
     get_mr_config_id,
     get_mr_config_id_hex,
     get_mr_config_id_v1,
+    get_mr_config_id_v3,
+    get_snp_host_data_v3,
     verify_mr_config_id,
 )
 
@@ -123,3 +129,249 @@ def test_different_key_provider_types():
         )
         results.add(r)
     assert len(results) == 4
+
+
+# ---------------------------------------------------------------------------
+# MrConfigV3
+#
+# Every vector below was printed by dstack itself, not by this implementation:
+# a scratch crate with a path dependency on dstack/dstack-types (at
+# origin/next) built each document with MrConfigV3::new(...) and printed
+# to_canonical_json(), to_tdx_mr_config_id() and to_snp_host_data().
+# The same six vectors are pinned in the JS and Go suites.
+# ---------------------------------------------------------------------------
+
+V3_APP_ID = "11" * 20
+V3_COMPOSE_HASH = "22" * 32
+V3_KMS_KEY_PROVIDER_ID = "33" * 32
+V3_INSTANCE_ID = "44" * 20
+# sha256(JCS({})) -- dstack's gpu_policy_hash for a compose with no policy.
+V3_DEFAULT_GPU_POLICY_HASH = "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+
+V3_A_ID = "0350fc88d0a462b6a0b06ba25859abc02e98c2a8d9bd000b7dc0d8bae65e71ecbb" + "00" * 15
+
+
+def test_v3_a_kms_with_instance_id():
+    document = build_mr_config_v3_document(
+        compose_hash=V3_COMPOSE_HASH,
+        key_provider="kms",
+        app_id=V3_APP_ID,
+        key_provider_id=V3_KMS_KEY_PROVIDER_ID,
+        instance_id=V3_INSTANCE_ID,
+    )
+    assert canonicalize_mr_config_v3_document(document) == (
+        '{"app_id":"1111111111111111111111111111111111111111",'
+        '"compose_hash":"2222222222222222222222222222222222222222222222222222222222222222",'
+        '"instance_id":"4444444444444444444444444444444444444444",'
+        '"key_provider":"kms",'
+        '"key_provider_id":"3333333333333333333333333333333333333333333333333333333333333333",'
+        '"version":3}'
+    )
+    assert get_mr_config_id_v3(document).hex() == V3_A_ID
+    assert (
+        get_snp_host_data_v3(document).hex()
+        == "50fc88d0a462b6a0b06ba25859abc02e98c2a8d9bd000b7dc0d8bae65e71ecbb"
+    )
+
+
+def test_v3_b_gpu_policy_hash():
+    document = build_mr_config_v3_document(
+        compose_hash=V3_COMPOSE_HASH,
+        key_provider="kms",
+        app_id=V3_APP_ID,
+        key_provider_id=V3_KMS_KEY_PROVIDER_ID,
+        instance_id=V3_INSTANCE_ID,
+        gpu_policy_hash=V3_DEFAULT_GPU_POLICY_HASH,
+    )
+    assert canonicalize_mr_config_v3_document(document) == (
+        '{"app_id":"1111111111111111111111111111111111111111",'
+        '"compose_hash":"2222222222222222222222222222222222222222222222222222222222222222",'
+        '"gpu_policy_hash":"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",'
+        '"instance_id":"4444444444444444444444444444444444444444",'
+        '"key_provider":"kms",'
+        '"key_provider_id":"3333333333333333333333333333333333333333333333333333333333333333",'
+        '"version":3}'
+    )
+    assert (
+        get_mr_config_id_v3(document).hex()
+        == "03893655c09844af05adb4d67af5917998038afe711bdcd3a3ec1dbd94ad272b85" + "00" * 15
+    )
+    assert (
+        get_snp_host_data_v3(document).hex()
+        == "893655c09844af05adb4d67af5917998038afe711bdcd3a3ec1dbd94ad272b85"
+    )
+
+
+def test_v3_c_ordered_init_script_hashes():
+    document = build_mr_config_v3_document(
+        compose_hash=V3_COMPOSE_HASH,
+        key_provider="local",
+        app_id=V3_APP_ID,
+        key_provider_id="55" * 20,
+        instance_id=V3_INSTANCE_ID,
+        init_script_hashes=["aa" * 32, "bb" * 32],
+    )
+    assert canonicalize_mr_config_v3_document(document) == (
+        '{"app_id":"1111111111111111111111111111111111111111",'
+        '"compose_hash":"2222222222222222222222222222222222222222222222222222222222222222",'
+        '"init_script_hashes":["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",'
+        '"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],'
+        '"instance_id":"4444444444444444444444444444444444444444",'
+        '"key_provider":"local",'
+        '"key_provider_id":"5555555555555555555555555555555555555555",'
+        '"version":3}'
+    )
+    assert (
+        get_mr_config_id_v3(document).hex()
+        == "039af46bdc5deb1ea74f2c77b4f83165f1f3e4e37e3ce15462b5fee0d235912390" + "00" * 15
+    )
+    assert (
+        get_snp_host_data_v3(document).hex()
+        == "9af46bdc5deb1ea74f2c77b4f83165f1f3e4e37e3ce15462b5fee0d235912390"
+    )
+
+
+def test_v3_c2_empty_init_script_hashes_is_not_omitted():
+    with_empty_list = build_mr_config_v3_document(
+        compose_hash=V3_COMPOSE_HASH,
+        key_provider="kms",
+        app_id=V3_APP_ID,
+        key_provider_id=V3_KMS_KEY_PROVIDER_ID,
+        instance_id=V3_INSTANCE_ID,
+        init_script_hashes=[],
+    )
+    assert '"init_script_hashes":[]' in canonicalize_mr_config_v3_document(with_empty_list)
+    assert (
+        get_mr_config_id_v3(with_empty_list).hex()
+        == "03ce2f8b8e4aa4cccdae73fb3a118047726b77d70b1e47bb0e3e48600603fd612c" + "00" * 15
+    )
+    assert (
+        get_snp_host_data_v3(with_empty_list).hex()
+        == "ce2f8b8e4aa4cccdae73fb3a118047726b77d70b1e47bb0e3e48600603fd612c"
+    )
+
+    omitted = build_mr_config_v3_document(
+        compose_hash=V3_COMPOSE_HASH,
+        key_provider="kms",
+        app_id=V3_APP_ID,
+        key_provider_id=V3_KMS_KEY_PROVIDER_ID,
+        instance_id=V3_INSTANCE_ID,
+    )
+    assert get_mr_config_id_v3(omitted) != get_mr_config_id_v3(with_empty_list)
+
+
+def test_v3_d_no_instance_id_and_no_key_provider_id():
+    document = build_mr_config_v3_document(
+        compose_hash=V3_COMPOSE_HASH,
+        key_provider="none",
+        app_id=V3_APP_ID,
+    )
+    assert canonicalize_mr_config_v3_document(document) == (
+        '{"app_id":"1111111111111111111111111111111111111111",'
+        '"compose_hash":"2222222222222222222222222222222222222222222222222222222222222222",'
+        '"key_provider":"none",'
+        '"version":3}'
+    )
+    assert (
+        get_mr_config_id_v3(document).hex()
+        == "0301d4d7e6ca2922bb80683c27fe1f4da318cf14d1c38db97563c2b6209af7dba5" + "00" * 15
+    )
+    assert (
+        get_snp_host_data_v3(document).hex()
+        == "01d4d7e6ca2922bb80683c27fe1f4da318cf14d1c38db97563c2b6209af7dba5"
+    )
+
+
+def test_v3_e_every_optional_field_on_tpm():
+    document = build_mr_config_v3_document(
+        compose_hash=V3_COMPOSE_HASH,
+        key_provider="tpm",
+        app_id=V3_APP_ID,
+        key_provider_id="66" * 16,
+        instance_id=V3_INSTANCE_ID,
+        gpu_policy_hash="55" * 32,
+        init_script_hashes=["cc" * 32],
+    )
+    assert (
+        get_mr_config_id_v3(document).hex()
+        == "03633f5444c26877f68c293d90a6feef58064e1e57367ac55c94b255cf3bdf8885" + "00" * 15
+    )
+    assert (
+        get_snp_host_data_v3(document).hex()
+        == "633f5444c26877f68c293d90a6feef58064e1e57367ac55c94b255cf3bdf8885"
+    )
+
+
+def test_v3_accepts_prefixed_and_bare_hex():
+    prefixed = build_mr_config_v3_document(
+        compose_hash="0x" + V3_COMPOSE_HASH, key_provider="none", app_id="0x" + V3_APP_ID
+    )
+    bare = build_mr_config_v3_document(
+        compose_hash=V3_COMPOSE_HASH, key_provider="none", app_id=V3_APP_ID
+    )
+    assert prefixed == bare
+
+
+def test_v3_rejects_wrong_byte_lengths():
+    with pytest.raises(ValueError, match="compose_hash must be 32 bytes"):
+        build_mr_config_v3_document(compose_hash="2222", key_provider="none")
+    with pytest.raises(ValueError, match="app_id must be 20 bytes"):
+        build_mr_config_v3_document(
+            compose_hash=V3_COMPOSE_HASH, key_provider="none", app_id="11" * 32
+        )
+
+
+def test_v3_rejects_too_many_init_scripts():
+    with pytest.raises(ValueError, match="at most 5"):
+        build_mr_config_v3_document(
+            compose_hash=V3_COMPOSE_HASH,
+            key_provider="none",
+            init_script_hashes=["aa" * 32] * 6,
+        )
+
+
+def test_verify_dispatches_on_version_byte():
+    assert verify_mr_config_id(
+        "0x" + V1_EXPECTED,
+        "0x" + COMPOSE_HASH.hex(),
+        "0x" + APP_ID.hex(),
+        "kms",
+        "aabbccdd",
+    )
+    assert verify_mr_config_id(
+        "0x" + V2_KMS,
+        "0x" + COMPOSE_HASH.hex(),
+        "0x" + APP_ID.hex(),
+        "kms",
+        "aabbccdd",
+    )
+    assert verify_mr_config_id(
+        "0x" + V3_A_ID,
+        V3_COMPOSE_HASH,
+        V3_APP_ID,
+        "kms",
+        V3_KMS_KEY_PROVIDER_ID,
+        instance_id_hex=V3_INSTANCE_ID,
+    )
+
+
+def test_verify_v3_rejects_a_different_instance_id():
+    assert not verify_mr_config_id(
+        "0x" + V3_A_ID,
+        V3_COMPOSE_HASH,
+        V3_APP_ID,
+        "kms",
+        V3_KMS_KEY_PROVIDER_ID,
+        instance_id_hex="45" * 20,
+    )
+
+
+def test_verify_rejects_unknown_version_byte():
+    assert not verify_mr_config_id(
+        "0x04" + V3_A_ID[2:],
+        V3_COMPOSE_HASH,
+        V3_APP_ID,
+        "kms",
+        V3_KMS_KEY_PROVIDER_ID,
+        instance_id_hex=V3_INSTANCE_ID,
+    )

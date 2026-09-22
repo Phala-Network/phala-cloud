@@ -704,3 +704,40 @@ describe("Client Event System", () => {
 		expect(handler2).toHaveBeenCalledOnce();
 	});
 });
+
+describe("OIDC bearer auth", () => {
+	const originalOidc = process.env.PHALA_OIDC_TOKEN;
+	const originalKey = process.env.PHALA_CLOUD_API_KEY;
+	const originalWs = process.env.PHALA_CLOUD_WORKSPACE;
+
+	afterEach(() => {
+		if (originalOidc === undefined) delete process.env.PHALA_OIDC_TOKEN;
+		else process.env.PHALA_OIDC_TOKEN = originalOidc;
+		if (originalKey === undefined) delete process.env.PHALA_CLOUD_API_KEY;
+		else process.env.PHALA_CLOUD_API_KEY = originalKey;
+		if (originalWs === undefined) delete process.env.PHALA_CLOUD_WORKSPACE;
+		else process.env.PHALA_CLOUD_WORKSPACE = originalWs;
+	});
+
+	test("uses Authorization Bearer from bearerToken config", () => {
+		delete process.env.PHALA_CLOUD_API_KEY;
+		delete process.env.PHALA_OIDC_TOKEN;
+		const client = createClient({
+			bearerToken: "oidc-jwt",
+			workspace: "acme",
+			baseURL: "https://example.test/api/v1",
+		});
+		expect(client.config.bearerToken).toBe("oidc-jwt");
+		expect(client.config.workspace).toBe("acme");
+	});
+
+	test("reads PHALA_OIDC_TOKEN and PHALA_CLOUD_WORKSPACE from env", () => {
+		delete process.env.PHALA_CLOUD_API_KEY;
+		process.env.PHALA_OIDC_TOKEN = "env-oidc";
+		process.env.PHALA_CLOUD_WORKSPACE = "ws-from-env";
+		const client = createClient({ baseURL: "https://example.test/api/v1" });
+		expect(client.config.bearerToken).toBe("env-oidc");
+		expect(client.config.workspace).toBe("ws-from-env");
+	});
+});
+

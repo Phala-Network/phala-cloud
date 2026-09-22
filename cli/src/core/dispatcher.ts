@@ -1,21 +1,21 @@
-import { ZodError } from "zod";
-import chalk from "chalk";
-import { SUPPORTED_API_VERSIONS, type CvmIdInput } from "@phala/cloud";
-import { buildCommandSchemaInput } from "./input-builder";
-import { parseCommandArguments } from "./parser";
-import type { CommandRegistry } from "./registry";
-import { formatCommandHelp, formatGlobalHelp, formatGroupHelp } from "./help";
-import type { CommandContext, CommandDefinition } from "./types";
-import { isValidApiVersion, setApiVersionOverride } from "./api-version";
-import { isInJsonMode, setJsonMode } from "./json-mode";
-import { getProjectConfig } from "@/src/utils/project-config";
 import { selectCvm } from "@/src/api/cvms";
-import { checkForUpdates, getCachedUpdateNotice } from "./update-check";
 import {
 	buildJsonCliError,
 	normalizeCliError,
 	renderHumanCliError,
 } from "@/src/utils/logger";
+import { getProjectConfig } from "@/src/utils/project-config";
+import { type CvmIdInput, SUPPORTED_API_VERSIONS } from "@phala/cloud";
+import chalk from "chalk";
+import { ZodError } from "zod";
+import { isValidApiVersion, setApiVersionOverride } from "./api-version";
+import { formatCommandHelp, formatGlobalHelp, formatGroupHelp } from "./help";
+import { buildCommandSchemaInput } from "./input-builder";
+import { isInJsonMode, setJsonMode } from "./json-mode";
+import { parseCommandArguments } from "./parser";
+import type { CommandRegistry } from "./registry";
+import type { CommandContext, CommandDefinition } from "./types";
+import { checkForUpdates, getCachedUpdateNotice } from "./update-check";
 
 export interface DispatchOptions {
 	readonly registry: CommandRegistry;
@@ -124,6 +124,17 @@ export async function dispatchCommand(
 	) {
 		const consumedPath = consumed.join(" ");
 		const unknown = remaining.join(" ");
+		const maybeCvmId = remaining[0];
+		if (
+			(consumedPath === "ssh-keys list" || consumedPath === "ssh-keys ls") &&
+			maybeCvmId &&
+			!maybeCvmId.startsWith("-")
+		) {
+			stderr.write(
+				`phala ssh-keys list shows your account keys, not a CVM. To see which keys ${maybeCvmId} authorizes, run: ${executableName} ssh-keys show ${maybeCvmId}\n`,
+			);
+			return 1;
+		}
 		stderr.write(
 			`Unknown subcommand "${unknown}" for "${consumedPath}". Run \`${executableName} ${consumedPath} --help\` for usage.\n`,
 		);

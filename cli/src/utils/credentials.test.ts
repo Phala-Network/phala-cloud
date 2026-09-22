@@ -24,36 +24,44 @@ function cleanupDir(dir: string): void {
 	}
 }
 
+function setEnv(key: string, value: string | undefined): void {
+	if (value === undefined) delete process.env[key];
+	else process.env[key] = value;
+}
+
 describe("credentials", () => {
 	let tempHome: string;
 	let oldHome: string | undefined;
 	let oldApiKey: string | undefined;
 	let oldApiPrefix: string | undefined;
+	let oldOidc: string | undefined;
+	let oldWorkspace: string | undefined;
 	let oldCloudDir: string | undefined;
 
 	beforeEach(() => {
 		oldHome = process.env.HOME;
 		oldApiKey = process.env.PHALA_CLOUD_API_KEY;
 		oldApiPrefix = process.env.PHALA_CLOUD_API_PREFIX;
+		oldOidc = process.env.PHALA_OIDC_TOKEN;
+		oldWorkspace = process.env.PHALA_CLOUD_WORKSPACE;
 		oldCloudDir = process.env.PHALA_CLOUD_DIR;
 
 		tempHome = makeTempHome();
 		process.env.HOME = tempHome;
 		process.env.PHALA_CLOUD_DIR = path.join(tempHome, ".phala-cloud");
-		process.env.PHALA_CLOUD_API_KEY = undefined;
-		process.env.PHALA_CLOUD_API_PREFIX = undefined;
+		setEnv("PHALA_CLOUD_API_KEY", undefined);
+		setEnv("PHALA_CLOUD_API_PREFIX", undefined);
+		setEnv("PHALA_OIDC_TOKEN", undefined);
+		setEnv("PHALA_CLOUD_WORKSPACE", undefined);
 	});
 
 	afterEach(() => {
-		if (oldHome !== undefined) process.env.HOME = oldHome;
-		else process.env.HOME = undefined;
-		if (oldApiKey !== undefined) process.env.PHALA_CLOUD_API_KEY = oldApiKey;
-		else process.env.PHALA_CLOUD_API_KEY = undefined;
-		if (oldApiPrefix !== undefined)
-			process.env.PHALA_CLOUD_API_PREFIX = oldApiPrefix;
-		else process.env.PHALA_CLOUD_API_PREFIX = undefined;
-		if (oldCloudDir !== undefined) process.env.PHALA_CLOUD_DIR = oldCloudDir;
-		else process.env.PHALA_CLOUD_DIR = undefined;
+		setEnv("HOME", oldHome);
+		setEnv("PHALA_CLOUD_API_KEY", oldApiKey);
+		setEnv("PHALA_CLOUD_API_PREFIX", oldApiPrefix);
+		setEnv("PHALA_OIDC_TOKEN", oldOidc);
+		setEnv("PHALA_CLOUD_WORKSPACE", oldWorkspace);
+		setEnv("PHALA_CLOUD_DIR", oldCloudDir);
 
 		cleanupDir(tempHome);
 	});
@@ -295,5 +303,23 @@ describe("credentials", () => {
 
 		switchProfile("  trimmed  ");
 		expect(getCurrentProfile()?.name).toBe("trimmed");
+	});
+	test("resolveAuth falls back to PHALA_OIDC_TOKEN when no API key", () => {
+		process.env.PHALA_OIDC_TOKEN = "oidc-jwt";
+		process.env.PHALA_CLOUD_WORKSPACE = "acme-ws";
+		const resolved = resolveAuth({ env: process.env });
+		expect(resolved.apiKey).toBeNull();
+		expect(resolved.bearerToken).toBe("oidc-jwt");
+		expect(resolved.workspace).toBe("acme-ws");
+		expect(resolved.tokenSource).toBe("oidc_env");
+	});
+
+	test("resolveAuth prefers API key over OIDC token", () => {
+		process.env.PHALA_CLOUD_API_KEY = "env-token";
+		process.env.PHALA_OIDC_TOKEN = "oidc-jwt";
+		const resolved = resolveAuth({ env: process.env });
+		expect(resolved.apiKey).toBe("env-token");
+		expect(resolved.bearerToken).toBeNull();
+		expect(resolved.tokenSource).toBe("env");
 	});
 });

@@ -29,9 +29,16 @@ const mockAvailableNodesData: AvailableNodes = {
       images: [
         {
           name: "ubuntu",
+          slug: "dstack-0.6.0-rc1",
+          release: "0.6.0-rc1",
+          published_at: "2026-09-07T12:00:00Z",
           is_dev: false,
-          version: [1, 0, 0],
+          version: [0, 6, 0],
           os_image_hash: null,
+          requires_gpu: false,
+          supports_cpu: true,
+          supports_gpu: true,
+          enabled: true,
         },
       ],
       dedicated_for_team_id: null,
@@ -76,6 +83,12 @@ describe("getAvailableNodes", () => {
 
       expect(mockClient.get).toHaveBeenCalledWith("/teepods/available");
       expect(result).toEqual(mockAvailableNodesData);
+      expect(result.nodes[0]?.images[0]).toMatchObject({
+        slug: "dstack-0.6.0-rc1",
+        release: "0.6.0-rc1",
+        supports_cpu: true,
+        supports_gpu: true,
+      });
     });
   });
 

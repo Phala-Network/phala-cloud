@@ -1,10 +1,3 @@
-import { z } from "zod";
-import type { CommandMeta } from "@/src/core/types";
-import {
-	DEFAULT_DISK_SIZE,
-	DEFAULT_MEMORY,
-	DEFAULT_VCPU,
-} from "@/src/utils/constants";
 import {
 	cvmIdOption,
 	interactiveOption,
@@ -13,6 +6,13 @@ import {
 	transactionHashOption,
 	uuidOption,
 } from "@/src/core/common-flags";
+import type { CommandMeta } from "@/src/core/types";
+import {
+	DEFAULT_DISK_SIZE,
+	DEFAULT_MEMORY,
+	DEFAULT_VCPU,
+} from "@/src/utils/constants";
+import { z } from "zod";
 
 export const deployCommandMeta: CommandMeta = {
 	name: "deploy",
@@ -163,7 +163,7 @@ export const deployCommandMeta: CommandMeta = {
 		{
 			name: "experimental-key-provider-type",
 			description:
-				"Set key_provider in compose (kms, local, tpm). Backend resolves key_provider_id for kms; local/tpm require manual key_provider_id. Computes and displays mr_config_id after provision.",
+				"Set key_provider in compose (kms, local, tpm). Backend resolves key_provider_id for kms; local/tpm require manual key_provider_id. Reports the MrConfigV3 measurement after provision — its instance_id is minted on first boot, so before then only the document inputs are known.",
 			type: "string",
 			target: "experimentalKeyProviderType",
 			group: "advanced",
@@ -216,10 +216,12 @@ export const deployCommandMeta: CommandMeta = {
 		},
 		{
 			name: "ssh-pubkey",
-			description: "SSH public key path (default: ~/.ssh/id_rsa.pub)",
+			description:
+				"[DEPRECATED] Inject a local public key via DSTACK_AUTHORIZED_KEYS. Prefer `phala ssh-keys add` and `phala ssh-keys grant`.",
 			type: "string",
 			target: "sshPubkey",
-			group: "basic",
+			deprecated: true,
+			group: "deprecated",
 		},
 		{
 			name: "dev-os",

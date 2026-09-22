@@ -1,13 +1,12 @@
-import path from "node:path";
 import os from "node:os";
+import path from "node:path";
 import type { CommandContext } from "@/src/core/types";
 import {
+	type CliApiClient,
 	getClient,
 	getClientWithKey,
 	resolveAuthForContext,
-	type CliApiClient,
 } from "@/src/lib/client";
-import { logger } from "@/src/utils/logger";
 import {
 	CLOUD_URL,
 	DEFAULT_DISK_SIZE,
@@ -15,46 +14,49 @@ import {
 	DEFAULT_VCPU,
 } from "@/src/utils/constants";
 import { waitForCvmReady } from "@/src/utils/cvms";
+import { logger } from "@/src/utils/logger";
 
-import { detectFileInCurrentDir, promptForFile } from "@/src/utils/prompts";
+import {
+	getEncryptPubkey,
+	verifyAndExtractEnvEncryptPubkey,
+} from "@/src/commands/envs/get-encrypt-pubkey";
 import { dedupeEnvVars, parseEnvInputs } from "@/src/utils/env-parsing";
+import type { RuntimeProjectConfig } from "@/src/utils/project-config";
+import { detectFileInCurrentDir, promptForFile } from "@/src/utils/prompts";
 import { parseDiskSizeInput, parseMemoryInput } from "@/src/utils/units";
 import {
-	type EnvVar,
 	CvmIdSchema,
+	type EnvVar,
 	MAX_COMPOSE_PAYLOAD_BYTES,
+	type MrConfigV3Input,
 	SUPPORTED_CHAINS,
+	buildMrConfigV3Document,
+	canonicalizeMrConfigV3Document,
+	convertToHostname,
 	encryptEnvVars,
+	getMrConfigIdV3,
+	isValidHostname,
 	parseEnvVars,
 	safeAddComposeHash,
 	safeAddDevice,
 	safeCheckOnChainPrerequisites,
 	safeCommitCvmProvision,
+	safeCommitCvmUpdate,
 	safeConfirmCvmPatch,
 	safeDeployAppAuth,
 	safeGetAppEnvEncryptPubKey,
 	safeGetAvailableNodes,
+	safeGetCurrentUser,
 	safeGetCvmInfo,
 	safeGetCvmList,
-	safeGetCurrentUser,
 	safePatchCvm,
 	safeProvisionCvm,
 	safeUpdateCvmVisibility,
-	safeCommitCvmUpdate,
-	convertToHostname,
-	isValidHostname,
-	getMrConfigId,
-	type MrConfigIdInput,
 } from "@phala/cloud";
 import dedent from "dedent";
 import fs from "fs-extra";
 import inquirer from "inquirer";
 import type { DeployCommandInput } from "./command";
-import type { RuntimeProjectConfig } from "@/src/utils/project-config";
-import {
-	getEncryptPubkey,
-	verifyAndExtractEnvEncryptPubkey,
-} from "@/src/commands/envs/get-encrypt-pubkey";
 
 type PrivacyConfig = Pick<
 	RuntimeProjectConfig,
@@ -127,8 +129,9 @@ async function getApiClient({
 	}
 >): Promise<CliApiClient> {
 	const resolved = resolveAuthForContext(context, { apiToken });
-	if (resolved.apiKey) {
+	if (resolved.apiKey || resolved.bearerToken) {
 		// Honors global --api-version via getClient (no hardcoded version).
+		// OIDC: PHALA_OIDC_TOKEN -> Authorization Bearer (deploy routes only on server).
 		return getClient(context, { apiToken });
 	}
 
@@ -146,7 +149,7 @@ async function getApiClient({
 	}
 
 	throw new Error(
-		"API token is required. Please run 'phala login' or set PHALA_CLOUD_API_KEY environment variable",
+		"Authentication required. Run 'phala login', set PHALA_CLOUD_API_KEY, or set PHALA_OIDC_TOKEN for GitHub Actions OIDC deploy.",
 	);
 }
 
@@ -398,6 +401,12 @@ const resolveEnvVars = async (
  */
 const readSshPubkey = async (options: Options): Promise<string | undefined> => {
 	let sshPubkeyPath = options.sshPubkey;
+
+	if (options.sshPubkey) {
+		logger.warn(
+			"--ssh-pubkey is deprecated. Register the key with `phala ssh-keys add` and manage per-CVM access with `phala ssh-keys grant`. Provision already authorizes all of your account keys by default, so this flag is usually unnecessary.",
+		);
+	}
 
 	// --no-dev-os: never inject SSH key
 	if (options.devOs === false) {
@@ -667,6 +676,36 @@ export const buildProvisionPayload = (
 	return payload;
 };
 
+/**
+ * Report the MrConfigV3 measurement dstack will enforce at boot.
+ *
+ * The document binds a random per-instance `instance_id` that the VMM only
+ * mints when the VM first starts, so right after provision the id is not yet
+ * knowable — in that case report the document inputs instead of a value that
+ * would be wrong. See `dstack/vmm/src/app/mr_config.rs`.
+ */
+const reportMrConfigV3 = (input: MrConfigV3Input, mayHaveGpus: boolean) => {
+	if (!input.compose_hash) return;
+
+	if (input.instance_id) {
+		const document = buildMrConfigV3Document(input);
+		logger.info(`mr_config_id (v3): ${getMrConfigIdV3(document)}`);
+		logger.info(
+			`mr_config document: ${canonicalizeMrConfigV3Document(document)}`,
+		);
+		return;
+	}
+
+	logger.info("mr_config_id (v3): finalized on first boot (instance_id)");
+	logger.info(`  compose_hash:    ${input.compose_hash}`);
+	logger.info(`  app_id:          ${input.app_id || "(not assigned)"}`);
+	logger.info(`  key_provider:    ${input.key_provider}`);
+	logger.info(`  key_provider_id: ${input.key_provider_id || "(none)"}`);
+	if (mayHaveGpus) {
+		logger.info("  gpu_policy_hash: bound at boot when the node attaches GPUs");
+	}
+};
+
 const deployNewCvm = async (
 	validatedOptions: Options,
 	docker_compose_yml: string,
@@ -720,22 +759,6 @@ const deployNewCvm = async (
 	let commit_result;
 
 	const provisionKmsInfo = app.kms_info;
-
-	if (
-		validatedOptions.experimentalKeyProviderType &&
-		app.app_id &&
-		app.compose_hash
-	) {
-		const kpType = validatedOptions.experimentalKeyProviderType;
-		const kpId = provisionKmsInfo?.k256_pubkey || "";
-		const mrConfigId = getMrConfigId({
-			compose_hash: `0x${app.compose_hash}`,
-			app_id: `0x${app.app_id}`,
-			key_provider_type: kpType,
-			key_provider_id: kpId ? `0x${kpId}` : "0x",
-		});
-		logger.info(`mr_config_id (v2): ${mrConfigId}`);
-	}
 
 	const needsOnchainKms =
 		!app.app_id &&
@@ -833,6 +856,19 @@ const deployNewCvm = async (
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
 	const cvm = commit_result.data as any;
+
+	if (validatedOptions.experimentalKeyProviderType) {
+		reportMrConfigV3(
+			{
+				app_id: cvm.app_id || app.app_id || "",
+				compose_hash: app.compose_hash || "",
+				key_provider: validatedOptions.experimentalKeyProviderType,
+				key_provider_id: provisionKmsInfo?.k256_pubkey || "",
+				instance_id: cvm.instance_id || "",
+			},
+			!!validatedOptions.instanceType,
+		);
+	}
 
 	if (validatedOptions?.json !== false) {
 		stdout.write(
@@ -1376,7 +1412,7 @@ export async function runDeploy(
 			debug: input.debug,
 			guidance: isUpdate
 				? "Check the CVM status before retrying. Include the Request ID when contacting support."
-				: undefined,
+				: "Include the Request ID when contacting support.",
 		});
 		return 1;
 	}

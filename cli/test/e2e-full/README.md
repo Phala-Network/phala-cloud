@@ -425,7 +425,7 @@ To run in CI/CD:
 
 - **Documentation**: [docs.phala.network](https://docs.phala.network)
 - **Issues**: [github.com/Phala-Network/phala-cloud/issues](https://github.com/Phala-Network/phala-cloud/issues)
-- **Discord**: [Phala Network Discord](https://discord.gg/phala)
+- **Discord**: [Phala Network Discord](https://phala.com/discord)
 
 ## Contributing
 

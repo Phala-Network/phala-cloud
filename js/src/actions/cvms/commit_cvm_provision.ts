@@ -168,7 +168,7 @@ const CommitCvmProvisionBaseSchema = z
     vcpu: z.number(),
     memory: z.number(),
     disk_size: z.number(),
-    manifest_version: z.number().nullable().default(2),
+    manifest_version: z.coerce.number().nullable().default(2),
     version: z.string().nullable().default("1.0.0"),
     runner: z.string().nullable().default("docker-compose"),
     docker_compose_file: z.string().nullable(),

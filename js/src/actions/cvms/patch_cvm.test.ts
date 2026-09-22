@@ -66,6 +66,23 @@ describe("patchCvm", () => {
   });
 
   describe("patchCvm action", () => {
+    it("should accept no_change without correlation_id", async () => {
+      (mockClient.patch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        status: "no_change",
+        message: "Compose configuration unchanged",
+      });
+
+      const result = await patchCvm(mockClient, {
+        id: "test-cvm-id",
+        docker_compose_file: "version: '3'",
+      });
+
+      expect(result.requiresOnChainHash).toBe(false);
+      if (!result.requiresOnChainHash) {
+        expect(result.correlationId).toBe("");
+      }
+    });
+
     it("should return accepted result on 202", async () => {
       (mockClient.patch as ReturnType<typeof vi.fn>).mockResolvedValue({
         correlation_id: "corr-123",

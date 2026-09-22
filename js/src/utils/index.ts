@@ -14,10 +14,18 @@ export {
   type SortableArray,
 } from "./get_compose_hash";
 export {
+  buildMrConfigV3Document,
+  canonicalizeMrConfigV3Document,
   getMrConfigId,
   getMrConfigIdV1,
+  getMrConfigIdV3,
+  getSnpHostDataV3,
   verifyMrConfigId,
+  MAX_INIT_SCRIPTS,
   type MrConfigIdInput,
+  type MrConfigV3Document,
+  type MrConfigV3Input,
+  type MrConfigVerifyInput,
   type KeyProviderKind as MrConfigKeyProviderKind,
 } from "./get_mr_config_id";
 export { asHex } from "./as-hex";

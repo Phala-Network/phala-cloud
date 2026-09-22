@@ -80,14 +80,22 @@ function profile(token: string) {
 	};
 }
 
+function setEnv(key: string, value: string | undefined): void {
+	if (value === undefined) delete process.env[key];
+	else process.env[key] = value;
+}
+
 describe("profiles refresh command", () => {
 	let tempDir: string;
 	let oldDir: string | undefined;
+	let oldPrefix: string | undefined;
 
 	beforeEach(() => {
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "phala-cli-test-"));
 		oldDir = process.env.PHALA_CLOUD_DIR;
+		oldPrefix = process.env.PHALA_CLOUD_API_PREFIX;
 		process.env.PHALA_CLOUD_DIR = tempDir;
+		setEnv("PHALA_CLOUD_API_PREFIX", undefined);
 		mockTryRevokeApiToken.mockClear();
 		mockTryRevokeApiToken.mockImplementation(() =>
 			Promise.resolve({ outcome: "revoked" }),
@@ -98,11 +106,8 @@ describe("profiles refresh command", () => {
 	});
 
 	afterEach(() => {
-		if (oldDir === undefined) {
-			process.env.PHALA_CLOUD_DIR = undefined;
-		} else {
-			process.env.PHALA_CLOUD_DIR = oldDir;
-		}
+		setEnv("PHALA_CLOUD_DIR", oldDir);
+		setEnv("PHALA_CLOUD_API_PREFIX", oldPrefix);
 		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 

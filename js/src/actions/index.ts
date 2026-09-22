@@ -640,6 +640,24 @@ export {
 } from "./ssh_keys/sync_github_ssh_keys";
 
 export {
+  getCvmSshKeys,
+  safeGetCvmSshKeys,
+  CvmSshKeySchema,
+  CvmSshKeysResponseSchema,
+  GetCvmSshKeysRequestSchema,
+  type CvmSshKey,
+  type CvmSshKeysResponse,
+  type GetCvmSshKeysRequest,
+} from "./ssh_keys/get_cvm_ssh_keys";
+
+export {
+  updateCvmSshKeys,
+  safeUpdateCvmSshKeys,
+  UpdateCvmSshKeysRequestSchema,
+  type UpdateCvmSshKeysRequest,
+} from "./ssh_keys/update_cvm_ssh_keys";
+
+export {
   revokeCurrentApiToken,
   safeRevokeCurrentApiToken,
 } from "./api_tokens/revoke_current_api_token";
