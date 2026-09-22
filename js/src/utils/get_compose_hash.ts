@@ -42,7 +42,7 @@ export interface DockerConfig extends SortableObject {
 }
 
 export interface AppCompose extends SortableObject {
-  manifest_version?: number;
+  manifest_version?: number | string;
   name?: string;
   features?: string[];
   runner?: string;

@@ -10,6 +10,8 @@ export const OSImageVariantSchema = z.object({
   slug: z.string(),
   os_image_hash: z.string().nullable(),
   requires_gpu: z.boolean(),
+  supports_cpu: z.boolean(),
+  supports_gpu: z.boolean(),
   is_current: z.boolean(),
   enabled: z.boolean(),
 });
@@ -24,6 +26,8 @@ export const AvailableOSImageSchema = z.object({
     z.tuple([z.number(), z.number(), z.number(), z.number()]),
     z.tuple([z.number(), z.number(), z.number()]),
   ]),
+  release: z.string(),
+  published_at: z.string().nullable(),
   prod: OSImageVariantSchema.nullable(),
   dev: OSImageVariantSchema.nullable(),
 });

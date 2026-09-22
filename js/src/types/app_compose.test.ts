@@ -96,6 +96,17 @@ describe("LooseAppComposeSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("should preserve a string manifest_version (dstack 0.6.0+)", () => {
+    const result = LooseAppComposeSchema.safeParse({
+      docker_compose_file: "version: '3'",
+      manifest_version: "3",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.manifest_version).toBe("3");
+    }
+  });
+
   it("should accept a valid port_policy", () => {
     const result = LooseAppComposeSchema.safeParse({
       docker_compose_file: "version: '3'",

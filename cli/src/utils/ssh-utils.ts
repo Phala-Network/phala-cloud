@@ -346,9 +346,11 @@ export function checkLibreSSLEd25519Compatibility(keyPath: string): void {
  * Build common SSH options for ssh/scp commands
  */
 export function buildSshOptions(verbose: boolean, timeout: string): string[] {
-	const proxyCommand = verbose
-		? "openssl s_client -quiet -connect %h:%p"
-		: "openssl s_client -quiet -connect %h:%p 2>/dev/null";
+	// The full app-port hostname selects the CVM through gateway SNI routing.
+	// Authenticate that same hostname and abort on certificate verification errors.
+	const tlsCommand =
+		"openssl s_client -quiet -connect %h:%p -servername %h -verify_hostname %h -verify_return_error";
+	const proxyCommand = verbose ? tlsCommand : `${tlsCommand} 2>/dev/null`;
 
 	return [
 		"-o",

@@ -46,9 +46,16 @@ type DeviceIDEntry struct {
 // AvailableImage represents an available OS image on a node.
 type AvailableImage struct {
 	Name        string  `json:"name"`
+	Slug        *string `json:"slug,omitempty"`
+	Release     *string `json:"release,omitempty"`
+	PublishedAt *string `json:"published_at,omitempty"`
 	IsDev       bool    `json:"is_dev"`
 	Version     any     `json:"version"`
 	OSImageHash *string `json:"os_image_hash,omitempty"`
+	RequiresGPU *bool   `json:"requires_gpu,omitempty"`
+	SupportsCPU *bool   `json:"supports_cpu,omitempty"`
+	SupportsGPU *bool   `json:"supports_gpu,omitempty"`
+	Enabled     *bool   `json:"enabled,omitempty"`
 }
 
 // ProductGPUAvailability describes usable GPU count for one product ID.

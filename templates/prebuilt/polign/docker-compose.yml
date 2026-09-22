@@ -1,0 +1,184 @@
+services:
+  polign:
+    image: alpine:3.20
+    restart: unless-stopped
+    environment:
+      POLIGN_VERSION: ${POLIGN_VERSION:-v0.5.0}
+      POLIGN_STORE: ${POLIGN_STORE:-fs:/data/store}
+      # The keyring never leaves the sealed environment. Without it the
+      # container refuses to start rather than run an unencrypted store.
+      POLIGN_STORE_ENCRYPTION_KEYS: ${POLIGN_STORE_ENCRYPTION_KEYS:?POLIGN_STORE_ENCRYPTION_KEYS is required, this template always encrypts the store}
+      POLIGN_DISK_CACHE_BYTES: ${POLIGN_DISK_CACHE_BYTES:-4294967296}
+      # Only for an s3:// store. POLIGN_STORE_REGION is the AWS region name of
+      # the bucket (for example us-west-2), unrelated to the Phala Cloud region
+      # the CVM runs in. The access key should belong to a bootstrap user whose
+      # one permission is sts:AssumeRole on POLIGN_STORE_ROLE_ARN; polign then
+      # signs every bucket request with short-lived role credentials.
+      POLIGN_STORE_REGION: ${POLIGN_STORE_REGION:-}
+      POLIGN_STORE_ROLE_ARN: ${POLIGN_STORE_ROLE_ARN:-}
+      POLIGN_STORE_EXTERNAL_ID: ${POLIGN_STORE_EXTERNAL_ID:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      # Only for a gcs:// store: base64 of a service-account key file. It is
+      # decoded into RAM-backed tmpfs at start and never written to disk. GCS
+      # needs no region variable; the client discovers the bucket's location.
+      GOOGLE_APPLICATION_CREDENTIALS_BASE64: ${GOOGLE_APPLICATION_CREDENTIALS_BASE64:-}
+    volumes:
+      - polign_data:/data
+    expose:
+      - "23000"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+
+        case "$$POLIGN_VERSION" in
+          v[0-9]*) ;;
+          *)
+            echo "POLIGN_VERSION must be a release tag such as v0.5.0, got '$$POLIGN_VERSION'" >&2
+            exit 1
+            ;;
+        esac
+
+        if [ -z "$${POLIGN_STORE_ENCRYPTION_KEYS:-}" ]; then
+          echo "POLIGN_STORE_ENCRYPTION_KEYS is empty. This template only runs polign_db with encryption at rest; see the template README for how to generate a keyring." >&2
+          exit 1
+        fi
+
+        case "$$POLIGN_STORE" in
+          s3://*)
+            if [ -z "$${AWS_ACCESS_KEY_ID:-}" ] || [ -z "$${AWS_SECRET_ACCESS_KEY:-}" ] || [ -z "$${POLIGN_STORE_REGION:-}" ]; then
+              echo "POLIGN_STORE is an S3 bucket, so AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and POLIGN_STORE_REGION must all be set; see the README section on using your own bucket" >&2
+              exit 1
+            fi
+            if [ -n "$${POLIGN_STORE_EXTERNAL_ID:-}" ] && [ -z "$${POLIGN_STORE_ROLE_ARN:-}" ]; then
+              echo "POLIGN_STORE_EXTERNAL_ID is set but POLIGN_STORE_ROLE_ARN is empty; the external id is only sent when a role is assumed" >&2
+              exit 1
+            fi
+            ;;
+          gcs://*)
+            if [ -z "$${GOOGLE_APPLICATION_CREDENTIALS_BASE64:-}" ]; then
+              echo "POLIGN_STORE is a GCS bucket, so GOOGLE_APPLICATION_CREDENTIALS_BASE64 must hold the base64 of a service-account key file; see the README section on using your own bucket" >&2
+              exit 1
+            fi
+            # Decode the key into RAM-backed tmpfs, readable by this user only,
+            # and hand polign the path the way Google's client libraries expect.
+            umask 077
+            printf '%s' "$$GOOGLE_APPLICATION_CREDENTIALS_BASE64" | tr -d ' \n\r' | base64 -d > /dev/shm/polign-gcs-credentials.json
+            umask 022
+            if ! grep -q '"client_email"' /dev/shm/polign-gcs-credentials.json; then
+              echo "GOOGLE_APPLICATION_CREDENTIALS_BASE64 did not decode to a service-account key file (no client_email field)" >&2
+              exit 1
+            fi
+            export GOOGLE_APPLICATION_CREDENTIALS=/dev/shm/polign-gcs-credentials.json
+            unset GOOGLE_APPLICATION_CREDENTIALS_BASE64
+            ;;
+        esac
+
+        case "$$(uname -m)" in
+          x86_64 | amd64) arch=amd64 ;;
+          aarch64 | arm64) arch=arm64 ;;
+          *)
+            echo "unsupported CPU architecture: $$(uname -m)" >&2
+            exit 1
+            ;;
+        esac
+
+        fetch() {
+          n=0
+          until wget -q -O "$$2" "$$1"; do
+            n=$$((n + 1))
+            if [ "$$n" -ge 5 ]; then
+              echo "download failed after $$n attempts: $$1" >&2
+              return 1
+            fi
+            sleep 3
+          done
+        }
+
+        # The release archive is downloaded once, checksum-verified against the
+        # release's checksums.txt, and kept on the persistent volume.
+        bin="/data/bin/$$POLIGN_VERSION"
+        if [ ! -x "$$bin/polign-server" ]; then
+          asset="polign_db_linux_$${arch}.tar.gz"
+          tmp="$$(mktemp -d)"
+          echo "downloading polign_db $$POLIGN_VERSION for linux/$$arch"
+          fetch "https://dl.polign.com/$$POLIGN_VERSION/$$asset?c=phala" "$$tmp/$$asset"
+          fetch "https://dl.polign.com/$$POLIGN_VERSION/checksums.txt?c=phala" "$$tmp/checksums.txt"
+          (cd "$$tmp" && grep " $$asset$$" checksums.txt | sha256sum -c -)
+          rm -rf "$$bin" "$$bin.tmp"
+          mkdir -p "$$bin.tmp"
+          tar xzf "$$tmp/$$asset" -C "$$bin.tmp"
+          rm -rf "$$tmp"
+          mv "$$bin.tmp" "$$bin"
+        fi
+
+        mkdir -p /data/store
+        set -- -store "$$POLIGN_STORE" -http :23000 -grpc 127.0.0.1:23001
+        case "$$POLIGN_STORE" in
+          fs:*)
+            # The store already lives on this disk, so a disk cache would only
+            # hold a second copy of the same bytes.
+            set -- "$$@" -disk-cache-dir "" -disk-cache-bytes 0
+            ;;
+          *)
+            mkdir -p /data/cache
+            set -- "$$@" -disk-cache-dir /data/cache -disk-cache-bytes "$$POLIGN_DISK_CACHE_BYTES"
+            ;;
+        esac
+
+        exec "$$bin/polign-server" "$$@"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:23000/healthz >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 180s
+    networks:
+      - internal
+
+  proxy:
+    image: caddy:2.8
+    restart: unless-stopped
+    depends_on:
+      polign:
+        condition: service_healthy
+    ports:
+      - "23000:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    networks:
+      - internal
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+          @health {
+              method GET
+              path /healthz
+          }
+          handle @health {
+              reverse_proxy polign:23000
+          }
+          @valid_auth {
+              header Authorization "Bearer ${BEARER_TOKEN:?BEARER_TOKEN is required, it protects the public endpoint}"
+          }
+          handle @valid_auth {
+              reverse_proxy polign:23000
+          }
+          handle {
+              respond 401 {
+                  body "Unauthorized"
+                  close
+              }
+          }
+      }
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  polign_data:

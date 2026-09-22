@@ -32,7 +32,18 @@ func TestGetCVMCreateResources(t *testing.T) {
 					"remaining_vcpu": 8,
 					"remaining_memory": 16384,
 					"remaining_cvm_slots": 4,
-					"images": []
+					"images": [{
+						"name": "Unified image",
+						"slug": "dstack-0.6.0-rc1",
+						"release": "0.6.0-rc1",
+						"published_at": "2026-09-07T12:00:00Z",
+						"is_dev": false,
+						"version": [0, 6, 0],
+						"requires_gpu": false,
+						"supports_cpu": true,
+						"supports_gpu": true,
+						"enabled": true
+					}]
 				}
 			],
 			"kms_nodes": [
@@ -100,6 +111,16 @@ func TestGetCVMCreateResources(t *testing.T) {
 	result, err := client.GetCVMCreateResources(context.Background())
 	if err != nil {
 		t.Fatalf("GetCVMCreateResources: %v", err)
+	}
+	if len(result.Nodes) != 1 || len(result.Nodes[0].Images) != 1 {
+		t.Fatalf("node images = %#v, want one image", result.Nodes)
+	}
+	image := result.Nodes[0].Images[0]
+	if image.Release == nil || *image.Release != "0.6.0-rc1" {
+		t.Fatalf("image release = %v, want 0.6.0-rc1", image.Release)
+	}
+	if image.SupportsCPU == nil || !*image.SupportsCPU || image.SupportsGPU == nil || !*image.SupportsGPU {
+		t.Fatalf("image support = CPU %v GPU %v, want both true", image.SupportsCPU, image.SupportsGPU)
 	}
 	if len(result.KMSNodes) != 1 {
 		t.Fatalf("KMSNodes len = %d, want 1", len(result.KMSNodes))

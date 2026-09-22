@@ -6196,5 +6196,83 @@
       "diskSize": 40
     },
     "tags": ["Web Apps", "Automation", "Data & Storage"]
+  },
+  {
+    "id": "polign",
+    "name": "Polign/polign_db",
+    "description": "polign_db v0.5.0 vector database with client-side encryption at rest always on. The keyring arrives through the sealed environment, every object and disk-cache entry the server writes is AES-256-GCM ciphertext, and the HTTP API on port 23000 sits behind a bearer-token Caddy proxy. Persists to the CVM disk by default, or to your own S3 bucket (through an assumed IAM role) or GCS bucket.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/polign",
+    "author": "Polign",
+    "icon": "polign.svg",
+    "envs": [
+      {
+        "key": "POLIGN_STORE_ENCRYPTION_KEYS",
+        "required": true,
+        "description": "Keyring that encrypts the store: one key per line as <id>=<base64 of 32 random bytes>. Generate with: printf '1=%s' \"$(openssl rand -base64 32)\". Keep a copy outside the CVM; without it the data cannot be read."
+      },
+      {
+        "key": "BEARER_TOKEN",
+        "required": true,
+        "description": "Token clients must send as Authorization: Bearer <token> to reach the API. Generate with openssl rand -hex 32."
+      },
+      {
+        "key": "POLIGN_VERSION",
+        "required": false,
+        "default": "v0.5.0",
+        "description": "polign_db release tag downloaded and checksum-verified at first start."
+      },
+      {
+        "key": "POLIGN_STORE",
+        "required": false,
+        "default": "fs:/data/store",
+        "description": "Where the database lives. fs:/data/store keeps it on the CVM's persistent volume; s3://bucket/prefix or gcs://bucket/prefix uses your own bucket (set the matching variables below). Choose before the first write."
+      },
+      {
+        "key": "POLIGN_DISK_CACHE_BYTES",
+        "required": false,
+        "default": "4294967296",
+        "description": "Local disk cache budget in bytes, used only with a remote store such as S3 or GCS."
+      },
+      {
+        "key": "POLIGN_STORE_REGION",
+        "required": false,
+        "description": "S3 only. The AWS region name of the bucket exactly as AWS reports it (for example us-west-2). This is not the Phala Cloud region and does not need to match it. Unused for GCS."
+      },
+      {
+        "key": "POLIGN_STORE_ROLE_ARN",
+        "required": false,
+        "description": "S3 only, recommended. IAM role polign assumes for every bucket request, so the access key below needs nothing but sts:AssumeRole on this role."
+      },
+      {
+        "key": "POLIGN_STORE_EXTERNAL_ID",
+        "required": false,
+        "description": "S3 only. External id sent on the AssumeRole call; require it in the role's trust policy. Generate with openssl rand -hex 16."
+      },
+      {
+        "key": "AWS_ACCESS_KEY_ID",
+        "required": false,
+        "description": "S3 only. Access key of the bootstrap IAM user (with POLIGN_STORE_ROLE_ARN) or of a user holding the bucket policy directly."
+      },
+      {
+        "key": "AWS_SECRET_ACCESS_KEY",
+        "required": false,
+        "description": "S3 only. Secret half of AWS_ACCESS_KEY_ID."
+      },
+      {
+        "key": "GOOGLE_APPLICATION_CREDENTIALS_BASE64",
+        "required": false,
+        "description": "GCS only. Base64 of a service-account key file whose account holds roles/storage.objectAdmin on the bucket. Decoded into RAM at start, never written to disk. Encode with base64 -w0 key.json."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": [
+      "Data & Storage",
+      "TEE & Privacy",
+      "AI Agents"
+    ]
   }
 ]

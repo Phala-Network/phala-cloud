@@ -128,6 +128,27 @@ type CvmOsInfo struct {
 	OSImageHash *string `json:"os_image_hash,omitempty"`
 }
 
+// CvmAvailableOSImageVariant represents a production or development OS image variant.
+type CvmAvailableOSImageVariant struct {
+	Name        string  `json:"name"`
+	Slug        string  `json:"slug"`
+	OSImageHash *string `json:"os_image_hash,omitempty"`
+	RequiresGPU bool    `json:"requires_gpu"`
+	SupportsCPU bool    `json:"supports_cpu"`
+	SupportsGPU bool    `json:"supports_gpu"`
+	IsCurrent   bool    `json:"is_current"`
+	Enabled     bool    `json:"enabled"`
+}
+
+// CvmAvailableOSImage groups production and development variants by version.
+type CvmAvailableOSImage struct {
+	Version     []int                       `json:"version"`
+	Release     string                      `json:"release"`
+	PublishedAt *string                     `json:"published_at"`
+	Prod        *CvmAvailableOSImageVariant `json:"prod"`
+	Dev         *CvmAvailableOSImageVariant `json:"dev"`
+}
+
 // CvmKmsInfo holds CVM KMS information.
 type CvmKmsInfo struct {
 	ChainID            *int    `json:"chain_id,omitempty"`
@@ -285,6 +306,10 @@ type ProvisionCVMResponse struct {
 	KMSID                 string `json:"kms_id,omitempty"`
 	KMSContractID         string `json:"kms_contract_id,omitempty"`
 	ComposeHashRegistered bool   `json:"compose_hash_registered,omitempty"`
+	// Token is the one-time commit token for the same-path two-phase create.
+	// Present when the backend supports token commit on POST /cvms; empty
+	// against older backends.
+	Token string `json:"token,omitempty"`
 	// ComposeUnchanged is set only by ProvisionCVMComposeFileUpdate: true means
 	// the submitted compose matched the deployed one, so the commit step is a
 	// no-op and can be skipped. Always false for a fresh provision.
@@ -293,8 +318,12 @@ type ProvisionCVMResponse struct {
 
 // CommitCVMProvisionRequest is the request for committing a CVM provision.
 type CommitCVMProvisionRequest struct {
-	AppID           string   `json:"app_id"`
-	ComposeHash     string   `json:"compose_hash"`
+	// Token is the one-time commit token from ProvisionCVMResponse. When set,
+	// the backend resolves AppID and ComposeHash from the token; they may be
+	// left empty.
+	Token           *string  `json:"token,omitempty"`
+	AppID           string   `json:"app_id,omitempty"`
+	ComposeHash     string   `json:"compose_hash,omitempty"`
 	TransactionHash *string  `json:"transaction_hash,omitempty"`
 	EncryptedEnv    *string  `json:"encrypted_env,omitempty"`
 	EnvKeys         []string `json:"env_keys,omitempty"`
