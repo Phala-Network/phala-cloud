@@ -55,7 +55,8 @@ export const jsonOption: CommandOption = {
 
 export const profileOption: CommandOption = {
 	name: "profile",
-	description: "Temporarily use a different auth profile for this command",
+	description:
+		"Temporarily use a different auth profile for this command (or set PHALA_CLOUD_PROFILE env var)",
 	type: "string",
 	target: "profile",
 	argumentName: "profile",

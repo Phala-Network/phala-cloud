@@ -58,6 +58,7 @@ For installation and quick start, see the [README](../README.md).
 |----------|-------------|
 | `PHALA_CLOUD_API_KEY` | Override the stored API key |
 | `PHALA_CLOUD_API_PREFIX` | Override the API base URL |
+| `PHALA_CLOUD_PROFILE` | Use this auth profile instead of the current one (same as `--profile`) |
 | `PHALA_CLOUD_DIR` | Override the credentials directory (default: `~/.phala-cloud`) |
 | `PHALA_UPDATE_CHANNEL` | Release channel for `self update` (e.g., `latest`, `beta`) |
 

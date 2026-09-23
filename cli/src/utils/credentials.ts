@@ -121,8 +121,12 @@ export function resolveAuth(options: {
 	projectProfile?: string;
 }): ResolvedAuth {
 	const credentials = loadCredentialsFile();
+	// Profile resolution: --profile > PHALA_CLOUD_PROFILE > phala.toml > current_profile
 	const requested = normalizeProfileName(
 		options.profile ||
+			(isNonEmptyString(options.env.PHALA_CLOUD_PROFILE)
+				? options.env.PHALA_CLOUD_PROFILE
+				: undefined) ||
 			options.projectProfile ||
 			credentials?.current_profile ||
 			"default",
