@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { parseCommandArguments } from "./parser";
 import { buildCommandSchemaInput } from "./input-builder";
+import { hoistLeadingGlobalOptions, parseCommandArguments } from "./parser";
 import type { CommandMeta } from "./types";
 
 describe("parseCommandArguments", () => {
@@ -220,5 +220,48 @@ describe("buildCommandSchemaInput with negatedName", () => {
 		const input = buildCommandSchemaInput(mockMeta, parsed);
 		// negatedLookup is processed after descriptors, so false wins
 		expect(input.options.devOs).toBe(false);
+	});
+});
+
+describe("hoistLeadingGlobalOptions", () => {
+	test("moves a leading value option after the command path", () => {
+		expect(
+			hoistLeadingGlobalOptions(["--profile", "local-dev", "api", "/me"]),
+		).toEqual(["api", "/me", "--profile", "local-dev"]);
+	});
+
+	test("keeps command flags after the hoisted options", () => {
+		expect(
+			hoistLeadingGlobalOptions([
+				"--profile=dev",
+				"-j",
+				"cvms",
+				"get",
+				"app_1",
+				"--",
+				"extra",
+			]),
+		).toEqual(["cvms", "get", "app_1", "--profile=dev", "-j", "--", "extra"]);
+	});
+
+	test("does not treat an option value as the command", () => {
+		expect(
+			hoistLeadingGlobalOptions(["--profile", "api", "cvms", "list"]),
+		).toEqual(["cvms", "list", "--profile", "api"]);
+	});
+
+	test("stops at the first unknown flag", () => {
+		const argv = ["--unknown", "--profile", "dev", "api", "/me"];
+		expect(hoistLeadingGlobalOptions(argv)).toEqual(argv);
+	});
+
+	test("leaves argv unchanged when it starts with the command", () => {
+		const argv = ["api", "/me", "--profile", "dev"];
+		expect(hoistLeadingGlobalOptions(argv)).toEqual(argv);
+	});
+
+	test("keeps global-only invocations intact", () => {
+		expect(hoistLeadingGlobalOptions(["--help"])).toEqual(["--help"]);
+		expect(hoistLeadingGlobalOptions(["--profile"])).toEqual(["--profile"]);
 	});
 });
