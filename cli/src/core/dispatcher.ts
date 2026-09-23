@@ -12,7 +12,7 @@ import { isValidApiVersion, setApiVersionOverride } from "./api-version";
 import { formatCommandHelp, formatGlobalHelp, formatGroupHelp } from "./help";
 import { buildCommandSchemaInput } from "./input-builder";
 import { isInJsonMode, setJsonMode } from "./json-mode";
-import { parseCommandArguments } from "./parser";
+import { hoistLeadingGlobalOptions, parseCommandArguments } from "./parser";
 import type { CommandRegistry } from "./registry";
 import type { CommandContext, CommandDefinition } from "./types";
 import { checkForUpdates, getCachedUpdateNotice } from "./update-check";
@@ -37,7 +37,6 @@ export async function dispatchCommand(
 ): Promise<number> {
 	const {
 		registry,
-		argv,
 		executableName,
 		version,
 		packageName,
@@ -49,6 +48,7 @@ export async function dispatchCommand(
 		env,
 		cwd,
 	} = options;
+	const argv = hoistLeadingGlobalOptions(options.argv);
 
 	const commandSegments = collectCommandSegments(argv);
 

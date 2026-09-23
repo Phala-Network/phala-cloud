@@ -6,6 +6,8 @@ All environment variables recognized by the Phala CLI. Command-line flags always
 
 - `PHALA_CLOUD_API_KEY` — API token. Overrides the token stored by `phala login`.
 - `PHALA_OIDC_TOKEN` — GitHub Actions OIDC JWT. Sent as `Authorization: Bearer`. Used for keyless CI deploy when no API key is set. Prefer API key when both are present.
+- `PHALA_CLOUD_PROFILE` — Auth profile to use instead of the current one, without changing it. Same as `--profile`.
+  Precedence: `--profile` > `PHALA_CLOUD_PROFILE` > `phala.toml` `profile` > current profile (`phala profiles use`).
 - `PHALA_CLOUD_WORKSPACE` — Workspace slug sent as `X-Phala-Workspace` (needed when a GitHub repo is trusted in multiple workspaces).
 - `PHALA_CLOUD_API_PREFIX` — API base URL. Default: `https://cloud-api.phala.com/api/v1`.
 

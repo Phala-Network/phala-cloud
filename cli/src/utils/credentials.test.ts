@@ -37,6 +37,7 @@ describe("credentials", () => {
 	let oldOidc: string | undefined;
 	let oldWorkspace: string | undefined;
 	let oldCloudDir: string | undefined;
+	let oldProfile: string | undefined;
 
 	beforeEach(() => {
 		oldHome = process.env.HOME;
@@ -45,6 +46,7 @@ describe("credentials", () => {
 		oldOidc = process.env.PHALA_OIDC_TOKEN;
 		oldWorkspace = process.env.PHALA_CLOUD_WORKSPACE;
 		oldCloudDir = process.env.PHALA_CLOUD_DIR;
+		oldProfile = process.env.PHALA_CLOUD_PROFILE;
 
 		tempHome = makeTempHome();
 		process.env.HOME = tempHome;
@@ -53,6 +55,7 @@ describe("credentials", () => {
 		setEnv("PHALA_CLOUD_API_PREFIX", undefined);
 		setEnv("PHALA_OIDC_TOKEN", undefined);
 		setEnv("PHALA_CLOUD_WORKSPACE", undefined);
+		setEnv("PHALA_CLOUD_PROFILE", undefined);
 	});
 
 	afterEach(() => {
@@ -62,6 +65,7 @@ describe("credentials", () => {
 		setEnv("PHALA_OIDC_TOKEN", oldOidc);
 		setEnv("PHALA_CLOUD_WORKSPACE", oldWorkspace);
 		setEnv("PHALA_CLOUD_DIR", oldCloudDir);
+		setEnv("PHALA_CLOUD_PROFILE", oldProfile);
 
 		cleanupDir(tempHome);
 	});
@@ -139,6 +143,73 @@ describe("credentials", () => {
 		expect(resolved.profileName).toBe("b");
 		expect(resolved.apiKey).toBe("token-b");
 		expect(resolved.baseURL).toBe("https://b.example/api/v1");
+	});
+
+	test("resolveAuth uses PHALA_CLOUD_PROFILE over projectProfile and current_profile", () => {
+		upsertProfile({
+			profileName: "a",
+			token: "token-a",
+			workspaceName: "a",
+			user: { username: "u" },
+			setCurrent: true,
+		});
+		upsertProfile({
+			profileName: "b",
+			token: "token-b",
+			workspaceName: "b",
+			user: { username: "u" },
+			setCurrent: false,
+		});
+
+		const resolved = resolveAuth({
+			env: { ...process.env, PHALA_CLOUD_PROFILE: "b" },
+			projectProfile: "a",
+		});
+		expect(resolved.profileName).toBe("b");
+		expect(resolved.apiKey).toBe("token-b");
+	});
+
+	test("resolveAuth uses explicit profile over PHALA_CLOUD_PROFILE", () => {
+		upsertProfile({
+			profileName: "a",
+			token: "token-a",
+			workspaceName: "a",
+			user: { username: "u" },
+			setCurrent: true,
+		});
+		upsertProfile({
+			profileName: "b",
+			token: "token-b",
+			workspaceName: "b",
+			user: { username: "u" },
+			setCurrent: false,
+		});
+
+		const resolved = resolveAuth({
+			env: { ...process.env, PHALA_CLOUD_PROFILE: "b" },
+			profile: "a",
+		});
+		expect(resolved.profileName).toBe("a");
+		expect(resolved.apiKey).toBe("token-a");
+	});
+
+	test("resolveAuth reports where the profile came from", () => {
+		upsertProfile({
+			profileName: "a",
+			token: "token-a",
+			workspaceName: "a",
+			user: { username: "u" },
+			setCurrent: true,
+		});
+
+		const source = (options: Partial<Parameters<typeof resolveAuth>[0]>) =>
+			resolveAuth({ env: process.env, ...options }).profileSource;
+		expect(source({ profile: "a" })).toBe("flag");
+		expect(source({ env: { ...process.env, PHALA_CLOUD_PROFILE: "a" } })).toBe(
+			"env",
+		);
+		expect(source({ projectProfile: "a" })).toBe("project");
+		expect(source({})).toBe("current");
 	});
 
 	test("api prefix resolution: env > profile > default", () => {
