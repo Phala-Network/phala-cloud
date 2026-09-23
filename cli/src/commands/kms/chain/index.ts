@@ -65,12 +65,12 @@ function createChainHandler(chain: string) {
 			});
 
 			if (!result.success) {
-			context.failWithError(result.error.cause ?? result.error, {
-				operation: "List KMS chains",
-				debug: Boolean((input as { debug?: boolean }).debug),
-			});
-			return 1;
-		}
+				context.failWithError(result.error.cause ?? result.error, {
+					operation: "List KMS chains",
+					debug: Boolean((input as { debug?: boolean }).debug),
+				});
+				return 1;
+			}
 
 			const data = result.data;
 

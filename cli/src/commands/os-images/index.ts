@@ -28,10 +28,13 @@ async function runOsImagesCommand(
 
 		const firstPageResult = await fetchPage(input.page);
 		if (!firstPageResult.success) {
-			context.failWithError(firstPageResult.error.cause ?? firstPageResult.error, {
-				operation: "List OS images",
-				debug: Boolean((input as { debug?: boolean }).debug),
-			});
+			context.failWithError(
+				firstPageResult.error.cause ?? firstPageResult.error,
+				{
+					operation: "List OS images",
+					debug: Boolean((input as { debug?: boolean }).debug),
+				},
+			);
 			return 1;
 		}
 
@@ -41,12 +44,12 @@ async function runOsImagesCommand(
 			for (let page = data.page + 1; page <= data.pages; page++) {
 				const pageResult = await fetchPage(page);
 				if (!pageResult.success) {
-			context.failWithError(pageResult.error.cause ?? pageResult.error, {
-				operation: "List OS images",
-				debug: Boolean((input as { debug?: boolean }).debug),
-			});
-			return 1;
-		}
+					context.failWithError(pageResult.error.cause ?? pageResult.error, {
+						operation: "List OS images",
+						debug: Boolean((input as { debug?: boolean }).debug),
+					});
+					return 1;
+				}
 				allItems.push(...pageResult.data.items);
 			}
 			data = {

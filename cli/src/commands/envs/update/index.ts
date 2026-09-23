@@ -163,12 +163,12 @@ async function runEnvsUpdateCommand(
 			});
 
 			if (!retryResult.success) {
-			context.failWithError(retryResult.error.cause ?? retryResult.error, {
-				operation: "Update envs",
-				debug: Boolean((input as { debug?: boolean }).debug),
-			});
-			return 1;
-		}
+				context.failWithError(retryResult.error.cause ?? retryResult.error, {
+					operation: "Update envs",
+					debug: Boolean((input as { debug?: boolean }).debug),
+				});
+				return 1;
+			}
 
 			if (retryResult.data.status === "in_progress") {
 				logger.success(

@@ -271,13 +271,16 @@ describe("CLI error envelope", () => {
 	});
 
 	test("network failure omits response and request ID", () => {
-		const error = new RequestError("[GET] https://example.test: <no response>", {
-			status: 0,
-			statusText: "Unknown Error",
-			detail: "[GET] https://example.test: <no response>",
-			request: "https://example.test/api",
-			requestMethod: "GET",
-		});
+		const error = new RequestError(
+			"[GET] https://example.test: <no response>",
+			{
+				status: 0,
+				statusText: "Unknown Error",
+				detail: "[GET] https://example.test: <no response>",
+				request: "https://example.test/api",
+				requestMethod: "GET",
+			},
+		);
 
 		const envelope = normalizeCliError(error);
 		const json = buildJsonCliError(envelope);
