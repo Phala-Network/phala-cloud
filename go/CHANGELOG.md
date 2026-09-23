@@ -36,7 +36,4 @@
 
 * migrate resize endpoint across all SDKs ([56638f1](https://github.com/Phala-Network/phala-cloud/commit/56638f1c1592a1a48dab7fedf9152b60c8e52a01))
 # Changelog
-## Unreleased
-
-- Add `key_provider` and `key_provider_id` to typed compose requests, so clients can select the measured KMS key provider without losing the field during JSON encoding.
 
