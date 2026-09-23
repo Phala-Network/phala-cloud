@@ -279,6 +279,8 @@ type ProvisionCVMRequest struct {
 type ComposeFile struct {
 	Name              string   `json:"name"`
 	DockerComposeFile string   `json:"docker_compose_file"`
+	KeyProvider       *string  `json:"key_provider,omitempty"`
+	KeyProviderID     *string  `json:"key_provider_id,omitempty"`
 	GatewayEnabled    *bool    `json:"gateway_enabled,omitempty"`
 	PreLaunchScript   *string  `json:"pre_launch_script,omitempty"`
 	EncryptedEnv      *string  `json:"encrypted_env,omitempty"`
