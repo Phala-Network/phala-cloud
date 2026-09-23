@@ -193,6 +193,25 @@ describe("credentials", () => {
 		expect(resolved.apiKey).toBe("token-a");
 	});
 
+	test("resolveAuth reports where the profile came from", () => {
+		upsertProfile({
+			profileName: "a",
+			token: "token-a",
+			workspaceName: "a",
+			user: { username: "u" },
+			setCurrent: true,
+		});
+
+		const source = (options: Partial<Parameters<typeof resolveAuth>[0]>) =>
+			resolveAuth({ env: process.env, ...options }).profileSource;
+		expect(source({ profile: "a" })).toBe("flag");
+		expect(source({ env: { ...process.env, PHALA_CLOUD_PROFILE: "a" } })).toBe(
+			"env",
+		);
+		expect(source({ projectProfile: "a" })).toBe("project");
+		expect(source({})).toBe("current");
+	});
+
 	test("api prefix resolution: env > profile > default", () => {
 		upsertProfile({
 			profileName: "p",

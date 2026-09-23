@@ -8,7 +8,21 @@ List all authentication profiles.
 phala profiles
 ```
 
-The active profile is marked with an asterisk (*).
+The current profile (set by `phala profiles use`) is marked with an asterisk (`*`).
+
+When `--profile`, `PHALA_CLOUD_PROFILE`, or `phala.toml` selects a different
+profile for the command, that profile is also marked with `>` and a note below
+the table names the override source. `--json` output reports it as
+`active: true`.
+
+```bash
+$ phala profiles --profile personal
+PROFILE   SLUG      WORKSPACE  USER  API ENDPOINT
+work      work      Work       me    https://cloud-api.phala.com/api/v1  *
+personal  personal  Personal   me    https://cloud-api.phala.com/api/v1  >
+
+> active for this command (overridden by --profile)
+```
 
 ## Examples
 

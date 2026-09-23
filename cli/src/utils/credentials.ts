@@ -101,6 +101,7 @@ export function saveCredentialsFile(file: CredentialsFileV1): void {
 
 export type TokenSource = "flag" | "env" | "file" | "oidc_env" | "none";
 export type ApiPrefixSource = "env" | "file" | "default";
+export type ProfileSource = "flag" | "env" | "project" | "current" | "default";
 
 export interface ResolvedAuth {
 	readonly apiKey: string | null;
@@ -110,6 +111,7 @@ export interface ResolvedAuth {
 	readonly workspace: string | null;
 	readonly baseURL: string;
 	readonly profileName: string;
+	readonly profileSource: ProfileSource;
 	readonly tokenSource: TokenSource;
 	readonly apiPrefixSource: ApiPrefixSource;
 }
@@ -122,15 +124,17 @@ export function resolveAuth(options: {
 }): ResolvedAuth {
 	const credentials = loadCredentialsFile();
 	// Profile resolution: --profile > PHALA_CLOUD_PROFILE > phala.toml > current_profile
-	const requested = normalizeProfileName(
-		options.profile ||
-			(isNonEmptyString(options.env.PHALA_CLOUD_PROFILE)
-				? options.env.PHALA_CLOUD_PROFILE
-				: undefined) ||
-			options.projectProfile ||
-			credentials?.current_profile ||
-			"default",
-	);
+	const [requestedRaw, profileSource]: [string, ProfileSource] =
+		isNonEmptyString(options.profile)
+			? [options.profile, "flag"]
+			: isNonEmptyString(options.env.PHALA_CLOUD_PROFILE)
+				? [options.env.PHALA_CLOUD_PROFILE, "env"]
+				: isNonEmptyString(options.projectProfile)
+					? [options.projectProfile, "project"]
+					: isNonEmptyString(credentials?.current_profile)
+						? [credentials.current_profile, "current"]
+						: ["default", "default"];
+	const requested = normalizeProfileName(requestedRaw);
 
 	// Backward-compat: phala.toml `profile` may contain a workspace slug,
 	// workspace name, or the actual profile key. If the requested key
@@ -181,6 +185,7 @@ export function resolveAuth(options: {
 			workspace,
 			baseURL,
 			profileName: selectedProfile,
+			profileSource,
 			tokenSource: "flag",
 			apiPrefixSource,
 		};
@@ -193,6 +198,7 @@ export function resolveAuth(options: {
 			workspace,
 			baseURL,
 			profileName: selectedProfile,
+			profileSource,
 			tokenSource: "env",
 			apiPrefixSource,
 		};
@@ -206,6 +212,7 @@ export function resolveAuth(options: {
 			workspace,
 			baseURL,
 			profileName: selectedProfile,
+			profileSource,
 			tokenSource: "file",
 			apiPrefixSource,
 		};
@@ -218,6 +225,7 @@ export function resolveAuth(options: {
 			workspace,
 			baseURL,
 			profileName: selectedProfile,
+			profileSource,
 			tokenSource: "oidc_env",
 			apiPrefixSource,
 		};
@@ -229,6 +237,7 @@ export function resolveAuth(options: {
 		workspace,
 		baseURL,
 		profileName: selectedProfile,
+		profileSource,
 		tokenSource: "none",
 		apiPrefixSource,
 	};
