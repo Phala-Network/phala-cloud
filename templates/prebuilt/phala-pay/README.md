@@ -17,8 +17,8 @@ instead (see [What the attestation covers](#what-the-attestation-covers)).
 
 The service variant of Phala Pay's
 [`deploy/docker-compose.yml`](https://github.com/Phala-Network/phala-pay/blob/main/deploy/docker-compose.yml)
-at commit `653644e9d313`, with the images of its
-[Release images run 36538132444](https://github.com/Phala-Network/phala-pay/actions/runs/36538132444),
+at commit `6968e54b90ce`, with the images of its
+[Release images run 36638440383](https://github.com/Phala-Network/phala-pay/actions/runs/36638440383),
 pinned by digest:
 
 | Service | Image | What it does |
@@ -31,9 +31,9 @@ pinned by digest:
 | `heartbeat` | `phala-pay` | Liveness heartbeat. |
 | `backup` | `postgres-walg` | An encrypted WAL-G base backup every day at 03:00 UTC, keeping seven. |
 
-- `ghcr.io/phala-network/phala-pay@sha256:1fb572d03781158437381fc69667b2aeaa8f2d4e6bc243fb69ae4c2860707931`
+- `ghcr.io/phala-network/phala-pay@sha256:b8b97975117801cf1c5360b8e67bb2054cc73644601bd4f42fd00c67c805c6a2`
   (bit-for-bit reproducible from the commit)
-- `ghcr.io/phala-network/postgres-walg@sha256:f5a43a906670fce8ac49dfadc96c7def4c62cc718b813aada01c73ec27c8efd3`
+- `ghcr.io/phala-network/postgres-walg@sha256:c94958a2a261f0df94f7c6bea7071160facc73711ea30dc0ae03f7dd7b1415f5`
 
 Each service mounts only the credentials it needs: `topup` and `heartbeat` see only the application
 login, never the database owner's password or the backup key, and no environment variable carries a
@@ -292,9 +292,9 @@ the same services locally against the dstack simulator and a Garage S3 store.
 ## Upstream sources
 
 - Repository: [Phala-Network/phala-pay](https://github.com/Phala-Network/phala-pay) (Apache-2.0)
-- Compose: [`deploy/docker-compose.yml`](https://github.com/Phala-Network/phala-pay/blob/653644e9d313bc4a3b89590de5fe57552e80d701/deploy/docker-compose.yml)
+- Compose: [`deploy/docker-compose.yml`](https://github.com/Phala-Network/phala-pay/blob/6968e54b90ce7e4eec5d1f71c7d1c907deb1b6b4/deploy/docker-compose.yml)
 - Deployment reference: [`deploy/README.md`](https://github.com/Phala-Network/phala-pay/blob/main/deploy/README.md)
 - Self-hosting guide: [`docs/self-hosting.md`](https://github.com/Phala-Network/phala-pay/blob/main/docs/self-hosting.md)
 - API reference: [phala-network.github.io/phala-pay](https://phala-network.github.io/phala-pay/)
-- Template icon: Phala's lime mark on black, `deploy/product/web/src/icons/pha.svg` from Phala Pay's
-  website, adapted there from [web3icons](https://github.com/0xa3k5/web3icons) (MIT)
+- Template icon: Phala Pay's own mark, the lime dot on a dark rounded tile,
+  [`deploy/product/web/brand/mark-light.svg`](https://github.com/Phala-Network/phala-pay/blob/main/deploy/product/web/brand/mark-light.svg)
