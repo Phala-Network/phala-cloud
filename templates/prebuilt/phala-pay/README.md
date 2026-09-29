@@ -103,11 +103,17 @@ All of them go into Phala Cloud's encrypted environment.
 Everything else is fixed in the compose: the key id `admin/v1`, the public origin, the service
 mode, path-style S3 requests, the webhook proxy, and the Sentry environment `testnet`.
 
-**Choose the `dstack-0.5.9` OS image** (non-dev) in the deploy form, or pass
-`--image dstack-0.5.9` to `phala deploy`, even when a newer image is offered. The service speaks
-the dstack 0.5 guest API and is built and tested on `dstack-0.5.9`. The OS image's key derivation
-fixes the backup key, the database passwords, and every account's webhook keys, and dstack 0.6
-derives different ones, so an instance started on one image cannot move to the other.
+**Choose the `dstack-0.5.9` OS image** (non-dev). The service speaks the dstack 0.5 guest API
+and is built and tested only on `dstack-0.5.9`; it has not been tested on dstack 0.6. The deploy
+form preselects the newest non-dev image the chosen node offers, which is `dstack-0.5.9` today
+but becomes a 0.6 image once the node offers one, so check the field. With the CLI, pass
+`--image dstack-0.5.9`: without it, `phala deploy` picks a dev image unless you add
+`--no-dev-os`.
+
+The OS image also fixes the instance's keys: the backup key, the database passwords, and every
+account's webhook keys are derived by the image's guest agent, and dstack 0.6 derives different
+ones for the same app. Moving an existing instance to another major OS version therefore loses
+its backups (they no longer decrypt) and changes the webhook keys merchants pinned.
 
 Phala Pay's own deploy also turns off public logs and public system info. If your deploy form
 offers those options, turn them off too. With public logs off, container logs are hidden from you
