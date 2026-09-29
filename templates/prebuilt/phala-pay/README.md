@@ -103,11 +103,15 @@ All of them go into Phala Cloud's encrypted environment.
 Everything else is fixed in the compose: the key id `admin/v1`, the public origin, the service
 mode, path-style S3 requests, the webhook proxy, and the Sentry environment `testnet`.
 
+**Choose the `dstack-0.5.9` OS image** (non-dev) in the deploy form, or pass
+`--image dstack-0.5.9` to `phala deploy`, even when a newer image is offered. The service speaks
+the dstack 0.5 guest API and is built and tested on `dstack-0.5.9`. The OS image's key derivation
+fixes the backup key, the database passwords, and every account's webhook keys, and dstack 0.6
+derives different ones, so an instance started on one image cannot move to the other.
+
 Phala Pay's own deploy also turns off public logs and public system info. If your deploy form
-offers those options, turn them off too. The service is built and tested on the `dstack-0.5.9` OS
-image. The OS image's key derivation fixes the backup key, the database passwords, and every
-account's webhook keys, so moving an existing instance to an OS image that derives different keys
-breaks it.
+offers those options, turn them off too. With public logs off, container logs are hidden from you
+as well: `phala logs` and the dashboard refuse them.
 
 ## What the attestation covers
 
@@ -145,7 +149,9 @@ curl -fsS "$ORIGIN/openapi.json" | jq -r .info.version
 
 The first start takes a minute or two: `keys` derives the credentials, PostgreSQL lists the empty
 backup prefix and initialises, `migrate` runs, and `topup` checks the factory on both chains.
-Backups have started once a WAL segment is listed:
+Backups have started once a WAL segment is listed (with the bucket settings of
+[Form fields](#form-fields) in your shell; a new database also takes its first base backup, under
+`basebackups_005/`, within a minute):
 
 ```sh
 aws s3 ls "${WALG_S3_PREFIX%/}/wal_005/" --endpoint-url "$AWS_ENDPOINT" | tail -1
@@ -170,7 +176,7 @@ replays the event log, and reports the app id and compose hash, which must match
 
 Merchants run the same check on the nonce-bound attestation the service returns to each account,
 before they pin their webhook keys (step 4). From a checkout of Phala Pay, with a secret key of the
-account:
+account ([step 3](#3-onboard-the-first-account)):
 
 ```sh
 NONCE=$(openssl rand -hex 32)
@@ -222,13 +228,25 @@ and [runbooks](https://github.com/Phala-Network/phala-pay/blob/main/deploy/runbo
 ### 4. A first test deposit
 
 The merchant does the rest with its own keys against `ORIGIN`, as
-[pay.phala.com](https://pay.phala.com/)'s demo does against Phala's staging instance:
+[pay.phala.com](https://pay.phala.com/)'s demo does against Phala's staging instance. In the
+Python SDK (`pip install 'phala-pay[eoa]'`), every call below is on
 
-1. Roll the first key, and create a restricted key (`ppay_rk_test_…`) for servers.
+```python
+from phala_pay import PhalaPay
+
+pay = PhalaPay(ORIGIN, SECRET_KEY, forwarder=(
+    "0x45466D37587E6E46DC35eB96b74ba3D3b1E5b747",  # factory
+    "0x49F2F1F1a25269Ea0C6FF2AB1C7B09dCBE9c5bA9",  # implementation
+))
+```
+
+1. Roll the first key with `pay.api_keys.roll(key_id, expires_in=3600)` (a key that rolls itself
+   keeps working for at least an hour), revoke the old one with the new key, and create a
+   restricted key (`ppay_rk_test_…`) for servers with `pay.api_keys.create(permissions=[…])`.
 2. Fetch `GET /v1/attestation?nonce=…`, verify it (step 2), and pin the account's webhook keys.
 3. Prove a test treasury per chain with a signed EIP-4361 challenge:
-   `pay.treasuries.set_eoa(chain_id=11155111, address=…, private_key=…)` in the Python SDK
-   (`pip install 'phala-pay[eoa]'`), or a Safe signing it as a Safe message.
+   `pay.treasuries.set_eoa(chain_id=11155111, address=…, private_key=…)`, or a Safe signing it
+   as a Safe message.
 4. Register a webhook endpoint (`POST /v1/webhook_endpoints`) with a public HTTPS URL.
 5. Create a quote (`pay.quotes.create(…, chain_id=11155111, asset="pha")`) and pay it: test PHA
    has a public `mint`, test USDC comes from Circle's faucet. The verified `deposit.credited`
