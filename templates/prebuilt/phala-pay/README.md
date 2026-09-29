@@ -17,8 +17,8 @@ instead (see [What the attestation covers](#what-the-attestation-covers)).
 
 The service variant of Phala Pay's
 [`deploy/docker-compose.yml`](https://github.com/Phala-Network/phala-pay/blob/main/deploy/docker-compose.yml)
-at commit `6968e54b90ce`, with the images of its
-[Release images run 36638440383](https://github.com/Phala-Network/phala-pay/actions/runs/36638440383),
+at commit `51f07b3c2cf0`, with the images of its
+[Release images run 36643452638](https://github.com/Phala-Network/phala-pay/actions/runs/36643452638),
 pinned by digest:
 
 | Service | Image | What it does |
@@ -31,9 +31,9 @@ pinned by digest:
 | `heartbeat` | `phala-pay` | Liveness heartbeat. |
 | `backup` | `postgres-walg` | An encrypted WAL-G base backup every day at 03:00 UTC, keeping seven. |
 
-- `ghcr.io/phala-network/phala-pay@sha256:b8b97975117801cf1c5360b8e67bb2054cc73644601bd4f42fd00c67c805c6a2`
+- `ghcr.io/phala-network/phala-pay@sha256:dc89124852faf922177c9eacc9235ad6f31c07cd0803e416044850d407613789`
   (bit-for-bit reproducible from the commit)
-- `ghcr.io/phala-network/postgres-walg@sha256:c94958a2a261f0df94f7c6bea7071160facc73711ea30dc0ae03f7dd7b1415f5`
+- `ghcr.io/phala-network/postgres-walg@sha256:6df9588c21e57cdbedbae216575fa39ed5693cd6a4a0a9268441590ead7f445a`
 
 Each service mounts only the credentials it needs: `topup` and `heartbeat` see only the application
 login, never the database owner's password or the backup key, and no environment variable carries a
@@ -310,7 +310,7 @@ the same services locally against the dstack simulator and a Garage S3 store.
 ## Upstream sources
 
 - Repository: [Phala-Network/phala-pay](https://github.com/Phala-Network/phala-pay) (Apache-2.0)
-- Compose: [`deploy/docker-compose.yml`](https://github.com/Phala-Network/phala-pay/blob/6968e54b90ce7e4eec5d1f71c7d1c907deb1b6b4/deploy/docker-compose.yml)
+- Compose: [`deploy/docker-compose.yml`](https://github.com/Phala-Network/phala-pay/blob/51f07b3c2cf060ccba152dd9d8ab975f2f843d3c/deploy/docker-compose.yml)
 - Deployment reference: [`deploy/README.md`](https://github.com/Phala-Network/phala-pay/blob/main/deploy/README.md)
 - Self-hosting guide: [`docs/self-hosting.md`](https://github.com/Phala-Network/phala-pay/blob/main/docs/self-hosting.md)
 - API reference: [phala-network.github.io/phala-pay](https://phala-network.github.io/phala-pay/)
