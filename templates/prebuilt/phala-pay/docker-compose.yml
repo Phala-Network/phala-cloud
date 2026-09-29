@@ -1,6 +1,6 @@
 # Phala Pay testnet quick start: the service variant of Phala Pay's deploy/docker-compose.yml
 # (https://github.com/Phala-Network/phala-pay/blob/main/deploy/docker-compose.yml) at commit
-# 6968e54b90ce, with the images of its Release images run 36638440383 and the four test routes of
+# 51f07b3c2cf0, with the images of its Release images run 36643452638 and the four test routes of
 # Phala's staging instance. Two differences from Phala Pay's own deploy (README.md): the settings
 # come from the CVM's encrypted env instead of being rendered into this file, and the public origin
 # is the Phala Cloud gateway's https://${DSTACK_APP_DOMAIN} (port 80 here) instead of a custom
@@ -41,7 +41,7 @@ services:
     # config's content does. Bump this label with any change to the configs below.
     labels: &revision-labels
       phala-pay.template-revision: "1"
-    image: ghcr.io/phala-network/phala-pay@sha256:b8b97975117801cf1c5360b8e67bb2054cc73644601bd4f42fd00c67c805c6a2
+    image: ghcr.io/phala-network/phala-pay@sha256:dc89124852faf922177c9eacc9235ad6f31c07cd0803e416044850d407613789
     user: "999:999"
     command:
       - topup
@@ -68,7 +68,7 @@ services:
 
   postgres:
     labels: *revision-labels
-    image: ghcr.io/phala-network/postgres-walg@sha256:c94958a2a261f0df94f7c6bea7071160facc73711ea30dc0ae03f7dd7b1415f5
+    image: ghcr.io/phala-network/postgres-walg@sha256:6df9588c21e57cdbedbae216575fa39ed5693cd6a4a0a9268441590ead7f445a
     environment:
       <<: *walg-environment
       POSTGRES_DB: topup
@@ -102,7 +102,7 @@ services:
 
   migrate:
     labels: *revision-labels
-    image: ghcr.io/phala-network/phala-pay@sha256:b8b97975117801cf1c5360b8e67bb2054cc73644601bd4f42fd00c67c805c6a2
+    image: ghcr.io/phala-network/phala-pay@sha256:dc89124852faf922177c9eacc9235ad6f31c07cd0803e416044850d407613789
     user: "999:999"
     command: ["topup", "migrate"]
     environment:
@@ -117,7 +117,7 @@ services:
 
   topup:
     labels: *revision-labels
-    image: ghcr.io/phala-network/phala-pay@sha256:b8b97975117801cf1c5360b8e67bb2054cc73644601bd4f42fd00c67c805c6a2
+    image: ghcr.io/phala-network/phala-pay@sha256:dc89124852faf922177c9eacc9235ad6f31c07cd0803e416044850d407613789
     # Database clients run as uid 999, which owns the 0600 credential files; each mounts only its own.
     user: "999:999"
     command:
@@ -152,7 +152,7 @@ services:
       # Sentry reporting: off while SENTRY_DSN is empty. The release is the image digest.
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_ENVIRONMENT: testnet
-      TOPUP_IMAGE: ghcr.io/phala-network/phala-pay@sha256:b8b97975117801cf1c5360b8e67bb2054cc73644601bd4f42fd00c67c805c6a2
+      TOPUP_IMAGE: ghcr.io/phala-network/phala-pay@sha256:dc89124852faf922177c9eacc9235ad6f31c07cd0803e416044850d407613789
     volumes:
       - /var/run/dstack.sock:/var/run/dstack.sock
       - db_app:/run/db-app:ro
@@ -192,7 +192,7 @@ services:
   # network.
   smokescreen:
     labels: *revision-labels
-    image: ghcr.io/phala-network/phala-pay@sha256:b8b97975117801cf1c5360b8e67bb2054cc73644601bd4f42fd00c67c805c6a2
+    image: ghcr.io/phala-network/phala-pay@sha256:dc89124852faf922177c9eacc9235ad6f31c07cd0803e416044850d407613789
     command:
       - smokescreen
       - --listen-ip=0.0.0.0
@@ -208,7 +208,7 @@ services:
 
   heartbeat:
     labels: *revision-labels
-    image: ghcr.io/phala-network/phala-pay@sha256:b8b97975117801cf1c5360b8e67bb2054cc73644601bd4f42fd00c67c805c6a2
+    image: ghcr.io/phala-network/phala-pay@sha256:dc89124852faf922177c9eacc9235ad6f31c07cd0803e416044850d407613789
     user: "999:999"
     command: ["topup", "heartbeat", "--interval-s", "60"]
     environment:
@@ -226,7 +226,7 @@ services:
   # WAL every minute.
   backup:
     labels: *revision-labels
-    image: ghcr.io/phala-network/postgres-walg@sha256:c94958a2a261f0df94f7c6bea7071160facc73711ea30dc0ae03f7dd7b1415f5
+    image: ghcr.io/phala-network/postgres-walg@sha256:6df9588c21e57cdbedbae216575fa39ed5693cd6a4a0a9268441590ead7f445a
     user: postgres
     command: ["walg-cron", "backup-push", "0 3 * * *"]
     environment:
