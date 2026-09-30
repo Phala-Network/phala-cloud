@@ -6,20 +6,29 @@ merchant's own treasury, refunds, and webhooks signed with keys that merchants p
 attestation. The service holds no funds and sends no transactions.
 
 This template is a **testnet quick start**: one Phala Pay instance in a Phala Cloud CVM, serving the
-same four test routes as Phala's staging instance, at the app's Phala Cloud domain. For a
-production instance whose merchants verify the service, follow Phala Pay's
-[self-hosting guide](https://github.com/Phala-Network/phala-pay/blob/main/docs/self-hosting.md)
+same four test routes as Phala's staging instance, at the app's Phala Cloud domain. It is Phala Pay
+release `v0.3.0`'s own template compose. For a production instance whose merchants verify the
+service, follow Phala Pay's
+[self-hosting guide](https://github.com/Phala-Network/phala-pay/blob/v0.3.0/docs/self-hosting.md)
 instead (see [What the attestation covers](#what-the-attestation-covers)).
 
 [![Deploy on Phala Cloud](https://cloud.phala.com/deploy-button.svg)](https://cloud.phala.com/templates/phala-pay)
 
 ## What it deploys
 
-The service variant of Phala Pay's
-[`deploy/docker-compose.yml`](https://github.com/Phala-Network/phala-pay/blob/main/deploy/docker-compose.yml)
-at commit `51f07b3c2cf0`, with the images of its
-[Release images run 36643452638](https://github.com/Phala-Network/phala-pay/actions/runs/36643452638),
-pinned by digest:
+This template's `docker-compose.yml` is, byte for byte, the `phala-cloud-template.yml` asset of
+Phala Pay [release `v0.3.0`](https://github.com/Phala-Network/phala-pay/releases/tag/v0.3.0). The
+release renders it from its deploy kit with `deploy/render.sh --template`, the same renderer and
+policy that Phala Pay's own deployments use, with the release's images pinned by digest. Each asset
+and each image has a GitHub build provenance attestation from the release workflow at the tag.
+Check the file against the release before you deploy:
+
+```sh
+gh release download v0.3.0 -R Phala-Network/phala-pay -p phala-cloud-template.yml -p images.json
+gh attestation verify phala-cloud-template.yml -R Phala-Network/phala-pay \
+  --signer-workflow Phala-Network/phala-pay/.github/workflows/release.yml --source-ref refs/tags/v0.3.0
+cmp phala-cloud-template.yml templates/prebuilt/phala-pay/docker-compose.yml
+```
 
 | Service | Image | What it does |
 | --- | --- | --- |
@@ -28,19 +37,18 @@ pinned by digest:
 | `migrate` | `phala-pay` | One-shot schema migration. |
 | `topup` | `phala-pay` | The API and the chain scanners, on port 80 behind the Phala Cloud gateway. |
 | `smokescreen` | `phala-pay` | Stripe's smokescreen: every webhook delivery leaves through it, and it refuses any address that is not publicly routable (private ranges, loopback, cloud metadata). |
-| `heartbeat` | `phala-pay` | Liveness heartbeat. |
+| `heartbeat` | `phala-pay` | Liveness heartbeat, one commit a minute. |
 | `backup` | `postgres-walg` | An encrypted WAL-G base backup every day at 03:00 UTC, keeping seven. |
 
-- `ghcr.io/phala-network/phala-pay@sha256:dc89124852faf922177c9eacc9235ad6f31c07cd0803e416044850d407613789`
-  (bit-for-bit reproducible from the commit)
-- `ghcr.io/phala-network/postgres-walg@sha256:6df9588c21e57cdbedbae216575fa39ed5693cd6a4a0a9268441590ead7f445a`
+`phala-pay` is bit-for-bit reproducible from the tag; the release's `images.json` lists every
+digest. Each service mounts only the credentials it needs: `topup` and `heartbeat` see only the
+application login, never the database owner's password or the backup key, and no environment
+variable carries a database password. `topup` is the only published port.
 
-Each service mounts only the credentials it needs: `topup` and `heartbeat` see only the application
-login, never the database owner's password or the backup key, and no environment variable carries a
-database password. `topup` is the only published port.
-
-**Routes.** Four test-mode routes (`livemode: false`), inlined as compose configs exactly as in
-Phala Pay's [`deploy/config/routes/`](https://github.com/Phala-Network/phala-pay/tree/main/deploy/config/routes):
+**Configuration.** The compose inlines one `topup.yaml`, Phala Pay's
+[`deploy/environments/phala-cloud-template/topup/topup.yaml`](https://github.com/Phala-Network/phala-pay/blob/v0.3.0/deploy/environments/phala-cloud-template/topup/topup.yaml):
+the four test routes (`livemode: false`) and the keyless RPC providers of Phala's staging instance,
+the Sentry environment `testnet`, and the admin key id `admin/v1`.
 
 | Route | Chain | Token |
 | --- | --- | --- |
@@ -51,12 +59,13 @@ Phala Pay's [`deploy/config/routes/`](https://github.com/Phala-Network/phala-pay
 
 Every route uses the permissionless forwarder factory `0x45466D37587E6E46DC35eB96b74ba3D3b1E5b747`
 (implementation `0x49F2F1F1a25269Ea0C6FF2AB1C7B09dCBE9c5bA9`), deployed at the same address on
-every chain. `topup` refuses to start unless each RPC provider shows exactly that code there.
+every chain. `topup` refuses to start unless each RPC provider shows exactly that code there. The
+providers are public and rate-limited, which is fine for a trial.
 
 **Public origin.** `https://${DSTACK_APP_DOMAIN}`, the app's Phala Cloud domain
-(`<app-id>.<gateway-domain>`, which the gateway serves from port 80). The admin API verifies every
-signed request against this origin, and treasury proofs (EIP-4361) name it, so always call the
-service at exactly this URL.
+(`<app-id>.<gateway-domain>`, which the gateway serves from port 80), exported by Phala Cloud's
+pre-launch script. The admin API verifies every signed request against this origin, and treasury
+proofs (EIP-4361) name it, so always call the service at exactly this URL.
 
 Default size: 2 vCPU, 4 GB memory, 20 GB disk, the `tdx.medium` that Phala Pay's own deploy uses.
 
@@ -72,14 +81,11 @@ Default size: 2 vCPU, 4 GB memory, 20 GB disk, the `tdx.medium` that Phala Pay's
 
    It prints `{"keyid": "admin/v1", "public_key": "…"}`. The `public_key` is
    `TOPUP_ADMIN_PUBLIC_KEY`. The seed stays on your machine: keep it offline, and never put it in
-   the CVM. The template sets the key id to `admin/v1`.
+   the CVM. The template's key id is `admin/v1`.
 2. **A backup bucket.** An S3-compatible bucket (Cloudflare R2, AWS S3, and so on), an **empty**
    prefix for this deployment, and a token with read and write access to it only. PostgreSQL does
    not start until it can list that prefix, so the CVM stays unhealthy until the bucket settings
    are right.
-3. **RPC providers (optional).** The defaults are the keyless public endpoints Phala's staging
-   uses. They are rate-limited; for anything beyond a trial, use two paid providers per chain from
-   different companies.
 
 ## Form fields
 
@@ -87,21 +93,19 @@ All of them go into Phala Cloud's encrypted environment.
 
 | Variable | Required | Default | What it is |
 | --- | --- | --- | --- |
-| `TOPUP_ADMIN_PUBLIC_KEY` | yes | | The admin key's `public_key` from `topup-sdk keygen`. |
+| `TOPUP_ADMIN_PUBLIC_KEY` | yes | | The admin key's `public_key` from `topup-sdk keygen`. `topup` refuses to start unless it is a valid key. |
 | `AWS_ENDPOINT` | yes | | The store's endpoint, for example `https://<account>.r2.cloudflarestorage.com` or `https://s3.us-east-1.amazonaws.com`. |
 | `AWS_ACCESS_KEY_ID` | yes | | Access key for the backup prefix. |
 | `AWS_SECRET_ACCESS_KEY` | yes | | Its secret. |
 | `AWS_REGION` | yes | `auto` | `auto` for R2; the bucket's region for AWS S3 and other stores. Requests use path-style addressing. |
 | `WALG_S3_PREFIX` | yes | | `s3://BUCKET/PATH`, empty and used by no other deployment. |
-| `TOPUP_RPC_PROVIDER_A_URL` | yes | `https://sepolia.gateway.tenderly.co` | Sepolia provider A. It makes every log request, so it must serve `eth_getLogs` over 2,000 blocks and without a contract address. |
-| `TOPUP_RPC_PROVIDER_B_URL` | yes | `https://ethereum-sepolia-rpc.publicnode.com` | Sepolia provider B (receipts, heads, calls), from a different company. |
-| `TOPUP_RPC_BASE_SEPOLIA_A_URL` | yes | `https://base-sepolia.gateway.tenderly.co` | Base Sepolia provider A, with the same log requirements. |
-| `TOPUP_RPC_BASE_SEPOLIA_B_URL` | yes | `https://base-sepolia-rpc.publicnode.com` | Base Sepolia provider B. |
-| `TOPUP_RPC_<ID>_KEY` | no | empty | For a provider that puts an API key in its URL: write `{key}` in the URL where the key goes (`https://eth-sepolia.g.alchemy.com/v2/{key}`) and the key here. One per URL above: `TOPUP_RPC_PROVIDER_A_KEY`, `TOPUP_RPC_PROVIDER_B_KEY`, `TOPUP_RPC_BASE_SEPOLIA_A_KEY`, `TOPUP_RPC_BASE_SEPOLIA_B_KEY`. Leave it empty for a keyless URL; `topup` refuses a URL and key that disagree. |
 | `SENTRY_DSN` | no | empty | Sentry project DSN for errors, alerts, and Crons monitors. Empty turns reporting off. |
 
-Everything else is fixed in the compose: the key id `admin/v1`, the public origin, the service
-mode, path-style S3 requests, the webhook proxy, and the Sentry environment `testnet`.
+`PostgreSQL` refuses a malformed `WALG_S3_PREFIX`, `AWS_ENDPOINT`, or `AWS_REGION` at startup.
+Everything else is fixed in the attested compose: the routes, the RPC providers, the key id, the
+webhook proxy, and the Sentry environment `testnet`. To use other RPC providers or routes, deploy
+Phala Pay as its [self-hosting guide](https://github.com/Phala-Network/phala-pay/blob/v0.3.0/docs/self-hosting.md)
+describes.
 
 **Choose the `dstack-0.5.9` OS image** (non-dev). The service speaks the dstack 0.5 guest API
 and is built and tested only on `dstack-0.5.9`; it has not been tested on dstack 0.6. The deploy
@@ -121,24 +125,27 @@ as well: `phala logs` and the dashboard refuse them.
 
 ## What the attestation covers
 
-**The template's settings are not covered by the attestation.** They arrive as Phala Cloud's
-encrypted environment, which keeps them secret from the host but outside the compose hash. The
-attestation proves this compose file, its pinned images, and the names of the allowed environment
-variables. It does not prove which values they hold: the admin public key, the RPC endpoints, and
-the backup location. Whoever controls the Phala Cloud workspace can change those values with an env
-update, without changing the compose hash. For example, they could swap in their own admin key and
-create accounts, or point the service at an RPC endpoint that reports false deposits.
+The attestation proves this compose file, its pinned images, the routes and RPC providers, and the
+names of the allowed environment variables. Phala Pay's template policy (`compose-policy.jq`,
+variant `template`) allows a runtime value for exactly these five values, which it therefore does
+**not** prove:
 
-Phala Pay's own GitHub Actions deploy is different: it renders every public setting into the
-attested compose and keeps only secrets (object-store and RPC API keys, the Sentry DSN) in the
-encrypted environment, so merchants can verify the settings too. It also serves a custom domain
-with TLS terminated inside the CVM by dstack-ingress, with certificate evidence. This template
-relies on the Phala Cloud gateway's TLS for the app domain instead.
+| Value | Source | Why it is not attested |
+| --- | --- | --- |
+| The admin public key | `TOPUP_ADMIN_PUBLIC_KEY`, form | A one-click template cannot write your key into the compose. |
+| The public origin | `DSTACK_APP_DOMAIN`, from Phala Cloud's pre-launch script (the app id and the gateway domain) | The app id exists only once the app is created. |
+| The backup location | `WALG_S3_PREFIX`, `AWS_ENDPOINT`, `AWS_REGION`, form | Every deployment has its own bucket. |
 
-That is fine for trying Phala Pay on testnets. For a production instance whose merchants verify the
-service, deploy as the
-[self-hosting guide](https://github.com/Phala-Network/phala-pay/blob/main/docs/self-hosting.md)
-describes.
+Whoever controls the Phala Cloud workspace can change these values with an env update, without
+changing the compose hash: for example, swap in their own admin key and create accounts. `topup`
+and PostgreSQL only check that each is well formed. This template also relies on the Phala Cloud
+gateway's TLS for the app domain, where Phala Pay's own deploy serves a custom domain with TLS
+terminated in the CVM by dstack-ingress, with certificate evidence.
+
+That is fine for trying Phala Pay on testnets. For an instance whose merchants verify the service,
+deploy a release as the
+[self-hosting guide](https://github.com/Phala-Network/phala-pay/blob/v0.3.0/docs/self-hosting.md)
+describes: every setting, including these, is then in the attested compose.
 
 ## After deploy
 
@@ -175,13 +182,23 @@ jq -j '.compose_file' attestation.json | sha256sum    # the compose hash
 ```
 
 Then check the quote with the official dstack verifier, either on the
-[Phala Trust Center](https://trust.phala.com) page of the app or locally with Phala Pay's
-[`deploy/dstack-verifier.sh`](https://github.com/Phala-Network/phala-pay/blob/main/deploy/dstack-verifier.sh)
-(it runs the pinned `dstacktee/dstack-verifier` image). The verifier checks the TDX quote and TCB,
-replays the event log, and reports the app id and compose hash, which must match the values above.
+[Phala Trust Center](https://trust.phala.com) page of the app or locally with the release's deploy
+kit, which runs the pinned `dstacktee/dstack-verifier` image and applies the template policy. With
+the kit of `v0.3.0` extracted to `kit/` and `APP_ID` the app id:
+
+```sh
+npx --yes phala cvms get "$CVM_ID" --json > cvm.json
+curl -fsS "https://${APP_ID#0x}-8090.$(jq -er '.gateway.base_domain' cvm.json)/prpc/Info" > info.json
+kit/deploy/verify-attestation.sh attestation.json info.json "$APP_ID" docker-compose.yml template
+```
+
+It checks the TDX quote and TCB, replays the event log, and requires the app id, the compose hash
+of exactly this compose, the allowed environment names, and the template policy. The guest
+agent's info on port 8090 is public only with public TCB info, the CLI's default; without it, use
+the Trust Center.
 
 Merchants run the same check on the nonce-bound attestation the service returns to each account,
-before they pin their webhook keys (step 4). From a checkout of Phala Pay, with a secret key of the
+before they pin their webhook keys (step 4). With the kit, from its directory, and a secret key of the
 account ([step 3](#3-onboard-the-first-account)):
 
 ```sh
@@ -194,7 +211,7 @@ jq '.details | {tcb_status, app_id: .app_info.app_id, compose_hash: .app_info.co
 
 `topup_sdk.verify_attestation_binding` in the Python SDK then checks that the report data binds the
 nonce, the account, the mode, and the listed webhook keys
-([integration guide §5.3](https://github.com/Phala-Network/phala-pay/blob/main/docs/integration.md#53-pin-your-accounts-webhook-keys)).
+([integration guide §5.3](https://github.com/Phala-Network/phala-pay/blob/v0.3.0/docs/integration.md#53-pin-your-accounts-webhook-keys)).
 
 ### 3. Onboard the first account
 
@@ -228,8 +245,8 @@ print(account["id"])  # acct_…; account["api_keys"] holds the first secret tes
 Hand the secret key (`ppay_sk_test_…`) to the merchant through an encrypted channel and delete the
 response. The merchant rolls it at once. The other admin calls (daily report, pauses, metrics,
 recovery keys) are in Phala Pay's
-[operator onboarding](https://github.com/Phala-Network/phala-pay/blob/main/deploy/README.md#operator-onboarding)
-and [runbooks](https://github.com/Phala-Network/phala-pay/blob/main/deploy/runbooks/README.md).
+[operator onboarding](https://github.com/Phala-Network/phala-pay/blob/v0.3.0/deploy/README.md#operator-onboarding)
+and [runbooks](https://github.com/Phala-Network/phala-pay/blob/v0.3.0/deploy/runbooks/README.md).
 
 ### 4. A first test deposit
 
@@ -261,8 +278,8 @@ pay = PhalaPay(ORIGIN, SECRET_KEY, forwarder=(
 
 Phala Pay's reference product runs steps 3 to 5 end to end from your machine: set `service_url` to
 `ORIGIN` and follow
-[Running the scenarios against a deployed service](https://github.com/Phala-Network/phala-pay/blob/main/deploy/sandbox/README.md#running-the-scenarios-against-a-deployed-service).
-The [integration guide](https://github.com/Phala-Network/phala-pay/blob/main/docs/integration.md)
+[Running the scenarios against a deployed service](https://github.com/Phala-Network/phala-pay/blob/v0.3.0/deploy/sandbox/README.md#running-the-scenarios-against-a-deployed-service).
+The [integration guide](https://github.com/Phala-Network/phala-pay/blob/v0.3.0/docs/integration.md)
 is the merchant's full reference, and the SDKs are
 [`phala-pay`](https://pypi.org/project/phala-pay/) (Python) and
 [`@phala/pay`](https://www.npmjs.com/package/@phala/pay) (JavaScript).
@@ -276,49 +293,50 @@ backups, which is why every deployment of this template needs a new, empty `WALG
 prefix that already holds a backup is restored from, and a new app cannot decrypt it.
 
 Restores, drills, and the reconciliation that follows a restore are in Phala Pay's
-[RESTORE.md](https://github.com/Phala-Network/phala-pay/blob/main/deploy/RESTORE.md). This template
+[RESTORE.md](https://github.com/Phala-Network/phala-pay/blob/v0.3.0/deploy/RESTORE.md). This template
 omits the restore-check variant. Don't delete the app while its backups matter.
 
 ## Going to mainnet
 
-Mainnet is not part of this template. A live route is a route file: add it as another inline config
-and pass it to `topup` with `--route`, as the routes here are, with its chain's two
-`TOPUP_RPC_<ID>_URL` providers in `x-rpc-providers`. Bump the `phala-pay.template-revision` label
-too, so that Compose recreates the services. Then enable the account with `charges_enabled: true`.
-Before you take real payments, read
-[Routes and contracts](https://github.com/Phala-Network/phala-pay/blob/main/docs/self-hosting.md#3-routes-and-contracts)
-and [Going live](https://github.com/Phala-Network/phala-pay/blob/main/docs/self-hosting.md#9-going-live).
-They cover the factory's deployment and security review on the chain, and the limits. Read
-[What the attestation covers](#what-the-attestation-covers) as well: a production instance belongs
-on Phala Pay's own deploy path.
+Mainnet is not part of this template. A live route, or any change to the routes and providers,
+changes the attested configuration, and a production instance needs every setting attested:
+deploy a Phala Pay release from your own environment repository, as the
+[self-hosting guide](https://github.com/Phala-Network/phala-pay/blob/v0.3.0/docs/self-hosting.md)
+describes. Before you take real payments, read its
+[Routes and contracts](https://github.com/Phala-Network/phala-pay/blob/v0.3.0/docs/self-hosting.md#3-routes-and-contracts)
+and [Going live](https://github.com/Phala-Network/phala-pay/blob/v0.3.0/docs/self-hosting.md#9-going-live).
 
 ## Upgrades
 
-Take the digests from a newer successful
-[Release images](https://github.com/Phala-Network/phala-pay/actions/workflows/release-images.yml)
-run on `main` (its `images.json` artifact), compare its `deploy/docker-compose.yml` and route files
-with this template's, and update the compose. Every upgrade changes the compose hash, so tell your
-merchants the new one. A schema is never rolled back.
+Each Phala Pay release publishes its `phala-cloud-template.yml`. To upgrade, replace this compose
+with a newer release's, verified as in [What it deploys](#what-it-deploys), read the release notes,
+and update the CVM with it. Every upgrade changes the compose hash, so tell your merchants the new
+one. A schema is never rolled back.
 
 ## Local validation
 
+Interpolate the template with sample form values and check its configuration with the pinned image:
+
 ```sh
 TOPUP_ADMIN_PUBLIC_KEY=11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo= \
-AWS_ENDPOINT=https://account.r2.cloudflarestorage.com AWS_ACCESS_KEY_ID=key AWS_SECRET_ACCESS_KEY=secret \
-WALG_S3_PREFIX=s3://bucket/phala-pay DSTACK_APP_DOMAIN=app.gateway.example \
-docker compose -f templates/prebuilt/phala-pay/docker-compose.yml config
+DSTACK_APP_DOMAIN=app.gateway.example WALG_S3_PREFIX=s3://bucket/phala-pay \
+AWS_ENDPOINT=https://account.r2.cloudflarestorage.com AWS_REGION=auto \
+docker compose -f templates/prebuilt/phala-pay/docker-compose.yml config --format json > template.json
+jq -j '.configs | to_entries[] | select(.key | startswith("topup_")) | .value.content' template.json |
+  docker run --rm -i "$(jq -r '.services.topup.image' template.json)" topup config check /dev/stdin
 ```
 
 The stack itself needs the dstack socket and KMS. Phala Pay's
-[`deploy/local/`](https://github.com/Phala-Network/phala-pay/tree/main/deploy/local) overlay runs
+[`deploy/local/`](https://github.com/Phala-Network/phala-pay/tree/v0.3.0/deploy/local) overlay runs
 the same services locally against the dstack simulator and a Garage S3 store.
 
 ## Upstream sources
 
 - Repository: [Phala-Network/phala-pay](https://github.com/Phala-Network/phala-pay) (Apache-2.0)
-- Compose: [`deploy/docker-compose.yml`](https://github.com/Phala-Network/phala-pay/blob/51f07b3c2cf060ccba152dd9d8ab975f2f843d3c/deploy/docker-compose.yml)
-- Deployment reference: [`deploy/README.md`](https://github.com/Phala-Network/phala-pay/blob/main/deploy/README.md)
-- Self-hosting guide: [`docs/self-hosting.md`](https://github.com/Phala-Network/phala-pay/blob/main/docs/self-hosting.md)
+- Release: [`v0.3.0`](https://github.com/Phala-Network/phala-pay/releases/tag/v0.3.0), asset `phala-cloud-template.yml`
+- Template environment: [`deploy/environments/phala-cloud-template/`](https://github.com/Phala-Network/phala-pay/tree/v0.3.0/deploy/environments/phala-cloud-template/topup), rendered with `deploy/render.sh --template`
+- Deployment reference: [`deploy/README.md`](https://github.com/Phala-Network/phala-pay/blob/v0.3.0/deploy/README.md#the-phala-cloud-template-variant)
+- Self-hosting guide: [`docs/self-hosting.md`](https://github.com/Phala-Network/phala-pay/blob/v0.3.0/docs/self-hosting.md)
 - API reference: [phala-network.github.io/phala-pay](https://phala-network.github.io/phala-pay/)
 - Template icon: Phala Pay's own mark, the lime dot on a dark rounded tile,
-  [`deploy/product/web/brand/mark-light.svg`](https://github.com/Phala-Network/phala-pay/blob/main/deploy/product/web/brand/mark-light.svg)
+  [`deploy/product/web/brand/mark-light.svg`](https://github.com/Phala-Network/phala-pay/blob/v0.3.0/deploy/product/web/brand/mark-light.svg)
