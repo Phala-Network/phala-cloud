@@ -26,7 +26,8 @@ Check the file against the release before you deploy:
 ```sh
 gh release download v0.3.0 -R Phala-Network/phala-pay -p phala-cloud-template.yml -p images.json
 gh attestation verify phala-cloud-template.yml -R Phala-Network/phala-pay \
-  --signer-workflow Phala-Network/phala-pay/.github/workflows/release.yml --source-ref refs/tags/v0.3.0
+  --source-ref refs/tags/v0.3.0 --deny-self-hosted-runners \
+  --cert-identity https://github.com/Phala-Network/phala-pay/.github/workflows/release.yml@refs/tags/v0.3.0
 cmp phala-cloud-template.yml templates/prebuilt/phala-pay/docker-compose.yml
 ```
 
@@ -62,9 +63,10 @@ Every route uses the permissionless forwarder factory `0x45466D37587E6E46DC35eB9
 every chain. `topup` refuses to start unless each RPC provider shows exactly that code there. The
 providers are public and rate-limited, which is fine for a trial.
 
-**Public origin.** `https://${DSTACK_APP_DOMAIN}`, the app's Phala Cloud domain
+**Public origin.** `https://<DSTACK_APP_DOMAIN>`, the app's Phala Cloud domain
 (`<app-id>.<gateway-domain>`, which the gateway serves from port 80), exported by Phala Cloud's
-pre-launch script. The admin API verifies every signed request against this origin, and treasury
+pre-launch script. `topup run --public-origin-host-env DSTACK_APP_DOMAIN` reads it at startup and
+refuses anything but a lowercase DNS name. The admin API verifies every signed request against this origin, and treasury
 proofs (EIP-4361) name it, so always call the service at exactly this URL.
 
 Default size: 2 vCPU, 4 GB memory, 20 GB disk, the `tdx.medium` that Phala Pay's own deploy uses.
@@ -125,10 +127,12 @@ as well: `phala logs` and the dashboard refuse them.
 
 ## What the attestation covers
 
-The attestation proves this compose file, its pinned images, the routes and RPC providers, and the
-names of the allowed environment variables. Phala Pay's template policy (`compose-policy.jq`,
-variant `template`) allows a runtime value for exactly these five values, which it therefore does
-**not** prove:
+The attestation proves this compose file, its pinned images, the routes and RPC providers,
+topup's exact command, the names of the allowed environment variables, and (checked by Phala
+Pay's `verify-attestation.sh`) the reviewed Phala Cloud pre-launch script. The inlined
+`topup.yaml` holds no runtime value. Phala Pay's template policy (`compose-policy.jq`, variant
+`template`) allows exactly these five environment values, each as the whole value of its own key,
+which the attestation therefore does **not** prove:
 
 | Value | Source | Why it is not attested |
 | --- | --- | --- |
@@ -138,7 +142,8 @@ variant `template`) allows a runtime value for exactly these five values, which 
 
 Whoever controls the Phala Cloud workspace can change these values with an env update, without
 changing the compose hash: for example, swap in their own admin key and create accounts. `topup`
-and PostgreSQL only check that each is well formed. This template also relies on the Phala Cloud
+and PostgreSQL only check that each is well formed (the key a base64 ed25519 key, the origin a DNS
+name, the prefix `s3://BUCKET[/PATH]`, the endpoint an `https://` origin). This template also relies on the Phala Cloud
 gateway's TLS for the app domain, where Phala Pay's own deploy serves a custom domain with TLS
 terminated in the CVM by dstack-ingress, with certificate evidence.
 
@@ -149,7 +154,7 @@ describes: every setting, including these, is then in the attested compose.
 
 ## After deploy
 
-`ORIGIN` below is `https://<app-id>.<gateway-domain>`, the value of `https://${DSTACK_APP_DOMAIN}`.
+`ORIGIN` below is `https://<app-id>.<gateway-domain>`, with `<app-id>.<gateway-domain>` the value of `DSTACK_APP_DOMAIN`.
 If the dashboard shows the endpoint as `https://<app-id>-80.<gateway-domain>`, drop the `-80`:
 signed admin requests to any other host are refused with `401`.
 
@@ -292,9 +297,12 @@ instance of the same app restores without any secret. A new app can never read t
 backups, which is why every deployment of this template needs a new, empty `WALG_S3_PREFIX`: a
 prefix that already holds a backup is restored from, and a new app cannot decrypt it.
 
-Restores, drills, and the reconciliation that follows a restore are in Phala Pay's
-[RESTORE.md](https://github.com/Phala-Network/phala-pay/blob/v0.3.0/deploy/RESTORE.md). This template
-omits the restore-check variant. Don't delete the app while its backups matter.
+A template instance has **no restore-check path**: Phala Pay's
+[RESTORE.md](https://github.com/Phala-Network/phala-pay/blob/v0.3.0/deploy/RESTORE.md) verifies a
+restore read-only before it serves, and its guarantees rest on an attested backup prefix, origin,
+and admin key, which the template takes from its form. Another instance of the same app, with the
+same form values, restores the newest backup when it first starts, without that verification.
+Don't delete the app while its backups matter.
 
 ## Going to mainnet
 
@@ -315,13 +323,11 @@ one. A schema is never rolled back.
 
 ## Local validation
 
-Interpolate the template with sample form values and check its configuration with the pinned image:
+Check the inlined configuration with the pinned image; it leaves the origin and the admin key to
+`topup run`'s environment:
 
 ```sh
-TOPUP_ADMIN_PUBLIC_KEY=11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo= \
-DSTACK_APP_DOMAIN=app.gateway.example WALG_S3_PREFIX=s3://bucket/phala-pay \
-AWS_ENDPOINT=https://account.r2.cloudflarestorage.com AWS_REGION=auto \
-docker compose -f templates/prebuilt/phala-pay/docker-compose.yml config --format json > template.json
+docker compose -f templates/prebuilt/phala-pay/docker-compose.yml config --no-interpolate --format json > template.json
 jq -j '.configs | to_entries[] | select(.key | startswith("topup_")) | .value.content' template.json |
   docker run --rm -i "$(jq -r '.services.topup.image' template.json)" topup config check /dev/stdin
 ```
