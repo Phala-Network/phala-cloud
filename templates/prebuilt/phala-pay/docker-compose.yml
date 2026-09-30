@@ -36,18 +36,16 @@ configs:
       \gexec
       SQL
     name: dstack_postgres_init_101a877e6d70
-  topup_5ea7dc08d8e9:
+  topup_1960f95801fe:
     content: |
       # The Phala Cloud template's topup configuration (docs/configuration.md): the four test routes and
-      # the keyless providers of Phala's staging instance. The origin (the app's gateway domain) and the
-      # admin public key are known only at deploy time, so they are the two runtime values the template
-      # policy allows (deploy/compose-policy.jq), filled by Compose from the CVM's env and parsed by
-      # topup at startup; they are not attested. A production instance attests them (docs/self-hosting.md).
+      # the keyless providers of Phala's staging instance. It leaves out the public origin (the app's
+      # gateway domain) and the admin public key, known only at deploy time: `topup run` reads them from
+      # DSTACK_APP_DOMAIN and TOPUP_ADMIN_PUBLIC_KEY (deploy/compose.template.yaml), parses them strictly
+      # at startup, and they are not attested. A production instance attests them (docs/self-hosting.md).
       environment: testnet
-      public_origin: https://${DSTACK_APP_DOMAIN:-}
       admin_key:
         id: admin/v1
-        public_key: ${TOPUP_ADMIN_PUBLIC_KEY:-}
       # Two keyless providers per chain, as on Phala's staging (deploy/phala.md, "RPC providers").
       rpc_providers:
         provider-a: https://sepolia.gateway.tenderly.co
@@ -198,7 +196,7 @@ configs:
             min_credit_minor: 100 # USD 1.00, as on the PHA route
             max_deposit_atomic: "10000000000" # 10,000 USDC, about the PHA route's 200,000 PHA
             min_refund_atomic: "1000000" # 1 USDC, about the PHA route's 20 PHA
-    name: dstack_topup_5ea7dc08d8e9
+    name: dstack_topup_1960f95801fe
 name: dstack
 networks:
   default:
@@ -429,8 +427,12 @@ services:
       - /etc/topup/topup.yaml
       - --webhook-proxy
       - http://smokescreen:4750
+      - --public-origin-host-env
+      - DSTACK_APP_DOMAIN
+      - --admin-public-key-env
+      - TOPUP_ADMIN_PUBLIC_KEY
     configs:
-      - source: topup_5ea7dc08d8e9
+      - source: topup_1960f95801fe
         target: /etc/topup/topup.yaml
     depends_on:
       migrate:
@@ -438,8 +440,10 @@ services:
         required: true
     environment:
       DATABASE_URL: postgres://topup_service@postgres:5432/topup
+      DSTACK_APP_DOMAIN: ${DSTACK_APP_DOMAIN:-}
       PGPASSFILE: /run/db-app/topup_service.pgpass
       SENTRY_DSN: ${SENTRY_DSN:-}
+      TOPUP_ADMIN_PUBLIC_KEY: ${TOPUP_ADMIN_PUBLIC_KEY:-}
     healthcheck:
       interval: 30s
       retries: 3
