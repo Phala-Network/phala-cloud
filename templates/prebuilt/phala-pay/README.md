@@ -19,16 +19,17 @@ instead (see [What the attestation covers](#what-the-attestation-covers)).
 This template's `docker-compose.yml` is, byte for byte, the `phala-cloud-template.yml` asset of
 Phala Pay [release `v0.3.0`](https://github.com/Phala-Network/phala-pay/releases/tag/v0.3.0). The
 release renders it from its deploy kit with `deploy/render.sh --template`, the same renderer and
-policy that Phala Pay's own deployments use, with the release's images pinned by digest. Each asset
-and each image has a GitHub build provenance attestation from the release workflow at the tag.
-Check the file against the release before you deploy:
+policy that Phala Pay's own deployments use, with the release's images pinned by digest. Verify
+the release with Phala Pay's `deploy/verify-release.sh` (its commit in `main`'s history, the
+checksums, and every asset's and image's build provenance for that commit), then compare:
 
 ```sh
-gh release download v0.3.0 -R Phala-Network/phala-pay -p phala-cloud-template.yml -p images.json
-gh attestation verify phala-cloud-template.yml -R Phala-Network/phala-pay \
-  --source-ref refs/tags/v0.3.0 --deny-self-hosted-runners \
-  --cert-identity https://github.com/Phala-Network/phala-pay/.github/workflows/release.yml@refs/tags/v0.3.0
-cmp phala-cloud-template.yml templates/prebuilt/phala-pay/docker-compose.yml
+gh api -H 'Accept: application/vnd.github.raw' \
+  'repos/Phala-Network/phala-pay/contents/deploy/verify-release.sh?ref=v0.3.0' >verify-release.sh
+bash verify-release.sh v0.3.0 release
+cmp release/phala-cloud-template.yml templates/prebuilt/phala-pay/docker-compose.yml
+mkdir kit && tar -xzf release/phala-pay-deploy-v0.3.0.tar.gz -C kit --strip-components=1
+npm ci --prefix kit/deploy/tools --ignore-scripts    # the kit's locked Phala Cloud CLI, kit/deploy/phala
 ```
 
 | Service | Image | What it does |
@@ -177,10 +178,10 @@ aws s3 ls "${WALG_S3_PREFIX%/}/wal_005/" --endpoint-url "$AWS_ENDPOINT" | tail -
 
 ### 2. Verify the attestation
 
-With the [Phala CLI](https://github.com/Phala-Network/phala-cloud/tree/main/cli) and your CVM id:
+With the kit's Phala CLI (above) and your CVM id:
 
 ```sh
-npx --yes phala cvms attestation "$CVM_ID" --json > attestation.json
+kit/deploy/phala cvms attestation "$CVM_ID" --json > attestation.json
 # The attested app-compose must hold exactly this template's compose file.
 jq -j '.compose_file | fromjson | .docker_compose_file' attestation.json | diff - docker-compose.yml
 jq -j '.compose_file' attestation.json | sha256sum    # the compose hash
@@ -188,11 +189,11 @@ jq -j '.compose_file' attestation.json | sha256sum    # the compose hash
 
 Then check the quote with the official dstack verifier, either on the
 [Phala Trust Center](https://trust.phala.com) page of the app or locally with the release's deploy
-kit, which runs the pinned `dstacktee/dstack-verifier` image and applies the template policy. With
-the kit of `v0.3.0` extracted to `kit/` and `APP_ID` the app id:
+kit, which runs the pinned `dstacktee/dstack-verifier` image and applies the template policy and
+the reviewed pre-launch script. With `APP_ID` the app id:
 
 ```sh
-npx --yes phala cvms get "$CVM_ID" --json > cvm.json
+kit/deploy/phala cvms get "$CVM_ID" --json > cvm.json
 curl -fsS "https://${APP_ID#0x}-8090.$(jq -er '.gateway.base_domain' cvm.json)/prpc/Info" > info.json
 kit/deploy/verify-attestation.sh attestation.json info.json "$APP_ID" docker-compose.yml template
 ```
