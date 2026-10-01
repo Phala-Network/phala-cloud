@@ -155,6 +155,11 @@ Phala Cloud login or `PHALA_CLOUD_API_KEY`, and uv or pipx to generate a key. It
 are in the self-hosting guide's
 [One-command deploy](https://github.com/Phala-Network/phala-pay/blob/v0.3.2/docs/self-hosting.md#one-command-deploy).
 
+In `v0.3.2` the script then waits for the CVM's instance id, which Phala Cloud does not report, so
+it fails after 15 minutes with `did not boot a new compose` even though the instance is healthy,
+and prints no summary. The CVM id is in `./NAME.cvm-id` and the URL is
+`https://<app-id>.<gateway-domain>` (`phala cvms get`); continue with [After deploy](#after-deploy).
+
 To deploy by hand with the kit's CLI ([What it deploys](#what-it-deploys)), put the variables in
 an env file and run:
 
