@@ -229,7 +229,7 @@ services:
       WALG_LIBSODIUM_KEY_TRANSFORM: hex
       WALG_RETENTION_FULL: "7"
       WALG_S3_PREFIX: ${WALG_S3_PREFIX:-}
-    image: ghcr.io/phala-network/postgres-walg@sha256:2ba0faf08590315c0f6c8bf4bf250644bf18aeebccd8efe79d9abbe1fc7a2275
+    image: ghcr.io/phala-network/postgres-walg@sha256:ef12e41c5801ae45b4140be9b0d17565717ea568736a4fb074b90a2072d2054b
     networks:
       default: null
     restart: unless-stopped
@@ -265,7 +265,7 @@ services:
     environment:
       DATABASE_URL: postgres://topup_service@postgres:5432/topup
       PGPASSFILE: /run/db-app/topup_service.pgpass
-    image: ghcr.io/phala-network/phala-pay@sha256:22fe042ab371b017b42f30d64c010a64afa7bd8b65ce95528d1670980ab40c1c
+    image: ghcr.io/phala-network/phala-pay@sha256:1b8ebb74caf715caf61b3196c39fa42f4b8a97bd849c2e4e30b17ebe9eacef6b
     networks:
       default: null
     restart: unless-stopped
@@ -302,7 +302,7 @@ services:
         - --app-dir
         - /run/db-app
       timeout: 5s
-    image: ghcr.io/phala-network/phala-pay@sha256:22fe042ab371b017b42f30d64c010a64afa7bd8b65ce95528d1670980ab40c1c
+    image: ghcr.io/phala-network/phala-pay@sha256:1b8ebb74caf715caf61b3196c39fa42f4b8a97bd849c2e4e30b17ebe9eacef6b
     networks:
       default: null
     restart: unless-stopped
@@ -336,7 +336,7 @@ services:
     environment:
       DATABASE_URL: postgres://postgres@postgres:5432/topup
       PGPASSFILE: /run/db-owner/postgres.pgpass
-    image: ghcr.io/phala-network/phala-pay@sha256:22fe042ab371b017b42f30d64c010a64afa7bd8b65ce95528d1670980ab40c1c
+    image: ghcr.io/phala-network/phala-pay@sha256:1b8ebb74caf715caf61b3196c39fa42f4b8a97bd849c2e4e30b17ebe9eacef6b
     networks:
       default: null
     restart: "no"
@@ -375,7 +375,7 @@ services:
         - CMD-SHELL
         - psql -U postgres -d topup -XAtqc 'SELECT NOT pg_is_in_recovery()' | grep -qx t
       timeout: 5s
-    image: ghcr.io/phala-network/postgres-walg@sha256:2ba0faf08590315c0f6c8bf4bf250644bf18aeebccd8efe79d9abbe1fc7a2275
+    image: ghcr.io/phala-network/postgres-walg@sha256:ef12e41c5801ae45b4140be9b0d17565717ea568736a4fb074b90a2072d2054b
     networks:
       default: null
     restart: unless-stopped
@@ -415,7 +415,7 @@ services:
       - --deny-range=192.0.0.0/24
       - --deny-range=198.18.0.0/15
       - --deny-range=240.0.0.0/4
-    image: ghcr.io/phala-network/phala-pay@sha256:22fe042ab371b017b42f30d64c010a64afa7bd8b65ce95528d1670980ab40c1c
+    image: ghcr.io/phala-network/phala-pay@sha256:1b8ebb74caf715caf61b3196c39fa42f4b8a97bd849c2e4e30b17ebe9eacef6b
     networks:
       default: null
     restart: unless-stopped
@@ -453,7 +453,7 @@ services:
         - topup
         - healthcheck
       timeout: 10s
-    image: ghcr.io/phala-network/phala-pay@sha256:22fe042ab371b017b42f30d64c010a64afa7bd8b65ce95528d1670980ab40c1c
+    image: ghcr.io/phala-network/phala-pay@sha256:1b8ebb74caf715caf61b3196c39fa42f4b8a97bd849c2e4e30b17ebe9eacef6b
     networks:
       default: null
     ports:
