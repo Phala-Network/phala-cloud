@@ -84,13 +84,15 @@ Default size: 2 vCPU, 4 GB memory, 20 GB disk, the `tdx.medium` that Phala Pay's
    your own machine (Python 3.12 or later):
 
    ```sh
-   pip install phala-pay
+   pip install 'phala-pay>=0.3'
    topup-sdk keygen --keyid admin/v1 --seed-out ~/phala-pay/admin.seed
    ```
 
    It prints `{"keyid": "admin/v1", "public_key": "…"}`. The `public_key` is
    `TOPUP_ADMIN_PUBLIC_KEY`. The seed stays on your machine: keep it offline, and never put it in
-   the CVM. The template's key id is `admin/v1`.
+   the CVM. The template's key id is `admin/v1`. Use the SDK 0.3 or later: this release lists
+   webhook keys as `whpk_…`, which 0.2's `verify_attestation_binding` refuses (`attestation fields
+   are not hexadecimal`).
 2. **A backup bucket.** An S3-compatible bucket (Cloudflare R2, AWS S3, and so on), an **empty**
    prefix for this deployment, and a token with read and write access to it only. PostgreSQL does
    not start until it can list that prefix, so the CVM stays unhealthy until the bucket settings
@@ -131,6 +133,19 @@ its backups (they no longer decrypt) and changes the webhook keys merchants pinn
 Phala Pay's own deploy also turns off public logs and public system info. If your deploy form
 offers those options, turn them off too. With public logs off, container logs are hidden from you
 as well: `phala logs` and the dashboard refuse them.
+
+**With the CLI**, put all seven variables in an env file, with `SENTRY_DSN=` empty if you don't use
+Sentry, and deploy with the kit's CLI ([What it deploys](#what-it-deploys)):
+
+```sh
+kit/deploy/phala deploy -n phala-pay -c docker-compose.yml -e phala-pay.env -t tdx.medium \
+  --disk-size 20G --image dstack-0.5.9 --no-dev-os --no-public-logs --no-public-sysinfo
+```
+
+The CLI allows exactly the variables in the env file (the app-compose's `allowed_envs`), and the
+kit's attestation check requires all seven: a deploy without `SENTRY_DSN` fails it with
+`attested allowed_envs differs from the compose's sealed names`. Add `SENTRY_DSN=` and redeploy
+with `--cvm-id`, which changes the compose hash.
 
 ## What the attestation covers
 
@@ -264,7 +279,7 @@ and [runbooks](https://github.com/Phala-Network/phala-pay/blob/v0.3.1/deploy/run
 
 The merchant does the rest with its own keys against `ORIGIN`, as
 [pay.phala.com](https://pay.phala.com/)'s demo does against Phala's staging instance. In the
-Python SDK (`pip install 'phala-pay[eoa]'`), every call below is on
+Python SDK (`pip install 'phala-pay[eoa]>=0.3'`), every call below is on
 
 ```python
 from phala_pay import PhalaPay
@@ -277,7 +292,10 @@ pay = PhalaPay(ORIGIN, SECRET_KEY, forwarder=(
 
 1. Roll the first key with `pay.api_keys.roll(key_id, expires_in=3600)` (a key that rolls itself
    keeps working for at least an hour), revoke the old one with the new key, and create a
-   restricted key (`ppay_rk_test_…`) for servers with `pay.api_keys.create(permissions=[…])`.
+   restricted key (`ppay_rk_test_…`) for servers with `pay.api_keys.create(permissions=[…])`,
+   for example `["quotes.write", "deposits.read"]`. A `PhalaPay` client on a key without
+   `account.read` needs `account="acct_…"`: otherwise `quotes.create` fails with
+   `403 permission_denied` when the SDK looks the account up to check the quote's address.
 2. Fetch `GET /v1/attestation?nonce=…`, verify it (step 2), and pin the account's webhook keys.
 3. Prove a test treasury per chain with a signed EIP-4361 challenge:
    `pay.treasuries.set_eoa(chain_id=11155111, address=…, private_key=…)`, or a Safe signing it
