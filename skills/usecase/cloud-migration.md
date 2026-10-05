@@ -158,10 +158,10 @@ If you're calling Tinfoil's API:
 
 ```diff
 - base_url = "https://inference.tinfoil.sh/v1"
-+ base_url = "https://api.redpill.ai/v1"
++ base_url = "https://inference.phala.com/v1"
 ```
 
-Model names may differ — check `https://redpill.ai/models`.
+Model names may differ — check `https://inference.phala.com/v1/models`.
 
 ### Custom-deploy users
 
