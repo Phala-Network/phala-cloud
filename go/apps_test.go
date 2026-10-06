@@ -258,3 +258,70 @@ func TestRedeployCVMRevision(t *testing.T) {
 		})
 	}
 }
+
+func TestRedeployAppRevisionAllowEnvMismatch(t *testing.T) {
+	cases := []struct {
+		name      string
+		allow     bool
+		wantAllow bool
+	}{
+		{"true is sent", true, true},
+		{"false is omitted", false, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var raw map[string]any
+			srv := redeployBodyServer(t, "/apps/app-1/revisions/rev_42/redeploy", &raw)
+			defer srv.Close()
+			client, err := NewClient(WithBaseURL(srv.URL), WithAPIKey("test"))
+			if err != nil {
+				t.Fatalf("NewClient: %v", err)
+			}
+			err = client.RedeployAppRevision(context.Background(), "app-1", "rev_42",
+				&RedeployAppRevisionRequest{VMUUIDs: []string{"vm-a"}, AllowEnvMismatch: tc.allow})
+			if err != nil {
+				t.Fatalf("RedeployAppRevision: %v", err)
+			}
+			got, present := raw["allow_env_mismatch"]
+			if present != tc.wantAllow {
+				t.Fatalf("allow_env_mismatch present = %v, want %v (body %v)", present, tc.wantAllow, raw)
+			}
+			if tc.wantAllow && got != true {
+				t.Errorf("allow_env_mismatch = %v, want true", got)
+			}
+		})
+	}
+}
+
+func TestRedeployCVMRevisionAllowEnvMismatch(t *testing.T) {
+	const uuid = "123e4567-e89b-12d3-a456-426614174000"
+	cases := []struct {
+		name      string
+		req       *RedeployCVMRevisionRequest
+		wantAllow bool
+	}{
+		{"true is sent", &RedeployCVMRevisionRequest{AllowEnvMismatch: true}, true},
+		{"false is omitted", &RedeployCVMRevisionRequest{}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var raw map[string]any
+			srv := redeployBodyServer(t, "/cvms/"+uuid+"/revisions/rev_42/redeploy", &raw)
+			defer srv.Close()
+			client, err := NewClient(WithBaseURL(srv.URL), WithAPIKey("test"))
+			if err != nil {
+				t.Fatalf("NewClient: %v", err)
+			}
+			if _, err := client.RedeployCVMRevision(context.Background(), uuid, "rev_42", tc.req); err != nil {
+				t.Fatalf("RedeployCVMRevision: %v", err)
+			}
+			got, present := raw["allow_env_mismatch"]
+			if present != tc.wantAllow {
+				t.Fatalf("allow_env_mismatch present = %v, want %v (body %v)", present, tc.wantAllow, raw)
+			}
+			if tc.wantAllow && got != true {
+				t.Errorf("allow_env_mismatch = %v, want true", got)
+			}
+		})
+	}
+}

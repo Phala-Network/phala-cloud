@@ -210,6 +210,14 @@ type RedeployCVMRevisionRequest struct {
 	// ones, pass a blob encrypted with the app's env encryption public
 	// key (the same way as at deploy time).
 	EncryptedEnv string `json:"encrypted_env,omitempty"`
+
+	// AllowEnvMismatch bypasses the server's env-key check. By default the
+	// backend rejects the redeploy (HTTP 400, error code ERR-03-017) when
+	// the target revision's allowed_envs differ from the keys of the
+	// environment currently stored on the CVM, in either direction. Set it
+	// only to deliberately keep the current environment despite the
+	// mismatch; otherwise pass a re-encrypted EncryptedEnv.
+	AllowEnvMismatch bool `json:"allow_env_mismatch,omitempty"`
 }
 
 // RedeployCVMRevisionResponse is returned when a CVM redeploy is accepted.
