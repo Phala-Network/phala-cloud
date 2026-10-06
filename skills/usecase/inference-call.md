@@ -36,7 +36,7 @@ OpenAI-compatible inference on confidential GPUs at `https://inference.phala.com
 Store the key in your environment:
 
 ```bash
-export CONFIDENTIAL_AI_KEY="sk-..."
+export PRIVATE_AI_API_KEY="sk-..."
 ```
 
 ---
@@ -48,7 +48,7 @@ export CONFIDENTIAL_AI_KEY="sk-..."
 ```bash
 curl https://inference.phala.com/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $CONFIDENTIAL_AI_KEY" \
+  -H "Authorization: Bearer $PRIVATE_AI_API_KEY" \
   -d '{
     "model": "openai/gpt-oss-120b",
     "messages": [
@@ -99,7 +99,7 @@ The endpoint is OpenAI-compatible. Any OpenAI SDK works — just change the base
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ["CONFIDENTIAL_AI_KEY"],
+    api_key=os.environ["PRIVATE_AI_API_KEY"],
     base_url="https://inference.phala.com/v1",
 )
 
@@ -120,7 +120,7 @@ import OpenAI from "openai"
 
 const client = new OpenAI({
   baseURL: "https://inference.phala.com/v1",
-  apiKey: process.env.CONFIDENTIAL_AI_KEY,
+  apiKey: process.env.PRIVATE_AI_API_KEY,
 })
 
 const completion = await client.chat.completions.create({
@@ -139,7 +139,7 @@ from langchain_openai import ChatOpenAI
 llm = ChatOpenAI(
     model="deepseek/deepseek-v3.2",
     base_url="https://inference.phala.com/v1",
-    api_key=os.environ["CONFIDENTIAL_AI_KEY"],
+    api_key=os.environ["PRIVATE_AI_API_KEY"],
 )
 ```
 
@@ -161,7 +161,7 @@ cURL with SSE:
 
 ```bash
 curl https://inference.phala.com/v1/chat/completions \
-  -H "Authorization: Bearer $CONFIDENTIAL_AI_KEY" \
+  -H "Authorization: Bearer $PRIVATE_AI_API_KEY" \
   -H "Content-Type: application/json" \
   -N \
   -d '{
@@ -251,7 +251,7 @@ response = client.chat.completions.create(
 
 ## Verify Signature
 
-Every Confidential AI API response can be cryptographically verified — the response chains to the GPU TEE quote.
+Every Private AI API response can be cryptographically verified. The response chains to the GPU TEE quote.
 
 ### Per-request attestation report
 
@@ -260,7 +260,7 @@ Fetch a fresh attestation tied to a nonce:
 ```bash
 NONCE=$(openssl rand -hex 32)
 curl -s "https://api.redpill.ai/v1/attestation/report?model=phala/deepseek-chat-v3-0324&nonce=$NONCE" \
-  -H "Authorization: Bearer $CONFIDENTIAL_AI_KEY" > report.json
+  -H "Authorization: Bearer $PRIVATE_AI_API_KEY" > report.json
 ```
 
 The response has `nvidia_payload`, `intel_quote`, `signing_address`, and `signing_algo`.
@@ -298,12 +298,12 @@ Reference implementation: [`Phala-Network/private-ml-sdk/vllm-proxy/verifiers/at
 
 ```bash
 # 1. Get an API key from cloud.phala.com → Private AI → API Keys (paid from your Balance)
-export CONFIDENTIAL_AI_KEY="sk-..."
+export PRIVATE_AI_API_KEY="sk-..."
 
 # 2. Call
 curl https://inference.phala.com/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $CONFIDENTIAL_AI_KEY" \
+  -H "Authorization: Bearer $PRIVATE_AI_API_KEY" \
   -d '{
     "model": "openai/gpt-oss-120b",
     "messages": [{"role":"user","content":"Hello world!"}]

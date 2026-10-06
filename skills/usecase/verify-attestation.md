@@ -44,11 +44,11 @@ phala cvms attestation my-app --json > attestation.json
 
 The summary should report `is_online: true`, `is_public: true`, and `error: null`. The JSON contains `app_certificates[0].quote` — a hex-encoded TDX quote that's the basis for everything else below.
 
-For inference (hosted Confidential AI API), use the per-request flow:
+For inference (hosted Private AI API), use the per-request flow:
 
 ```bash
 curl "https://api.redpill.ai/v1/attestation/report?model=phala/deepseek-chat-v3-0324&nonce=$(openssl rand -hex 32)" \
-  -H "Authorization: Bearer $CONFIDENTIAL_AI_KEY" > report.json
+  -H "Authorization: Bearer $PRIVATE_AI_API_KEY" > report.json
 ```
 
 The response includes `nvidia_payload`, `intel_quote`, `signing_address`, and `signing_algo`.
@@ -253,7 +253,7 @@ A passing Sigstore link lets the user open the URL and confirm the image was bui
 
 ## Verify Signature
 
-Once you've verified the signing key is bound to a real TEE, verify response signatures from the Confidential AI API.
+Once you've verified the signing key is bound to a real TEE, verify response signatures from the Private AI API.
 
 Every response carries:
 
@@ -302,10 +302,10 @@ End-to-end offline: clone [Phala-Network/dstack-verifier](https://github.com/Pha
 ## Reference: minimal end-to-end (Python)
 
 ```python
-# Full flow — verify a Confidential AI API response is genuine
+# Full flow — verify a Private AI API response is genuine
 import secrets, requests, json, base64, hashlib
 
-api_key = os.environ["CONFIDENTIAL_AI_KEY"]
+api_key = os.environ["PRIVATE_AI_API_KEY"]
 model = "phala/deepseek-chat-v3-0324"
 
 # 1. Fresh nonce
