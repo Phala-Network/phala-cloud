@@ -197,6 +197,52 @@ func (c *Client) StartCVMV20260121(ctx context.Context, cvmID string) (*CVMActio
 	return &result, nil
 }
 
+// RedeployCVMRevisionRequest is the request body for redeploying a single
+// CVM to an app revision.
+type RedeployCVMRevisionRequest struct {
+	// EncryptedEnv is an optional encrypted environment blob. When empty
+	// it is omitted from the request and the CVM keeps the environment
+	// it currently has, even if the target revision was deployed with
+	// different secrets. A rollback after a failed update therefore keeps
+	// the failed update's environment.
+	//
+	// If the target revision's allowed_envs differ from the current
+	// ones, pass a blob encrypted with the app's env encryption public
+	// key (the same way as at deploy time).
+	EncryptedEnv string `json:"encrypted_env,omitempty"`
+}
+
+// RedeployCVMRevisionResponse is returned when a CVM redeploy is accepted.
+type RedeployCVMRevisionResponse struct {
+	Message string `json:"message"`
+	// CorrelationID identifies the accepted operation. Poll the CVM's
+	// in-progress operation (GetCVMInfo or GetCVMState, Operation.CorrelationID)
+	// until it finishes and check the outcome, rather than waiting only for
+	// compose_hash to change.
+	CorrelationID string `json:"correlation_id"`
+	Status        string `json:"status"`
+}
+
+// RedeployCVMRevision schedules an async redeploy of a single CVM to the
+// named app revision. The endpoint returns 202 on accept. A nil req is
+// valid and keeps the CVM's current environment.
+//
+// HTTP 465 from the backend means on-chain KMS compose-hash registration
+// is required; surfaced as a regular *APIError.
+func (c *Client) RedeployCVMRevision(ctx context.Context, cvmID, revisionID string, req *RedeployCVMRevisionRequest) (*RedeployCVMRevisionResponse, error) {
+	var result RedeployCVMRevisionResponse
+	path := cvmPath(cvmID, "revisions", url.PathEscape(revisionID), "redeploy")
+	// A typed nil pointer would marshal as JSON null; send no body instead.
+	var body any
+	if req != nil {
+		body = req
+	}
+	if err := c.doJSON(ctx, "POST", path, body, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // StopCVM stops a CVM.
 func (c *Client) StopCVM(ctx context.Context, cvmID string) (*CVMActionResponse, error) {
 	var result CVMActionResponse

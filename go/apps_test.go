@@ -3,6 +3,7 @@ package phala
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -163,5 +164,97 @@ func TestRedeployAppRevision(t *testing.T) {
 	if err := client.RedeployAppRevision(context.Background(), "app-1", "rev_42",
 		&RedeployAppRevisionRequest{VMUUIDs: []string{"vm-a", "vm-b"}}); err != nil {
 		t.Fatalf("RedeployAppRevision: %v", err)
+	}
+}
+
+// redeployBodyServer records the raw JSON body of a redeploy request so
+// tests can assert which fields are present on the wire.
+func redeployBodyServer(t *testing.T, wantPath string, raw *map[string]any) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			t.Errorf("method = %q, want POST", r.Method)
+		}
+		if r.URL.Path != wantPath {
+			t.Errorf("path = %q, want %s", r.URL.Path, wantPath)
+		}
+		*raw = map[string]any{}
+		if err := json.NewDecoder(r.Body).Decode(raw); err != nil && err != io.EOF {
+			t.Fatalf("decode body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"message":"Revision redeploy initiated","correlation_id":"corr-1","status":"in_progress"}`))
+	}))
+}
+
+func TestRedeployAppRevisionEncryptedEnv(t *testing.T) {
+	cases := []struct {
+		name    string
+		env     string
+		wantEnv bool
+	}{
+		{"set", "deadbeef", true},
+		{"empty is omitted", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var raw map[string]any
+			srv := redeployBodyServer(t, "/apps/app-1/revisions/rev_42/redeploy", &raw)
+			defer srv.Close()
+			client, err := NewClient(WithBaseURL(srv.URL), WithAPIKey("test"))
+			if err != nil {
+				t.Fatalf("NewClient: %v", err)
+			}
+			err = client.RedeployAppRevision(context.Background(), "app-1", "rev_42",
+				&RedeployAppRevisionRequest{VMUUIDs: []string{"vm-a"}, EncryptedEnv: tc.env})
+			if err != nil {
+				t.Fatalf("RedeployAppRevision: %v", err)
+			}
+			got, present := raw["encrypted_env"]
+			if present != tc.wantEnv {
+				t.Fatalf("encrypted_env present = %v, want %v (body %v)", present, tc.wantEnv, raw)
+			}
+			if tc.wantEnv && got != tc.env {
+				t.Errorf("encrypted_env = %v, want %q", got, tc.env)
+			}
+		})
+	}
+}
+
+func TestRedeployCVMRevision(t *testing.T) {
+	const uuid = "123e4567-e89b-12d3-a456-426614174000"
+	cases := []struct {
+		name    string
+		req     *RedeployCVMRevisionRequest
+		wantEnv bool
+	}{
+		{"env set", &RedeployCVMRevisionRequest{EncryptedEnv: "deadbeef"}, true},
+		{"env empty is omitted", &RedeployCVMRevisionRequest{}, false},
+		{"nil request", nil, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var raw map[string]any
+			srv := redeployBodyServer(t, "/cvms/"+uuid+"/revisions/rev_42/redeploy", &raw)
+			defer srv.Close()
+			client, err := NewClient(WithBaseURL(srv.URL), WithAPIKey("test"))
+			if err != nil {
+				t.Fatalf("NewClient: %v", err)
+			}
+			resp, err := client.RedeployCVMRevision(context.Background(), uuid, "rev_42", tc.req)
+			if err != nil {
+				t.Fatalf("RedeployCVMRevision: %v", err)
+			}
+			if resp.CorrelationID != "corr-1" {
+				t.Errorf("CorrelationID = %q, want corr-1", resp.CorrelationID)
+			}
+			if _, present := raw["encrypted_env"]; present != tc.wantEnv {
+				t.Fatalf("encrypted_env present = %v, want %v (body %v)", present, tc.wantEnv, raw)
+			}
+			if tc.wantEnv && raw["encrypted_env"] != "deadbeef" {
+				t.Errorf("encrypted_env = %v, want deadbeef", raw["encrypted_env"])
+			}
+		})
 	}
 }
