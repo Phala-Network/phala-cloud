@@ -48,7 +48,6 @@
 		"chalk": "5.2.0",
 		"dedent": "^1.7.0",
 		"execa": "^7.2.0",
-		"fast-glob": "^3.3.3",
 		"fs-extra": "^11.3.0",
 		"handlebars": "^4.7.9",
 		"inquirer": "^12.4.2",
