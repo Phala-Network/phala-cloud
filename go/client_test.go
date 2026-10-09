@@ -153,8 +153,8 @@ func TestOptions(t *testing.T) {
 	if c.apiVersion != "2025-01-01" {
 		t.Errorf("apiVersion = %q", c.apiVersion)
 	}
-	if c.httpClient != customHTTP {
-		t.Error("httpClient not set")
+	if c.httpClient == customHTTP || c.httpClient.Timeout != customHTTP.Timeout {
+		t.Error("httpClient was not copied with its configuration preserved")
 	}
 	if c.userAgent != "my-app/1.0" {
 		t.Errorf("userAgent = %q", c.userAgent)

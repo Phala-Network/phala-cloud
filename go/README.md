@@ -66,6 +66,14 @@ client, err := phala.NewClient(
 )
 ```
 
+## Does the SDK follow redirects?
+
+No. Redirects can send your API key to another server, so the SDK stops at the first response. This applies to API calls and SSE streams. Set `WithBaseURL` to the final API URL instead of relying on a redirect.
+
+API calls return `APIError` for 3xx responses. SSE streams report an error instead of connecting to the redirect target.
+
+`WithHTTPClient` copies the supplied client's settings and replaces `CheckRedirect` only in the SDK's copy. Its transport and cookie jar stay shared. `WithTimeout` changes only the SDK's copy, not the supplied client. Custom transports must not follow redirects internally.
+
 ## Usage Examples
 
 ### Deploy a CVM

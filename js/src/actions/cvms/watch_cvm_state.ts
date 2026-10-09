@@ -291,6 +291,7 @@ async function watchSingleAttempt(
   });
 
   if (!response.ok) {
+    await response.body?.cancel();
     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
   }
 

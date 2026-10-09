@@ -23,9 +23,13 @@ func WithAPIVersion(v string) Option {
 	return func(c *Client) { c.apiVersion = v }
 }
 
-// WithHTTPClient sets a custom HTTP client.
+// WithHTTPClient copies a custom HTTP client. Its transport and cookie jar are
+// shared, but SDK timeout and redirect policy do not mutate the caller's client.
 func WithHTTPClient(hc *http.Client) Option {
-	return func(c *Client) { c.httpClient = hc }
+	return func(c *Client) {
+		copy := *hc
+		c.httpClient = &copy
+	}
 }
 
 // WithTimeout sets the HTTP client timeout.

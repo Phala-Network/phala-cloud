@@ -123,7 +123,7 @@ class AsyncPhalaCloud:
             base_url=self.config.base_url,
             timeout=self.config.timeout,
             headers=self.config.request_headers,
-            follow_redirects=True,
+            follow_redirects=False,
         )
         self._owns_client = http_client is None
 
@@ -148,6 +148,8 @@ class AsyncPhalaCloud:
         )
 
     async def request(self, method: str, path: str, **kwargs: Any) -> Any:
+        # Enforce this per request, including caller-supplied HTTP clients.
+        kwargs["follow_redirects"] = False
         try:
             response = await self._client.request(method.upper(), path, **kwargs)
         except httpx.HTTPError as exc:
@@ -155,6 +157,7 @@ class AsyncPhalaCloud:
         return self._decode_or_raise(response)
 
     async def request_full(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        kwargs["follow_redirects"] = False
         try:
             response = await self._client.request(method.upper(), path, **kwargs)
         except httpx.HTTPError as exc:
@@ -294,6 +297,14 @@ class AsyncPhalaCloud:
         return await self.safe(self.list_kms_contract_nodes, slug)
 
     def _decode_or_raise(self, response: httpx.Response) -> Any:
+        if response.is_redirect:
+            raise ApiError(
+                status_code=response.status_code,
+                message=(
+                    f"API redirects are not allowed (HTTP {response.status_code}). "
+                    "Set base_url to the API's trusted final URL."
+                ),
+            )
         if response.status_code >= 400:
             raise self._to_api_error(response)
         if not response.content:
@@ -404,7 +415,7 @@ class PhalaCloud:
             base_url=self.config.base_url,
             timeout=self.config.timeout,
             headers=self.config.request_headers,
-            follow_redirects=True,
+            follow_redirects=False,
         )
         self._owns_client = http_client is None
 
@@ -429,6 +440,8 @@ class PhalaCloud:
         )
 
     def request(self, method: str, path: str, **kwargs: Any) -> Any:
+        # Enforce this per request, including caller-supplied HTTP clients.
+        kwargs["follow_redirects"] = False
         try:
             response = self._client.request(method.upper(), path, **kwargs)
         except httpx.HTTPError as exc:
@@ -436,6 +449,7 @@ class PhalaCloud:
         return self._decode_or_raise(response)
 
     def request_full(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        kwargs["follow_redirects"] = False
         try:
             response = self._client.request(method.upper(), path, **kwargs)
         except httpx.HTTPError as exc:
@@ -571,6 +585,14 @@ class PhalaCloud:
         return self.safe(self.list_kms_contract_nodes, slug)
 
     def _decode_or_raise(self, response: httpx.Response) -> Any:
+        if response.is_redirect:
+            raise ApiError(
+                status_code=response.status_code,
+                message=(
+                    f"API redirects are not allowed (HTTP {response.status_code}). "
+                    "Set base_url to the API's trusted final URL."
+                ),
+            )
         if response.status_code >= 400:
             raise self._to_api_error(response)
         if not response.content:

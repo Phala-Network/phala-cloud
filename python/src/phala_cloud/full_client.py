@@ -1069,6 +1069,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
             with self._client.stream(
                 "GET",
                 f"/cvms/{req.resolved}/state",
+                follow_redirects=False,
                 params=params,
                 headers={"Accept": "text/event-stream", "Cache-Control": "no-cache"},
             ) as response:
@@ -1944,6 +1945,7 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
             async with self._client.stream(
                 "GET",
                 f"/cvms/{req.resolved}/state",
+                follow_redirects=False,
                 params=params,
                 headers={"Accept": "text/event-stream", "Cache-Control": "no-cache"},
             ) as response:

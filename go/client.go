@@ -52,5 +52,11 @@ func NewClient(opts ...Option) (*Client, error) {
 
 	c.baseURL = strings.TrimRight(c.baseURL, "/")
 
+	// Never forward API credentials to a redirect target, including SSE requests.
+	// Apply after options so a custom HTTP client cannot re-enable redirects.
+	c.httpClient.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+
 	return c, nil
 }
