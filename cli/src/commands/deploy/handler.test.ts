@@ -6,8 +6,129 @@
  */
 
 import { describe, test, expect } from "bun:test";
-import { deployCommandSchema } from "./command";
-import { applyForceStopOption, buildProvisionPayload } from "./handler";
+import type { CommandContext } from "@/src/core/types";
+import { buildCommandSchemaInput } from "@/src/core/input-builder";
+import { parseCommandArguments } from "@/src/core/parser";
+import { deployCommandMeta, deployCommandSchema } from "./command";
+import {
+	applyForceStopOption,
+	buildProvisionPayload,
+	buildUpdatePatchBody,
+	runDeploy,
+} from "./handler";
+
+describe("deploy --no-pre-launch-script", () => {
+	test("parses the flag as a boolean option", () => {
+		const parsedArguments = parseCommandArguments(
+			["--no-pre-launch-script"],
+			deployCommandMeta.options,
+		);
+		const schemaInput = buildCommandSchemaInput(
+			deployCommandMeta,
+			parsedArguments,
+		);
+
+		expect(schemaInput.options.noPreLaunchScript).toBe(true);
+		expect(
+			deployCommandSchema.parse(schemaInput.options).noPreLaunchScript,
+		).toBe(true);
+	});
+
+	test("rejects combining the flag with --pre-launch-script", async () => {
+		const result = deployCommandSchema.safeParse({
+			noPreLaunchScript: true,
+			preLaunchScript: "setup.sh",
+		});
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error.issues[0]?.message).toContain(
+				"--no-pre-launch-script cannot be used with --pre-launch-script",
+			);
+		}
+
+		let failure: unknown;
+		const context = {
+			env: {},
+			projectConfig: {},
+			stdout: { write: () => true },
+			stderr: { write: () => true },
+			failWithError: (error: unknown) => {
+				failure = error;
+			},
+		} as unknown as CommandContext;
+		const exitCode = await runDeploy(
+			{
+				noPreLaunchScript: true,
+				preLaunchScript: "setup.sh",
+			} as Parameters<typeof runDeploy>[0],
+			context,
+		);
+
+		expect(exitCode).toBe(1);
+		expect(failure).toBeInstanceOf(Error);
+		expect((failure as Error).message).toContain(
+			"--no-pre-launch-script cannot be used with --pre-launch-script",
+		);
+	});
+
+	test("sends an explicit empty pre-launch script on create", () => {
+		const payload = buildProvisionPayload(
+			{ noPreLaunchScript: true },
+			"test-cvm",
+			"services: {}",
+			[],
+			{
+				publicLogs: true,
+				publicSysinfo: true,
+				publicTcbinfo: true,
+				secureTime: false,
+				listed: false,
+			},
+		);
+
+		expect(payload).toEqual({
+			name: "test-cvm",
+			compose_file: {
+				name: "",
+				docker_compose_file: "services: {}",
+				allowed_envs: [],
+				public_logs: true,
+				public_sysinfo: true,
+				public_tcbinfo: true,
+				secure_time: false,
+				pre_launch_script: "",
+			},
+			listed: false,
+			kms: "PHALA",
+		});
+	});
+
+	test("sends an explicit empty pre-launch script on update", () => {
+		const patchBody = buildUpdatePatchBody(
+			{ uuid: "cvm-123", noPreLaunchScript: true },
+			"services: {}",
+		);
+
+		expect(patchBody).toEqual({
+			id: "cvm-123",
+			docker_compose_file: "services: {}",
+			pre_launch_script: "",
+		});
+	});
+
+	test("omits an empty script file from update requests", () => {
+		const patchBody = buildUpdatePatchBody(
+			{ uuid: "cvm-123" },
+			"services: {}",
+			"",
+		);
+
+		expect(patchBody).toEqual({
+			id: "cvm-123",
+			docker_compose_file: "services: {}",
+		});
+	});
+});
 
 describe("deploy --force-stop", () => {
 	test("parses the optional update flag", () => {

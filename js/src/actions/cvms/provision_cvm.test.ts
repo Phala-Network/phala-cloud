@@ -310,6 +310,23 @@ describe("provisionCvm (wire-level)", () => {
     warnSpy.mockRestore();
   });
 
+  it("preserves an explicit empty pre-launch script in the request body", async () => {
+    await provisionCvm(mockClient, {
+      ...baseRequest,
+      compose_file: {
+        ...baseRequest.compose_file,
+        pre_launch_script: "",
+      },
+    });
+
+    const body = getRequestBody();
+    expect(body.compose_file).toEqual({
+      ...baseRequest.compose_file,
+      name: "",
+      pre_launch_script: "",
+    });
+  });
+
   it("forwards node_id verbatim and does not synthesize teepod_id", async () => {
     await provisionCvm(mockClient, { ...baseRequest, node_id: 7 });
 
