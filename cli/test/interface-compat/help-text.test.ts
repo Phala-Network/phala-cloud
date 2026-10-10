@@ -36,6 +36,7 @@ describe("CLI Interface Compatibility - Help Text (v1.0.40 baseline)", () => {
 					"--vcpu",
 					"--memory",
 					"--disk-size",
+					"--no-pre-launch-script",
 				],
 			},
 			{
@@ -68,6 +69,15 @@ describe("CLI Interface Compatibility - Help Text (v1.0.40 baseline)", () => {
 				}
 			});
 		}
+	});
+
+	test("deploy help explains no-script and empty-file behavior", async () => {
+		const helpText = await getHelpText("deploy");
+
+		expect(helpText).toContain(
+			"Deploy without any pre-launch script (do not use the Phala Cloud default)",
+		);
+		expect(helpText).toContain("an empty file uses the Phala Cloud default");
 	});
 
 	describe("Group help shows subcommands", () => {

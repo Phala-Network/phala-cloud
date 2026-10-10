@@ -65,6 +65,14 @@ asyncio.run(main())
 - `headers`
 - `use_cookie_auth`
 
+## Does the SDK follow redirects?
+
+No. Redirects can send your API key to another server, so the SDK stops at the first response. This applies to API calls and SSE streams. Set `base_url` to the final API URL instead of relying on a redirect.
+
+Direct calls raise `ApiError` for 3xx responses. `request_full` returns the original status, headers, and body with `ok=False`, so you can inspect the response without following it.
+
+The SDK ignores `follow_redirects=True` on SDK requests, including requests made with a supplied `http_client`. It does not change that client's settings or close the supplied client. Custom transports must not follow redirects internally.
+
 ## API Style
 
 - Direct methods: raise on HTTP/validation errors

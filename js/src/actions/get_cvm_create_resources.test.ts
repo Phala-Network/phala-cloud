@@ -90,6 +90,7 @@ const mockResourceGraph: CvmCreateResourceGraph = {
 			default_disk_size_gb: 40,
 			requires_gpu: false,
 			requires_gpu_count: 0,
+			requires_gpu_product_id: null,
 			family: "cpu",
 			display_order: 1,
 		},
@@ -99,6 +100,14 @@ const mockResourceGraph: CvmCreateResourceGraph = {
 		reserved_gpu_count: 0,
 		has_public_gpus: true,
 		public_gpu_count: 1,
+		available_by_product: [
+			{
+				product_id: "10de:2335",
+				display_name: "H200 SXM 141GB",
+				count: 1,
+				max_placeable_count: 1,
+			},
+		],
 	},
 };
 
@@ -124,6 +133,14 @@ describe("getCvmCreateResources", () => {
 		);
 		expect(result.kms_nodes[0].kms_contract_id).toBe("kc_301");
 		expect(result.gateway_nodes[0].domain_suffix).toBe("example.app");
+		expect(result.gpu_availability.available_by_product).toEqual([
+			{
+				product_id: "10de:2335",
+				display_name: "H200 SXM 141GB",
+				count: 1,
+				max_placeable_count: 1,
+			},
+		]);
 	});
 
 	it("parses latest hashid resource IDs", async () => {

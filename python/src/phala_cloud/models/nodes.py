@@ -51,11 +51,19 @@ class ResourceThreshold(CloudModel):
     max_disk: int | None = None
 
 
+class ProductGpuAvailability(CloudModel):
+    product_id: str
+    display_name: str | None = None
+    count: int = 0
+    max_placeable_count: int = 0
+
+
 class GpuAvailability(CloudModel):
     has_reserved_gpus: bool = False
     reserved_gpu_count: int = 0
     has_public_gpus: bool = False
     public_gpu_count: int = 0
+    available_by_product: list[ProductGpuAvailability] = Field(default_factory=list)
 
 
 class AvailableNodes(CloudModel):
@@ -125,6 +133,7 @@ class CvmCreateInstanceTypeResource(CloudModel):
     default_disk_size_gb: int
     requires_gpu: bool
     requires_gpu_count: int
+    requires_gpu_product_id: str | None = None
     family: str | None = None
     display_order: int | None = None
 

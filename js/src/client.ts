@@ -156,7 +156,7 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
       requestHeaders["X-Phala-Workspace"] = workspace.trim();
     }
 
-    this.fetchInstance = ofetch.create({
+    const defaultOptions: FetchOptions = {
       baseURL,
       timeout: timeout || 60000,
       headers: requestHeaders,
@@ -240,6 +240,15 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
           onResponseError({ request, response, options });
         }
       },
+    };
+    this.fetchInstance = ofetch.create(defaultOptions, {
+      // Enforce at the transport boundary: options/hooks cannot enable redirects,
+      // and native() (used by SSE) shares the same credential-safe transport.
+      fetch: Object.assign(
+        (request: Parameters<typeof fetch>[0], options?: Parameters<typeof fetch>[1]) =>
+          globalThis.fetch(request, { ...options, redirect: "manual" }),
+        globalThis.fetch,
+      ),
     });
   }
 
@@ -318,13 +327,33 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
 
   // ===== Direct methods (throw on error) =====
 
+  /** Decode only non-redirect responses, independently of user response hooks. */
+  private async fetchData<T>(
+    request: FetchRequest,
+    options?: Parameters<typeof this.fetchInstance<T>>[1],
+  ): Promise<T> {
+    const response = await this.fetchInstance.raw<T>(
+      request,
+      options as Parameters<typeof this.fetchInstance.raw<T>>[1],
+    );
+    if (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400)) {
+      if (!response.bodyUsed) await response.body?.cancel();
+      throw new RequestError("API redirects are not allowed", {
+        status: response.status || undefined,
+        statusText: response.statusText,
+        response,
+      });
+    }
+    return response._data as T;
+  }
+
   /**
    * Generic request method (throws PhalaCloudError on error)
    */
   async request<T = unknown>(url: string, options?: RequestOptions): Promise<T> {
     try {
       const method = options?.method || "GET";
-      return await this.fetchInstance<T>(url, {
+      return await this.fetchData<T>(url, {
         ...options,
         method,
       } as Parameters<typeof this.fetchInstance<T>>[1]);
@@ -350,6 +379,9 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
         ignoreResponseError: true,
       } as Parameters<(typeof this.fetchInstance)["raw"]>[1]);
 
+      if (response.type === "opaqueredirect") {
+        throw new RequestError("API redirects are not allowed");
+      }
       return {
         status: response.status,
         statusText: response.statusText,
@@ -372,7 +404,7 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
     options?: Omit<FetchOptions, "method">,
   ): Promise<T> {
     try {
-      return await this.fetchInstance<T>(request, {
+      return await this.fetchData<T>(request, {
         ...options,
         method: "GET",
       } as Parameters<typeof this.fetchInstance<T>>[1]);
@@ -415,7 +447,7 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
     options?: Omit<FetchOptions, "method" | "body">,
   ): Promise<T> {
     try {
-      return await this.fetchInstance<T>(request, this.buildRequestOptions("POST", body, options));
+      return await this.fetchData<T>(request, this.buildRequestOptions("POST", body, options));
     } catch (error) {
       const requestError = this.convertToRequestError(error);
       const phalaCloudError = this.emitError(requestError);
@@ -432,7 +464,7 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
     options?: Omit<FetchOptions, "method" | "body">,
   ): Promise<T> {
     try {
-      return await this.fetchInstance<T>(request, this.buildRequestOptions("PUT", body, options));
+      return await this.fetchData<T>(request, this.buildRequestOptions("PUT", body, options));
     } catch (error) {
       const requestError = this.convertToRequestError(error);
       const phalaCloudError = this.emitError(requestError);
@@ -449,7 +481,7 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
     options?: Omit<FetchOptions, "method" | "body">,
   ): Promise<T> {
     try {
-      return await this.fetchInstance<T>(request, this.buildRequestOptions("PATCH", body, options));
+      return await this.fetchData<T>(request, this.buildRequestOptions("PATCH", body, options));
     } catch (error) {
       const requestError = this.convertToRequestError(error);
       const phalaCloudError = this.emitError(requestError);
@@ -465,7 +497,7 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
     options?: Omit<FetchOptions, "method">,
   ): Promise<T> {
     try {
-      return await this.fetchInstance<T>(request, {
+      return await this.fetchData<T>(request, {
         ...options,
         method: "DELETE",
       } as Parameters<typeof this.fetchInstance<T>>[1]);
@@ -482,6 +514,7 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
    * Convert any error to RequestError
    */
   private convertToRequestError(error: unknown): RequestError {
+    if (error instanceof RequestError) return error;
     if (error && typeof error === "object" && "data" in error) {
       return RequestError.fromFetchError(error as FetchError);
     }

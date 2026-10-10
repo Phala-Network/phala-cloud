@@ -179,6 +179,10 @@ describe("Client", () => {
 	beforeEach(() => {
 		mockFetchInstance = vi.fn();
 		mockFetchInstance.mockResolvedValue({ success: true });
+		mockFetchInstance.raw = async (...args: Parameters<typeof ofetch.raw>) => ({
+			status: 200,
+			_data: await mockFetchInstance(...args),
+		});
 
 		(ofetch.create as any).mockReturnValue(mockFetchInstance);
 
@@ -218,6 +222,7 @@ describe("Client", () => {
 					}),
 					onResponseError: expect.any(Function),
 				}),
+				expect.objectContaining({ fetch: expect.any(Function) }),
 			);
 		});
 
@@ -245,6 +250,7 @@ describe("Client", () => {
 					}),
 					onResponseError: expect.any(Function),
 				}),
+				expect.objectContaining({ fetch: expect.any(Function) }),
 			);
 
 			// Restore environment variable
@@ -604,6 +610,12 @@ describe("Client Event System", () => {
 
 	beforeEach(() => {
 		mockFetchInstance = vi.fn();
+		Object.assign(mockFetchInstance, {
+			raw: async (...args: Parameters<typeof ofetch.raw>) => ({
+				status: 200,
+				_data: await mockFetchInstance(...args),
+			}),
+		});
 		vi.mocked(ofetch.create).mockReturnValue(mockFetchInstance as any);
 	});
 

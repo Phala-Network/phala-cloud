@@ -88,6 +88,7 @@ interface Options {
 	customAppId?: string;
 	nonce?: string;
 	preLaunchScript?: string;
+	noPreLaunchScript?: boolean;
 	privateKey?: string;
 	rpcUrl?: string;
 	json?: boolean;
@@ -117,6 +118,45 @@ export function applyForceStopOption(
 ): void {
 	if (!forceStop) return;
 	patchBody.allow_force_stop = true;
+}
+
+export function validatePreLaunchScriptOptions(
+	options: Pick<Options, "noPreLaunchScript" | "preLaunchScript">,
+): void {
+	if (options.noPreLaunchScript && options.preLaunchScript !== undefined) {
+		throw new Error(
+			"--no-pre-launch-script cannot be used with --pre-launch-script",
+		);
+	}
+}
+
+export function buildUpdatePatchBody(
+	options: Options,
+	dockerComposeYml: string,
+	preLaunchScriptContent?: string,
+): Record<string, unknown> {
+	const patchBody: Record<string, unknown> = {
+		id: options.uuid,
+		docker_compose_file: dockerComposeYml,
+	};
+
+	if (options.noPreLaunchScript) {
+		patchBody.pre_launch_script = "";
+	} else if (preLaunchScriptContent) {
+		patchBody.pre_launch_script = preLaunchScriptContent;
+	}
+	if (options.publicLogs !== undefined) {
+		patchBody.public_logs = options.publicLogs;
+	}
+	if (options.publicSysinfo !== undefined) {
+		patchBody.public_sysinfo = options.publicSysinfo;
+	}
+	applyForceStopOption(patchBody, options.forceStop);
+	if (options.prepareOnly) {
+		patchBody.prepareOnly = true;
+	}
+
+	return patchBody;
 }
 
 async function getApiClient({
@@ -568,7 +608,9 @@ export const buildProvisionPayload = (
 		secure_time: privacySettings.secureTime,
 	};
 
-	if (preLaunchScriptContent) {
+	if (options.noPreLaunchScript) {
+		composeFile.pre_launch_script = "";
+	} else if (preLaunchScriptContent) {
 		composeFile.pre_launch_script = preLaunchScriptContent;
 	}
 
@@ -924,32 +966,17 @@ const updateCvm = async (
 	}
 
 	// Build unified patch request
-	const patchBody: Record<string, unknown> = {
-		id: validatedOptions.uuid,
-		docker_compose_file: docker_compose_yml,
-	};
-	if (preLaunchScriptContent) {
-		patchBody.pre_launch_script = preLaunchScriptContent;
-	}
+	const patchBody = buildUpdatePatchBody(
+		validatedOptions,
+		docker_compose_yml,
+		preLaunchScriptContent,
+	);
 	if (envs && envs.length > 0) {
 		patchBody.allowed_envs = envs.map((env) => env.key);
 	}
 	if (encrypted_env) {
 		patchBody.encrypted_env = encrypted_env;
 	}
-	if (validatedOptions.publicLogs !== undefined) {
-		patchBody.public_logs = validatedOptions.publicLogs;
-	}
-	if (validatedOptions.publicSysinfo !== undefined) {
-		patchBody.public_sysinfo = validatedOptions.publicSysinfo;
-	}
-	applyForceStopOption(patchBody, validatedOptions.forceStop);
-
-	// Add prepareOnly flag if set
-	if (validatedOptions.prepareOnly) {
-		patchBody.prepareOnly = true;
-	}
-
 	logger.info(`Updating CVM ${validatedOptions.uuid}...`);
 	// biome-ignore lint/suspicious/noExplicitAny: dynamic patch body
 	const patchResult = await safePatchCvm(client, patchBody as any);
@@ -1287,6 +1314,8 @@ export async function runDeploy(
 	context: CommandContext,
 ): Promise<number> {
 	try {
+		validatePreLaunchScriptOptions(input);
+
 		// Handle --commit mode: skip compose file reading entirely
 		// commit-update endpoint is token-based (no API key required),
 		// but we still need a client with the correct base URL.

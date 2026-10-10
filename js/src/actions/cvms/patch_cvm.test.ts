@@ -83,6 +83,21 @@ describe("patchCvm", () => {
       }
     });
 
+    it("preserves an explicit empty pre-launch script in the request body", async () => {
+      (mockClient.patch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        correlation_id: "corr-123",
+      });
+
+      await patchCvm(mockClient, {
+        id: "test-cvm-id",
+        pre_launch_script: "",
+      });
+
+      expect(mockClient.patch).toHaveBeenCalledWith("/cvms/test-cvm-id", {
+        pre_launch_script: "",
+      });
+    });
+
     it("should return accepted result on 202", async () => {
       (mockClient.patch as ReturnType<typeof vi.fn>).mockResolvedValue({
         correlation_id: "corr-123",

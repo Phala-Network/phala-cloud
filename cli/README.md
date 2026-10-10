@@ -36,6 +36,8 @@ phala ssh
 
 > **Tip:** Run `phala link` after your first deploy. It creates a `phala.toml` that binds the directory to the CVM, so subsequent commands (`deploy`, `logs`, `ssh`, `cp`, `ps`) work without specifying a CVM ID. `phala.toml` is safe to commit to version control.
 
+By default, `phala deploy` uses the Phala Cloud pre-launch script. Use `--no-pre-launch-script` to deploy without one. An empty file passed to `--pre-launch-script` still selects the default; the two flags cannot be combined. See the [deploy reference](docs/deploy.md) for details.
+
 ## Commands
 
 ### Deploy

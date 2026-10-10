@@ -503,9 +503,12 @@ async function resolveAppContract(
 		appId: normalizeAllowlistAppId(appId),
 	});
 	if (!allowlistResult.success) {
-		context.failWithError(allowlistResult.error.cause ?? allowlistResult.error, {
-			operation: "Manage devices",
-		});
+		context.failWithError(
+			allowlistResult.error.cause ?? allowlistResult.error,
+			{
+				operation: "Manage devices",
+			},
+		);
 		return null;
 	}
 

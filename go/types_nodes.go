@@ -58,12 +58,21 @@ type AvailableImage struct {
 	Enabled     *bool   `json:"enabled,omitempty"`
 }
 
+// ProductGPUAvailability describes usable GPU count for one product ID.
+type ProductGPUAvailability struct {
+	ProductID         string  `json:"product_id"`
+	DisplayName       *string `json:"display_name,omitempty"`
+	Count             int     `json:"count"`
+	MaxPlaceableCount int     `json:"max_placeable_count"`
+}
+
 // GPUAvailability describes GPU access for the current workspace.
 type GPUAvailability struct {
-	HasReservedGPUs  bool `json:"has_reserved_gpus"`
-	ReservedGPUCount int  `json:"reserved_gpu_count"`
-	HasPublicGPUs    bool `json:"has_public_gpus"`
-	PublicGPUCount   int  `json:"public_gpu_count"`
+	HasReservedGPUs    bool                     `json:"has_reserved_gpus"`
+	ReservedGPUCount   int                      `json:"reserved_gpu_count"`
+	HasPublicGPUs      bool                     `json:"has_public_gpus"`
+	PublicGPUCount     int                      `json:"public_gpu_count"`
+	AvailableByProduct []ProductGPUAvailability `json:"available_by_product,omitempty"`
 }
 
 // CVMCreateResources is the resource graph for CVM creation.
@@ -160,13 +169,14 @@ type CVMCreateGatewayResource struct {
 
 // CVMCreateInstanceType is an instance type candidate for CVM creation.
 type CVMCreateInstanceType struct {
-	ID                string  `json:"id"`
-	Name              string  `json:"name"`
-	VCPU              int     `json:"vcpu"`
-	MemoryMB          int     `json:"memory_mb"`
-	DefaultDiskSizeGB int     `json:"default_disk_size_gb"`
-	RequiresGPU       bool    `json:"requires_gpu"`
-	RequiresGPUCount  int     `json:"requires_gpu_count"`
-	Family            *string `json:"family,omitempty"`
-	DisplayOrder      *int    `json:"display_order,omitempty"`
+	ID                   string  `json:"id"`
+	Name                 string  `json:"name"`
+	VCPU                 int     `json:"vcpu"`
+	MemoryMB             int     `json:"memory_mb"`
+	DefaultDiskSizeGB    int     `json:"default_disk_size_gb"`
+	RequiresGPU          bool    `json:"requires_gpu"`
+	RequiresGPUCount     int     `json:"requires_gpu_count"`
+	RequiresGPUProductID *string `json:"requires_gpu_product_id,omitempty"`
+	Family               *string `json:"family,omitempty"`
+	DisplayOrder         *int    `json:"display_order,omitempty"`
 }

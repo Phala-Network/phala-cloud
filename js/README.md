@@ -93,6 +93,14 @@ This will print detailed information about each API call in a format similar to 
 }
 ```
 
+## Does the SDK follow redirects?
+
+No. Redirects can send your API key to another server, so the SDK stops at the first response. This applies to API calls and SSE streams. Set `baseURL` to the final API URL instead of relying on a redirect.
+
+Direct calls throw `PhalaCloudError` for 3xx responses. `requestFull` returns the original status, headers, and body with `ok: false`, so you can inspect the response without following it. Browsers hide manual redirect responses; in that case, `requestFull` also throws.
+
+The SDK enforces `redirect: "manual"` at the fetch boundary, even if configuration, request options, or hooks ask to follow redirects. `client.raw.native` uses the same policy. If you supply your own transport through `client.raw.create`, it must not follow redirects internally.
+
 ## Available Methods
 
 ### Direct Methods (throw on error)

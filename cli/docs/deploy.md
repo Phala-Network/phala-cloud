@@ -39,7 +39,8 @@ Creates a new CVM by default. If `--cvm-id` is provided or `phala.toml` contains
 | `--node-id <id>` | | Deploy to specific node ID |
 | `--custom-app-id <id>` | | Use custom App ID (requires --nonce for PHALA KMS) |
 | `--nonce <nonce>` | | Nonce for deterministic app_id generation |
-| `--pre-launch-script <path>` | | Path to pre-launch script |
+| `--pre-launch-script <path>` | | Path to pre-launch script. An empty file is treated as unspecified and keeps the Phala Cloud default |
+| `--no-pre-launch-script` | false | Deploy without any pre-launch script (do not use the Phala Cloud default); cannot be combined with `--pre-launch-script` |
 | `--private-key <key>` | | Private key for on-chain KMS (ethereum/base) |
 | `--rpc-url <url>` | | RPC URL for blockchain interaction |
 | `--debug` | false | Enable debug logging |
@@ -56,6 +57,14 @@ The following options are deprecated and will be removed in future versions:
 - `--ssh-pubkey <path>` - Register the key with `phala ssh-keys add` and manage per-CVM access with `phala ssh-keys grant`. Provision already authorizes all of your account keys by default.
 
 `--ssh-pubkey` still injects `DSTACK_AUTHORIZED_KEYS` into the encrypted env. That path only works when the CVM compose includes the platform pre-launch script, and it has no effect on images that do not ship an SSH server.
+
+## Pre-launch script behavior
+
+By default, deploy leaves the pre-launch script field out of the request, so Phala Cloud uses its official default script. Use `--pre-launch-script <path>` to supply a script. If that file is empty, the field is still omitted and the default script is used. To explicitly deploy with no pre-launch script, use `--no-pre-launch-script`; it cannot be combined with `--pre-launch-script`.
+
+```bash
+$ phala deploy --no-pre-launch-script
+```
 
 ## Examples
 
@@ -158,6 +167,12 @@ $ phala deploy --node-id node_xyz789
 
 ```bash
 $ phala deploy --pre-launch-script ./setup.sh
+```
+
+An empty script file keeps the default Phala Cloud script. To explicitly disable all pre-launch scripts instead:
+
+```bash
+$ phala deploy --no-pre-launch-script
 ```
 
 ### Deploy unlisted CVM (private)

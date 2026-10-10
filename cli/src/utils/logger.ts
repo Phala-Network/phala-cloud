@@ -86,7 +86,9 @@ function asNonEmptyString(value: unknown): string | undefined {
 
 function asStringArray(value: unknown): readonly string[] | undefined {
 	if (!Array.isArray(value)) return undefined;
-	const items = value.filter((item): item is string => typeof item === "string");
+	const items = value.filter(
+		(item): item is string => typeof item === "string",
+	);
 	return items.length > 0 ? items : undefined;
 }
 
@@ -180,9 +182,7 @@ function extractMessageFromDetail(detail: unknown): string | undefined {
 		return asNonEmptyString(detail);
 	}
 	if (isRecord(detail)) {
-		return (
-			asNonEmptyString(detail.message) ?? asNonEmptyString(detail.error)
-		);
+		return asNonEmptyString(detail.message) ?? asNonEmptyString(detail.error);
 	}
 	return undefined;
 }
@@ -238,16 +238,12 @@ function normalizeSdkError(
 			? error.status
 			: undefined;
 	const statusText =
-		httpStatus !== undefined
-			? asNonEmptyString(error.statusText)
-			: undefined;
+		httpStatus !== undefined ? asNonEmptyString(error.statusText) : undefined;
 
 	const details =
 		resource?.details ?? dataFields.details ?? detailFields.details;
 	const suggestions =
-		resource?.suggestions ??
-		dataFields.suggestions ??
-		detailFields.suggestions;
+		resource?.suggestions ?? dataFields.suggestions ?? detailFields.suggestions;
 	const links = resource?.links ?? dataFields.links ?? detailFields.links;
 
 	const response = error.data !== undefined ? error.data : undefined;
@@ -306,7 +302,9 @@ export function normalizeCliError(error: unknown): CliErrorEnvelope {
 function formatDetailLines(details: unknown): string[] {
 	if (!Array.isArray(details)) {
 		if (details === undefined || details === null) return [];
-		return [`  - ${typeof details === "string" ? details : JSON.stringify(details)}`];
+		return [
+			`  - ${typeof details === "string" ? details : JSON.stringify(details)}`,
+		];
 	}
 
 	const lines: string[] = [];
@@ -361,9 +359,7 @@ export function renderHumanCliError(
 	}
 
 	if (envelope.request) {
-		const method = envelope.request.method
-			? `${envelope.request.method} `
-			: "";
+		const method = envelope.request.method ? `${envelope.request.method} ` : "";
 		lines.push(`Request: ${method}${envelope.request.url}`);
 	}
 
