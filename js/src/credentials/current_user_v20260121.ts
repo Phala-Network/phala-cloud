@@ -32,6 +32,13 @@ export const WorkspaceInfoSchema = z
 
 export type WorkspaceInfo = z.infer<typeof WorkspaceInfoSchema>;
 
+/**
+ * Money in the current workspace.
+ * - `balance`: the workspace Balance. It pays for CVMs, GPU instances, and Private AI.
+ * - `granted_balance`: Gifted credits. They pay for CVMs and GPU instances only, before Balance.
+ * - `is_post_paid`: CVM usage beyond Balance is charged to the card instead of stopping the CVMs.
+ * - `outstanding_amount`: what the workspace owes, if anything.
+ */
 export const CreditsInfoSchema = z
   .object({
     balance: z.string().or(z.number()),

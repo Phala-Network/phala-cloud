@@ -29,7 +29,12 @@ type WorkspaceInfo struct {
 	Avatar *string `json:"avatar,omitempty"`
 }
 
-// CreditsInfo contains credit balance information.
+// CreditsInfo is the money in the current workspace.
+//
+// Balance pays for CVMs, GPU instances, and Private AI. GrantedBalance holds
+// Gifted credits, which pay for CVMs and GPU instances only, before Balance.
+// IsPostPaid means CVM usage beyond Balance is charged to the card instead of
+// stopping the CVMs. OutstandingAmount is what the workspace owes.
 type CreditsInfo struct {
 	Balance           *string `json:"balance,omitempty"`
 	GrantedBalance    *string `json:"granted_balance,omitempty"`

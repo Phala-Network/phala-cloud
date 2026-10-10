@@ -32,8 +32,9 @@ class WorkspaceResponse(CloudModel):
     is_default: bool | None = None
     created_at: str | None = None
     confidential_models_enabled: bool | None = None
-    # Billing lifecycle state. A suspended workspace still runs but owes money;
-    # an abandoned one is closed and read-only until its balance is settled.
+    # Billing lifecycle state. A suspended workspace has its CVMs stopped until
+    # it pays what it owes or is topped up. An abandoned one is closed and
+    # read-only until what it owes is paid.
     billing_status: Literal["active", "suspended", "abandoned"] = "active"
     # When the workspace was suspended. None unless billing_status is suspended.
     suspended_at: str | None = None

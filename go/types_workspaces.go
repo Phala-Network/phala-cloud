@@ -15,8 +15,9 @@ type Workspace struct {
 	ConfidentialModelsEnabled *bool `json:"confidential_models_enabled,omitempty"`
 
 	// BillingStatus is the billing lifecycle state: active, suspended or
-	// abandoned. A suspended workspace still runs but owes money; an abandoned
-	// one is closed and read-only until its balance is settled.
+	// abandoned. A suspended workspace has its CVMs stopped until it pays what
+	// it owes or is topped up. An abandoned one is closed and read-only until
+	// what it owes is paid.
 	BillingStatus *string `json:"billing_status,omitempty"`
 	// SuspendedAt is set only while BillingStatus is "suspended".
 	SuspendedAt *string `json:"suspended_at,omitempty"`

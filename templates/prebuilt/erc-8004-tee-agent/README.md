@@ -26,7 +26,7 @@ The `app` service is only reachable on the internal Docker network. Public traff
 Required:
 
 - `AGENT_SALT`: Secret salt used for deterministic TEE key derivation. Changing it changes the agent wallet.
-- `REDPILL_API_KEY`: RedPill Confidential AI API key.
+- `REDPILL_API_KEY`: Private AI API key.
 - `SUBGRAPH_API_KEY`: The Graph Gateway API key for ERC-8004 subgraph queries.
 - `RPC_URL`: RPC endpoint for the selected chain.
 - `CHAIN_NAME`: Chain selector. The pinned upstream source currently supports `eth-sepolia`.

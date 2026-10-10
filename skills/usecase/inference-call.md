@@ -1,15 +1,15 @@
 ---
 name: inference-call
 description: |
-  Call the Phala Confidential AI API (hosted models on GPU TEE) via the
-  OpenAI-compatible interface at api.redpill.ai/v1. Use when users want
+  Call Phala Private AI (hosted models on GPU TEE) via the
+  OpenAI-compatible interface at inference.phala.com/v1. Use when users want
   to call DeepSeek, Qwen, Llama, GPT-OSS, Gemma, etc. without deploying
   their own server — pay per token, no infrastructure.
 ---
 
-# Phala Confidential AI API
+# Phala Private AI
 
-OpenAI-compatible inference on confidential GPUs at `https://api.redpill.ai/v1`.
+OpenAI-compatible inference on confidential GPUs at `https://inference.phala.com/v1`.
 
 ## Operations
 
@@ -29,14 +29,14 @@ OpenAI-compatible inference on confidential GPUs at `https://api.redpill.ai/v1`.
 
 ## Get API Key
 
-1. Go to [cloud.phala.com](https://cloud.phala.com) and add at least $5 in credits (Dashboard → Deposit).
-2. Open **Dashboard → Confidential AI API** and click **Enable**.
+1. Sign in to [cloud.phala.com](https://cloud.phala.com). Private AI is paid from your workspace Balance, the same Balance that pays for CVMs. There is no separate top-up and no minimum; Gifted credits do not pay for it. If your Balance is empty, top up (or add a card and claim a welcome credit if one is offered).
+2. Open **Private AI → API Keys**.
 3. Click **Create Key**, give it a name, and copy the value (starts with `sk-`).
 
 Store the key in your environment:
 
 ```bash
-export CONFIDENTIAL_AI_KEY="sk-..."
+export PRIVATE_AI_API_KEY="sk-..."
 ```
 
 ---
@@ -46,11 +46,11 @@ export CONFIDENTIAL_AI_KEY="sk-..."
 ### cURL
 
 ```bash
-curl https://api.redpill.ai/v1/chat/completions \
+curl https://inference.phala.com/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $CONFIDENTIAL_AI_KEY" \
+  -H "Authorization: Bearer $PRIVATE_AI_API_KEY" \
   -d '{
-    "model": "openai/gpt-oss-20b",
+    "model": "openai/gpt-oss-120b",
     "messages": [
       { "role": "user", "content": "Hello world!" }
     ]
@@ -70,10 +70,10 @@ Models are namespaced by provider. All run inside GPU TEE.
 | Model | Model ID | Context | $/1M (in/out) |
 |---|---|---|---|
 | DeepSeek V3 0324 | `deepseek/deepseek-chat-v3-0324` | 163K | 0.28 / 1.14 |
-| Qwen 2.5 VL 72B | `qwen/qwen2.5-vl-72b-instruct` | 65K | 0.59 / 0.59 |
+| Qwen 2.5 VL 72B | `qwen/qwen3-vl-30b-a3b-instruct` | 65K | 0.59 / 0.59 |
 | Gemma 3 27B | `google/gemma-3-27b-it` | 53K | 0.11 / 0.40 |
 | GPT-OSS 120B | `openai/gpt-oss-120b` | 131K | 0.10 / 0.49 |
-| GPT-OSS 20B | `openai/gpt-oss-20b` | 131K | 0.04 / 0.15 |
+| GPT-OSS 20B | `openai/gpt-oss-120b` | 131K | 0.04 / 0.15 |
 | Qwen 2.5 7B | `qwen/qwen-2.5-7b-instruct` | 32K | 0.04 / 0.10 |
 
 ### Other providers
@@ -85,7 +85,7 @@ Models are namespaced by provider. All run inside GPU TEE.
 | Z.AI GLM 4.6 (NearAI) | `z-ai/glm-4.6` | 202K |
 | Phi-4 (Tinfoil) | check live catalog | — |
 
-The full live catalog: <https://redpill.ai/models> — filter by **GPU TEE** to see only confidential variants.
+The full live catalog: <https://inference.phala.com/v1/models>. Add `?tee=true` to list only models that run in a GPU TEE.
 
 ---
 
@@ -99,12 +99,12 @@ The endpoint is OpenAI-compatible. Any OpenAI SDK works — just change the base
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ["CONFIDENTIAL_AI_KEY"],
-    base_url="https://api.redpill.ai/v1",
+    api_key=os.environ["PRIVATE_AI_API_KEY"],
+    base_url="https://inference.phala.com/v1",
 )
 
 response = client.chat.completions.create(
-    model="phala/deepseek-chat-v3-0324",
+    model="deepseek/deepseek-v3.2",
     messages=[
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "What is your model name?"},
@@ -119,12 +119,12 @@ print(response.choices[0].message.content)
 import OpenAI from "openai"
 
 const client = new OpenAI({
-  baseURL: "https://api.redpill.ai/v1",
-  apiKey: process.env.CONFIDENTIAL_AI_KEY,
+  baseURL: "https://inference.phala.com/v1",
+  apiKey: process.env.PRIVATE_AI_API_KEY,
 })
 
 const completion = await client.chat.completions.create({
-  model: "phala/deepseek-chat-v3-0324",
+  model: "deepseek/deepseek-v3.2",
   messages: [{ role: "user", content: "What is your model name?" }],
 })
 
@@ -137,9 +137,9 @@ console.log(completion.choices[0].message)
 from langchain_openai import ChatOpenAI
 
 llm = ChatOpenAI(
-    model="phala/deepseek-chat-v3-0324",
-    base_url="https://api.redpill.ai/v1",
-    api_key=os.environ["CONFIDENTIAL_AI_KEY"],
+    model="deepseek/deepseek-v3.2",
+    base_url="https://inference.phala.com/v1",
+    api_key=os.environ["PRIVATE_AI_API_KEY"],
 )
 ```
 
@@ -149,7 +149,7 @@ llm = ChatOpenAI(
 
 ```python
 stream = client.chat.completions.create(
-    model="phala/qwen-2.5-7b-instruct",
+    model="qwen/qwen-2.5-7b-instruct",
     messages=[{"role": "user", "content": "Write a haiku about TEEs"}],
     stream=True,
 )
@@ -160,12 +160,12 @@ for chunk in stream:
 cURL with SSE:
 
 ```bash
-curl https://api.redpill.ai/v1/chat/completions \
-  -H "Authorization: Bearer $CONFIDENTIAL_AI_KEY" \
+curl https://inference.phala.com/v1/chat/completions \
+  -H "Authorization: Bearer $PRIVATE_AI_API_KEY" \
   -H "Content-Type: application/json" \
   -N \
   -d '{
-    "model": "phala/qwen-2.5-7b-instruct",
+    "model": "qwen/qwen-2.5-7b-instruct",
     "messages": [{"role":"user","content":"Hello"}],
     "stream": true
   }'
@@ -192,7 +192,7 @@ tools = [{
 }]
 
 response = client.chat.completions.create(
-    model="phala/deepseek-chat-v3-0324",
+    model="deepseek/deepseek-v3.2",
     messages=[{"role": "user", "content": "Weather in Tokyo?"}],
     tools=tools,
 )
@@ -205,11 +205,11 @@ Models that support tool calling: most Phala-provider models. Check the catalog 
 
 ## Images & Vision
 
-For VLM models like `qwen/qwen2.5-vl-72b-instruct`:
+For VLM models like `qwen/qwen3-vl-30b-a3b-instruct`:
 
 ```python
 response = client.chat.completions.create(
-    model="qwen/qwen2.5-vl-72b-instruct",
+    model="qwen/qwen3-vl-30b-a3b-instruct",
     messages=[{
         "role": "user",
         "content": [
@@ -228,7 +228,7 @@ JSON mode + JSON Schema:
 
 ```python
 response = client.chat.completions.create(
-    model="phala/deepseek-chat-v3-0324",
+    model="deepseek/deepseek-v3.2",
     messages=[{"role": "user", "content": "Give me a person record."}],
     response_format={
         "type": "json_schema",
@@ -251,7 +251,7 @@ response = client.chat.completions.create(
 
 ## Verify Signature
 
-Every Confidential AI API response can be cryptographically verified — the response chains to the GPU TEE quote.
+Every Private AI API response can be cryptographically verified. The response chains to the GPU TEE quote.
 
 ### Per-request attestation report
 
@@ -260,7 +260,7 @@ Fetch a fresh attestation tied to a nonce:
 ```bash
 NONCE=$(openssl rand -hex 32)
 curl -s "https://api.redpill.ai/v1/attestation/report?model=phala/deepseek-chat-v3-0324&nonce=$NONCE" \
-  -H "Authorization: Bearer $CONFIDENTIAL_AI_KEY" > report.json
+  -H "Authorization: Bearer $PRIVATE_AI_API_KEY" > report.json
 ```
 
 The response has `nvidia_payload`, `intel_quote`, `signing_address`, and `signing_algo`.
@@ -285,9 +285,9 @@ Reference implementation: [`Phala-Network/private-ml-sdk/vllm-proxy/verifiers/at
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| 401 Unauthorized | Bad / expired key | Generate a new key in Dashboard → Confidential AI API |
-| 402 Payment Required | Out of credits | Add funds in Dashboard → Deposit |
-| 404 Not Found | Wrong model ID | Use lowercase, e.g. `phala/deepseek-chat-v3-0324` not `Phala/DeepSeek-V3` |
+| 401 Unauthorized | Bad / expired key | Generate a new key in Private AI → API Keys |
+| 403 Forbidden | Balance too low to fund Private AI | Top up your Balance (or turn on auto-topup); calls work again within about 5 minutes |
+| 404 Not Found | Wrong model ID | Use lowercase, e.g. `deepseek/deepseek-v3.2` not `Phala/DeepSeek-V3` |
 | 429 Rate Limited | Workspace quota | Wait or contact Phala for quota increase |
 | Response cuts off | Hit `max_tokens` | Increase `max_tokens` in request |
 | Slow first token | Cold start on smaller models | Use a Dedicated Model deployment for predictable latency |
@@ -297,15 +297,15 @@ Reference implementation: [`Phala-Network/private-ml-sdk/vllm-proxy/verifiers/at
 ## Reference: minimal end-to-end
 
 ```bash
-# 1. Get API key from cloud.phala.com (one-time)
-export CONFIDENTIAL_AI_KEY="sk-..."
+# 1. Get an API key from cloud.phala.com → Private AI → API Keys (paid from your Balance)
+export PRIVATE_AI_API_KEY="sk-..."
 
 # 2. Call
-curl https://api.redpill.ai/v1/chat/completions \
+curl https://inference.phala.com/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $CONFIDENTIAL_AI_KEY" \
+  -H "Authorization: Bearer $PRIVATE_AI_API_KEY" \
   -d '{
-    "model": "openai/gpt-oss-20b",
+    "model": "openai/gpt-oss-120b",
     "messages": [{"role":"user","content":"Hello world!"}]
   }'
 ```
