@@ -1,0 +1,745 @@
+configs:
+  capacity_probe_89d72a1adb8f:
+    content: |
+      #!/usr/bin/env bash
+      # Read-only capacity probe. Writes only its atomic sample in the observability volume.
+      set -euo pipefail
+      pgdata=$${PGDATA:-/var/lib/postgresql/data}
+      report_dir=$${CAPACITY_REPORT_DIR:-/run/topup-observability}
+      sample() {
+          local pg_total pg_available obs_total obs_available bytes=0 oldest=0 size modified file now
+          read -r pg_total pg_available < <(df -B1 --output=size,avail "$$pgdata" | tail -1) || return 1
+          read -r obs_total obs_available < <(df -B1 --output=size,avail "$$report_dir" | tail -1) || return 1
+          [[ -d "$$pgdata/pg_wal/archive_status" ]] || return 1
+          now=$$(date +%s) || return 1
+          find "$$pgdata/pg_wal/archive_status" -maxdepth 1 -name '*.ready' -print0 >"$$report_dir/capacity.pending.new" || return 1
+          while IFS= read -r -d '' file; do
+              [[ $${file##*/} =~ ^[0-9A-F]{24}\.ready$$ ]] || continue
+              # A successful archive may rename .ready during inspection; retry the next sample.
+              read -r size modified < <(stat -c '%s %Y' "$$pgdata/pg_wal/$$(basename "$$file" .ready)") || return 1
+              bytes=$$((bytes + size))
+              ((oldest != 0 && oldest <= modified)) || oldest=$$modified
+          done <"$$report_dir/capacity.pending.new"
+          rm -f "$$report_dir/capacity.pending.new" || return 1
+          local age=0
+          ((oldest == 0 || oldest >= now)) || age=$$((now - oldest))
+          printf '{"timestamp":%s,"pgdata_total":%s,"pgdata_available":%s,"observability_total":%s,"observability_available":%s,"wal_bytes":%s,"wal_age_seconds":%s}\n' \
+              "$$now" "$$pg_total" "$$pg_available" "$$obs_total" "$$obs_available" "$$bytes" "$$age" >"$$report_dir/capacity.json.new" || return 1
+          mv "$$report_dir/capacity.json.new" "$$report_dir/capacity.json" || return 1
+      }
+      trap 'rm -f "$$report_dir/capacity.json.new" "$$report_dir/capacity.pending.new"' EXIT
+      while true; do
+          if ! sample; then echo 'capacity sample failed; retaining previous timestamp' >&2; fi
+          [[ $${CAPACITY_ONCE:-0} != 1 ]] || exit 0
+          sleep 30
+      done
+    name: dstack_capacity_probe_89d72a1adb8f
+  postgres_init_101a877e6d70:
+    content: |
+      #!/bin/sh
+      set -eu
+
+      # `keys` derives the application login's password from dstack `db/app/v1`. psql reads it from
+      # the login's pgpass file (field 5), so it never appears in argv or the environment.
+      app_pgpass=/run/db-app/topup_service.pgpass
+      if [ ! -s "$$app_pgpass" ]; then
+          echo "$$app_pgpass is required to initialize the application login" >&2
+          exit 1
+      fi
+
+      psql --username "$$POSTGRES_USER" --dbname "$$POSTGRES_DB" \
+          --set=ON_ERROR_STOP=1 --set=app_pgpass="$$app_pgpass" <<'SQL'
+      \set app_password `cut -d: -f5 :'app_pgpass'`
+
+      DO $$$$
+      BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'topup_app') THEN
+              CREATE ROLE topup_app NOLOGIN;
+          END IF;
+      END;
+      $$$$;
+
+      SELECT format(
+          'CREATE ROLE topup_service LOGIN PASSWORD %L IN ROLE topup_app',
+          :'app_password'
+      )
+      WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'topup_service')
+      \gexec
+
+      SELECT format('ALTER ROLE topup_service PASSWORD %L', :'app_password')
+      WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'topup_service')
+      \gexec
+      SQL
+    name: dstack_postgres_init_101a877e6d70
+  topup_b813a940f235:
+    content: |
+      # The Phala Cloud template's topup configuration (docs/configuration.md): the six test routes and
+      # the read/verify endpoints of Phala's staging instance. It leaves out the public origin (the app's
+      # gateway domain) and the admin public key, known only at deploy time: `topup run` reads them from
+      # DSTACK_APP_DOMAIN and TOPUP_ADMIN_PUBLIC_KEY (deploy/compose.template.yaml), parses them strictly
+      # at startup, and they are not attested. A production instance attests them (docs/self-hosting.md).
+      environment: testnet
+      max_attached_pending_refunds: 2
+      admin_key:
+        id: admin/v1
+      # Independent Ankr read and Infura verify endpoints, with both sealed keys.
+      rpc:
+        - chain_id: 11155111
+          read:
+            id: ankr-sepolia
+            url: "https://rpc.ankr.com/eth_sepolia/{key}"
+            sealed_key: TOPUP_RPC_ANKR_KEY
+            max_log_blocks: 3000
+          verify:
+            id: infura-sepolia
+            url: "https://sepolia.infura.io/v3/{key}"
+            sealed_key: TOPUP_RPC_INFURA_KEY
+            max_log_blocks: 3000
+        - chain_id: 84532
+          read:
+            id: ankr-base-sepolia
+            url: "https://rpc.ankr.com/base_sepolia/{key}"
+            sealed_key: TOPUP_RPC_ANKR_KEY
+            max_log_blocks: 3000
+          verify:
+            id: infura-base-sepolia
+            url: "https://base-sepolia.infura.io/v3/{key}"
+            sealed_key: TOPUP_RPC_INFURA_KEY
+            max_log_blocks: 3000
+        - chain_id: 1
+          read:
+            id: ankr-mainnet
+            url: "https://rpc.ankr.com/eth/{key}"
+            sealed_key: TOPUP_RPC_ANKR_KEY
+            max_log_blocks: 3000
+          verify:
+            id: infura-mainnet
+            url: "https://mainnet.infura.io/v3/{key}"
+            sealed_key: TOPUP_RPC_INFURA_KEY
+            max_log_blocks: 3000
+        - chain_id: 8453
+          read:
+            id: ankr-base-mainnet
+            url: "https://rpc.ankr.com/base/{key}"
+            sealed_key: TOPUP_RPC_ANKR_KEY
+            max_log_blocks: 3000
+          verify:
+            id: infura-base-mainnet
+            url: "https://base-mainnet.infura.io/v3/{key}"
+            sealed_key: TOPUP_RPC_INFURA_KEY
+            max_log_blocks: 3000
+
+      routes:
+        # Staging route on Base Sepolia, the PHA route of Sepolia on a second chain: a test-mode route
+        # (`livemode: false`) any account can quote on and pay its own treasury through. Test PHA here is
+        # the same MockERC20 as on Sepolia (18 decimals, public `mint`). Route files carry no treasury
+        # (design D10); the factory and implementation are the deterministic deployment of
+        # deploy/CONTRACTS.md, the same address on every chain.
+        - route: phala-cloud-base-sepolia-pha-usd
+          version: 1
+          livemode: false
+
+          chain:
+            chain_id: 84532
+            forwarder_factory: "0x45466D37587E6E46DC35eB96b74ba3D3b1E5b747"
+            # Base Sepolia is an OP-stack chain (design D1, architecture §8): credited at depth 3 on the
+            # sequencer's unsafe head, 4 s after inclusion (about 7 s after paying), and watched to
+            # finality like Sepolia's depth 2. `3` is the family default, written out here; an account
+            # may require more, `safe`, or `finalized`, never less.
+            confirmations: 3
+            sanctions_oracle: "0x8A0C93d85a05aD30741C193068abF2e5E16e7b35" # no Chainalysis oracle on Base Sepolia
+
+          asset:
+            symbol: pha
+            contract: "0x1a6F260377e42ead1418C7C1afDFD5DE371A9284"
+            decimals: 18
+            # No transfer since it was deployed (the last 100 000 blocks, Sep 2026): one token-wide log
+            # request per range. The USDC route still puts the whole chain in address mode (architecture §8).
+
+          price:
+            mode: volatile
+            sequencer_uptime: { feed: BASE_SEQUENCER_UPTIME, grace_s: 3600 }
+            allow_unclear_sources: true # noncommercial staging only; production refuses non-Allowed sources
+            primary: [{ source: uniswap_v2_twap, observation_chain_id: 84532 }]
+            check: [{ source: kraken, symbol: PHAUSD, company: kraken }] # production requires written permission
+            fx:
+              - { source: chainlink, feed: USDT_USD, chain_id: 1, observation_chain_id: 84532 }
+
+          merchant:
+            min_amount: { default: 100 }
+            max_deposit_atomic: { default: "200000000000000000000000" }
+            min_refund_atomic: { default: "20000000000000000000" }
+        # Staging route on Base Sepolia for Circle's testnet USDC (https://faucet.circle.com), beside the
+        # PHA route: a test-mode route (`livemode: false`) any account can quote on and pay its own
+        # treasury through. The token is the one Circle lists for Base Sepolia
+        # (https://developers.circle.com/stablecoins/usdc-contract-addresses): FiatTokenV2_2 behind
+        # Circle's proxy, a plain ERC-20 with no transfer fee or rebasing. The chain section is the PHA
+        # route's: one chain has one set of chain settings. Route files carry no treasury (design D10).
+        - route: phala-cloud-base-sepolia-usdc-usd
+          version: 1
+          livemode: false
+
+          chain:
+            chain_id: 84532
+            forwarder_factory: "0x45466D37587E6E46DC35eB96b74ba3D3b1E5b747"
+            # Base Sepolia is an OP-stack chain (design D1, architecture §8): credited at depth 3 on the
+            # sequencer's unsafe head, 4 s after inclusion (about 7 s after paying), and watched to
+            # finality like Sepolia's depth 2. `3` is the family default, written out here; an account
+            # may require more, `safe`, or `finalized`, never less.
+            confirmations: 3
+            sanctions_oracle: "0x8A0C93d85a05aD30741C193068abF2e5E16e7b35" # no Chainalysis oracle on Base Sepolia
+
+          asset:
+            symbol: usdc
+            contract: "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+            decimals: 6
+            # About 1 to 1.5 transfers per block on Base Sepolia (1 740 to 3 065 in 2 000 blocks, up to 14 in
+            # requests by recipient (architecture §8).
+
+          price:
+            mode: stablecoin
+            sequencer_uptime: { feed: BASE_SEQUENCER_UPTIME, grace_s: 3600 }
+            sources:
+              - { source: chainlink, feed: USDC_USD, chain_id: 1, observation_chain_id: 84532 }
+            peg_band_bps: 100
+
+          merchant:
+            min_amount: { default: 100 } # USD 1.00, as on the PHA route
+            max_deposit_atomic: { default: "10000000000" } # 10,000 USDC, about the PHA route's 200,000 PHA
+            min_refund_atomic: { default: "1000000" } # 1 USDC, about the PHA route's 20 PHA
+            quote_spread_bps: { default: 0 } # valued at a fixed 1.00 USD: no price move within the quote window for a spread to cover
+        # Staging route on Base Sepolia for Aave's testnet USDT, beside the PHA and USDC routes: a
+        # test-mode route (`livemode: false`) any account can quote on and pay its own treasury through.
+        # Tether publishes no testnet USDT; the token is the one Aave's address book lists for its Base
+        # Sepolia market (bgd-labs/aave-address-book, `AaveV3BaseSepolia.USDT_UNDERLYING`), a plain
+        # 6-decimal ERC-20 with no transfer fee or rebasing that its faucet,
+        # `0xD9145b5F45Ad4519c7ACcD6E0A4A82e83bB8A6Dc`, mints to anyone (`mint(token, to, amount)`).
+        # The chain section is the PHA route's: one chain has one set of chain settings. Route files carry
+        # no treasury (design D10).
+        - route: phala-cloud-base-sepolia-usdt-usd
+          version: 1
+          livemode: false
+
+          chain:
+            chain_id: 84532
+            forwarder_factory: "0x45466D37587E6E46DC35eB96b74ba3D3b1E5b747"
+            # Base Sepolia is an OP-stack chain (design D1, architecture §8): credited at depth 3 on the
+            # sequencer's unsafe head, 4 s after inclusion (about 7 s after paying), and watched to
+            # finality like Sepolia's depth 2. `3` is the family default, written out here; an account
+            # may require more, `safe`, or `finalized`, never less.
+            confirmations: 3
+            sanctions_oracle: "0x8A0C93d85a05aD30741C193068abF2e5E16e7b35" # no Chainalysis oracle on Base Sepolia
+
+          asset:
+            symbol: usdt
+            contract: "0x0a215D8ba66387DCA84B284D18c3B4ec3de6E54a"
+            decimals: 6
+            # 2 transfers in 2 000 blocks (Oct 2026): one token-wide log request per range. The USDC route
+            # still puts the whole chain in address mode (architecture §8).
+
+          price:
+            mode: stablecoin
+            sequencer_uptime: { feed: BASE_SEQUENCER_UPTIME, grace_s: 3600 }
+            sources:
+              - { source: chainlink, feed: USDT_USD, chain_id: 1, observation_chain_id: 84532 }
+            peg_band_bps: 100
+
+          merchant:
+            min_amount: { default: 100 } # USD 1.00, as on the PHA route
+            max_deposit_atomic: { default: "10000000000" } # 10,000 USDT, as on the USDC route
+            min_refund_atomic: { default: "1000000" } # 1 USDT, as on the USDC route
+            quote_spread_bps: { default: 0 } # valued at a fixed 1.00 USD: no price move within the quote window for a spread to cover
+        # Staging route on Sepolia: a test-mode route (`livemode: false`) any account can quote on and pay
+        # its own treasury through; the staging reference-product CVM uses it (deploy/phala.md, "Staging
+        # reference product"). Route files carry no treasury: each account proves its own per chain
+        # through the API (docs/design/multi-tenant.md D10). The factory and implementation are the
+        # deterministic deployment of deploy/CONTRACTS.md, the same address on every chain.
+        - route: phala-cloud-sepolia-pha-usd
+          version: 3
+          livemode: false
+
+          chain:
+            chain_id: 11155111
+            forwarder_factory: "0x45466D37587E6E46DC35eB96b74ba3D3b1E5b747"
+            confirmations: 2 # the floor and default (design D1); an account may require more, never less
+            sanctions_oracle: "0x28A73f8235d966244210D9c49E34EDdA4fF9e1f6" # no Chainalysis oracle on Sepolia
+
+          asset:
+            symbol: pha
+            contract: "0x8F40e7E99678F44c88158f049E62817580ab113B"
+            decimals: 18
+
+          price:
+            mode: volatile
+            allow_unclear_sources: true # noncommercial staging only; production refuses non-Allowed sources
+            primary: [{ source: uniswap_v2_twap, observation_chain_id: 11155111 }]
+            check: [{ source: kraken, symbol: PHAUSD, company: kraken }] # production requires written permission
+            fx:
+              - { source: chainlink, feed: USDT_USD, chain_id: 1, observation_chain_id: 11155111 }
+
+          merchant:
+            min_amount: { default: 100 }
+            max_deposit_atomic: { default: "200000000000000000000000" }
+            min_refund_atomic: { default: "20000000000000000000" }
+        # Staging route on Sepolia for Circle's testnet USDC (https://faucet.circle.com), beside the PHA
+        # route: a test-mode route (`livemode: false`) any account can quote on and pay its own treasury
+        # through. The token is the one Circle lists for Ethereum Sepolia
+        # (https://developers.circle.com/stablecoins/usdc-contract-addresses): FiatTokenV2_2 behind
+        # Circle's proxy, a plain ERC-20 with no transfer fee or rebasing. The chain section is the PHA
+        # route's: one chain has one set of chain settings. Route files carry no treasury (design D10).
+        - route: phala-cloud-sepolia-usdc-usd
+          version: 1
+          livemode: false
+
+          chain:
+            chain_id: 11155111
+            forwarder_factory: "0x45466D37587E6E46DC35eB96b74ba3D3b1E5b747"
+            confirmations: 2 # the floor and default (design D1); an account may require more, never less
+            sanctions_oracle: "0x28A73f8235d966244210D9c49E34EDdA4fF9e1f6" # no Chainalysis oracle on Sepolia
+
+          asset:
+            symbol: usdc
+            contract: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
+            decimals: 6
+            # response caps. Address mode puts the whole chain, PHA included, on requests by recipient
+            # (architecture §8).
+
+          price:
+            mode: stablecoin
+            sources:
+              - { source: chainlink, feed: USDC_USD, chain_id: 1, observation_chain_id: 11155111 }
+            peg_band_bps: 100
+
+          merchant:
+            min_amount: { default: 100 } # USD 1.00, as on the PHA route
+            max_deposit_atomic: { default: "10000000000" } # 10,000 USDC, about the PHA route's 200,000 PHA
+            min_refund_atomic: { default: "1000000" } # 1 USDC, about the PHA route's 20 PHA
+            quote_spread_bps: { default: 0 } # valued at a fixed 1.00 USD: no price move within the quote window for a spread to cover
+        # Staging route on Sepolia for Aave's testnet USDT, beside the PHA and USDC routes: a test-mode
+        # route (`livemode: false`) any account can quote on and pay its own treasury through. Tether
+        # publishes no testnet USDT; the token is the one Aave's address book lists for its Sepolia market
+        # (bgd-labs/aave-address-book, `AaveV3Sepolia.USDT_UNDERLYING`), a plain 6-decimal ERC-20 with no
+        # transfer fee or rebasing that its faucet, `0xC959483DBa39aa9E78757139af0e9a2EDEb3f42D`, mints to
+        # anyone (`mint(token, to, amount)`). The chain section is the PHA route's: one chain has one set
+        # of chain settings. Route files carry no treasury (design D10).
+        - route: phala-cloud-sepolia-usdt-usd
+          version: 1
+          livemode: false
+
+          chain:
+            chain_id: 11155111
+            forwarder_factory: "0x45466D37587E6E46DC35eB96b74ba3D3b1E5b747"
+            confirmations: 2 # the floor and default (design D1); an account may require more, never less
+            sanctions_oracle: "0x28A73f8235d966244210D9c49E34EDdA4fF9e1f6" # no Chainalysis oracle on Sepolia
+
+          asset:
+            symbol: usdt
+            contract: "0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0"
+            decimals: 6
+            # 175 transfers in 2 000 blocks, up to 3 in one (Oct 2026): one token-wide log request per
+            # range. The USDC route still puts the whole chain in address mode (architecture §8).
+
+          price:
+            mode: stablecoin
+            sources:
+              - { source: chainlink, feed: USDT_USD, chain_id: 1, observation_chain_id: 11155111 }
+            peg_band_bps: 100
+
+          merchant:
+            min_amount: { default: 100 } # USD 1.00, as on the PHA route
+            max_deposit_atomic: { default: "10000000000" } # 10,000 USDT, as on the USDC route
+            min_refund_atomic: { default: "1000000" } # 1 USDT, as on the USDC route
+            quote_spread_bps: { default: 0 } # valued at a fixed 1.00 USD: no price move within the quote window for a spread to cover
+    name: dstack_topup_b813a940f235
+name: dstack
+networks:
+  default:
+    name: dstack_default
+services:
+  backup:
+    command:
+      - walg-cron
+      - backup-push
+      - 0 3 * * *
+    depends_on:
+      keys:
+        condition: service_healthy
+        required: true
+      postgres:
+        condition: service_healthy
+        required: true
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_ENDPOINT: ${AWS_ENDPOINT:-}
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_S3_FORCE_PATH_STYLE: "true"
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      PGDATA: /var/lib/postgresql/data
+      PGDATABASE: topup
+      PGHOST: postgres
+      PGPASSFILE: /run/db-owner/postgres.pgpass
+      PGUSER: postgres
+      WALG_BASE_ATTEMPTS: "2"
+      WALG_BASE_TIMEOUT_SECONDS: "1800"
+      WALG_BIN: wal-g
+      WALG_LIBSODIUM_KEY_PATH: /run/wal-g/backup.key
+      WALG_LIBSODIUM_KEY_TRANSFORM: hex
+      WALG_OBSERVABILITY_DIR: /run/topup-observability
+      WALG_RESTORE_ATTEMPTS: "3"
+      WALG_RESTORE_TIMEOUT_SECONDS: "120"
+      WALG_RETENTION_FULL: "7"
+      WALG_S3_PREFIX: ${WALG_S3_PREFIX:-}
+      WALG_WAL_ATTEMPTS: "1"
+      WALG_WAL_TIMEOUT_SECONDS: "10"
+    image: ghcr.io/phala-network/postgres-walg@sha256:7d04dfefa85c405ebcd780834aaa24a51a1a2b56e483d0197206c55b471a7cdb
+    networks:
+      default: null
+    restart: unless-stopped
+    user: postgres
+    volumes:
+      - read_only: true
+        source: pgdata
+        target: /var/lib/postgresql
+        type: volume
+        volume: {}
+      - read_only: true
+        source: walg_key
+        target: /run/wal-g
+        type: volume
+        volume: {}
+      - read_only: true
+        source: db_owner
+        target: /run/db-owner
+        type: volume
+        volume: {}
+      - source: observability
+        target: /run/topup-observability
+        type: volume
+        volume: {}
+  capacity:
+    cap_drop:
+      - ALL
+    configs:
+      - source: capacity_probe_89d72a1adb8f
+        target: /etc/topup/capacity.sh
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: true
+    entrypoint:
+      - bash
+      - /etc/topup/capacity.sh
+    image: ghcr.io/phala-network/postgres-walg@sha256:7d04dfefa85c405ebcd780834aaa24a51a1a2b56e483d0197206c55b471a7cdb
+    mem_limit: 64m
+    networks:
+      default: null
+    pids_limit: 32
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    user: 999:999
+    volumes:
+      - read_only: true
+        source: pgdata
+        target: /var/lib/postgresql
+        type: volume
+        volume: {}
+      - source: observability
+        target: /run/topup-observability
+        type: volume
+        volume: {}
+  heartbeat:
+    cap_drop:
+      - ALL
+    command:
+      - topup
+      - heartbeat
+      - --interval-s
+      - "15"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+        required: true
+    environment:
+      DATABASE_URL: postgres://topup_service@postgres:5432/topup
+      PGPASSFILE: /run/db-app/topup_service.pgpass
+    image: ghcr.io/phala-network/phala-pay@sha256:9633c56aad3dd1e3cf8c0f23e9cb318fc282de658dfe4dbbf1f43e8eed4802d9
+    mem_limit: 256m
+    networks:
+      default: null
+    pids_limit: 64
+    read_only: true
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    user: 999:999
+    volumes:
+      - read_only: true
+        source: db_app
+        target: /run/db-app
+        type: volume
+        volume: {}
+  keys:
+    command:
+      - topup
+      - keys
+      - --backup-dir
+      - /run/wal-g
+      - --owner-dir
+      - /run/db-owner
+      - --app-dir
+      - /run/db-app
+      - --hold
+    healthcheck:
+      interval: 5s
+      retries: 12
+      test:
+        - CMD
+        - topup
+        - keys
+        - --check
+        - --backup-dir
+        - /run/wal-g
+        - --owner-dir
+        - /run/db-owner
+        - --app-dir
+        - /run/db-app
+      timeout: 5s
+    image: ghcr.io/phala-network/phala-pay@sha256:9633c56aad3dd1e3cf8c0f23e9cb318fc282de658dfe4dbbf1f43e8eed4802d9
+    networks:
+      default: null
+    restart: unless-stopped
+    user: 999:999
+    volumes:
+      - bind:
+          create_host_path: true
+        source: /var/run/dstack.sock
+        target: /var/run/dstack.sock
+        type: bind
+      - source: walg_key
+        target: /run/wal-g
+        type: volume
+        volume: {}
+      - source: db_owner
+        target: /run/db-owner
+        type: volume
+        volume: {}
+      - source: db_app
+        target: /run/db-app
+        type: volume
+        volume: {}
+  migrate:
+    command:
+      - topup
+      - migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: true
+    environment:
+      DATABASE_URL: postgres://postgres@postgres:5432/topup
+      PGPASSFILE: /run/db-owner/postgres.pgpass
+    image: ghcr.io/phala-network/phala-pay@sha256:9633c56aad3dd1e3cf8c0f23e9cb318fc282de658dfe4dbbf1f43e8eed4802d9
+    networks:
+      default: null
+    restart: "no"
+    user: 999:999
+    volumes:
+      - read_only: true
+        source: db_owner
+        target: /run/db-owner
+        type: volume
+        volume: {}
+  postgres:
+    configs:
+      - source: postgres_init_101a877e6d70
+        target: /docker-entrypoint-initdb.d/10-topup-role.sh
+    depends_on:
+      keys:
+        condition: service_healthy
+        required: true
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_ENDPOINT: ${AWS_ENDPOINT:-}
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_S3_FORCE_PATH_STYLE: "true"
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      POSTGRES_DB: topup
+      POSTGRES_PASSWORD_FILE: /run/db-owner/postgres.password
+      POSTGRES_USER: postgres
+      WALG_BASE_ATTEMPTS: "2"
+      WALG_BASE_TIMEOUT_SECONDS: "1800"
+      WALG_BIN: wal-g
+      WALG_LIBSODIUM_KEY_PATH: /run/wal-g/backup.key
+      WALG_LIBSODIUM_KEY_TRANSFORM: hex
+      WALG_OBSERVABILITY_DIR: /run/topup-observability
+      WALG_RESTORE_ATTEMPTS: "3"
+      WALG_RESTORE_TIMEOUT_SECONDS: "120"
+      WALG_S3_PREFIX: ${WALG_S3_PREFIX:-}
+      WALG_WAL_ATTEMPTS: "1"
+      WALG_WAL_TIMEOUT_SECONDS: "10"
+    healthcheck:
+      interval: 5s
+      retries: 12
+      start_period: 3600s
+      test:
+        - CMD-SHELL
+        - psql -U postgres -d topup -XAtqc 'SELECT NOT pg_is_in_recovery()' | grep -qx t
+      timeout: 5s
+    image: ghcr.io/phala-network/postgres-walg@sha256:7d04dfefa85c405ebcd780834aaa24a51a1a2b56e483d0197206c55b471a7cdb
+    networks:
+      default: null
+    restart: unless-stopped
+    volumes:
+      - source: pgdata
+        target: /var/lib/postgresql
+        type: volume
+        volume: {}
+      - read_only: true
+        source: walg_key
+        target: /run/wal-g
+        type: volume
+        volume: {}
+      - read_only: true
+        source: db_owner
+        target: /run/db-owner
+        type: volume
+        volume: {}
+      - read_only: true
+        source: db_app
+        target: /run/db-app
+        type: volume
+        volume: {}
+      - source: observability
+        target: /run/topup-observability
+        type: volume
+        volume: {}
+  smokescreen:
+    cap_drop:
+      - ALL
+    command:
+      - smokescreen
+      - --listen-ip=0.0.0.0
+      - --listen-port=4750
+      - --timeout=10s
+      - --deny-range=0.0.0.0/8
+      - --deny-range=100.64.0.0/10
+      - --deny-range=169.254.0.0/16
+      - --deny-range=192.0.0.0/24
+      - --deny-range=198.18.0.0/15
+      - --deny-range=240.0.0.0/4
+    image: ghcr.io/phala-network/phala-pay@sha256:9633c56aad3dd1e3cf8c0f23e9cb318fc282de658dfe4dbbf1f43e8eed4802d9
+    mem_limit: 256m
+    networks:
+      default: null
+    pids_limit: 128
+    read_only: true
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+  topup:
+    cap_drop:
+      - ALL
+    command:
+      - topup
+      - run
+      - --config
+      - /etc/topup/topup.yaml
+      - --webhook-proxy
+      - http://smokescreen:4750
+      - --public-origin-host-env
+      - DSTACK_APP_DOMAIN
+      - --admin-public-key-env
+      - TOPUP_ADMIN_PUBLIC_KEY
+    configs:
+      - source: topup_b813a940f235
+        target: /etc/topup/topup.yaml
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+        required: true
+    environment:
+      DATABASE_URL: postgres://topup_service@postgres:5432/topup
+      DSTACK_APP_DOMAIN: ${DSTACK_APP_DOMAIN:-}
+      PGPASSFILE: /run/db-app/topup_service.pgpass
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      TOPUP_ADMIN_PUBLIC_KEY: ${TOPUP_ADMIN_PUBLIC_KEY:-}
+      TOPUP_RPC_ANKR_KEY: ${TOPUP_RPC_ANKR_KEY:-}
+      TOPUP_RPC_INFURA_KEY: ${TOPUP_RPC_INFURA_KEY:-}
+    healthcheck:
+      interval: 30s
+      retries: 3
+      start_period: 20s
+      test:
+        - CMD
+        - topup
+        - healthcheck
+      timeout: 10s
+    image: ghcr.io/phala-network/phala-pay@sha256:9633c56aad3dd1e3cf8c0f23e9cb318fc282de658dfe4dbbf1f43e8eed4802d9
+    mem_limit: 1g
+    networks:
+      default: null
+    pids_limit: 256
+    ports:
+      - mode: ingress
+        protocol: tcp
+        published: "80"
+        target: 8080
+    read_only: false
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 360s
+    tmpfs:
+      - /tmp
+    user: 999:999
+    volumes:
+      - bind:
+          create_host_path: true
+        source: /var/run/dstack.sock
+        target: /var/run/dstack.sock
+        type: bind
+      - read_only: true
+        source: db_app
+        target: /run/db-app
+        type: volume
+        volume: {}
+      - read_only: true
+        source: observability
+        target: /run/topup-observability
+        type: volume
+        volume: {}
+volumes:
+  db_app:
+    driver: local
+    driver_opts:
+      device: tmpfs
+      o: uid=999,gid=999,mode=0700
+      type: tmpfs
+    name: dstack_db_app
+  db_owner:
+    driver: local
+    driver_opts:
+      device: tmpfs
+      o: uid=999,gid=999,mode=0700
+      type: tmpfs
+    name: dstack_db_owner
+  ingress_certs:
+    name: dstack_ingress_certs
+  ingress_evidences:
+    name: dstack_ingress_evidences
+  observability:
+    name: dstack_observability
+  pgdata:
+    name: dstack_pgdata
+  walg_key:
+    driver: local
+    driver_opts:
+      device: tmpfs
+      o: uid=999,gid=999,mode=0700
+      type: tmpfs
+    name: dstack_walg_key
