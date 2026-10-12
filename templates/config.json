@@ -6278,7 +6278,7 @@
   {
     "id": "phala-pay",
     "name": "Phala Pay",
-    "description": "Phala Pay v0.10.1: non-custodial testnet payments with quotes, deposit addresses, refunds and signed webhooks. Test PHA, Circle test USDC and Aave test USDT on Sepolia and Base Sepolia. Requires Ankr and Infura keys.",
+    "description": "Phala Pay v0.10.3: non-custodial testnet payments with quotes, deposit addresses, refunds and signed webhooks. Test PHA, Circle test USDC and Aave test USDT on Sepolia and Base Sepolia. Requires Ankr and Infura keys.",
     "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/phala-pay",
     "author": "Phala-Network",
     "icon": "phala-pay.svg",
@@ -6286,7 +6286,7 @@
       {
         "key": "TOPUP_ADMIN_PUBLIC_KEY",
         "required": true,
-        "description": "Public key of the operator's admin key, which signs every admin API call (creating merchant accounts). Generate it on your own machine with pip install phala-pay==0.10.1, then topup-sdk keygen --keyid admin/v1 --seed-out admin.seed, and paste the printed public_key. Keep admin.seed offline; it never goes into the CVM. Not attested (it is in the CVM's encrypted env); topup refuses to start unless it is a valid key."
+        "description": "Public key of the operator's admin key, which signs every admin API call (creating merchant accounts). Generate it on your own machine with pip install phala-pay==0.10.3, then topup-sdk keygen --keyid admin/v1 --seed-out admin.seed, and paste the printed public_key. Keep admin.seed offline; it never goes into the CVM. Not attested (it is in the CVM's encrypted env); topup refuses to start unless it is a valid key."
       },
       {
         "key": "TOPUP_RPC_ANKR_KEY",
