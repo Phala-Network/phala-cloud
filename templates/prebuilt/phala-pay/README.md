@@ -47,11 +47,11 @@ SHA-256 `baa502ff699e973c10c16dd6d6ed139436e5b5e5a0685fcaa4328bf053286a81`, and 
 | Service | Image | What it does |
 | --- | --- | --- |
 | `keys` | `phala-pay` | Derives the database passwords and the backup encryption key from the app's KMS keys into tmpfs volumes. With `topup`, the only container with the dstack socket. |
-| `postgres` | `postgres-walg` | PostgreSQL 18 with WAL-G. Archives WAL every minute to your bucket. |
+| `postgres` | `postgres-walg` | PostgreSQL 18 with WAL-G. Uses `archive_timeout=30` to switch WAL segments containing new data for archiving to your bucket. |
 | `migrate` | `phala-pay` | One-shot schema migration. |
 | `topup` | `phala-pay` | The API and the chain scanners, on port 80 behind the Phala Cloud gateway. |
 | `smokescreen` | `phala-pay` | Stripe's smokescreen: every webhook delivery leaves through it, and it refuses any address that is not publicly routable (private ranges, loopback, cloud metadata). |
-| `heartbeat` | `phala-pay` | Liveness heartbeat, one commit a minute. |
+| `heartbeat` | `phala-pay` | Liveness heartbeat using `topup heartbeat --interval-s 15`, committing every 15 seconds. |
 | `capacity` | `postgres-walg` | Samples disk space and the WAL archive backlog every 30 seconds for capacity monitoring. |
 | `backup` | `postgres-walg` | An encrypted WAL-G base backup every day at 8 PM PDT / 7 PM PST (03:00 UTC), keeping seven. |
 
@@ -200,6 +200,7 @@ an env file and run:
 
 ```sh
 kit/deploy/phala deploy -n phala-pay -c docker-compose.yml -e phala-pay.env -t tdx.medium \
+  --pre-launch-script kit/deploy/phala-cloud-pre-launch.sh --fs ext4 --kms phala \
   --disk-size 20G --image dstack-0.5.9 --no-dev-os --no-public-logs --no-public-sysinfo \
   --public-tcbinfo --secure-time
 ```
@@ -347,7 +348,7 @@ is the new account id, `livemode` is `False`, `factory` and `implementation` are
 forwarder addresses above, `treasuries` maps each chain id to your own chosen treasury, and
 `webhook_keys` contains `(version, public_key)` pairs from the verified attestation. The encoding
 starts with `ppay_pins_v1.`; protect it from modification in your deployment configuration.
-Set `PHALA_PAY_API_KEY` to the account's secret test key. Every call below is on
+Set `PHALA_PAY_API_KEY` to the account's secret test key, then create the client used below:
 
 ```python
 from phala_pay import PhalaPay
@@ -392,8 +393,8 @@ use to `0.10.0`, matching the service.
 
 ## Backups and restore
 
-PostgreSQL archives WAL every minute and `backup` takes a daily base backup, both encrypted with a
-key derived in the CVM from the app id. The same app derives the same key, so a replacement
+PostgreSQL archives written WAL with `archive_timeout=30`, and `backup` takes a daily base backup,
+both encrypted with a key derived in the CVM from the app id. The same app derives the same key, so a replacement
 instance of the same app restores without any secret. A new app can never read the old app's
 backups, which is why every deployment of this template needs a new, empty `WALG_S3_PREFIX`: a
 prefix that already holds a backup is restored from, and a new app cannot decrypt it.
@@ -425,8 +426,13 @@ unsupported. Keep the old app while its backups matter; a new app cannot decrypt
 For later releases, verify their `phala-cloud-template.yml` as in
 [What it deploys](#what-it-deploys) and follow the release's supported upgrade and rollback path.
 From v0.10.0, the supported N-1 binary rollback is to v0.9.2, retaining the upgraded schema.
-Before that rollback, pause settlement on routes affected by active manual sanctions entries,
-which N-1 cannot read. Every upgrade changes the compose hash, so tell your merchants the new one.
+Before that rollback, pause **all screening-dependent fund processing**, regardless of manual
+sanctions entries. N-1 uses the deprecated, stale Chainalysis oracle and cannot see the manual
+supplements. Keep the pause until N is restored and verified screening is healthy; a passing
+database/binary rollback drill does not authorize resuming settlement. Retain the previous
+configuration for N-1; see the
+[sanctions runbook](https://github.com/Phala-Network/phala-pay/blob/v0.10.0/deploy/runbooks/sanctions-list.md#n-1-rollback).
+Every upgrade changes the compose hash, so tell your merchants the new one.
 Never run down migrations; see the
 [rollback policy](https://github.com/Phala-Network/phala-pay/blob/v0.10.0/deploy/README.md#rollback-compatibility).
 
