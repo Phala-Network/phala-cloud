@@ -1,0 +1,177 @@
+services:
+  app:
+    image: python:3.13-slim-bookworm
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      GSC_SKIP_OAUTH: "true"
+      GSC_ALLOW_DESTRUCTIVE: "false"
+      GSC_CONFIG_DIR: /tmp/mcp-gsc
+    configs:
+      - source: verifier
+        target: /app/server.py
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        python -m pip install --no-cache-dir 'mcp==1.30.0' 'mcp-search-console @ https://codeload.github.com/AminForou/mcp-gsc/tar.gz/d49eea9e5efb5eb645b722249303179b2c150b49#sha256=c6341b9be8657efb95038fca69130deadf4271bfec9d77b933f9f25a795fc6ce'
+        exec python /app/server.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5).read()"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
+
+configs:
+  verifier:
+    content: |
+      import asyncio
+      import json
+      from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+      from importlib.metadata import version
+      from urllib.parse import urlsplit
+
+      import gsc_server
+
+
+      UPSTREAM = "https://github.com/AminForou/mcp-gsc"
+      REVISION = "d49eea9e5efb5eb645b722249303179b2c150b49"
+      PACKAGE_VERSION = version("mcp-search-console")
+      MODE = "credential-free-verifier"
+
+      # These fixtures contain synthetic API-shaped data. No Google API is called.
+      FIXTURES = {
+          "product_with_issue": {
+              "richResultsResult": {
+                  "verdict": "FAIL",
+                  "detectedItems": [{
+                      "richResultType": "Product",
+                      "items": [{
+                          "name": "Demo product",
+                          "issues": [{
+                              "severity": "ERROR",
+                              "issueMessage": 'Missing field "offers"',
+                          }],
+                      }],
+                  }],
+              },
+          },
+          "valid_breadcrumb": {
+              "richResultsResult": {
+                  "verdict": "PASS",
+                  "detectedItems": [{
+                      "richResultType": "Breadcrumbs",
+                      "items": [{"name": "Demo breadcrumb"}],
+                  }],
+              },
+          },
+          "no_rich_results": {},
+      }
+      EXPECTED = {
+          "product_with_issue": {
+              "verdict": "FAIL",
+              "detected_types": ["Product"],
+              "issues": [{
+                  "type": "Product",
+                  "item": "Demo product",
+                  "severity": "ERROR",
+                  "message": 'Missing field "offers"',
+              }],
+          },
+          "valid_breadcrumb": {
+              "verdict": "PASS",
+              "detected_types": ["Breadcrumbs"],
+              "issues": [],
+          },
+          "no_rich_results": None,
+      }
+
+      # Listing registered tools is local; invoking data/auth tools needs credentials.
+      TOOLS = [
+          tool.model_dump(mode="json", exclude_none=True)
+          for tool in asyncio.run(gsc_server.mcp.list_tools())
+      ]
+      TOOL_NAMES = {tool["name"] for tool in TOOLS}
+      REQUIRED_TOOLS = {
+          "get_search_analytics", "inspect_url_enhanced", "batch_url_inspection",
+          "check_indexing_issues", "manage_sitemaps", "get_creator_info",
+      }
+      RESULTS = {
+          name: gsc_server._rich_results_summary(fixture)
+          for name, fixture in FIXTURES.items()
+      }
+      if (
+          PACKAGE_VERSION != "0.4.1"
+          or len(TOOLS) != 21
+          or not REQUIRED_TOOLS.issubset(TOOL_NAMES)
+          or RESULTS != EXPECTED
+      ):
+          raise RuntimeError("Upstream import, tool discovery, or rich-result verification failed")
+
+      HEALTH = {
+          "status": "ok",
+          "mode": MODE,
+          "package": "mcp-search-console",
+          "version": PACKAGE_VERSION,
+          "revision": REVISION,
+          "tool_count": len(TOOLS),
+          "local_checks_passed": True,
+      }
+      DEMO = {
+          "mode": MODE,
+          "upstream": UPSTREAM,
+          "revision": REVISION,
+          "version": PACKAGE_VERSION,
+          "synthetic_data": True,
+          "google_api_calls": False,
+          "credentials_required": False,
+          "function": "gsc_server._rich_results_summary",
+          "purpose": "Summarize rich-result issues from synthetic URL-inspection data",
+          "cases": [
+              {"name": name, "input": fixture, "output": RESULTS[name]}
+              for name, fixture in FIXTURES.items()
+          ],
+      }
+      RESPONSES = {
+          "/": {
+              "name": "AminForou/mcp-gsc",
+              "mode": MODE,
+              "upstream": UPSTREAM,
+              "endpoints": ["/healthz", "/demo", "/tools", "/v1/models"],
+              "note": "Local verifier; live Search Console access requires a separate authenticated deployment.",
+          },
+          "/healthz": HEALTH,
+          "/demo": DEMO,
+          "/tools": {"tools": TOOLS, "invocation_enabled": False},
+          "/v1/models": {"object": "list", "data": []},
+      }
+
+
+      class Handler(BaseHTTPRequestHandler):
+          def do_GET(self):
+              path = urlsplit(self.path).path
+              payload = RESPONSES.get(path)
+              status = 200 if payload is not None else 404
+              if payload is None:
+                  payload = {"error": "not_found"}
+              body = (json.dumps(payload, ensure_ascii=True) + "\n").encode("utf-8")
+              self.send_response(status)
+              self.send_header("Content-Type", "application/json; charset=utf-8")
+              self.send_header("Content-Length", str(len(body)))
+              self.send_header("Cache-Control", "no-store")
+              self.end_headers()
+              self.wfile.write(body)
+
+
+      if __name__ == "__main__":
+          print("mcp-gsc verifier ready on :8080; upstream import and local checks passed", flush=True)
+          ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()

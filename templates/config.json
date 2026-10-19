@@ -6274,5 +6274,20 @@
       "TEE & Privacy",
       "AI Agents"
     ]
+  },
+  {
+    "id": "mcp-gsc",
+    "name": "AminForou/mcp-gsc",
+    "description": "Google Search Console MCP server for SEO analytics, URL inspection, indexing, and sitemap management.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/mcp-gsc",
+    "author": "AminForou",
+    "icon": "mcp-gsc.png",
+    "envs": [],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 1024,
+      "diskSize": 10
+    },
+    "tags": ["SEO & Analytics"]
   }
 ]
