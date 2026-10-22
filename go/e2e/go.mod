@@ -2,6 +2,8 @@ module github.com/Phala-Network/phala-cloud/sdks/go/e2e
 
 go 1.25.0
 
+toolchain go1.26.10
+
 require (
 	github.com/Phala-Network/phala-cloud/sdks/go v0.0.0
 	golang.org/x/crypto v0.49.0
