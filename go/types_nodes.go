@@ -20,6 +20,9 @@ type ResourceThreshold struct {
 // TeepodCapacity represents a node's capacity.
 type TeepodCapacity struct {
 	TeepodID          int              `json:"teepod_id"`
+	TeepodIDHashid    string           `json:"teepod_id_hashid"`
+	NodeID            *int             `json:"node_id,omitempty"`
+	NodeIDHashid      *string          `json:"node_id_hashid,omitempty"`
 	Name              string           `json:"name"`
 	Listed            bool             `json:"listed"`
 	ResourceScore     float64          `json:"resource_score"`

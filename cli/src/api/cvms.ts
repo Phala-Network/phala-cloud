@@ -155,7 +155,7 @@ export async function replicateCvm(
 	appId: string,
 	vmUuid: string,
 	payload: {
-		teepod_id?: number;
+		teepod_id?: string;
 		encrypted_env?: string;
 	},
 ): Promise<ReplicateCvmResponse> {

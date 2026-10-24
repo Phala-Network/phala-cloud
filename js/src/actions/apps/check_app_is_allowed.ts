@@ -5,7 +5,10 @@ import { IsAllowedResultSchema, type IsAllowedResult } from "../cvms/check_cvm_i
 export const CheckAppIsAllowedRequestSchema = z.object({
   appId: z.string().min(1),
   compose_hash: z.string(),
-  node_id: z.number().optional(),
+  node_id: z
+    .string()
+    .regex(/^node_[A-Za-z0-9]+$/)
+    .optional(),
   device_id: z.string().optional(),
   chain_id: z.number().optional(),
 });

@@ -19,10 +19,10 @@ describe.skipIf(skipIntegrationTests)("provisionCvm Integration Tests", () => {
     client = createClient({ timeout: 30000 });
     const nodes = await getAvailableNodes(client);
     node = nodes.nodes.find(n => n.listed && n.images.length > 0);
-    if (!node) throw new Error("No available node for testing");
+    if (!node?.node_id_hashid || !node.teepod_id_hashid) throw new Error("No available placement with canonical hash IDs for testing");
     app_compose = {
       name: `sdk-e2e-test-${Date.now()}`,
-      node_id: node.teepod_id,
+      node_id: node.node_id_hashid,
       image: node.images[0].name,
       vcpu: 1,
       memory: 1024,
@@ -63,7 +63,7 @@ describe.skipIf(skipIntegrationTests)("provisionCvm Integration Tests", () => {
     // Create config with only teepod_id (no node_id)
     const legacyConfig = { 
       ...app_compose, 
-      teepod_id: node.teepod_id 
+      teepod_id: node.teepod_id_hashid
     };
     delete legacyConfig.node_id; // Remove node_id to test teepod_id path
     try {
@@ -121,7 +121,7 @@ describe.skipIf(skipIntegrationTests)("provisionCvm Integration Tests", () => {
   }, 30000);
 
   it("should return error for invalid node_id", async () => {
-    const invalidConfig = { ...app_compose, node_id: 99999999 };
+    const invalidConfig = { ...app_compose, node_id: "node_invalid" };
     try {
       await provisionCvm(client, invalidConfig, { schema: false });
       throw new Error("Should not succeed with invalid node_id");

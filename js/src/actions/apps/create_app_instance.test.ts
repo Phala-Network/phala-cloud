@@ -43,12 +43,12 @@ describe("createAppInstance", () => {
     await createAppInstance(mockClient, {
       appId: "app-123",
       name: "redis-0",
-      node_id: 5,
+      node_id: "teepod_test5",
     });
 
     expect(mockClient.post).toHaveBeenCalledWith("/apps/app-123/instances", {
       name: "redis-0",
-      node_id: 5,
+      node_id: "teepod_test5",
     });
   });
 });
