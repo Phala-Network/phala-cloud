@@ -85,6 +85,12 @@ export const AvailableOSImageSchema = z
 export const TeepodCapacitySchema = z
   .object({
     teepod_id: z.number(),
+    teepod_id_hashid: z.string().regex(/^teepod_[A-Za-z0-9]+$/),
+    node_id: z.number().nullable().optional(),
+    node_id_hashid: z
+      .string()
+      .regex(/^node_[A-Za-z0-9]+$/)
+      .nullable(),
     name: z.string(),
     listed: z.boolean(),
     resource_score: z.number(),

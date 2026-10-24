@@ -171,7 +171,7 @@ func TestProvisionCVMRequest_MarshalResourceMatchingFields(t *testing.T) {
 		KMSID:           String("kms-base"),
 		KMS:             String("BASE"),
 		KMSContract:     String("0xbase"),
-		KMSContractID:   IntKMSContractID(301),
+		KMSContractID:   String("kc_test301"),
 		KeyProviderMode: String("local"),
 		SkipGateway:     Bool(true),
 	}
@@ -185,7 +185,7 @@ func TestProvisionCVMRequest_MarshalResourceMatchingFields(t *testing.T) {
 		KMSID           string `json:"kms_id"`
 		KMS             string `json:"kms"`
 		KMSContract     string `json:"kms_contract"`
-		KMSContractID   int    `json:"kms_contract_id"`
+		KMSContractID   string `json:"kms_contract_id"`
 		KeyProviderMode string `json:"key_provider_mode"`
 		SkipGateway     bool   `json:"skip_gateway"`
 	}
@@ -202,8 +202,8 @@ func TestProvisionCVMRequest_MarshalResourceMatchingFields(t *testing.T) {
 	if body.KMSContract != "0xbase" {
 		t.Errorf("kms_contract = %q, want 0xbase", body.KMSContract)
 	}
-	if body.KMSContractID != 301 {
-		t.Errorf("kms_contract_id = %d, want 301", body.KMSContractID)
+	if body.KMSContractID != "kc_test301" {
+		t.Errorf("kms_contract_id = %q, want kc_test301", body.KMSContractID)
 	}
 	if body.KeyProviderMode != "local" {
 		t.Errorf("key_provider_mode = %q, want local", body.KeyProviderMode)

@@ -18,6 +18,8 @@ const mockResourceGraph: CvmCreateResourceGraph = {
 	nodes: [
 		{
 			teepod_id: 11,
+			teepod_id_hashid: "teepod_test11",
+			node_id_hashid: "node_test42",
 			name: "public-node",
 			listed: true,
 			resource_score: 1,

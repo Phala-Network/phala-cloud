@@ -20,6 +20,8 @@ const mockAvailableNodesData: AvailableNodes = {
   nodes: [
     {
       teepod_id: 1,
+      teepod_id_hashid: "teepod_test1",
+      node_id_hashid: "node_test42",
       name: "teepod-1",
       listed: true,
       resource_score: 0.8,
