@@ -46,7 +46,8 @@ async function runCvmsListNodesCommand(
 		logger.info("Available Nodes:");
 		for (const teepod of teepods) {
 			logger.info("----------------------------------------");
-			logger.info(`  ID:          ${teepod.teepod_id}`);
+			logger.info(`  Teepod ID:   ${teepod.teepod_id_hashid ?? "unavailable"}`);
+			logger.info(`  Node ID:     ${teepod.node_id_hashid ?? "unavailable"}`);
 			logger.info(`  Name:        ${teepod.name}`);
 			logger.info(`  Region:      ${teepod.region_identifier}`);
 			logger.info(`  FMSPC:       ${teepod.fmspc || "N/A"}`);

@@ -240,7 +240,7 @@ describe("buildProvisionPayload", () => {
 				vcpu: "2",
 				memory: "4G",
 				diskSize: "50G",
-				nodeId: "123",
+				nodeId: "node_test123",
 				region: "us-west",
 				image: "dstack-dev-0.5.0",
 				kmsId: "phala",
@@ -259,12 +259,25 @@ describe("buildProvisionPayload", () => {
 			expect(payload.vcpu).toBe(2);
 			expect(payload.memory).toBe(4096); // 4G = 4096MB
 			expect(payload.disk_size).toBe(50); // 50G = 50GB
-			expect(payload.teepod_id).toBe(123);
+			expect(payload.node_id).toBe("node_test123");
+			expect(payload.teepod_id).toBeUndefined();
 			expect(payload.region).toBe("us-west");
 			expect(payload.image).toBe("dstack-dev-0.5.0");
 			// --kms-id is deprecated and now a no-op; it is no longer sent.
 			expect(payload.kms_id).toBeUndefined();
 			expect(payload.prefer_dev).toBe(true);
+		});
+
+		test("rejects numeric node IDs instead of coercing them into placement inputs", () => {
+			expect(() =>
+				buildProvisionPayload(
+					{ nodeId: "123" },
+					defaultName,
+					defaultDockerCompose,
+					defaultEnvs,
+					defaultPrivacySettings,
+				),
+			).toThrow("Use a node_ hash ID");
 		});
 
 		test("should default kms to PHALA when not specified", () => {

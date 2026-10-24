@@ -27,7 +27,8 @@ export const instancesAddCommandMeta: CommandMeta = {
 		{
 			name: "node-id",
 			aliases: ["teepod-id"],
-			description: "Target node ID for the new instance.",
+			description:
+				"Target Teepod hash ID (teepod_) or node name for the new instance.",
 			type: "string",
 			target: "nodeId",
 		},
@@ -88,21 +89,22 @@ export const instancesAddCommandMeta: CommandMeta = {
 	examples: [
 		{
 			name: "Add instance with existing compose",
-			value: "phala instances add --app-id <app-id> --node-id 5",
+			value: "phala instances add --app-id <app-id> --node-id teepod_abc123",
 		},
 		{
 			name: "Add instance with custom name",
-			value: "phala instances add --app-id <app-id> --name redis-0 --node-id 5",
+			value:
+				"phala instances add --app-id <app-id> --name redis-0 --node-id teepod_abc123",
 		},
 		{
 			name: "Add instance with new Docker Compose",
 			value:
-				"phala instances add --app-id <app-id> --node-id 5 --compose-file docker-compose.yml",
+				"phala instances add --app-id <app-id> --node-id teepod_abc123 --compose-file docker-compose.yml",
 		},
 		{
 			name: "Prepare for multisig approval",
 			value:
-				"phala instances add --app-id <app-id> --node-id 5 --compose-file docker-compose.yml --prepare-only",
+				"phala instances add --app-id <app-id> --node-id teepod_abc123 --compose-file docker-compose.yml --prepare-only",
 		},
 		{
 			name: "Commit a prepared instance",

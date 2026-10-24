@@ -17,7 +17,8 @@ export const cvmsReplicateCommandMeta: CommandMeta = {
 		{
 			name: "node-id",
 			aliases: ["teepod-id"],
-			description: "Target node ID for the replica.",
+			description:
+				"Target Teepod hash ID (teepod_) or node name for the replica.",
 			type: "string",
 			target: "nodeId",
 		},
@@ -66,12 +67,12 @@ export const cvmsReplicateCommandMeta: CommandMeta = {
 	examples: [
 		{
 			name: "Replicate a CVM",
-			value: "phala cvms replicate 1234 --node-id 5",
+			value: "phala cvms replicate 1234 --node-id teepod_abc123",
 		},
 		{
 			name: "Prepare a replica for multisig approval",
 			value:
-				"phala cvms replicate 1234 --node-id 5 --compose-hash <hash> --prepare-only",
+				"phala cvms replicate 1234 --node-id teepod_abc123 --compose-hash <hash> --prepare-only",
 		},
 		{
 			name: "Commit a prepared replica",
