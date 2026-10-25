@@ -251,7 +251,7 @@ response = client.chat.completions.create(
 
 ## Verify Signature
 
-Every Private AI API response can be cryptographically verified. The response chains to the GPU TEE quote.
+Verify the serving workload, protected connections, and response binding. For GPU workloads, also establish that the accepted CPU runtime checks the GPU before releasing secrets. Two hardware quotes alone do not establish this enforcement.
 
 ### Per-request attestation report
 
@@ -275,9 +275,9 @@ The response has `nvidia_payload`, `intel_quote`, `signing_address`, and `signin
 
 ### Full verification flow
 
-For the complete end-to-end verification — verify NVIDIA GPU via NRAS, verify Intel TDX, check report-data binds the signing key + nonce, verify the compose manifest, check Sigstore provenance, and verify the response signature — follow `verify-attestation.md`.
+Follow `verify-attestation.md` for CPU identity, GPU appraisal and boot-gate policy, application identity, protected connections, and response binding. The GPU section includes boot-time and fresh evidence retrieval for compatible dstack guest images. Apply the evidence contract of the deployed workload; a gateway CPU report is not model-worker GPU evidence.
 
-Reference implementation: [`Phala-Network/private-ml-sdk/vllm-proxy/verifiers/attestation_verifier.py`](https://github.com/Phala-Network/private-ml-sdk/blob/main/vllm-proxy/verifiers/attestation_verifier.py).
+When using an existing verifier, check that it covers the accepted CPU image, GPU policy, and fail-closed boot gate as well as the vendor signatures.
 
 ---
 

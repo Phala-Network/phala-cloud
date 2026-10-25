@@ -246,7 +246,9 @@ The next time the Analysis CVM tries to refresh keys via KMS, the verifier sees 
 phala cvms attestation cohort-analysis --json > attestation.json
 # Then run the full verification per verify-attestation.md:
 #   - TDX quote chains to Intel root (DCAP / Phala verify endpoint)
-#   - GPU NV-CSE quote chains to NVIDIA root (NRAS)
+#   - For GPU workloads: NVIDIA evidence and accepted GPU policy
+#   - Accepted CPU code checks GPUs before readiness and dataset-key provisioning
+#   - GPU boot appraisal is bound to the CPU evidence; protected GPU connection
 #   - report_data binds to the signing key + your nonce
 #   - mr_config binds to the expected compose_hash
 #   - container images have Sigstore provenance from expected source repos

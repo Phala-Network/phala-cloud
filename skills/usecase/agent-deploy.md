@@ -200,9 +200,9 @@ The hex `quote` decodes into a TDX quote containing:
 
 ### Verify offline
 
-For the full step-by-step verification flow (Intel TDX root + NVIDIA root + report-data binding + compose-hash + Sigstore provenance), follow `verify-attestation.md`.
+Follow `verify-attestation.md` for CPU identity, report-data binding, application configuration, and image provenance. If the agent uses a GPU, also verify that the accepted CPU runtime checks the GPU and its policy before enabling it and requesting secrets. A failed check must stop boot.
 
-The minimum check:
+The following checks only the CPU quote. Complete the applicable policy and GPU boot-gate checks before sending secrets:
 
 ```bash
 phala cvms attestation my-agent --json > attestation.json

@@ -184,7 +184,7 @@ phala deploy -n my-workload -c docker-compose.yml -e .env -t h200.16xlarge --kms
 
 ## Verify GPU CC
 
-NVIDIA Confidential Computing seals the GPU memory. Confirm it's active:
+Check GPU Confidential Computing mode locally, then verify that the accepted CPU runtime enforces GPU verification before secrets. A failed GPU check must stop boot before GPU readiness and workload-key provisioning.
 
 ### Inside the CVM
 
@@ -197,12 +197,12 @@ nvidia-smi conf-compute -q
 ### From the attestation
 
 ```bash
-phala cvms attestation my-workload --json | jq '.app_certificates[0].quote'
+phala cvms attestation my-workload --json > attestation.json
 ```
 
-The hex `quote` decodes into a combined TDX + GPU NV-CSE attestation. For the full verification flow (Intel TDX + NVIDIA NRAS + report-data binding + compose-hash), follow `verify-attestation.md`. Offline-only path: `dcap-qvl` for the TDX layer + `nvattest-verifier` for the NVIDIA layer.
+The `app_certificates[0].quote` field is the CPU TDX quote. Follow [verify-attestation.md](verify-attestation.md#verify-nvidia-gpu) for the accepted CPU image, measured GPU policy, GPU boot evidence, protected connection, and application identity. Local `nvidia-smi` output is operational status, not a remote proof of this enforcement.
 
-For a full reference on parsing the combined TDX+NVIDIA quote, see `https://docs.phala.com/phala-cloud/confidential-ai/verify/verify-attestation`.
+For supported dstack TDX releases, RTMR3 events bind the GPU boot appraisal and policy to the CPU quote. NVIDIA evidence is a separate artifact; it is not embedded in TDX `report_data`. See the [dstack GPU security model](https://github.com/Dstack-TEE/dstack/blob/250334c26a97a579fe26d911d89e8e90256d8572/docs/security/security-model.md#gpu-security-for-ai-workloads) for the evidence format and release requirements.
 
 ---
 

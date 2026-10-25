@@ -174,6 +174,8 @@ vLLM auto-shards the model across all 8 GPUs.
 
 ### From inside the CVM
 
+This is an operational status check. Remote verification also needs the accepted CPU boot chain and its enforced GPU check before secrets.
+
 ```bash
 phala ssh
 nvidia-smi conf-compute -q
@@ -182,14 +184,14 @@ nvidia-smi conf-compute -q
 
 ### Full attestation flow
 
-For the complete verification (NVIDIA NRAS + Intel TDX + report-data binding + compose-hash + Sigstore), follow `verify-attestation.md`.
+Follow [verify-attestation.md](verify-attestation.md#verify-nvidia-gpu) to verify the CPU image, GPU policy, boot appraisal, protected connection, and application identity. The accepted CPU runtime must check the GPU before enabling it and requesting workload keys; failure stops boot.
 
-The minimum check:
+Collect the CPU attestation as a starting point:
 
 ```bash
 phala cvms attestation my-llm --json > attestation.json
-# The .app_certificates[0].quote contains the combined TDX + GPU NV-CSE attestation.
-# Verify with Phala's online endpoint or dcap-qvl + nvattest-verifier offline.
+# .app_certificates[0].quote is the CPU TDX quote.
+# Follow verify-attestation.md for GPU boot evidence and policy checks.
 ```
 
 ---
@@ -261,10 +263,9 @@ phala login
 phala deploy -n my-llm -c docker-compose.yml -e .env -t h200.small --kms phala --wait
 
 # 3. Verify GPU CC + endpoint
-phala cvms attestation --json | jq '.app_certificates[0].quote'
-# The hex string decodes into the combined TDX quote. For GPU CC verification,
-# use NVIDIA's nvattest-verifier or dstack-verifier on the same blob —
-# the GPU quote is bound into the TDX report_data.
+phala cvms attestation my-llm --json > attestation.json
+# Complete verify-attestation.md before sending private data.
+# TDX GPU boot appraisal is bound through RTMR3 events, not report_data.
 phala ssh -- nvidia-smi conf-compute -q
 ENDPOINT=$(phala cvms get my-llm --json | jq -r '.endpoints[0]')
 curl $ENDPOINT/v1/chat/completions -H "Authorization: Bearer $VLLM_API_KEY" \

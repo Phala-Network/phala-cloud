@@ -2,7 +2,8 @@
 name: verify-attestation
 description: |
   Verify a Phala Cloud TEE attestation end-to-end — Intel TDX quote
-  to Intel root, NVIDIA GPU quote to NVIDIA root, report-data binding
+  to Intel root, NVIDIA GPU evidence to NVIDIA root, the measured CPU
+  boot gate that checks GPUs before secrets, report-data binding
   the signing key + nonce, OS image hash to dstack-os reproducible
   build, compose-hash to expected app, and Sigstore provenance for
   container images. Use this whenever a user asks "how do I verify
@@ -11,7 +12,7 @@ description: |
 
 # Verify TEE Attestation
 
-The hardware-rooted proof flow that other skills reference. Every step gives a separate cryptographic guarantee — together they prove a Phala Cloud workload is running on genuine TEE hardware with the exact code you registered.
+Verify a Phala Cloud workload against your accepted hardware, OS image, application, and key-release policy. For GPU workloads, verify that the measured CPU runtime checks the GPU before enabling it and requesting workload keys. Failed checks must stop boot before secrets are released.
 
 ## Operations
 
@@ -61,13 +62,14 @@ The response includes `nvidia_payload`, `intel_quote`, `signing_address`, and `s
 |---|---|
 | Replayed attestation from old/compromised hardware | **Nonce binding** — fresh per request |
 | Counterfeit CPU pretending to be Intel TDX | **Verify Intel TDX** via DCAP / Phala verify endpoint |
-| Counterfeit GPU pretending to be H100/H200 | **Verify NVIDIA** via NRAS |
+| Counterfeit or misconfigured GPU | **Verify NVIDIA GPU** against NVIDIA roots and your GPU policy |
+| Valid CPU and GPU evidence without an enforced handoff | **GPU boot gate** — accepted CPU code checks GPUs before readiness and key provisioning |
 | Signing key not actually inside the TEE | **Report-data binding** — first 32 bytes of `reportdata` = signing key |
 | Operator swapped your code post-boot | **Compose manifest hash** — `mr_config` includes compose-hash |
 | Operator swapped the OS image | **OS image hash** — matches dstack-os reproducible build |
 | Container image swapped at registry | **Sigstore provenance** — built from expected source |
 
-Skip any step → that risk is unguarded.
+Apply the checks for your workload. GPU workloads also require the boot gate and protected CPU-to-GPU connection described below; CPU-only CVMs do not require GPU evidence.
 
 ---
 
@@ -96,28 +98,97 @@ For app-CVM attestation (not hosted-API), the nonce is bound at handshake time v
 
 ## Verify NVIDIA GPU
 
-Only NVIDIA can confirm their hardware is genuine — secret keys baked into each chip at manufacturing.
+GPU verification has two parts: appraise NVIDIA evidence, then establish that the accepted CPU runtime enforces that appraisal before releasing secrets. Two independently valid hardware quotes do not establish this relationship.
 
-```python
-import json, base64, requests
+### NVIDIA evidence appraisal
 
-gpu_payload = json.loads(report["nvidia_payload"])
-assert gpu_payload["nonce"].lower() == request_nonce.lower()    # check fresh
+Use NVIDIA's [`nvattest` CLI and SDK](https://docs.nvidia.com/attestation/nv-attestation-sdk-cpp/latest/sdk-cli/introduction.html) for local or NRAS-backed verification. Use versions compatible with the deployment's evidence format.
 
-# Send to NVIDIA Remote Attestation Service (NRAS)
-r = requests.post("https://nras.attestation.nvidia.com/v3/attest/gpu", json=gpu_payload)
-result = r.json()
+Verify the evidence signatures, NVIDIA certificate chain and reference measurements, freshness, and accepted firmware/security state. For NRAS, authenticate the signed verdict, its issuer, validity, and nonce before applying policy. Decoding a JWT payload is not signature verification. Check Confidential Computing mode, debug/DevTools settings, and the expected device count explicitly.
 
-# Decode the JWT verdict
-jwt_token = result[0][1]
-payload_b64 = jwt_token.split(".")[1]
-padded = payload_b64 + "=" * ((4 - len(payload_b64) % 4) % 4)
-verdict = json.loads(base64.urlsafe_b64decode(padded))
+### Get GPU evidence yourself
 
-assert verdict["x-nvidia-overall-att-result"] is True
+These commands run **inside your GPU CVM**, or a container with `/var/run/dstack.sock` mounted. They use the [dstack v1 guest API](https://github.com/Dstack-TEE/dstack/blob/250334c26a97a579fe26d911d89e8e90256d8572/sdk/curl/api.md#7-attest-gpu-v1). Check that your deployed guest image supports these methods:
+
+```bash
+curl --fail-with-body --unix-socket /var/run/dstack.sock \
+  http://dstack/v1/Version
 ```
 
-A passing NRAS verdict means the GPU silicon is genuine NVIDIA, the firmware is signed, and Confidential Compute mode is active.
+The frozen v0.5.x API does not expose these GPU methods. A 404 means v1 is unavailable; a 501 from `AttestGpu` means the image has no GPU evidence collector. Use a compatible GPU guest image for this procedure. These are internal guest endpoints, not URLs on `inference.phala.com`. Hosted API clients need evidence published by their selected model deployment; a gateway's CPU quote describes the gateway.
+
+**Boot-time evidence:** fetch the CPU attestation and the NVIDIA appraisal saved during boot together:
+
+```bash
+CHALLENGE=$(openssl rand -hex 32)
+curl --fail-with-body --unix-socket /var/run/dstack.sock \
+  http://dstack/v1/Attest \
+  -H 'Content-Type: application/json' \
+  -d "{\"report_data\":\"$CHALLENGE\",\"include_boottime_gpu_evidence\":true}" \
+  -o boot-attestation.json
+```
+
+The response has `attestation` and `boottime_gpu_evidence`. Select the bundle with vendor `nvidia` and format `nvidia-nvattest-boottime-json-v1`. Its hex `evidence` decodes to the exact boot-time `nvattest` output, including `claims` and `detached_eat`. An empty list means no boot-time GPU output was returned. The challenge freshens the CPU report, not the historical GPU record. Authenticate the record using the CPU quote and event-log binding below.
+
+**Fresh GPU evidence:** ask the GPU to answer your own 32-byte challenge:
+
+```bash
+GPU_NONCE=$(openssl rand -hex 32)
+curl --fail-with-body --unix-socket /var/run/dstack.sock \
+  http://dstack/v1/AttestGpu \
+  -H 'Content-Type: application/json' \
+  -d "{\"nonce\":\"$GPU_NONCE\"}" \
+  -o gpu-attestation.json
+```
+
+Select `bundles` with vendor `nvidia` and format `nvidia-nvattest-collect-evidence-json-v1`. Decode the hex `evidence` bytes into a file without reformatting them. For example, save this as `extract-gpu-evidence.py`:
+
+```python
+import json
+import sys
+from pathlib import Path
+
+source, field, evidence_format, output = {
+    "fresh": ("gpu-attestation.json", "bundles",
+              "nvidia-nvattest-collect-evidence-json-v1", "gpu-evidence.json"),
+    "boot": ("boot-attestation.json", "boottime_gpu_evidence",
+             "nvidia-nvattest-boottime-json-v1", "gpu-boot-record.json"),
+}[sys.argv[1]]
+report = json.loads(Path(source).read_text())
+bundles = [b for b in report[field]
+           if b["vendor"] == "nvidia"
+           and b["format"] == evidence_format]
+if len(bundles) != 1:
+    raise ValueError("Expected one NVIDIA evidence bundle")
+Path(output).write_bytes(bytes.fromhex(bundles[0]["evidence"]))
+```
+
+Appraise all devices in that evidence with NVIDIA's verifier, using the same nonce:
+
+```bash
+python3 extract-gpu-evidence.py fresh
+nvattest attest --device gpu --verifier local \
+  --gpu-evidence-source file --gpu-evidence-file gpu-evidence.json \
+  --nonce "$GPU_NONCE" --format json > gpu-appraisal.json
+```
+
+Install `nvattest` on the verifying machine using NVIDIA's linked instructions. Expect a successful exit and `result_code: 0`; then apply your accepted GPU policy to all returned claims. See the [command reference](https://docs.nvidia.com/attestation/nv-attestation-sdk-cpp/latest/sdk-cli/command-reference.html#attest) for `--relying-party-policy` and NRAS-backed appraisal. This appraises the GPU evidence independently; it does not establish the CPU boot gate or bind that GPU to this CVM. Keep the nonce with the saved evidence for later verification.
+
+Run `python3 extract-gpu-evidence.py boot` to save the boot record as `gpu-boot-record.json`. Authenticate those exact bytes through the CPU quote and measured event log before inspecting its claims. This is an appraisal record, not the fresh raw-evidence input to `nvattest attest` above.
+
+### GPU boot gate
+
+Verify the CPU quote and accepted guest image as described below. Review that image's GPU initialization code and measured GPU policy: all required GPUs must pass verification and policy checks before GPU readiness and workload-key provisioning. Confirm the runtime uses the protected CPU-to-GPU connection for private data.
+
+For dstack TDX releases implementing the [measured GPU boot appraisal](https://github.com/Dstack-TEE/dstack/blob/250334c26a97a579fe26d911d89e8e90256d8572/docs/security/security-model.md#gpu-security-for-ai-workloads):
+
+1. Replay the event log against the verified quote's RTMR3. Require exactly one `gpu-policy-hash` event immediately after `compose-hash`, matching `SHA-256(JCS(requirements.gpu_policy))`. An omitted policy uses `{}`. Check `MrConfigV3.gpu_policy_hash` too when present. Accept only a policy requiring GPU attestation and the expected production security settings.
+2. Require exactly one `gpu-attestation` event before `system-ready`. Check the expected nonzero device count, CC state, and allowed DevTools/debug/secure-boot state. The accepted CPU code must enforce these checks before requesting app keys. The event itself is recorded after key provisioning for TPM-unseal compatibility.
+3. When independently appraising the boot-time NVIDIA evidence, request `/v1/Attest` with `include_boottime_gpu_evidence`. Select the `nvidia-nvattest-boottime-json-v1` bundle and compare `SHA-256(hex_decode(bundle.evidence))` with the measured event's `evidence_sha256`. Hash the exact decoded bytes, then appraise the authenticated evidence.
+
+These bindings use RTMR3, not application-controlled `report_data`. `/v1/AttestGpu` returns fresh evidence for a caller nonce; it does not bind that GPU to the CPU's boot appraisal. A boot appraisal records startup checks, not continuous device identity or physical co-location. See the linked security model for the platform and lifetime boundaries.
+
+Use the evidence contract for the deployed dstack release. If the accepted CPU image, required policy, or boot-gate evidence cannot be established, report GPU workload verification as incomplete and withhold secrets. A standalone GPU quote or local `nvidia-smi` status does not complete this verification.
 
 ---
 
@@ -290,20 +361,21 @@ If you can't reach Phala's verify endpoint or NRAS:
 | Step | Offline tool |
 |---|---|
 | Verify Intel TDX quote | [`dcap-qvl`](https://github.com/Phala-Network/dcap-qvl) — chains to Intel PCS root |
-| Verify NVIDIA GPU quote | [`nvattest-verifier`](https://github.com/NVIDIA/nvtrust) — NVIDIA's local verifier (chains to NVIDIA root) |
+| Verify NVIDIA GPU evidence | [`nvattest`](https://docs.nvidia.com/attestation/nv-attestation-sdk-cpp/latest/sdk-cli/command-reference.html#attest) with local verification and the required cached collateral |
+| Verify GPU boot gate | Accepted CPU image and GPU policy; replay TDX RTMR3 events and bind any boot-time NVIDIA evidence as above |
 | Verify OS image hash | Compare against `digest.txt` from [meta-dstack release tarball](https://github.com/Dstack-TEE/meta-dstack/releases) |
 | Verify compose-hash | sha256 the app_compose JSON locally; check against `mr_config` byte for byte |
 | Verify Sigstore record | `cosign verify --certificate-identity-regexp '...' --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' <image>` |
 
-End-to-end offline: clone [Phala-Network/dstack-verifier](https://github.com/Phala-Network/dstack-verifier), feed it `attestation.json`, get a single PASS/FAIL.
+Offline verification requires the relevant vendor collateral and release artifacts in advance. Use [Phala-Network/dstack-verifier](https://github.com/Phala-Network/dstack-verifier) for the checks it supports; GPU workloads additionally require the GPU appraisal, policy, and boot-gate checks above.
 
 ---
 
-## Reference: minimal end-to-end (Python)
+## Reference: CPU field checks (Python)
 
 ```python
-# Full flow — verify a Private AI API response is genuine
-import secrets, requests, json, base64, hashlib
+# Partial example: CPU fields and application binding; complete all policy checks above
+import os, secrets, requests, json, hashlib
 
 api_key = os.environ["PRIVATE_AI_API_KEY"]
 model = "phala/deepseek-chat-v3-0324"
@@ -317,12 +389,8 @@ report = requests.get(
     headers={"Authorization": f"Bearer {api_key}"},
 ).json()
 
-# 3. Verify NVIDIA GPU
-gpu_payload = json.loads(report["nvidia_payload"])
-assert gpu_payload["nonce"].lower() == nonce.lower()
-nras = requests.post("https://nras.attestation.nvidia.com/v3/attest/gpu", json=gpu_payload).json()
-verdict = json.loads(base64.urlsafe_b64decode(nras[0][1].split(".")[1] + "=="))
-assert verdict["x-nvidia-overall-att-result"] is True
+# 3. Complete NVIDIA appraisal and the CPU-enforced GPU boot gate
+# using the evidence retrieval and verification procedures above.
 
 # 4. Verify Intel TDX
 intel = requests.post(
@@ -343,7 +411,7 @@ if isinstance(tcb, str): tcb = json.loads(tcb)
 ch = hashlib.sha256(tcb["app_compose"].encode()).hexdigest()
 assert intel["quote"]["body"]["mr_config_id"].lower().startswith(("0x01" + ch).lower())
 
-print("ALL VERIFIED — request to", model, "ran on genuine GPU TEE with the expected code.")
+print("CPU FIELDS MATCH — complete GPU boot-gate, image, policy, and signature checks before releasing secrets.")
 ```
 
-A reference implementation lives at [`Phala-Network/private-ml-sdk/vllm-proxy/verifiers/attestation_verifier.py`](https://github.com/Phala-Network/private-ml-sdk/blob/main/vllm-proxy/verifiers/attestation_verifier.py) — copy it, point at your model + key, run.
+When evaluating an existing verifier, check its GPU appraisal, accepted CPU image and policy, and boot-gate coverage against the procedures above. A passing CPU quote check and a passing GPU quote check are separate inputs to that verification.
