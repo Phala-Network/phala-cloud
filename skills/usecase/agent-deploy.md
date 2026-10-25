@@ -200,9 +200,9 @@ The hex `quote` decodes into a TDX quote containing:
 
 ### Verify offline
 
-Agents can run on CPU-only CVMs and call remote model APIs. Follow `verify-attestation.md` for CPU identity, report-data binding, application configuration, and image provenance. Only if a GPU is attached to the agent CVM, also verify the CPU-enforced GPU boot gate before readiness and secret provisioning. A failed GPU check must stop boot.
+Agents can run on CPU-only CVMs and call remote model APIs. Follow `verify-attestation.md` for CPU identity, report-data binding, application configuration, and image provenance. If a GPU is attached, dstack’s standard GPU policy checks it before starting the agent and provisioning keys. Verify the CPU image and configuration that enforce this policy.
 
-The following checks only the CPU quote. Complete the image, application, and binding checks before sending secrets. GPU boot-gate checks apply only to attached GPUs:
+The following checks only the CPU quote. Complete the image, application, and binding checks before sending secrets. Direct GPU evidence inspection is optional for agents with attached GPUs:
 
 ```bash
 phala cvms attestation my-agent --json > attestation.json

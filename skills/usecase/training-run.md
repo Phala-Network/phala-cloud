@@ -335,7 +335,7 @@ phala cvms attestation llama-sft --json > attestation.json
 phala ssh -- nvidia-smi conf-compute -q       # ConfComputeMode : ON
 ```
 
-For every training node, follow [verify-attestation.md](verify-attestation.md#verify-nvidia-gpu): verify the accepted CPU image, GPU policy and boot appraisal, protected connection, and application identity. The CPU runtime must check its GPUs before enabling them and requesting dataset keys, with failure stopping boot. The `manifest.signed.json` quote separately binds the manifest hash through `report_data`; it does not replace GPU boot verification.
+For every training node, follow [verify-attestation.md](verify-attestation.md#verify-nvidia-gpu) to verify the CPU attestation, approved dstack image, and application configuration, including the GPU policy. Dstack checks the GPUs before starting training and provisioning dataset keys; failure stops boot. Raw GPU evidence inspection is optional. The `manifest.signed.json` quote separately binds the manifest hash through `report_data`.
 
 ---
 

@@ -174,7 +174,7 @@ vLLM auto-shards the model across all 8 GPUs.
 
 ### From inside the CVM
 
-This is an operational status check. Remote verification also needs the accepted CPU boot chain and its enforced GPU check before secrets.
+Dstack’s standard GPU policy verifies GPU attestation and Confidential Computing mode before starting vLLM and provisioning workload keys. Failed verification stops boot. The following command checks operational status:
 
 ```bash
 phala ssh
@@ -184,14 +184,14 @@ nvidia-smi conf-compute -q
 
 ### Full attestation flow
 
-Follow [verify-attestation.md](verify-attestation.md#verify-nvidia-gpu) to verify the CPU image, GPU policy, boot appraisal, protected connection, and application identity. The accepted CPU runtime must check the GPU before enabling it and requesting workload keys; failure stops boot.
+Follow [verify-attestation.md](verify-attestation.md#verify-nvidia-gpu) to verify the CPU attestation, approved dstack image, and application configuration, including the GPU policy. Dstack performs the GPU check during boot. The same guide includes optional raw GPU evidence retrieval and independent appraisal.
 
 Collect the CPU attestation as a starting point:
 
 ```bash
 phala cvms attestation my-llm --json > attestation.json
 # .app_certificates[0].quote is the CPU TDX quote.
-# Follow verify-attestation.md for GPU boot evidence and policy checks.
+# Verify the approved dstack CPU image, application, and GPU policy.
 ```
 
 ---

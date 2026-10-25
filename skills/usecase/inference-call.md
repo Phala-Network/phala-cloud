@@ -251,7 +251,7 @@ response = client.chat.completions.create(
 
 ## Verify Signature
 
-Verify the serving workload, protected connections, and response binding. For GPU workloads, also establish that the accepted CPU runtime checks the GPU before releasing secrets. Two hardware quotes alone do not establish this enforcement.
+Verify the serving workload, protected connections, and response binding. For dstack GPU deployments, the standard boot policy verifies the GPU before application startup and key provisioning. Verify the CPU image and deployment policy that enforce this behavior.
 
 ### Per-request attestation report
 
@@ -275,9 +275,9 @@ The response has `nvidia_payload`, `intel_quote`, `signing_address`, and `signin
 
 ### Full verification flow
 
-Follow `verify-attestation.md` for CPU identity, GPU appraisal and boot-gate policy, application identity, protected connections, and response binding. The GPU section includes boot-time and fresh evidence retrieval for compatible dstack guest images. Apply the evidence contract of the deployed workload; a gateway CPU report is not model-worker GPU evidence.
+Follow `verify-attestation.md` for CPU identity, application identity and policy, protected connections, and response binding. For dstack GPU workloads, verify the approved CPU image and GPU policy; dstack performs GPU verification before starting the application. The GPU section also includes optional boot-time and fresh evidence retrieval for independent inspection. Apply the evidence contract of the deployed workload; a gateway CPU report is not model-worker GPU evidence.
 
-When using an existing verifier, check that it covers the accepted CPU image, GPU policy, and fail-closed boot gate as well as the vendor signatures.
+When using an existing verifier, check its coverage of the accepted CPU image and policy that enforce dstack’s fail-closed GPU boot gate. Independently appraising raw GPU evidence is an additional inspection path.
 
 ---
 
