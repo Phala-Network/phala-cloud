@@ -202,7 +202,7 @@ phala cvms attestation my-workload --json | jq '.app_certificates[0].quote'
 
 The hex `quote` decodes into a combined TDX + GPU NV-CSE attestation. For the full verification flow (Intel TDX + NVIDIA NRAS + report-data binding + compose-hash), follow `verify-attestation.md`. Offline-only path: `dcap-qvl` for the TDX layer + `nvattest-verifier` for the NVIDIA layer.
 
-For a full reference on parsing the combined TDX+NVIDIA quote, see `https://docs.phala.com/phala-cloud/confidential-ai/verify/verify-attestation`.
+For self-deployed CVM verification, see [Self-Deployed CVMs](verify-attestation.md#self-deployed-cvms), [Verify Your Application](https://docs.phala.com/phala-cloud/attestation/verify-your-application), and [Verify the Platform](https://docs.phala.com/phala-cloud/attestation/verify-the-platform).
 
 ---
 

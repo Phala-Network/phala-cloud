@@ -39,7 +39,6 @@ if (!apiKey) throw new Error("PHALA_AI_API_KEY is required");
 
 const aci = await connectAci({
   baseURL: "https://inference.phala.com/v1",
-  policy: { requireProductionOs: true },
   serving: {
     requireVerified: true,
     requireReceipt: true,
@@ -71,7 +70,7 @@ try {
 
 `connectAci()` verifies a fresh gateway report and creates a hostname-validated transport pinned to the attested TLS SPKI. Send requests through `aci.fetch`. Consume the complete response before calling `verifyReceipt()`, including every SSE frame when streaming. The SDK does not automatically audit each receipt; call it before accepting the result. Close the connection in `finally` and propagate verification failures.
 
-`requireProductionOs` enforces the OS policy. For reviewed-release enforcement, configure `policy.acceptedComposeHashes` from an independently obtained, authenticated allowlist. Copying a hash from the endpoint does not establish a reviewed release. Pair compose appraisal with a dstack verifier result for the same quote and require `is_valid: true` for a production security decision. See the [SDK guide](https://docs.phala.com/phala-cloud/confidential-ai/verify/typescript-sdk) for release policy and browser limits; browser JavaScript alone cannot enforce the runtime's TLS pin.
+The SDK does not check whether the gateway runs a production or development dstack OS image. For OS assurance, run an independent [dstack verifier](https://github.com/Dstack-TEE/dstack/tree/next/dstack/verifier) on the same quote, event log, and VM configuration and require `is_valid: true`. For reviewed-release enforcement, configure `policy.acceptedComposeHashes` from an independently obtained, authenticated allowlist. Copying a hash from the endpoint does not establish a reviewed release. See the [SDK guide](https://docs.phala.com/phala-cloud/confidential-ai/verify/typescript-sdk) for release policy and browser limits; browser JavaScript alone cannot enforce the runtime's TLS pin.
 
 ## Private AI Proxy
 
@@ -120,7 +119,7 @@ The current receipt key has `algo: "ed25519"` and `key_id: "dstack-kms-receipt-e
 
 ### Gateway verification checks
 
-The SDK applies the dstack policy. A verifier implementation must:
+A complete verification policy must include these checks, with an independent dstack verifier for OS assurance:
 
 1. Verify `attestation.evidence.quote` against Intel DCAP collateral, check TCB/OS policy and private-key custody.
 2. Recompute `workload_keyset_digest` from the complete `attestation.workload_keyset` using JCS and SHA-256. `jq` key sorting is not a general JCS implementation.
