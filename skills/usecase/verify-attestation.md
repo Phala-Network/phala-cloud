@@ -1,349 +1,204 @@
 ---
 name: verify-attestation
 description: |
-  Verify a Phala Cloud TEE attestation end-to-end — Intel TDX quote
-  to Intel root, NVIDIA GPU quote to NVIDIA root, report-data binding
-  the signing key + nonce, OS image hash to dstack-os reproducible
-  build, compose-hash to expected app, and Sigstore provenance for
-  container images. Use this whenever a user asks "how do I verify
-  this is really running in TEE?"
+  Verify Phala Private AI through ACI gateway attestation, pinned TLS,
+  signed receipts, and attested upstream sessions using the TypeScript SDK
+  or Private AI Proxy. Also covers where to verify a self-deployed Phala
+  Cloud CVM's Intel TDX, GPU, OS, application, and key-custody evidence.
+  Use when users ask whether a workload or inference response runs in a TEE.
 ---
 
 # Verify TEE Attestation
 
-The hardware-rooted proof flow that other skills reference. Every step gives a separate cryptographic guarantee — together they prove a Phala Cloud workload is running on genuine TEE hardware with the exact code you registered.
+Choose the evidence for the service you use. Hosted Private AI uses ACI: the gateway report attests the Phala gateway, and a response receipt cites its upstream's session. A self-deployed CVM has its own application quote and verification policy. Upstream evidence coverage varies by provider.
 
 ## Operations
 
 | User says | Operation |
-|---|---|
-| "is this really in TEE?", "verify the CVM" | **Quick Check** |
-| "verify the GPU TEE", "NVIDIA quote" | **Verify NVIDIA GPU** |
-| "verify the TDX quote", "Intel root" | **Verify Intel TDX** |
-| "fresh nonce", "replay attack" | **Nonce Binding** |
-| "OS image hash", "reproducible build" | **OS Image Verification** |
-| "compose-hash matches", "exact code running" | **Compose Manifest** |
-| "verify the response signature" | **Verify Signature** |
-| "offline verifier", "no internet" | **Offline Verification** |
+| --- | --- |
+| "verify hosted inference", "verify the response signature" | **Verify a Hosted Response** |
+| "show the attestation", "inspect the quote" | **Inspect Gateway Attestation** |
+| "receipt", "which upstream served this?" | **Receipts and Sessions** |
+| "coding agent", "proxy verification" | **Private AI Proxy** |
+| "verify my CVM", "GPU quote", "OS image", "compose hash" | **Self-Deployed CVMs** |
 
-> **Authoritative doc:** [docs.phala.com/phala-cloud/confidential-ai/verify](https://docs.phala.com/phala-cloud/confidential-ai/verify) is the source of truth. This skill summarizes it as runnable steps.
+The [ACI verification docs](https://docs.phala.com/phala-cloud/confidential-ai/verify/overview) and [ACI specification](https://github.com/Dstack-TEE/private-ai-gateway/blob/main/spec/aci.md) describe the hosted protocol. For CVMs, use the [Cloud attestation guides](https://docs.phala.com/phala-cloud/attestation/get-attestation).
 
----
+## Verify a Hosted Response
 
-## Quick Check
+Ordinary OpenAI SDK clients and cURL do not verify attestation, pin the gateway's TLS key, or verify response receipts. Use `connectAci()` from the official TypeScript SDK for Node.js/Bun applications, or **Private AI Proxy** for agent tools.
 
-If you just want to confirm "yes, this CVM is running in TEE":
+Install `@phala/aci-verifier` and `openai` in your project using its package manager. The runtime is ESM-only and requires Node.js 20.18.1+ or Bun 1.4.0+.
+
+```typescript
+import OpenAI from "openai";
+import { connectAci } from "@phala/aci-verifier/runtime";
+
+const apiKey = process.env.PHALA_AI_API_KEY;
+if (!apiKey) throw new Error("PHALA_AI_API_KEY is required");
+
+const aci = await connectAci({
+  baseURL: "https://inference.phala.com/v1",
+  serving: {
+    requireVerified: true,
+    requireReceipt: true,
+  },
+});
+
+try {
+  const client = new OpenAI({
+    baseURL: aci.baseURL,
+    apiKey,
+    fetch: aci.fetch,
+  });
+
+  const response = await client.chat.completions.create({
+    model: "z-ai/glm-5.3",
+    messages: [{ role: "user", content: "Explain attestation." }],
+  });
+
+  const audit = await aci.verifyReceipt();
+  if (!audit.transcript.verdict.verified) {
+    throw new Error(audit.transcript.verdict.line);
+  }
+
+  console.log(response.choices[0].message.content);
+} finally {
+  await aci.close();
+}
+```
+
+`connectAci()` verifies a fresh gateway report and creates a hostname-validated transport pinned to the attested TLS SPKI. Send requests through `aci.fetch`. Consume the complete response before calling `verifyReceipt()`, including every SSE frame when streaming. The SDK does not automatically audit each receipt; call it before accepting the result. Close the connection in `finally` and propagate verification failures.
+
+The SDK does not check whether the gateway runs a production or development dstack OS image. For OS assurance, run an independent [dstack verifier](https://github.com/Dstack-TEE/dstack/tree/next/dstack/verifier) on the same quote, event log, and VM configuration and require `is_valid: true`. For reviewed-release enforcement, configure `policy.acceptedComposeHashes` from an independently obtained, authenticated allowlist. Copying a hash from the endpoint does not establish a reviewed release. See the [SDK guide](https://docs.phala.com/phala-cloud/confidential-ai/verify/typescript-sdk) for release policy and browser limits; browser JavaScript alone cannot enforce the runtime's TLS pin.
+
+## Private AI Proxy
+
+[Private AI Proxy](https://docs.phala.com/phala-cloud/confidential-ai/agents/private-ai-proxy) verifies the gateway and pins the channel before sending agent traffic, then audits each receipt after delivery.
+
+After installing it, create a Phala profile and enter the API key at its hidden prompt:
 
 ```bash
-# Summary
-phala cvms attestation my-app
+pap profiles add --id work --name Phala \
+  --url https://inference.phala.com --provider phala
+pap start --profile work
+pap status --json
+```
 
-# Full JSON (for programmatic verification)
+Connect the intended agent using the proxy's documented workflow. Agent tools, MCP servers, browser automation, and telemetry remain separate trust boundaries.
+
+## Inspect Gateway Attestation
+
+The gateway report is public. These commands only inspect the document; they do not verify the quote, nonce binding, or channel:
+
+```bash
+NONCE=$(openssl rand -hex 32)
+curl --fail-with-body -sS "https://inference.phala.com/v1/aci/attestation?nonce=$NONCE" \
+  -o report.json
+
+jq '{api_version, workload_keyset_digest,
+     tee_type: .attestation.tee_type,
+     report_data: .attestation.report_data,
+     keyset: .attestation.workload_keyset,
+     provenance: .attestation.source_provenance}' report.json
+```
+
+The nonce must be exactly 64 lowercase hex characters (32 random bytes). A report fetched without a nonce does not establish freshness.
+
+| Field | Meaning |
+| --- | --- |
+| `api_version` | `aci/1`. |
+| `workload_keyset_digest` | `sha256:` plus SHA-256 of the complete keyset in RFC 8785 JCS form. |
+| `attestation.workload_keyset` | `subject`, `not_after`, `receipt_signing_keys`, `e2ee_public_keys`, and `tls_public_keys`. |
+| `attestation.report_data` | SHA-256 of the nonce/keyset statement, bound into the hardware quote. |
+| `attestation.evidence` | Quote, event log, VM configuration, app compose, key custody, and downstream TLS binding. |
+| `attestation.source_provenance` | Workload-declared source/build labels; they require measured corroboration. |
+| `service_capabilities` | Supported E2EE extension versions and `serving: "aggregator"`. |
+
+The current receipt key has `algo: "ed25519"` and `key_id: "dstack-kms-receipt-ed25519-v1"`. Resolve its public key from a verified report.
+
+### Gateway verification checks
+
+A complete verification policy must include these checks, with an independent dstack verifier for OS assurance:
+
+1. Verify `attestation.evidence.quote` against Intel DCAP collateral, check TCB/OS policy and private-key custody.
+2. Recompute `workload_keyset_digest` from the complete `attestation.workload_keyset` using JCS and SHA-256. `jq` key sorting is not a general JCS implementation.
+3. Hash this exact statement with the recomputed digest and your nonce, without whitespace and in this field order:
+
+   ```text
+   {"keyset_digest":"sha256:<hex>","nonce":"<64 lowercase hex>","purpose":"aci.report_data.v1"}
+   ```
+
+   Require that hash to equal `attestation.report_data` and the quote's first 32 report-data bytes, with the remaining 32 bytes zero. The nonce is part of this statement, rather than a separate half of the quote's report data.
+4. Check `attestation.workload_keyset.not_after` is a future Unix timestamp under your policy; reject implausibly distant expiry.
+5. Replay the event log to the quote's RTMR3 and confirm the measured `compose-hash` equals `sha256(app_compose)`. Apply an independently authenticated release allowlist when required. `source_provenance` alone is not a trust root.
+6. Before releasing sensitive data, pin hostname-validated TLS to the SPKI listed for `inference.phala.com` in the attested keyset.
+
+See [Verify Attestation](https://docs.phala.com/phala-cloud/confidential-ai/verify/verify-attestation) for the complete procedure. A valid gateway quote alone does not verify a particular response or every upstream's GPU.
+
+## Receipts and Sessions
+
+The response's `x-receipt-id` identifies its receipt. Fetch it after consuming the full response, using the same API key that made the request. A missing key returns `401` for a credential-bound receipt; a different key returns `404`.
+
+The following commands inspect an existing receipt and session. They do not produce a verification verdict:
+
+```bash
+# Set RECEIPT_ID to the x-receipt-id header from your inference response.
+curl --fail-with-body -sS "https://inference.phala.com/v1/aci/receipts/$RECEIPT_ID" \
+  -H "Authorization: Bearer $PHALA_AI_API_KEY" -o receipt.json
+
+jq '{receipt_id, workload_keyset_digest, key_id, endpoint,
+     upstream: [.event_log[] | select(.type == "upstream.verified")]}' receipt.json
+
+# Stop if the receipt does not cite a successful upstream session.
+SESSION_ID=$(jq -er '.event_log[] | select(.type == "upstream.verified" and .result == "verified" and .required == true) | .session_id | select(type == "string" and test("^[0-9a-f]{64}$"))' receipt.json) && \
+  curl --fail-with-body -sS "https://inference.phala.com/v1/aci/sessions/$SESSION_ID" \
+    -o session.json
+```
+
+For verification, the client must:
+
+1. Require the receipt's `workload_keyset_digest` to match the verified report, resolve `key_id` in `receipt_signing_keys`, and verify the Ed25519 signature over the JCS receipt with `signature` removed.
+2. Match the `request.received` and `response.returned` events' `body_hash` values to the exact request and response bytes. SSE response hashes cover the complete in-order stream including framing and the terminating sentinel. E2EE request hashes follow the transport extension's restored-plaintext rules.
+3. Require `upstream.verified` with `result: "verified"`, `required: true`, and a `session_id` for a successful request on this TEE-only endpoint.
+4. Fetch the full session and recompute `session_id` as the bare SHA-256 hex digest of its complete JCS document. Check decoded `evidence.data` against `evidence.digest`, verify the upstream evidence and channel binding, and apply your claim policy. Require the receipt's `served_at` to fall within the session's `established_at`/`expires_at` interval.
+
+A receipt event is an assertion by the attested gateway. Independently checking the cited session's evidence provides the upstream audit; a claim marked `unknown` is not a pass. GPU attestation alone does not prove that GPU's binding to the serving CPU TEE.
+
+### Inspect current sessions
+
+```bash
+curl --fail-with-body -sS --get https://inference.phala.com/v1/aci/sessions \
+  --data-urlencode 'model=z-ai/glm-5.3' | \
+  jq '.sessions[] | {session_id, upstream_name, channel_binding, claims}'
+
+curl --fail-with-body -sS 'https://inference.phala.com/v1/aci/sessions?upstream_name=chutes'
+```
+
+The list returns `{ "api_version": "aci/1", "sessions": [...] }`. The filter and record field are `upstream_name`, a route label such as `chutes` or `phala-267`. List entries omit `evidence.data`, so they cannot be used for a full content-address check. Fetch `/v1/aci/sessions/{session_id}` to verify the full document.
+
+To restrict a request to sessions you have accepted, send `provider: {"aci_verified": true, "aci_session_ids": ["<verified session id>"]}`. A `412 session_not_accepted` means none of the pinned sessions can serve; verify current sessions before changing the pins. A `503 upstream_verification_failed` means required upstream verification or channel binding failed. Both refuse forwarding; do not weaken verification to retry. See [Attested Routing](https://docs.phala.com/phala-cloud/confidential-ai/confidential-model/attested-routing).
+
+## Self-Deployed CVMs
+
+Use this path for a workload deployed with `phala deploy`, including a custom GPU server. Its evidence and report-data layout are application-specific; the hosted gateway's ACI layout does not automatically apply.
+
+```bash
+# Inspect the CVM's bootstrap attestation.
+phala cvms attestation my-app
 phala cvms attestation my-app --json > attestation.json
 ```
 
-The summary should report `is_online: true`, `is_public: true`, and `error: null`. The JSON contains `app_certificates[0].quote` — a hex-encoded TDX quote that's the basis for everything else below.
-
-For inference (hosted Private AI API), use the per-request flow:
-
-```bash
-curl "https://api.redpill.ai/v1/attestation/report?model=phala/deepseek-chat-v3-0324&nonce=$(openssl rand -hex 32)" \
-  -H "Authorization: Bearer $PRIVATE_AI_API_KEY" > report.json
-```
-
-The response includes `nvidia_payload`, `intel_quote`, `signing_address`, and `signing_algo`.
-
----
-
-## Why every step
-
-| Risk | Step that catches it |
-|---|---|
-| Replayed attestation from old/compromised hardware | **Nonce binding** — fresh per request |
-| Counterfeit CPU pretending to be Intel TDX | **Verify Intel TDX** via DCAP / Phala verify endpoint |
-| Counterfeit GPU pretending to be H100/H200 | **Verify NVIDIA** via NRAS |
-| Signing key not actually inside the TEE | **Report-data binding** — first 32 bytes of `reportdata` = signing key |
-| Operator swapped your code post-boot | **Compose manifest hash** — `mr_config` includes compose-hash |
-| Operator swapped the OS image | **OS image hash** — matches dstack-os reproducible build |
-| Container image swapped at registry | **Sigstore provenance** — built from expected source |
-
-Skip any step → that risk is unguarded.
-
----
-
-## Nonce Binding
-
-Generate a fresh 32-byte nonce per attestation request. The TEE embeds this nonce into the report — replayed quotes won't match.
-
-```python
-import secrets
-request_nonce = secrets.token_hex(32)   # 64 hex chars
-```
-
-Pass the nonce when you fetch the attestation report:
-
-```python
-import requests
-report = requests.get(
-    f"https://api.redpill.ai/v1/attestation/report?model={model}&nonce={request_nonce}",
-    headers={"Authorization": f"Bearer {api_key}"},
-).json()
-```
-
-For app-CVM attestation (not hosted-API), the nonce is bound at handshake time via RA-TLS, and you verify by extracting `report_data` from the TLS cert's TDX-quote extension.
-
----
-
-## Verify NVIDIA GPU
-
-Only NVIDIA can confirm their hardware is genuine — secret keys baked into each chip at manufacturing.
-
-```python
-import json, base64, requests
-
-gpu_payload = json.loads(report["nvidia_payload"])
-assert gpu_payload["nonce"].lower() == request_nonce.lower()    # check fresh
-
-# Send to NVIDIA Remote Attestation Service (NRAS)
-r = requests.post("https://nras.attestation.nvidia.com/v3/attest/gpu", json=gpu_payload)
-result = r.json()
-
-# Decode the JWT verdict
-jwt_token = result[0][1]
-payload_b64 = jwt_token.split(".")[1]
-padded = payload_b64 + "=" * ((4 - len(payload_b64) % 4) % 4)
-verdict = json.loads(base64.urlsafe_b64decode(padded))
-
-assert verdict["x-nvidia-overall-att-result"] is True
-```
-
-A passing NRAS verdict means the GPU silicon is genuine NVIDIA, the firmware is signed, and Confidential Compute mode is active.
-
----
-
-## Verify Intel TDX
-
-Two paths — an online verifier service (easy) or local DCAP verification (offline).
-
-### Online (Phala verifier)
-
-```python
-intel_result = requests.post(
-    "https://cloud-api.phala.com/api/v1/attestations/verify",
-    json={"hex": report["intel_quote"]},
-).json()
-
-assert intel_result["quote"]["verified"] is True
-```
-
-### Offline (DCAP)
-
-Use [`dcap-qvl`](https://github.com/Phala-Network/dcap-qvl) — Phala's open-source DCAP quote verifier:
-
-```bash
-cargo install --git https://github.com/Phala-Network/dcap-qvl
-echo "$INTEL_QUOTE_HEX" | xxd -r -p > quote.bin
-dcap-qvl verify quote.bin
-```
-
-This chains to Intel's PCS root cert, no network call to Phala.
-
-For an interactive sanity check without code, paste the hex `intel_quote` into the [TEE Attestation Explorer](https://proof.t16z.com/) — it decodes the quote and shows TDX version + security features.
-
----
-
-## Report-Data Binding
-
-The TDX quote's `reportdata` field is 64 bytes the application provides to the hardware at attestation time. Phala packs it as:
-
-| Bytes | Content |
-|---|---|
-| 0–31 | Signing address (ECDSA: 20-byte Eth address right-padded; Ed25519: 32-byte pubkey) |
-| 32–63 | Your request nonce |
-
-Verify both halves match what you expect:
-
-```python
-report_data = bytes.fromhex(intel_result["quote"]["body"]["reportdata"].removeprefix("0x"))
-
-embedded_address = report_data[:32]
-embedded_nonce = report_data[32:64]
-
-if report["signing_algo"] == "ecdsa":
-    addr = bytes.fromhex(report["signing_address"].removeprefix("0x"))
-    assert embedded_address == addr.ljust(32, b"\x00")
-else:
-    pubkey = bytes.fromhex(report["signing_address"])
-    assert embedded_address == pubkey
-
-assert embedded_nonce.hex() == request_nonce
-```
-
-This proves: (1) the signing key was generated inside the TEE — it's bound into hardware-attested report data; (2) the attestation is fresh — it contains your unique nonce; (3) the signing key you'll use for verifying responses actually belongs to this TEE instance.
-
----
-
-## OS Image Verification
-
-Verify the operating system the CVM booted is the dstack-os reproducible build, not a tampered image.
-
-The TDX `mrtd` and `rtmr0..3` measurements are folded into the quote at boot. Compare them against the expected values from [meta-dstack reproducible builds](https://github.com/Dstack-TEE/meta-dstack#reproducible-build-the-guest-image):
-
-```bash
-tar -xzf dstack-0.5.5.tar.gz
-cat dstack-0.5.5/digest.txt
-# 0b327bcd642788b0517de3ff46d31ebd3847b6c64ea40bacde268bb9f1c8ec83
-```
-
-Then in the verification code, follow the [`osVerification.ts`](https://github.com/Phala-Network/dstack-verifier/blob/95689c41/src/verification/osVerification.ts#L13-L27) pattern from `dstack-verifier` to compute and compare TCB measurements against the digest above.
-
-If even one byte of the OS image differs, the measurements won't match.
-
----
-
-## Compose Manifest
-
-Verify the running CVM's `app_compose.json` hash matches the registered `compose-hash`. This is what proves "the code I see is the code that's running".
-
-```python
-from hashlib import sha256, json
-
-tcb_info = report["info"]["tcb_info"]
-if isinstance(tcb_info, str):
-    tcb_info = json.loads(tcb_info)
-
-app_compose = tcb_info["app_compose"]
-compose_hash = sha256(app_compose.encode()).hexdigest()
-
-# `mr_config` field of TDX quote includes the compose hash, prefixed with "0x01"
-mr_config = intel_result["quote"]["body"]["mr_config_id"]
-expected = "0x01" + compose_hash
-assert mr_config.lower().startswith(expected.lower())
-
-# Optional: print the actual docker-compose so the user can review
-docker_compose = json.loads(app_compose)["docker_compose_file"]
-print(docker_compose)
-```
-
-This proves the CVM booted with exactly the docker-compose you registered. Operator can't swap services, change images, or inject env vars after boot.
-
----
-
-## Sigstore Provenance
-
-Verify each container image in the compose was built from a known source repo (not a backdoor pushed to the registry).
-
-```python
-import re, requests
-
-digests = set(re.findall(r'@sha256:([0-9a-f]{64})', docker_compose))
-
-for digest in digests:
-    sigstore_url = f"https://search.sigstore.dev/?hash=sha256:{digest}"
-    r = requests.head(sigstore_url, timeout=10)
-    if r.status_code < 400:
-        print(f"✓ {sigstore_url}")
-    else:
-        print(f"✗ {sigstore_url} (HTTP {r.status_code})")
-```
-
-A passing Sigstore link lets the user open the URL and confirm the image was built from the expected GitHub repo, with the expected workflow, by the expected actor. If a digest has no Sigstore record, the user must trust the registry directly — flag this in your verifier UI.
-
----
-
-## Verify Signature
-
-Once you've verified the signing key is bound to a real TEE, verify response signatures from the Private AI API.
-
-Every response carries:
-
-| Header | Meaning |
-|---|---|
-| `x-phala-receipt-sig` | Signature over `(model_id, prompt_hash, response_hash, ts)` |
-| `x-phala-compose-hash` | Compose-hash of the model serving CVM |
-| `x-phala-app-id` | Per-app key identity |
-
-```python
-import hashlib
-from eth_keys import keys
-
-prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()
-response_hash = hashlib.sha256(response_text.encode()).hexdigest()
-payload = f"{model_id}|{prompt_hash}|{response_hash}|{timestamp}"
-
-# ECDSA verification (signing_algo == "ecdsa")
-signature = bytes.fromhex(receipt_sig.removeprefix("0x"))
-recovered = keys.ecdsa_recover(hashlib.sha256(payload.encode()).digest(), keys.Signature(signature))
-assert recovered.to_address() == report["signing_address"]
-```
-
-For Ed25519, use `nacl.signing.VerifyKey(pubkey).verify(payload, signature)` instead.
-
-This is the final link: the response YOU received is bound to the (verified-genuine) TEE that produced it.
-
----
-
-## Offline Verification
-
-If you can't reach Phala's verify endpoint or NRAS:
-
-| Step | Offline tool |
-|---|---|
-| Verify Intel TDX quote | [`dcap-qvl`](https://github.com/Phala-Network/dcap-qvl) — chains to Intel PCS root |
-| Verify NVIDIA GPU quote | [`nvattest-verifier`](https://github.com/NVIDIA/nvtrust) — NVIDIA's local verifier (chains to NVIDIA root) |
-| Verify OS image hash | Compare against `digest.txt` from [meta-dstack release tarball](https://github.com/Dstack-TEE/meta-dstack/releases) |
-| Verify compose-hash | sha256 the app_compose JSON locally; check against `mr_config` byte for byte |
-| Verify Sigstore record | `cosign verify --certificate-identity-regexp '...' --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' <image>` |
-
-End-to-end offline: clone [Phala-Network/dstack-verifier](https://github.com/Phala-Network/dstack-verifier), feed it `attestation.json`, get a single PASS/FAIL.
-
----
-
-## Reference: minimal end-to-end (Python)
-
-```python
-# Full flow — verify a Private AI API response is genuine
-import secrets, requests, json, base64, hashlib
-
-api_key = os.environ["PRIVATE_AI_API_KEY"]
-model = "phala/deepseek-chat-v3-0324"
-
-# 1. Fresh nonce
-nonce = secrets.token_hex(32)
-
-# 2. Get attestation report
-report = requests.get(
-    f"https://api.redpill.ai/v1/attestation/report?model={model}&nonce={nonce}",
-    headers={"Authorization": f"Bearer {api_key}"},
-).json()
-
-# 3. Verify NVIDIA GPU
-gpu_payload = json.loads(report["nvidia_payload"])
-assert gpu_payload["nonce"].lower() == nonce.lower()
-nras = requests.post("https://nras.attestation.nvidia.com/v3/attest/gpu", json=gpu_payload).json()
-verdict = json.loads(base64.urlsafe_b64decode(nras[0][1].split(".")[1] + "=="))
-assert verdict["x-nvidia-overall-att-result"] is True
-
-# 4. Verify Intel TDX
-intel = requests.post(
-    "https://cloud-api.phala.com/api/v1/attestations/verify",
-    json={"hex": report["intel_quote"]},
-).json()
-assert intel["quote"]["verified"] is True
-
-# 5. Verify report-data binding
-rd = bytes.fromhex(intel["quote"]["body"]["reportdata"].removeprefix("0x"))
-addr = bytes.fromhex(report["signing_address"].removeprefix("0x"))
-assert rd[:32] == addr.ljust(32, b"\x00")
-assert rd[32:64].hex() == nonce
-
-# 6. Verify compose-hash
-tcb = report["info"]["tcb_info"]
-if isinstance(tcb, str): tcb = json.loads(tcb)
-ch = hashlib.sha256(tcb["app_compose"].encode()).hexdigest()
-assert intel["quote"]["body"]["mr_config_id"].lower().startswith(("0x01" + ch).lower())
-
-print("ALL VERIFIED — request to", model, "ran on genuine GPU TEE with the expected code.")
-```
-
-A reference implementation lives at [`Phala-Network/private-ml-sdk/vllm-proxy/verifiers/attestation_verifier.py`](https://github.com/Phala-Network/private-ml-sdk/blob/main/vllm-proxy/verifiers/attestation_verifier.py) — copy it, point at your model + key, run.
+The JSON includes `app_certificates[0].quote`. Reading a CLI status or extracting a quote is inspection, not independent verification of a fresh application exchange. For fresh evidence, generate a challenge-bound quote through your application's dstack SDK, as documented in [Get Attestation](https://docs.phala.com/phala-cloud/attestation/get-attestation).
+
+Follow the supported guides for each layer:
+
+| Layer | Verification |
+| --- | --- |
+| Intel TDX and OS image | Verify the quote and TCB against Intel roots, then compare OS measurements using [Verify the Platform](https://docs.phala.com/phala-cloud/attestation/verify-the-platform) and [dstack-verifier](https://github.com/Dstack-TEE/dstack/tree/next/dstack/verifier). Require `is_valid: true`. |
+| Application/compose | Replay RTMR3 and compare the measured compose hash against the application you expect; apply governance policy where configured. See [Verify Your Application](https://docs.phala.com/phala-cloud/attestation/verify-your-application). |
+| Key custody and network | Verify the KMS evidence and bind the actual client channel to the attested application. See [Chain of Trust](https://docs.phala.com/phala-cloud/attestation/chain-of-trust). |
+| NVIDIA GPU, when used | Verify the NVIDIA evidence and freshness under the workload's supported verifier, including its CPU/channel binding. Use the [Phala GPU verifier source](https://github.com/Phala-Network/private-ml-sdk/tree/main/vllm-proxy/verifiers) for the matching deployment; decoding an NRAS JWT alone does not verify its signature. |
+| Container source | Check image digests and their signed build provenance against your release policy; the existence of a provenance URL alone is not verification. |
+
+`dcap-qvl` checks the Intel quote layer. It does not replace GPU verification, compose appraisal, KMS policy, or channel binding. Offline verification needs the appropriate trusted collateral, reference measurements, evidence, and verifier policy for the workload; a fetched JSON file alone is insufficient.
