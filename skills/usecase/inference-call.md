@@ -1,20 +1,20 @@
 ---
 name: inference-call
 description: |
-  Call Phala Private AI (hosted models on GPU TEE) via the
+  Call Phala Private AI (hosted models in TEEs) via the
   OpenAI-compatible interface at inference.phala.com/v1. Use when users want
-  to call DeepSeek, Qwen, Llama, GPT-OSS, Gemma, etc. without deploying
+  to use hosted chat, embeddings, or System One decisions without deploying
   their own server — pay per token, no infrastructure.
 ---
 
 # Phala Private AI
 
-OpenAI-compatible inference on confidential GPUs at `https://inference.phala.com/v1`.
+OpenAI-compatible confidential inference at `https://inference.phala.com/v1`.
 
 ## Operations
 
 | User says | Operation |
-|---|---|
+| --- | --- |
 | "call confidential AI", "use phala model", "OpenAI compatible" | **First Call** |
 | "get an API key", "how to authenticate" | **Get API Key** |
 | "Python SDK", "TypeScript SDK" | **SDKs** |
@@ -23,7 +23,8 @@ OpenAI-compatible inference on confidential GPUs at `https://inference.phala.com
 | "vision", "image input" | **Images & Vision** |
 | "structured output", "JSON mode" | **Structured Output** |
 | "verify the response", "signed receipt" | **Verify Signature** |
-| "list models", "available models" | **Model Catalog** |
+| "list models", "available models", "embeddings" | **Model Catalog** |
+| "Kev", "System One", "typed decisions" | **System One Decisions** |
 
 ---
 
@@ -36,7 +37,7 @@ OpenAI-compatible inference on confidential GPUs at `https://inference.phala.com
 Store the key in your environment:
 
 ```bash
-export PRIVATE_AI_API_KEY="sk-..."
+export PHALA_AI_API_KEY="sk-..."
 ```
 
 ---
@@ -46,11 +47,11 @@ export PRIVATE_AI_API_KEY="sk-..."
 ### cURL
 
 ```bash
-curl https://inference.phala.com/v1/chat/completions \
+curl --fail-with-body -sS https://inference.phala.com/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $PRIVATE_AI_API_KEY" \
+  -H "Authorization: Bearer $PHALA_AI_API_KEY" \
   -d '{
-    "model": "openai/gpt-oss-120b",
+    "model": "z-ai/glm-5.3",
     "messages": [
       { "role": "user", "content": "Hello world!" }
     ]
@@ -63,48 +64,75 @@ That's the canonical "hello world." Replace the model and message and you're don
 
 ## Model Catalog
 
-Models are namespaced by provider. All run inside GPU TEE.
+Fetch the public catalogs before selecting a model or quoting a price. Model IDs are namespaced by model publisher; `providers` lists the serving routes. Models on this endpoint run in TEEs, with evidence coverage that varies by provider. Catalog flags do not verify a particular response.
 
-### Phala provider (lowest cost)
+```bash
+curl --fail-with-body -sS https://inference.phala.com/v1/models | \
+  jq '.data[] | {id, providers, context_length, input_modalities,
+                output_modalities, supported_parameters, supported_features, pricing}'
 
-| Model | Model ID | Context | $/1M (in/out) |
-|---|---|---|---|
-| DeepSeek V3 0324 | `deepseek/deepseek-chat-v3-0324` | 163K | 0.28 / 1.14 |
-| Qwen 2.5 VL 72B | `qwen/qwen3-vl-30b-a3b-instruct` | 65K | 0.59 / 0.59 |
-| Gemma 3 27B | `google/gemma-3-27b-it` | 53K | 0.11 / 0.40 |
-| GPT-OSS 120B | `openai/gpt-oss-120b` | 131K | 0.10 / 0.49 |
-| GPT-OSS 20B | `openai/gpt-oss-120b` | 131K | 0.04 / 0.15 |
-| Qwen 2.5 7B | `qwen/qwen-2.5-7b-instruct` | 32K | 0.04 / 0.10 |
+curl --fail-with-body -sS https://inference.phala.com/v1/embeddings/models | \
+  jq '.data[] | {id, providers, context_length, pricing}'
+```
 
-### Other providers
+`pricing.prompt`, `pricing.completion`, and `pricing.input_cache_read` (when present) are USD per token; multiply by 1,000,000 for per-million-token prices. Usage can include `cost`, the request charge in USD. Read current prices from the catalog instead of maintaining a static table.
 
-| Model | Model ID | Context |
-|---|---|---|
-| DeepSeek V3.1 (NearAI) | `deepseek/deepseek-chat-v3.1` | 163K |
-| Qwen3 30B (NearAI) | `qwen/qwen3-30b-a3b-instruct-2507` | 262K |
-| Z.AI GLM 4.6 (NearAI) | `z-ai/glm-4.6` | 202K |
-| Phi-4 (Tinfoil) | check live catalog | — |
+Choose the API by modality:
 
-The full live catalog: <https://inference.phala.com/v1/models>. Add `?tee=true` to list only models that run in a GPU TEE.
+| Model kind | Endpoint | Selection |
+| --- | --- | --- |
+| Chat/text | `POST /v1/chat/completions` | For example, `z-ai/glm-5.3`; check supported parameters/features for tools and structured output. |
+| Embeddings | `POST /v1/embeddings` | Select a model from `/v1/embeddings/models`. |
+| Decisions | `POST /v1/systemone` | `jaredpalmer/kev-4b` has `output_modalities: ["decisions"]`; it does not serve chat or stream. |
+
+## System One Decisions
+
+Kev answers typed questions about a state. Send `noul`, `choice`, and `score` questions through System One:
+
+```bash
+curl --fail-with-body -sS https://inference.phala.com/v1/systemone \
+  -H "Authorization: Bearer $PHALA_AI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jaredpalmer/kev-4b",
+    "state": "I was charged twice this month. Please fix it today.",
+    "questions": {
+      "billing": { "type": "noul", "instructions": "Is this about billing?" },
+      "tone": {
+        "type": "choice",
+        "instructions": "What is the tone?",
+        "criteria": { "calm": null, "upset": null }
+      },
+      "urgency": {
+        "type": "score",
+        "instructions": "How urgent is it?",
+        "criteria": ["low", "medium", "high"]
+      }
+    }
+  }'
+```
+
+The response's `answers.billing.noul` is the probability of true, `answers.tone.choice` is the selected option, and `answers.urgency.score` is the probability-weighted level index. See the [System One reference](https://docs.phala.com/phala-cloud/confidential-ai/confidential-model/api-reference/systemone) for the full response and TypeSafe SDK examples. Those SDKs append `/v1/systemone`, so their base URL is `https://inference.phala.com` without `/v1`.
 
 ---
 
 ## SDKs
 
-The endpoint is OpenAI-compatible. Any OpenAI SDK works — just change the base URL.
+Use the OpenAI SDK with the Phala base URL and API key for compatible chat requests. This alone does not verify attestation or response receipts; see **Verify Signature**.
 
 ### Python (OpenAI SDK)
 
 ```python
+import os
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ["PRIVATE_AI_API_KEY"],
+    api_key=os.environ["PHALA_AI_API_KEY"],
     base_url="https://inference.phala.com/v1",
 )
 
 response = client.chat.completions.create(
-    model="deepseek/deepseek-v3.2",
+    model="z-ai/glm-5.3",
     messages=[
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "What is your model name?"},
@@ -118,13 +146,16 @@ print(response.choices[0].message.content)
 ```typescript
 import OpenAI from "openai"
 
+const apiKey = process.env.PHALA_AI_API_KEY
+if (!apiKey) throw new Error("PHALA_AI_API_KEY is required")
+
 const client = new OpenAI({
   baseURL: "https://inference.phala.com/v1",
-  apiKey: process.env.PRIVATE_AI_API_KEY,
+  apiKey,
 })
 
 const completion = await client.chat.completions.create({
-  model: "deepseek/deepseek-v3.2",
+  model: "z-ai/glm-5.3",
   messages: [{ role: "user", content: "What is your model name?" }],
 })
 
@@ -134,12 +165,13 @@ console.log(completion.choices[0].message)
 ### LangChain
 
 ```python
+import os
 from langchain_openai import ChatOpenAI
 
 llm = ChatOpenAI(
-    model="deepseek/deepseek-v3.2",
+    model="z-ai/glm-5.3",
     base_url="https://inference.phala.com/v1",
-    api_key=os.environ["PRIVATE_AI_API_KEY"],
+    api_key=os.environ["PHALA_AI_API_KEY"],
 )
 ```
 
@@ -149,23 +181,24 @@ llm = ChatOpenAI(
 
 ```python
 stream = client.chat.completions.create(
-    model="qwen/qwen-2.5-7b-instruct",
+    model="z-ai/glm-5.3",
     messages=[{"role": "user", "content": "Write a haiku about TEEs"}],
     stream=True,
 )
 for chunk in stream:
-    print(chunk.choices[0].delta.content or "", end="", flush=True)
+    if chunk.choices:
+        print(chunk.choices[0].delta.content or "", end="", flush=True)
 ```
 
 cURL with SSE:
 
 ```bash
-curl https://inference.phala.com/v1/chat/completions \
-  -H "Authorization: Bearer $PRIVATE_AI_API_KEY" \
+curl --fail-with-body -sS https://inference.phala.com/v1/chat/completions \
+  -H "Authorization: Bearer $PHALA_AI_API_KEY" \
   -H "Content-Type: application/json" \
   -N \
   -d '{
-    "model": "qwen/qwen-2.5-7b-instruct",
+    "model": "z-ai/glm-5.3",
     "messages": [{"role":"user","content":"Hello"}],
     "stream": true
   }'
@@ -192,14 +225,14 @@ tools = [{
 }]
 
 response = client.chat.completions.create(
-    model="deepseek/deepseek-v3.2",
+    model="z-ai/glm-5.3",
     messages=[{"role": "user", "content": "Weather in Tokyo?"}],
     tools=tools,
 )
 print(response.choices[0].message.tool_calls)
 ```
 
-Models that support tool calling: most Phala-provider models. Check the catalog page for capability flags.
+Check `supported_parameters` for `tools` and the catalog's `supported_features` before using tool calling with a model.
 
 ---
 
@@ -214,7 +247,7 @@ response = client.chat.completions.create(
         "role": "user",
         "content": [
             {"type": "text", "text": "What's in this image?"},
-            {"type": "image_url", "image_url": {"url": "https://example.com/img.jpg"}},
+            {"type": "image_url", "image_url": {"url": "https://upload.wikimedia.org/wikipedia/commons/6/67/Giant_Pandas_having_a_snack.jpg"}},
         ],
     }],
 )
@@ -228,7 +261,7 @@ JSON mode + JSON Schema:
 
 ```python
 response = client.chat.completions.create(
-    model="deepseek/deepseek-v3.2",
+    model="z-ai/glm-5.3",
     messages=[{"role": "user", "content": "Give me a person record."}],
     response_format={
         "type": "json_schema",
@@ -251,61 +284,56 @@ response = client.chat.completions.create(
 
 ## Verify Signature
 
-Every Private AI API response can be cryptographically verified. The response chains to the GPU TEE quote.
+Use [the TypeScript ACI SDK](https://docs.phala.com/phala-cloud/confidential-ai/verify/typescript-sdk) (`connectAci`) or [Private AI Proxy](https://docs.phala.com/phala-cloud/confidential-ai/agents/private-ai-proxy) for client-side verification. Ordinary OpenAI clients and cURL do not verify each response.
 
-### Per-request attestation report
+The proof artifacts are:
 
-Fetch a fresh attestation tied to a nonce:
+| Artifact | Endpoint | Scope |
+| --- | --- | --- |
+| Attestation | `GET /v1/aci/attestation?nonce=<64 lowercase hex>` | The Phala gateway's quote and workload keyset. |
+| Receipt | `GET /v1/aci/receipts/{id}` | Signed event log with `workload_keyset_digest` and request/response `body_hash` values; obtain the id from `x-receipt-id`. |
+| Session | `GET /v1/aci/sessions/{session_id}` | Evidence and channel binding for the upstream cited by the receipt; coverage varies by provider. |
+
+To inspect the public gateway report:
 
 ```bash
 NONCE=$(openssl rand -hex 32)
-curl -s "https://api.redpill.ai/v1/attestation/report?model=phala/deepseek-chat-v3-0324&nonce=$NONCE" \
-  -H "Authorization: Bearer $PRIVATE_AI_API_KEY" > report.json
+curl --fail-with-body -sS "https://inference.phala.com/v1/aci/attestation?nonce=$NONCE" | \
+  jq '{api_version, workload_keyset_digest, attestation, service_capabilities}'
 ```
 
-The response has `nvidia_payload`, `intel_quote`, `signing_address`, and `signing_algo`.
-
-### Response headers (per-request)
-
-| Header | Meaning |
-|---|---|
-| `x-phala-receipt-sig` | Signature over `(model_id, prompt_hash, response_hash, timestamp)` |
-| `x-phala-compose-hash` | Compose-hash of the model-serving CVM |
-| `x-phala-app-id` | Per-app key identity |
-
-### Full verification flow
-
-For the complete end-to-end verification — verify NVIDIA GPU via NRAS, verify Intel TDX, check report-data binds the signing key + nonce, verify the compose manifest, check Sigstore provenance, and verify the response signature — follow `verify-attestation.md`.
-
-Reference implementation: [`Phala-Network/private-ml-sdk/vllm-proxy/verifiers/attestation_verifier.py`](https://github.com/Phala-Network/private-ml-sdk/blob/main/vllm-proxy/verifiers/attestation_verifier.py).
+This displays evidence; it does not verify the quote, nonce binding, TLS pin, or receipt signature. Fetch receipts after consuming the complete response, using the same API key that made the request. See [verify-attestation.md](verify-attestation.md) for verification clients, receipt/session checks, and self-deployed CVM verification.
 
 ---
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
-|---|---|---|
+| --- | --- | --- |
+| 400 Bad Request | Unknown model or unsupported parameter | Select an exact model ID and supported parameters from the live catalog |
 | 401 Unauthorized | Bad / expired key | Generate a new key in Private AI → API Keys |
 | 403 Forbidden | Balance too low to fund Private AI | Top up your Balance (or turn on auto-topup); calls work again within about 5 minutes |
-| 404 Not Found | Wrong model ID | Use lowercase, e.g. `deepseek/deepseek-v3.2` not `Phala/DeepSeek-V3` |
-| 429 Rate Limited | Workspace quota | Wait or contact Phala for quota increase |
+| 404 Not Found | No eligible route, or unknown/expired receipt or session | Inspect request constraints and artifact retention |
+| 412 Precondition Failed | `session_not_accepted`: none of the pinned sessions can serve | Fetch and verify current sessions before updating `provider.aci_session_ids` |
+| 429 Rate Limited | Rate limit reached | Back off and respect `Retry-After` when present |
+| 503 Service Unavailable | `upstream_verification_failed`: required upstream verification or binding failed | Inspect the failure and retry when verification is healthy; do not bypass verification |
 | Response cuts off | Hit `max_tokens` | Increase `max_tokens` in request |
-| Slow first token | Cold start on smaller models | Use a Dedicated Model deployment for predictable latency |
+| Slow first token | Model/provider latency varies | Inspect request timing and the current model catalog |
 
 ---
 
-## Reference: minimal end-to-end
+## Reference: minimal API call
 
 ```bash
 # 1. Get an API key from cloud.phala.com → Private AI → API Keys (paid from your Balance)
-export PRIVATE_AI_API_KEY="sk-..."
+export PHALA_AI_API_KEY="sk-..."
 
 # 2. Call
-curl https://inference.phala.com/v1/chat/completions \
+curl --fail-with-body -sS https://inference.phala.com/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $PRIVATE_AI_API_KEY" \
+  -H "Authorization: Bearer $PHALA_AI_API_KEY" \
   -d '{
-    "model": "openai/gpt-oss-120b",
+    "model": "z-ai/glm-5.3",
     "messages": [{"role":"user","content":"Hello world!"}]
   }'
 ```
