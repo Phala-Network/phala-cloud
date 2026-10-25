@@ -1,8 +1,8 @@
 ---
 name: verify-attestation
 description: |
-  Verify a Phala Cloud TEE attestation end-to-end — Intel TDX quote
-  to Intel root, the measured dstack CPU policy that verifies GPUs
+  Verify a Phala Cloud TEE attestation against its platform vendor root,
+  including Intel TDX and AMD SEV-SNP, the dstack CPU policy that verifies GPUs
   before application startup and keys, optional independent GPU evidence
   appraisal against NVIDIA roots, report-data binding
   the signing key + nonce, OS image hash to dstack-os reproducible
@@ -21,6 +21,7 @@ Verify a Phala Cloud workload against your accepted hardware, OS image, applicat
 |---|---|
 | "is this really in TEE?", "verify the CVM" | **Quick Check** |
 | "verify the GPU TEE", "NVIDIA quote" | **Verify NVIDIA GPU** |
+| "verify the CPU", "AMD SEV-SNP", "platform verification" | **Verify CPU Attestation** |
 | "verify the TDX quote", "Intel root" | **Verify Intel TDX** |
 | "fresh nonce", "replay attack" | **Nonce Binding** |
 | "OS image hash", "reproducible build" | **OS Image Verification** |
@@ -44,7 +45,7 @@ phala cvms attestation my-app
 phala cvms attestation my-app --json > attestation.json
 ```
 
-The summary should report `is_online: true`, `is_public: true`, and `error: null`. The JSON contains `app_certificates[0].quote` — a hex-encoded TDX quote that's the basis for everything else below.
+The CLI reports deployment status and available certificates. On legacy Intel TDX deployments, `app_certificates[0].quote` contains a raw TDX quote. For platform-adaptive verification, collect the versioned `/v1/Attest` response and use the [complete CVM policy example](#reference-verify-a-cvm-against-an-approved-policy) below. This supports AMD SEV-SNP as well as TDX.
 
 For inference (hosted Private AI API), use the per-request flow:
 
@@ -113,7 +114,9 @@ For dstack TDX releases implementing the [measured GPU boot appraisal](https://g
 2. Require exactly one `gpu-attestation` event before `system-ready`. Check the expected nonzero device count, CC state, and allowed DevTools/debug/secure-boot state. The accepted CPU code must enforce these checks before requesting app keys. The event itself is recorded after key provisioning for TPM-unseal compatibility.
 3. When independently appraising the boot-time NVIDIA evidence, request `/v1/Attest` with `include_boottime_gpu_evidence`. Select the `nvidia-nvattest-boottime-json-v1` bundle and compare `SHA-256(hex_decode(bundle.evidence))` with the measured event's `evidence_sha256`. Hash the exact decoded bytes, then appraise the authenticated evidence.
 
-These bindings use RTMR3, not application-controlled `report_data`. `/v1/AttestGpu` returns fresh evidence for a caller nonce; it does not bind that GPU to the CPU's boot appraisal. A boot appraisal records startup checks, not continuous device identity or physical co-location. See the linked security model for the platform and lifetime boundaries.
+On AMD SEV-SNP, verify the signed report and MrConfigV3 `HOST_DATA` binding. When present, `gpu_policy_hash` must match the expected GPU policy digest. This binds the policy; the current SNP path has no quote-bound runtime register binding the later GPU appraisal or boot-time evidence. The local boot check still enforces the accepted policy. See [AMD SEV-SNP attestation](https://github.com/Dstack-TEE/dstack/blob/250334c26a97a579fe26d911d89e8e90256d8572/docs/amd-sev-snp.md#attestation-and-image-identity).
+
+The TDX bindings above use RTMR3, not application-controlled `report_data`. `/v1/AttestGpu` returns fresh evidence for a caller nonce; it does not bind that GPU to the CPU's boot appraisal. A boot appraisal records startup checks, not continuous device identity or physical co-location. See the linked security model for the platform and lifetime boundaries.
 
 Use the evidence contract for the deployed dstack release. If the accepted CPU image, required policy, or boot-gate evidence cannot be established, report GPU workload verification as incomplete and withhold secrets. A standalone GPU quote or local `nvidia-smi` status does not complete this verification.
 
@@ -149,7 +152,7 @@ curl --fail-with-body --unix-socket /var/run/dstack.sock \
   -o boot-attestation.json
 ```
 
-The response has `attestation` and `boottime_gpu_evidence`. Select the bundle with vendor `nvidia` and format `nvidia-nvattest-boottime-json-v1`. Its hex `evidence` decodes to the exact boot-time `nvattest` output, including `claims` and `detached_eat`. An empty list means no boot-time GPU output was returned. The challenge freshens the CPU report, not the historical GPU record. Authenticate the record using the CPU quote and event-log binding in [GPU boot gate](#gpu-boot-gate).
+The response has `attestation` and `boottime_gpu_evidence`. Select the bundle with vendor `nvidia` and format `nvidia-nvattest-boottime-json-v1`. Its hex `evidence` decodes to the exact boot-time `nvattest` output, including `claims` and `detached_eat`. An empty list means no boot-time GPU output was returned. The challenge freshens the CPU report, not the historical GPU record. On TDX, authenticate the record using the CPU quote and RTMR3 event-log binding in [GPU boot gate](#gpu-boot-gate). On SNP, treat it as a local appraisal record; it has no equivalent quote-bound runtime binding.
 
 **Fresh GPU evidence:** ask the GPU to answer your own 32-byte challenge:
 
@@ -198,6 +201,17 @@ Install `nvattest` on the verifying machine using NVIDIA's linked instructions. 
 Run `python3 extract-gpu-evidence.py boot` to save the boot record as `gpu-boot-record.json`. Authenticate those exact bytes through the CPU quote and measured event log before inspecting its claims. This is an appraisal record, not the fresh raw-evidence input to `nvattest attest` above.
 
 ---
+
+## Verify CPU Attestation
+
+Use a verifier for the platform that produced the evidence. The versioned dstack attestation carries the platform-specific evidence and measurement material; the maintained dstack verifier selects the appropriate hardware verification path.
+
+| Platform | Hardware and identity binding |
+|---|---|
+| Intel TDX | Intel DCAP signature/collateral, OS measurements, and RTMR3 application-event replay |
+| AMD SEV-SNP | AMD ARK/ASK/VCEK chain, SNP report signature and launch measurements, and `HOST_DATA` binding of MrConfigV3 |
+
+The [CVM policy example](#reference-verify-a-cvm-against-an-approved-policy) runs these checks and compares the resulting identity against your approved deployment. The TDX-specific examples below apply only to TDX evidence.
 
 ## Verify Intel TDX
 
@@ -263,7 +277,7 @@ This proves: (1) the signing key was generated inside the TEE — it's bound int
 
 ## OS Image Verification
 
-Verify the operating system the CVM booted is the dstack-os reproducible build, not a tampered image.
+Verify the OS image against the authenticated boot measurements and your approved release. The platform-adaptive verifier in the [CVM policy example](#reference-verify-a-cvm-against-an-approved-policy) checks this for both TDX and SNP. The manual register comparison below is specific to TDX.
 
 The TDX `mrtd` and `rtmr0..3` measurements are folded into the quote at boot. Compare them against the expected values from [meta-dstack reproducible builds](https://github.com/Dstack-TEE/meta-dstack#reproducible-build-the-guest-image):
 
@@ -281,10 +295,11 @@ If even one byte of the OS image differs, the measurements won't match.
 
 ## Compose Manifest
 
-Verify the running CVM's `app_compose.json` hash matches the registered `compose-hash`. This is what proves "the code I see is the code that's running".
+Verify the exact `app_compose.json` hash against your approved configuration. Dstack binds this identity through the CPU attestation: TDX uses its measured identity fields; SNP uses MrConfigV3 bound by `HOST_DATA`. The [CVM policy example](#reference-verify-a-cvm-against-an-approved-policy) checks the authenticated compose hash on both platforms. The manual example below is TDX-specific.
 
 ```python
-from hashlib import sha256, json
+import json
+from hashlib import sha256
 
 tcb_info = report["info"]["tcb_info"]
 if isinstance(tcb_info, str):
@@ -367,9 +382,10 @@ If you can't reach Phala's verify endpoint or NRAS:
 
 | Step | Offline tool |
 |---|---|
-| Verify Intel TDX quote | [`dcap-qvl`](https://github.com/Phala-Network/dcap-qvl) — chains to Intel PCS root |
+| Verify Intel TDX quote (TDX only) | [`dcap-qvl`](https://github.com/Phala-Network/dcap-qvl) — chains to Intel PCS root |
 | Independently inspect NVIDIA GPU evidence (optional) | [`nvattest`](https://docs.nvidia.com/attestation/nv-attestation-sdk-cpp/latest/sdk-cli/command-reference.html#attest) with local verification and the required cached collateral |
-| Verify GPU boot gate | Accepted CPU image and GPU policy; replay TDX RTMR3 events and bind any boot-time NVIDIA evidence as above |
+| Verify AMD SEV-SNP report | Maintained dstack verifier with AMD collateral and the SNP launch measurement material |
+| Verify GPU boot policy | Approved CPU image and configuration; TDX runtime binding and SNP policy binding differ as described above |
 | Verify OS image hash | Compare against `digest.txt` from [meta-dstack release tarball](https://github.com/Dstack-TEE/meta-dstack/releases) |
 | Verify compose-hash | sha256 the app_compose JSON locally; check against `mr_config` byte for byte |
 | Verify Sigstore record | `cosign verify --certificate-identity-regexp '...' --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' <image>` |
@@ -378,47 +394,98 @@ Offline verification requires the relevant vendor collateral and release artifac
 
 ---
 
-## Reference: CPU field checks (Python)
+## Reference: verify a CVM against an approved policy
 
-```python
-# Partial example: CPU fields and application binding; complete all policy checks above
-import os, secrets, requests, json, hashlib
+Use Python 3, Docker, OpenSSL, and a guest image exposing the dstack v1 API. This example uses the maintained [dstack verifier](https://github.com/Dstack-TEE/dstack/blob/250334c26a97a579fe26d911d89e8e90256d8572/dstack/verifier/README.md) for platform signatures, application-identity binding, and OS measurement verification. It supports Intel TDX and AMD SEV-SNP. The pinned verifier image below is release 0.6.1.
 
-api_key = os.environ["PRIVATE_AI_API_KEY"]
-model = "phala/deepseek-chat-v3-0324"
+On your **verifying machine**, generate the challenge:
 
-# 1. Fresh nonce
-nonce = secrets.token_hex(32)
-
-# 2. Get attestation report
-report = requests.get(
-    f"https://api.redpill.ai/v1/attestation/report?model={model}&nonce={nonce}",
-    headers={"Authorization": f"Bearer {api_key}"},
-).json()
-
-# 3. Complete NVIDIA appraisal and the CPU-enforced GPU boot gate
-# using the evidence retrieval and verification procedures above.
-
-# 4. Verify Intel TDX
-intel = requests.post(
-    "https://cloud-api.phala.com/api/v1/attestations/verify",
-    json={"hex": report["intel_quote"]},
-).json()
-assert intel["quote"]["verified"] is True
-
-# 5. Verify report-data binding
-rd = bytes.fromhex(intel["quote"]["body"]["reportdata"].removeprefix("0x"))
-addr = bytes.fromhex(report["signing_address"].removeprefix("0x"))
-assert rd[:32] == addr.ljust(32, b"\x00")
-assert rd[32:64].hex() == nonce
-
-# 6. Verify compose-hash
-tcb = report["info"]["tcb_info"]
-if isinstance(tcb, str): tcb = json.loads(tcb)
-ch = hashlib.sha256(tcb["app_compose"].encode()).hexdigest()
-assert intel["quote"]["body"]["mr_config_id"].lower().startswith(("0x01" + ch).lower())
-
-print("CPU FIELDS MATCH — complete GPU boot-gate, image, policy, and signature checks before releasing secrets.")
+```bash
+NONCE=$(openssl rand -hex 32)
+echo "$NONCE"
 ```
 
-When evaluating an existing verifier, check its GPU appraisal, accepted CPU image and policy, and boot-gate coverage against the procedures above. A passing CPU quote check and a passing GPU quote check are separate inputs to that verification.
+Inside the CVM, use that challenge to collect a versioned attestation:
+
+```bash
+NONCE="<challenge from your verifying machine>"
+curl --fail-with-body --unix-socket /var/run/dstack.sock \
+  http://dstack/v1/Attest \
+  -H 'Content-Type: application/json' \
+  -d "{\"report_data\":\"$NONCE\"}" \
+  -o cvm-attestation.json
+```
+
+Copy `cvm-attestation.json` back to your verifying machine. Prepare `approved-policy.json` from your independently reviewed OS release, application configuration, and key-provider identity. Use the exact SHA-256 of the reviewed `app_compose.json` bytes for `compose_hash`; pin container digests and verify their provenance before approving that configuration. For GPU workloads, approve dstack code and configuration that enforce GPU verification before application startup, with GPU attestation enabled and production security settings. Obtain these trust inputs independently of the report being checked.
+
+```json
+{
+  "tee_variant": "dstack-tdx",
+  "app_id": "<expected application ID>",
+  "compose_hash": "<approved 64-character hex compose hash>",
+  "os_image_hash": "<approved 64-character hex OS image hash>",
+  "key_provider": {"name": "kms", "id": "<approved KMS identity>"},
+  "accepted_tcb_statuses": ["UpToDate"],
+  "allowed_advisory_ids": []
+}
+```
+
+For AMD SEV-SNP, use `dstack-amd-sev-snp` and that deployment's approved values. The verifier authenticates the SNP report, launch measurements, and `HOST_DATA` binding instead of TDX registers. Its cryptographic `is_valid` result does not enforce your TCB or deployment policy; the following code does. Save it as `verify-cvm.py`:
+
+```python
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+IMAGE = "ghcr.io/dstack-tee/dstack-verifier@sha256:9f2c07a94efd3d8a1a89268e5faa35e91e3cb345b9c4ab859c86d35142f4f788"
+report_path, policy_path, nonce_hex = sys.argv[1:]
+policy = json.loads(Path(policy_path).read_text())
+required = {"tee_variant", "app_id", "compose_hash", "os_image_hash",
+            "key_provider", "accepted_tcb_statuses", "allowed_advisory_ids"}
+if set(policy) != required:
+    raise ValueError("Policy must specify every required field")
+nonce = bytes.fromhex(nonce_hex)
+if len(nonce) != 32:
+    raise ValueError("Expected the original 32-byte challenge")
+
+with tempfile.TemporaryDirectory() as directory:
+    shutil.copyfile(report_path, Path(directory) / "attestation.json")
+    result = subprocess.run([
+        "docker", "run", "--rm", "--mount",
+        f"type=bind,src={directory},dst=/evidence", IMAGE,
+        "--verify", "/evidence/attestation.json",
+    ], check=True, capture_output=True, text=True)
+    verified = json.loads(result.stdout)
+
+details = verified["details"]
+if verified["is_valid"] is not True or any(details.get(field) is not True
+        for field in ("quote_verified", "event_log_verified", "os_image_hash_verified")):
+    raise ValueError("Hardware, application identity, or OS binding failed")
+if details["report_data"] != (nonce + bytes(32)).hex():
+    raise ValueError("Challenge mismatch")
+if details["tee_variant"] != policy["tee_variant"]:
+    raise ValueError("Unexpected TEE platform")
+if details["tcb_status"] not in policy["accepted_tcb_statuses"]:
+    raise ValueError("Unaccepted TCB status")
+if not set(details["advisory_ids"]).issubset(policy["allowed_advisory_ids"]):
+    raise ValueError("Unaccepted security advisory")
+for field in ("app_id", "compose_hash", "os_image_hash"):
+    if details["app_info"][field] != policy[field]:
+        raise ValueError(f"Unexpected {field}")
+if details["key_provider"] != policy["key_provider"]:
+    raise ValueError("Unexpected key provider")
+print("CVM BOOT VERIFIED against the approved image and deployment policy")
+```
+
+Run on the verifying machine, using the original challenge:
+
+```bash
+python3 verify-cvm.py cvm-attestation.json approved-policy.json "$NONCE"
+```
+
+A successful run prints `CVM BOOT VERIFIED against the approved image and deployment policy`. Signature, measurement, nonce, image, application, key-provider, TCB, or advisory failures exit unsuccessfully. GPU verification is enforced by the approved dstack boot code and configuration; optional direct evidence inspection is documented above.
+
+For hosted Private AI connection and response-receipt verification, follow the [PAP guide](https://phala.com/confidential-ai-models/verification). For a custom CVM application's signed outputs, also verify its key binding and signature as described in this guide.

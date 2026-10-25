@@ -190,7 +190,8 @@ Collect the CPU attestation as a starting point:
 
 ```bash
 phala cvms attestation my-llm --json > attestation.json
-# .app_certificates[0].quote is the CPU TDX quote.
+# On legacy Intel TDX deployments, .app_certificates[0].quote is a raw TDX quote.
+# For platform-adaptive TDX/SNP verification, use the versioned Attest example.
 # Verify the approved dstack CPU image, application, and GPU policy.
 ```
 

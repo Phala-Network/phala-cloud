@@ -196,13 +196,18 @@ nvidia-smi conf-compute -q
 
 ### From the attestation
 
+Use the platform-adaptive `/v1/Attest` response from inside the CVM:
+
 ```bash
-phala cvms attestation my-workload --json > attestation.json
+curl --fail-with-body --unix-socket /var/run/dstack.sock \
+  http://dstack/v1/Attest \
+  -H 'Content-Type: application/json' \
+  -d '{}' -o cvm-attestation.json
 ```
 
-The `app_certificates[0].quote` field is the CPU TDX quote. Follow [verify-attestation.md](verify-attestation.md#verify-nvidia-gpu) to verify the approved dstack image and application configuration, including the GPU policy. This establishes the CPU boot chain that enforces the GPU check. The guide also covers optional raw GPU evidence inspection. Local `nvidia-smi` output reports operational status.
+The response's `attestation` field carries versioned platform evidence, including Intel TDX or AMD SEV-SNP. For fresh verification, use a verifier-generated challenge and the [complete CVM policy example](verify-attestation.md#reference-verify-a-cvm-against-an-approved-policy). It verifies the approved dstack image and deployment configuration that enforce GPU checks before application startup. Local `nvidia-smi` output reports operational status.
 
-For supported dstack TDX releases, RTMR3 events bind the GPU boot appraisal and policy to the CPU quote. NVIDIA evidence is a separate artifact; it is not embedded in TDX `report_data`. See the [dstack GPU security model](https://github.com/Dstack-TEE/dstack/blob/250334c26a97a579fe26d911d89e8e90256d8572/docs/security/security-model.md#gpu-security-for-ai-workloads) for the evidence format and release requirements.
+GPU evidence binding depends on the CPU platform: TDX uses measured RTMR3 events; SNP binds the GPU policy through MrConfigV3 `HOST_DATA` when its optional policy field is present. SNP currently has no equivalent runtime binding for the later GPU appraisal record. See the [GPU security model](https://github.com/Dstack-TEE/dstack/blob/250334c26a97a579fe26d911d89e8e90256d8572/docs/security/security-model.md#gpu-security-for-ai-workloads). The guide retains optional direct GPU evidence retrieval and appraisal.
 
 ---
 
