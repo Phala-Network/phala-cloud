@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from typing import Any, Literal, TypedDict
 
 
@@ -33,13 +34,51 @@ def encrypt_env_vars(*args: Any, **kwargs: Any) -> Any:
         raise RuntimeError("encrypt_env_vars requires dstack-sdk in Python environment") from exc
 
 
-def get_compose_hash(*args: Any, **kwargs: Any) -> Any:
-    try:
-        from dstack_sdk import get_compose_hash as _impl  # type: ignore
+# Optional app-compose fields the backend drops from the hashed compose when null.
+_OMIT_WHEN_NONE = ("key_provider", "port_policy", "requirements", "swap_size")
+# Optional app-compose fields the backend drops when null or an empty string.
+_OMIT_WHEN_EMPTY = ("default_gateway_domain", "key_provider_id", "pre_launch_script", "salt")
 
-        return _impl(*args, **kwargs)
-    except Exception as exc:  # pragma: no cover
-        raise RuntimeError("get_compose_hash requires dstack-sdk in Python environment") from exc
+
+def normalize_app_compose(app_compose: Mapping[str, Any]) -> dict[str, Any]:
+    """Apply the Phala Cloud backend's normalization before hashing.
+
+    Drops the script field the runner does not use, and drops optional fields
+    that are null (or empty, for string fields).
+    """
+    compose = dict(app_compose)
+    if compose.get("runner") == "bash":
+        compose.pop("docker_compose_file", None)
+    elif compose.get("runner") == "docker-compose":
+        compose.pop("bash_script", None)
+    for key in _OMIT_WHEN_NONE:
+        if key in compose and compose[key] is None:
+            del compose[key]
+    for key in _OMIT_WHEN_EMPTY:
+        if key in compose and not compose[key]:
+            del compose[key]
+    return compose
+
+
+def dump_app_compose(app_compose: Mapping[str, Any]) -> str:
+    """Serialize like the backend: sorted keys, compact separators, UTF-8 text unescaped.
+
+    Nested keys are sorted too, which matches the backend because its nested
+    models declare their fields alphabetically.
+    """
+    return json.dumps(app_compose, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def get_compose_hash(app_compose: Mapping[str, Any], normalize: bool = True) -> str:
+    """Compute the app-compose hash exactly as the Phala Cloud backend does.
+
+    Accepts a dict, or an object with ``to_dict()`` such as ``dstack_sdk.AppCompose``.
+    With ``normalize=False`` the compose is hashed as given.
+    """
+    compose = app_compose.to_dict() if hasattr(app_compose, "to_dict") else app_compose
+    if normalize:
+        compose = normalize_app_compose(compose)
+    return hashlib.sha256(dump_app_compose(compose).encode("utf-8")).hexdigest()
 
 
 def verify_env_encrypt_public_key(*args: Any, **kwargs: Any) -> Any:

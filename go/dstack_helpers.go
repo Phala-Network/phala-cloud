@@ -36,11 +36,6 @@ func EncryptEnvVars(envs []EnvVar, publicKeyHex string) (string, error) {
 	return dstacksdk.EncryptEnvVars(envs, publicKeyHex)
 }
 
-// GetComposeHash computes the compose hash using the upstream dstack Go SDK implementation.
-func GetComposeHash(appCompose AppCompose, normalize ...bool) (string, error) {
-	return dstacksdk.GetComposeHash(appCompose, normalize...)
-}
-
 // VerifyEnvEncryptPublicKey verifies the signature of an env encryption public key.
 func VerifyEnvEncryptPublicKey(publicKey []byte, signature []byte, appID string) ([]byte, error) {
 	return dstacksdk.VerifyEnvEncryptPublicKey(publicKey, signature, appID)

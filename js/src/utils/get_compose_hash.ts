@@ -66,24 +66,48 @@ export interface AppCompose extends SortableObject {
   pre_launch_script?: string;
 }
 
+/** Optional fields the backend omits from the hashed compose when null. */
+const OMIT_WHEN_NULL = ["key_provider", "port_policy", "requirements", "swap_size"] as const;
+/** Optional fields the backend omits from the hashed compose when null or empty. */
+const OMIT_WHEN_EMPTY = [
+  "default_gateway_domain",
+  "key_provider_id",
+  "pre_launch_script",
+  "salt",
+] as const;
+
+/**
+ * Apply the same normalization as the Phala Cloud backend before hashing:
+ * drop the script field the runner does not use, and drop optional fields
+ * that are null (or empty for string fields).
+ */
 export function preprocessAppCompose(dic: AppCompose): AppCompose {
   const obj: AppCompose = { ...dic };
-  if (obj.runner === "bash" && "docker_compose_file" in obj) {
+  if (obj.runner === "bash") {
     delete obj.docker_compose_file;
-  } else if (obj.runner === "docker-compose" && "bash_script" in obj) {
+  } else if (obj.runner === "docker-compose") {
     delete obj.bash_script;
   }
-  if ("pre_launch_script" in obj && !obj.pre_launch_script) {
-    delete obj.pre_launch_script;
+  for (const key of OMIT_WHEN_NULL) {
+    if (obj[key] == null) {
+      delete obj[key];
+    }
+  }
+  for (const key of OMIT_WHEN_EMPTY) {
+    if (!obj[key]) {
+      delete obj[key];
+    }
   }
   return obj;
 }
 
+/**
+ * Serialize like the backend: sorted keys, compact separators, and non-ASCII
+ * text left as UTF-8. Nested keys are sorted too, which matches the backend
+ * because its nested models declare their fields alphabetically.
+ */
 export function dumpAppCompose(dic: AppCompose): string {
-  const ordered = sortObject(dic);
-  let json = JSON.stringify(ordered, null, 4);
-  json = json.replace(/": /g, '":');
-  return json;
+  return JSON.stringify(sortObject(dic));
 }
 
 export function getComposeHash(app_compose: AppCompose): string {
