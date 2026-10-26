@@ -244,13 +244,9 @@ The next time the Analysis CVM tries to refresh keys via KMS, the verifier sees 
 
 ```bash
 phala cvms attestation cohort-analysis --json > attestation.json
-# Then run the full verification per verify-attestation.md:
-#   - TDX quote chains to Intel root (DCAP / Phala verify endpoint)
-#   - GPU NV-CSE quote chains to NVIDIA root (NRAS)
-#   - report_data binds to the signing key + your nonce
-#   - mr_config binds to the expected compose_hash
-#   - container images have Sigstore provenance from expected source repos
 ```
+
+Follow [verify-attestation.md](verify-attestation.md) to check the workload before releasing your dataset key.
 
 ### Each owner checks DstackApp.sol:
 

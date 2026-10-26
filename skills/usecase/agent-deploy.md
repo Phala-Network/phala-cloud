@@ -200,9 +200,9 @@ The hex `quote` decodes into a TDX quote containing:
 
 ### Verify offline
 
-For the full step-by-step verification flow (Intel TDX root + NVIDIA root + report-data binding + compose-hash + Sigstore provenance), follow `verify-attestation.md`.
+Follow [verify-attestation.md](verify-attestation.md) to check the agent's identity against the build you approved.
 
-The minimum check:
+This command checks the hardware quote only:
 
 ```bash
 phala cvms attestation my-agent --json > attestation.json
