@@ -335,7 +335,7 @@ phala cvms attestation llama-sft --json > attestation.json
 phala ssh -- nvidia-smi conf-compute -q       # ConfComputeMode : ON
 ```
 
-Then run the full verification flow per `verify-attestation.md` — Intel TDX + NVIDIA NRAS + report-data binding + compose-hash. The `manifest.signed.json` quote can be verified the same way: its `report_data` binds the manifest hash to a fresh TDX quote.
+Verify each training node using [verify-attestation.md](verify-attestation.md). The `manifest.signed.json` quote binds the manifest hash through `report_data`; check this separately when auditing a completed run.
 
 ---
 

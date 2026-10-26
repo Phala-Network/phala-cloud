@@ -184,25 +184,17 @@ phala deploy -n my-workload -c docker-compose.yml -e .env -t h200.16xlarge --kms
 
 ## Verify GPU CC
 
-NVIDIA Confidential Computing seals the GPU memory. Confirm it's active:
+dstack checks GPU attestation and Confidential Computing mode during boot, before starting your application or provisioning its keys. A failed check stops boot.
 
-### Inside the CVM
+To inspect GPU mode while troubleshooting:
 
 ```bash
 phala ssh
 nvidia-smi conf-compute -q
-# Look for: ConfComputeMode : ON
+# Expect: ConfComputeMode : ON
 ```
 
-### From the attestation
-
-```bash
-phala cvms attestation my-workload --json | jq '.app_certificates[0].quote'
-```
-
-The hex `quote` decodes into a combined TDX + GPU NV-CSE attestation. For the full verification flow (Intel TDX + NVIDIA NRAS + report-data binding + compose-hash), follow `verify-attestation.md`. Offline-only path: `dcap-qvl` for the TDX layer + `nvattest-verifier` for the NVIDIA layer.
-
-For a full reference on parsing the combined TDX+NVIDIA quote, see `https://docs.phala.com/phala-cloud/confidential-ai/verify/verify-attestation`.
+For attestation verification or raw GPU evidence, follow [Verify NVIDIA GPU](verify-attestation.md#verify-nvidia-gpu). The local mode display is operational status, not proof for a remote client.
 
 ---
 
