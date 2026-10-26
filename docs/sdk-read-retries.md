@@ -6,6 +6,13 @@ the same default policy for buffered API reads. The shared cases in
 all four clients in CI. Keeping the fixture inside the Go module also makes its
 tests work from a downloaded module archive.
 
+Retry execution uses `cenkalti/backoff/v5` in Go, `p-retry` in JavaScript, and
+Tenacity's `Retrying` and `AsyncRetrying` in Python. The SDK adapters classify
+responses, select server-directed waits, and connect cancellation and deadlines
+to those libraries. JavaScript uses `retry` for exponential delays and `delay`
+with `long-timeout` for cancellable waits above the native timer limit; its
+CommonJS build bundles ESM dependencies to retain Node 18 compatibility.
+
 ## Default behavior
 
 GET and HEAD requests retry HTTP 409, 429, and 503 responses, with at most 30

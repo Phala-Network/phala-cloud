@@ -27,6 +27,7 @@ dependencies = [
   "pydantic>=2.7.0",
   "dstack-sdk>=0.5.4",
   "pysha3>=1.0.2",
+  "tenacity>=9.1,<10",
 ]
 
 [project.optional-dependencies]

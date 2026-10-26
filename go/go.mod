@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/Dstack-TEE/dstack/sdk/go v0.1.0
+	github.com/cenkalti/backoff/v5 v5.0.3
 	golang.org/x/crypto v0.49.0
 )
 

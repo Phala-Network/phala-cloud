@@ -1,6 +1,9 @@
+import pRetry, { AbortError } from "p-retry";
+import { createTimeout } from "retry";
+import { createDelay } from "delay";
+import { setTimeout as setLongTimeout, clearTimeout as clearLongTimeout } from "long-timeout";
 import type { FetchOptions, FetchRequest, FetchResponse, ResponseType, ofetch } from "ofetch";
 
-const MAX_TIMER_MS = 2 ** 31 - 1;
 const MAX_SERVER_DELAY_MS = (2 ** 63 - 1) / 1_000_000;
 
 export function readRetryBudget(retry: number | false | undefined): number {
@@ -17,33 +20,23 @@ function throwIfAborted(signal?: AbortSignal | null): void {
   }
 }
 
-// Split waits above the JavaScript timer limit instead of wrapping them to 1ms.
-async function waitForRetry(delay: number, signal?: AbortSignal | null): Promise<void> {
-  throwIfAborted(signal);
-  await new Promise<void>((resolve, reject) => {
-    const started = performance.now();
-    let timer: ReturnType<typeof setTimeout>;
-    const cleanup = () => {
-      clearTimeout(timer);
-      signal?.removeEventListener("abort", abort);
-    };
-    const abort = () => {
-      cleanup();
-      reject(signal?.reason ?? new DOMException("Operation cancelled", "AbortError"));
-    };
-    const tick = () => {
-      const remaining = delay - (performance.now() - started);
-      if (remaining <= 0) {
-        cleanup();
-        resolve();
-      } else {
-        timer = setTimeout(tick, Math.min(remaining, MAX_TIMER_MS));
-      }
-    };
-    signal?.addEventListener("abort", abort, { once: true });
-    tick();
-  });
-  throwIfAborted(signal);
+// Library timers preserve both cancellation and waits above the JS timer limit.
+const waitForRetry = createDelay({ setTimeout: setLongTimeout, clearTimeout: clearLongTimeout });
+
+class RetryableResponse extends Error {
+  constructor(
+    readonly response: FetchResponse<unknown>,
+    readonly failure?: unknown,
+  ) {
+    super(`Retryable HTTP ${response.status}`);
+  }
+}
+
+// p-retry requires Error instances; preserve arbitrary errors from fetch hooks.
+class PermanentFailure extends Error {
+  constructor(readonly failure: unknown) {
+    super("Non-retryable request failure");
+  }
 }
 
 function serverDelay(response: Response): number | undefined {
@@ -134,51 +127,81 @@ export async function fetchWithReadRetry<T, R extends ResponseType = ResponseTyp
   const statuses = options.retryStatusCodes ?? defaults.retryStatusCodes ?? [409, 429, 503];
   const customDelay = options.retryDelay ?? defaults.retryDelay;
 
-  for (let attempt = 0; ; attempt++) {
-    throwIfAborted(signal);
-    // ofetch's timeout is disabled when a caller supplies a signal. Compose
-    // a fresh request timeout with the operation signal for every attempt.
-    const controller = new AbortController();
-    const abort = () => controller.abort(signal?.reason);
-    signal?.addEventListener("abort", abort, { once: true });
-    const timer =
-      timeout > 0
-        ? setTimeout(
-            () => controller.abort(new DOMException("HTTP request timed out", "TimeoutError")),
-            timeout,
-          )
-        : undefined;
-    let response: FetchResponse<T>;
-    let failure: unknown;
-    try {
-      response = (await fetcher.raw<T, R>(request, {
-        ...options,
-        retry: 0,
-        timeout: 0,
-        signal: controller.signal,
-      })) as FetchResponse<T>;
-    } catch (error) {
-      const failedResponse = (error as { response?: FetchResponse<T> })?.response;
-      if (!failedResponse) throw error;
-      response = failedResponse;
-      failure = error;
-    } finally {
-      clearTimeout(timer);
-      signal?.removeEventListener("abort", abort);
+  throwIfAborted(signal);
+  try {
+    return await pRetry(
+      async () => {
+        throwIfAborted(signal);
+        // Compose the per-exchange timeout with the caller's operation signal.
+        const controller = new AbortController();
+        const abort = () => controller.abort(signal?.reason);
+        signal?.addEventListener("abort", abort, { once: true });
+        const timer =
+          timeout > 0
+            ? setLongTimeout(
+                () => controller.abort(new DOMException("HTTP request timed out", "TimeoutError")),
+                timeout,
+              )
+            : undefined;
+        let response: FetchResponse<T>;
+        let failure: unknown;
+        try {
+          response = (await fetcher.raw<T, R>(request, {
+            ...options,
+            retry: 0,
+            timeout: 0,
+            signal: controller.signal,
+          })) as FetchResponse<T>;
+        } catch (error) {
+          const failedResponse = (error as { response?: FetchResponse<T> })?.response;
+          if (!failedResponse) throw new AbortError(new PermanentFailure(error));
+          response = failedResponse;
+          failure = error;
+        } finally {
+          if (timer) clearLongTimeout(timer);
+          signal?.removeEventListener("abort", abort);
+        }
+        throwIfAborted(signal);
+        if (await retryable(response, statuses)) throw new RetryableResponse(response, failure);
+        if (failure) throw new AbortError(new PermanentFailure(failure));
+        return response;
+      },
+      {
+        retries: budget,
+        signal: signal ?? undefined,
+        // The policy callback selects the delay because Retry-After can be either
+        // shorter or longer than exponential backoff. p-retry owns the loop/budget.
+        minTimeout: 0,
+        maxTimeout: 0,
+        onFailedAttempt: async (error) => {
+          if (error.retriesLeft === 0) throw error;
+          if (!(error instanceof RetryableResponse)) throw error;
+          const response = error.response;
+          const configuredDelay =
+            typeof customDelay === "function"
+              ? customDelay({ request, options, response } as Parameters<typeof customDelay>[0])
+              : customDelay;
+          const delay =
+            serverDelay(response) ??
+            configuredDelay ??
+            createTimeout(error.attemptNumber - 1, {
+              factor: 2,
+              minTimeout: 1000,
+              maxTimeout: 20_000,
+              randomize: false,
+            });
+          if (!Number.isFinite(delay) || delay < 0)
+            throw new RangeError("retryDelay must be a finite non-negative number");
+          await waitForRetry(delay, { signal: signal ?? undefined });
+        },
+      },
+    );
+  } catch (error) {
+    if (error instanceof PermanentFailure) throw error.failure;
+    if (error instanceof RetryableResponse) {
+      if (error.failure) throw error.failure;
+      return error.response as FetchResponse<T>;
     }
-    throwIfAborted(signal);
-    if (attempt === budget || !(await retryable(response, statuses))) {
-      if (failure) throw failure;
-      return response;
-    }
-    const configuredDelay =
-      typeof customDelay === "function"
-        ? customDelay({ request, options, response } as Parameters<typeof customDelay>[0])
-        : customDelay;
-    const delay = serverDelay(response) ?? configuredDelay ?? Math.min(1000 * 2 ** attempt, 20_000);
-    if (!Number.isFinite(delay) || delay < 0) {
-      throw new RangeError("retryDelay must be a finite non-negative number");
-    }
-    await waitForRetry(delay, signal);
+    throw error;
   }
 }

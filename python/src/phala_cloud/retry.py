@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import math
-import re
 import threading
 import time
 from collections.abc import Mapping
@@ -13,6 +12,8 @@ from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
+from tenacity import AsyncRetrying, Retrying, retry_if_result, stop_after_attempt, wait_exponential
+from tenacity.nap import sleep, sleep_using_event
 
 from .errors import RequestError
 
@@ -20,15 +21,6 @@ DEFAULT_MAX_RETRIES = 30
 MAX_RETRY_DELAY = 20.0
 # Match Go's maximum representable time.Duration; never overflow a server wait.
 MAX_SERVER_DELAY = (2**63 - 1) / 1_000_000_000
-_DAYS = r"(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)"
-_MONTHS = r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
-_CLOCK = r"[0-9]{2}:[0-9]{2}:[0-9]{2}"
-_HTTP_DATE = re.compile(
-    rf"(?:{_DAYS}, [0-9]{{2}} {_MONTHS} [0-9]{{4}} {_CLOCK} GMT|"
-    rf"(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), "
-    rf"[0-9]{{2}}-{_MONTHS}-[0-9]{{2}} {_CLOCK} GMT|"
-    rf"{_DAYS} {_MONTHS} (?: [0-9]|[0-9]{{2}}) {_CLOCK} [0-9]{{4}})"
-)
 
 
 def validate_retries(value: int) -> int:
@@ -37,9 +29,9 @@ def validate_retries(value: int) -> int:
     return value
 
 
-def retry_delay(response: httpx.Response, attempt: int) -> float | None:
+def retryable_response(response: httpx.Response) -> bool:
     if response.status_code not in (409, 429, 503):
-        return None
+        return False
     if response.status_code == 409:
         try:
             body = response.json()
@@ -50,9 +42,13 @@ def retry_delay(response: httpx.Response, attempt: int) -> float | None:
             and isinstance(body.get("error_code"), str)
             and body["error_code"]
         ):
-            return None
+            return False
+    return True
+
+
+def server_delay(response: httpx.Response) -> float | None:
     header = response.headers.get("Retry-After", "").strip()
-    if re.fullmatch(r"[0-9]+", header):
+    if header.isascii() and header.isdecimal():
         # Comparing decimal strings avoids Python's integer string length limit.
         significant = header.lstrip("0") or "0"
         if len(significant) > 10:
@@ -60,7 +56,7 @@ def retry_delay(response: httpx.Response, attempt: int) -> float | None:
         seconds = min(float(significant), MAX_SERVER_DELAY)
         if seconds > 0:
             return seconds
-    elif _HTTP_DATE.fullmatch(header):
+    elif header:
         try:
             date = parsedate_to_datetime(header)
             if date.tzinfo is None:
@@ -70,7 +66,7 @@ def retry_delay(response: httpx.Response, attempt: int) -> float | None:
                 return min(seconds, MAX_SERVER_DELAY)
         except (ValueError, TypeError, OverflowError):
             pass
-    return min(float(2 ** min(attempt, 5)), MAX_RETRY_DELAY)
+    return None
 
 
 def replayable_read(method: str, kwargs: Mapping[str, Any]) -> bool:
@@ -91,6 +87,7 @@ class RetryContext:
         asynchronous: bool = False,
     ) -> None:
         self.max_retries = validate_retries(max_retries)
+        self.asynchronous = asynchronous
         event_type = asyncio.Event if asynchronous else threading.Event
         if cancel_event is not None and not isinstance(cancel_event, event_type):
             raise TypeError(f"cancel_event must be a {event_type.__module__}.Event")
@@ -100,6 +97,22 @@ class RetryContext:
             raise ValueError("operation_timeout must be positive and finite")
         self.deadline = None if operation_timeout is None else time.monotonic() + operation_timeout
         self.cancel_event = cancel_event
+
+    def policy(self, can_retry: bool) -> Retrying | AsyncRetrying:
+        exponential = wait_exponential(multiplier=1, max=MAX_RETRY_DELAY)
+
+        def wait_for_response(state):
+            delay = server_delay(state.outcome.result())
+            return exponential(state) if delay is None else delay
+
+        engine = AsyncRetrying if self.asynchronous else Retrying
+        return engine(
+            retry=retry_if_result(lambda response: can_retry and retryable_response(response)),
+            stop=stop_after_attempt(self.max_retries + 1),
+            wait=wait_for_response,
+            sleep=self.wait_async if self.asynchronous else self.wait,
+            retry_error_callback=lambda state: state.outcome.result(),
+        )
 
     def remaining(self) -> float | None:
         if self.cancel_event is not None and self.cancel_event.is_set():
@@ -134,9 +147,9 @@ class RetryContext:
             if remaining is not None:
                 step = min(step, remaining)
             if isinstance(self.cancel_event, threading.Event):
-                self.cancel_event.wait(step)
+                sleep_using_event(self.cancel_event)(step)
             else:
-                time.sleep(step)
+                sleep(step)
 
     async def wait_async(self, delay: float) -> None:
         remaining = self.remaining()

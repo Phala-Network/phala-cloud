@@ -40,7 +40,7 @@ from .models import (
     PaginatedCvmInfosV20260522,
 )
 from .result import SafeResult
-from .retry import DEFAULT_MAX_RETRIES, RetryContext, replayable_read, retry_delay, validate_retries
+from .retry import DEFAULT_MAX_RETRIES, RetryContext, replayable_read, validate_retries
 
 ApiVersion = Literal["2025-10-28", "2026-01-21", "2026-05-22", "2026-06-23"]
 SUPPORTED_API_VERSIONS: tuple[ApiVersion, ...] = (
@@ -169,7 +169,8 @@ class AsyncPhalaCloud:
         kwargs["follow_redirects"] = False
         can_retry = replayable_read(method, kwargs)
         timeout = kwargs.pop("timeout", self._client.timeout)
-        for attempt in range(retry.max_retries + 1):
+
+        async def request_once():
             request_timeout = retry.request_timeout(timeout)
             try:
                 remaining = retry.remaining()
@@ -184,12 +185,9 @@ class AsyncPhalaCloud:
             except (httpx.HTTPError, asyncio.TimeoutError) as exc:
                 raise RequestError(str(exc) or "Operation deadline exceeded") from exc
             retry.remaining()
-            delay = retry_delay(response, attempt) if can_retry else None
-            if delay is None or attempt == retry.max_retries:
-                return response
-            await response.aclose()
-            await retry.wait_async(delay)
-        raise AssertionError("unreachable retry exhaustion")
+            return response
+
+        return await retry.policy(can_retry)(request_once)
 
     async def request(self, method: str, path: str, **kwargs: Any) -> Any:
         response = await self._request_response(method, path, **kwargs)
@@ -489,7 +487,8 @@ class PhalaCloud:
         kwargs["follow_redirects"] = False
         can_retry = replayable_read(method, kwargs)
         timeout = kwargs.pop("timeout", self._client.timeout)
-        for attempt in range(retry.max_retries + 1):
+
+        def request_once():
             request_timeout = retry.request_timeout(timeout)
             try:
                 response = self._client.request(
@@ -498,12 +497,9 @@ class PhalaCloud:
             except httpx.HTTPError as exc:
                 raise RequestError(str(exc)) from exc
             retry.remaining()
-            delay = retry_delay(response, attempt) if can_retry else None
-            if delay is None or attempt == retry.max_retries:
-                return response
-            response.close()
-            retry.wait(delay)
-        raise AssertionError("unreachable retry exhaustion")
+            return response
+
+        return retry.policy(can_retry)(request_once)
 
     def request(self, method: str, path: str, **kwargs: Any) -> Any:
         response = self._request_response(method, path, **kwargs)
