@@ -108,14 +108,17 @@ async function loadEncryptedEnv(
 async function resolveNodeId(
 	client: Client<"2026-06-23">,
 	nodeInput?: string,
-): Promise<number | undefined> {
+): Promise<string | undefined> {
 	if (!nodeInput) {
 		return undefined;
 	}
 
 	const trimmed = nodeInput.trim();
+	if (/^teepod_[A-Za-z0-9]+$/.test(trimmed)) return trimmed;
 	if (/^\d+$/.test(trimmed)) {
-		return Number.parseInt(trimmed, 10);
+		throw new Error(
+			"Numeric placement IDs are not supported. Use a teepod_ hash ID or node name.",
+		);
 	}
 
 	const nodesResult = await safeGetAvailableNodes(client);
@@ -137,7 +140,10 @@ async function resolveNodeId(
 			`Node name "${trimmed}" is ambiguous (${matches.length} matches). Use an explicit node ID.`,
 		);
 	}
-	return matches[0].teepod_id;
+	const hashId = matches[0].teepod_id_hashid;
+	if (!hashId)
+		throw new Error("The selected placement is missing its Teepod hash ID.");
+	return hashId;
 }
 
 function formatInstanceOutput(

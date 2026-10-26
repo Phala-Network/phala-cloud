@@ -121,7 +121,7 @@ describe("ProvisionCvmRequestSchema", () => {
         compose_file: {
           docker_compose_file: "version: '3'\nservices:\n  app:\n    image: nginx",
         },
-        node_id: 123,
+        node_id: "node_test123",
         region: "us-east",
       };
 
@@ -328,19 +328,19 @@ describe("provisionCvm (wire-level)", () => {
   });
 
   it("forwards node_id verbatim and does not synthesize teepod_id", async () => {
-    await provisionCvm(mockClient, { ...baseRequest, node_id: 7 });
+    await provisionCvm(mockClient, { ...baseRequest, node_id: "node_test7" });
 
     const body = getRequestBody();
-    expect(body.node_id).toBe(7);
+    expect(body.node_id).toBe("node_test7");
     expect("teepod_id" in body).toBe(false);
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
   it("forwards teepod_id verbatim with deprecation warning when only teepod_id is set", async () => {
-    await provisionCvm(mockClient, { ...baseRequest, teepod_id: 12 });
+    await provisionCvm(mockClient, { ...baseRequest, teepod_id: "teepod_test12" });
 
     const body = getRequestBody();
-    expect(body.teepod_id).toBe(12);
+    expect(body.teepod_id).toBe("teepod_test12");
     expect("node_id" in body).toBe(false);
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("teepod_id is deprecated"));
   });
@@ -349,11 +349,11 @@ describe("provisionCvm (wire-level)", () => {
     // Guards against the historical rewrite that copied node_id into teepod_id
     // and dropped node_id. With distinct values (7 vs 12), a regression would
     // collapse them to a single id.
-    await provisionCvm(mockClient, { ...baseRequest, node_id: 7, teepod_id: 12 });
+    await provisionCvm(mockClient, { ...baseRequest, node_id: "node_test7", teepod_id: "teepod_test12" });
 
     const body = getRequestBody();
-    expect(body.node_id).toBe(7);
-    expect(body.teepod_id).toBe(12);
+    expect(body.node_id).toBe("node_test7");
+    expect(body.teepod_id).toBe("teepod_test12");
     expect(warnSpy).not.toHaveBeenCalled();
   });
 

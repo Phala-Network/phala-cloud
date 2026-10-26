@@ -33,12 +33,12 @@ describe("replicateCvm", () => {
 
     await replicateCvm(client, {
       id: "source",
-      node_id: 7,
+      node_id: "teepod_test7",
       os_image: "dstack-0.5.8-target",
     });
 
     expect(client.post).toHaveBeenCalledWith("/cvms/source/replicas", {
-      node_id: 7,
+      node_id: "teepod_test7",
       os_image: "dstack-0.5.8-target",
     });
   });

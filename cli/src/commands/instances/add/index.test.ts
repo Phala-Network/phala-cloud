@@ -3,6 +3,23 @@ import type { CommandContext } from "@/src/core/types";
 
 class MockResourceError extends Error {}
 
+const mockAvailableNodes = mock(() =>
+	Promise.resolve({
+		success: true,
+		data: {
+			nodes: [
+				{
+					teepod_id: 7,
+					node_id: 42,
+					name: "test-node",
+					teepod_id_hashid: "teepod_placement7",
+					node_id_hashid: "node_physical42",
+				},
+			],
+		},
+	}),
+);
+
 const mockPost = mock(() =>
 	Promise.resolve({
 		app_id: "app-123",
@@ -26,11 +43,11 @@ mock.module("@phala/cloud", () => ({
 			data: { composeHashAllowed: true, deviceAllowed: true },
 		}),
 	),
-	safeGetAvailableNodes: mock(() =>
-		Promise.resolve({ success: true, data: { nodes: [] } }),
-	),
+	safeGetAvailableNodes: mockAvailableNodes,
 	safeGetAppCvms: mock(() => Promise.resolve({ success: true, data: [] })),
-	safeGetCvmInfo: mock(() => Promise.resolve({ success: true, data: {} })),
+	safeGetCvmInfo: mock(() =>
+		Promise.resolve({ success: true, data: { vm_uuid: "source-uuid" } }),
+	),
 	safeGetAppEnvEncryptPubKey: mock(() =>
 		Promise.resolve({
 			success: true,
@@ -59,6 +76,7 @@ mock.module("@/src/utils/logger", () => ({
 }));
 
 const { instancesAddCommand } = await import("./index");
+const { cvmsReplicateCommand } = await import("../../cvms/replicate/index");
 
 function makeContext(overrides: Partial<CommandContext> = {}): CommandContext {
 	return {
@@ -85,16 +103,51 @@ describe("instances add command", () => {
 
 	test("sends custom name when creating an app instance", async () => {
 		const code = await instancesAddCommand.run(
-			{ appId: "app-123", name: "redis-0", nodeId: "5" },
+			{ appId: "app-123", name: "redis-0", nodeId: "teepod_test5" },
 			makeContext(),
 		);
 
 		expect(code).toBe(0);
 		expect(mockPost).toHaveBeenCalledWith(
 			"/apps/app-123/instances",
-			{ name: "redis-0", node_id: 5 },
+			{ name: "redis-0", node_id: "teepod_test5" },
 			{ headers: undefined },
 		);
+	});
+
+	test("resolves instance placement names to the Teepod hash, not the physical Node hash", async () => {
+		const code = await instancesAddCommand.run(
+			{ appId: "app-123", nodeId: "test-node" },
+			makeContext(),
+		);
+		expect(code).toBe(0);
+		expect(mockPost).toHaveBeenCalledWith(
+			"/apps/app-123/instances",
+			{ node_id: "teepod_placement7" },
+			{ headers: undefined },
+		);
+	});
+
+	test("resolves replica placement names to the Teepod hash when Node.id differs", async () => {
+		const code = await cvmsReplicateCommand.run(
+			{ nodeId: "test-node" },
+			makeContext({ cvmId: { id: "source-uuid" } }),
+		);
+		expect(code).toBe(0);
+		expect(mockPost).toHaveBeenCalledWith(
+			"/cvms/source-uuid/replicas",
+			{ node_id: "teepod_placement7" },
+			{ headers: undefined },
+		);
+	});
+
+	test("rejects numeric placement input without posting", async () => {
+		const code = await instancesAddCommand.run(
+			{ appId: "app-123", nodeId: "7" },
+			makeContext(),
+		);
+		expect(code).toBe(1);
+		expect(mockPost).not.toHaveBeenCalled();
 	});
 
 	test("does not send custom name in commit mode", async () => {

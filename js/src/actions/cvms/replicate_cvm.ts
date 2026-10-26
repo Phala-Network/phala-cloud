@@ -19,7 +19,7 @@ import { type VMForVersion, getVMSchemaForVersion } from "../../types/cvm_info";
  * console.log(replica.vm_uuid); // new replica UUID
  *
  * // Replicate to a specific node
- * const replica2 = await replicateCvm(client, { id: 'my-cvm-id', node_id: 42 });
+ * const replica2 = await replicateCvm(client, { id: 'my-cvm-id', node_id: 'teepod_abc123' });
  * ```
  *
  * ## Safe Version
@@ -38,7 +38,16 @@ import { type VMForVersion, getVMSchemaForVersion } from "../../types/cvm_info";
 
 export const ReplicateCvmRequestSchema = refineCvmId(
   CvmIdObjectSchema.extend({
-    node_id: z.number().optional(),
+    /** Replica placement uses a Teepod hash ID, despite the node_id name. */
+    node_id: z
+      .string()
+      .regex(/^teepod_[A-Za-z0-9]+$/)
+      .optional(),
+    /** @deprecated Use node_id; both fields identify a Teepod. */
+    teepod_id: z
+      .string()
+      .regex(/^teepod_[A-Za-z0-9]+$/)
+      .optional(),
     os_image: z.string().min(1).optional(),
   }),
 );
@@ -55,9 +64,10 @@ export async function replicateCvm<V extends ApiVersion>(
 ): Promise<VMForVersion<V>> {
   const parsed = ReplicateCvmRequestSchema.parse(request);
   const { cvmId } = CvmIdSchema.parse(parsed);
-  const { node_id, os_image } = parsed;
+  const { node_id, teepod_id, os_image } = parsed;
   const response = await client.post(`/cvms/${cvmId}/replicas`, {
     node_id,
+    teepod_id,
     os_image,
   });
   return getVMSchemaForVersion(client.config.version).parse(response) as VMForVersion<V>;

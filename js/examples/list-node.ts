@@ -9,7 +9,8 @@ async function main(_: arg.Result<typeof typed>) {
 
   for (const node of nodes) {
     console.log(`${node.name} (${node.region_identifier})`);
-    console.log(`node_id: ${node.teepod_id}`);
+    console.log(`teepod_id: ${node.teepod_id_hashid ?? "unavailable"}`);
+    console.log(`node_id: ${node.node_id_hashid ?? "unavailable"}`);
     if (node.fmspc) {
       console.log(`fmspc: ${node.fmspc}`);
     }
