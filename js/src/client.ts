@@ -88,7 +88,6 @@ function formatResponse(
  */
 export class Client<V extends ApiVersion = DefaultApiVersion> {
   protected fetchInstance: typeof ofetch;
-  private readonly fetchDefaults: FetchOptions;
   public readonly config: ResolvedClientConfig<V>;
   private emitter: Emitter<ClientEvents>;
 
@@ -244,7 +243,6 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
         }
       },
     };
-    this.fetchDefaults = defaultOptions;
     this.fetchInstance = ofetch.create(defaultOptions, {
       // Enforce at the transport boundary: options/hooks cannot enable redirects,
       // and native() (used by SSE) shares the same credential-safe transport.
@@ -340,7 +338,7 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
       this.fetchInstance,
       request,
       options ?? {},
-      this.fetchDefaults,
+      this.config,
     );
     if (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400)) {
       if (!response.bodyUsed) await response.body?.cancel();
@@ -387,7 +385,7 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
           method,
           ignoreResponseError: true,
         } as Parameters<(typeof this.fetchInstance)["raw"]>[1],
-        this.fetchDefaults,
+        this.config,
       );
 
       if (response.type === "opaqueredirect") {

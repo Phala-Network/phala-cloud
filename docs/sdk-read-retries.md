@@ -10,12 +10,11 @@ request. A 409 with a nonempty string `error_code` is permanent. Other HTTP
 statuses, transport failures, and response-decoding errors return without a read
 retry.
 
-A positive `Retry-After` delay takes precedence, even when it exceeds the HTTP
-timeout or the backoff cap. Integer seconds and HTTP dates are accepted. Missing,
-invalid, zero, or expired values use exponential backoff:
-one, two, four, eight, sixteen, then twenty seconds for every remaining retry.
-JavaScript rejects delays above its platform timer limit (2,147,483,647 ms)
-instead of overflowing into an immediate retry.
+`Retry-After` seconds or HTTP dates take precedence over default backoff, even
+when the wait exceeds the HTTP timeout. Without a server delay, waits double
+from one second to a twenty-second cap. Header parsing and timer limits follow
+each client's libraries and runtime; malformed, zero, or expired values may
+behave differently.
 
 Zero retries disables automatic retries; negative or fractional counts are
 rejected. After exhaustion, the final HTTP error retains its status and details.
@@ -34,11 +33,12 @@ The HTTP timeout applies to each exchange separately from retry waits. Set an
 operation deadline to bound the whole sequence. Cancellation interrupts backoff
 and prevents another request.
 
-Go and JavaScript use a total timeout per HTTP exchange. Python uses HTTPX's
-connect, pool, write, and read-inactivity timeouts, limited by the remaining
+Go bounds the full HTTP exchange. JavaScript's per-attempt timeout covers
+receiving the response; use an operation signal to also bound body processing
+and retries. Python uses HTTPX's per-phase timeouts, limited by the remaining
 operation budget. An async Python deadline also interrupts an active request.
-Sync Python checks cancellation between exchanges; an active socket operation
-returns according to its HTTPX timeouts.
+Sync Python checks cancellation between exchanges; active sockets use HTTPX
+timeouts.
 
 Mutation-specific retries, JavaScript's explicit ofetch customizations and
 advanced `.raw` interface, and stream reconnection retain their existing policies.

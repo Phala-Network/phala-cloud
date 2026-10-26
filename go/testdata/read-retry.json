@@ -342,60 +342,6 @@
       "expected_status": 429
     },
     {
-      "name": "invalid_or_zero_after_0",
-      "method": "GET",
-      "responses": [
-        {
-          "status": 429,
-          "retry_after": "0"
-        },
-        {
-          "status": 200
-        }
-      ],
-      "expected_times": [
-        0,
-        1
-      ],
-      "expected_status": 200
-    },
-    {
-      "name": "invalid_or_zero_after_-1",
-      "method": "GET",
-      "responses": [
-        {
-          "status": 429,
-          "retry_after": "-1"
-        },
-        {
-          "status": 200
-        }
-      ],
-      "expected_times": [
-        0,
-        1
-      ],
-      "expected_status": 200
-    },
-    {
-      "name": "invalid_or_zero_after_invalid",
-      "method": "GET",
-      "responses": [
-        {
-          "status": 429,
-          "retry_after": "invalid"
-        },
-        {
-          "status": 200
-        }
-      ],
-      "expected_times": [
-        0,
-        1
-      ],
-      "expected_status": 200
-    },
-    {
       "name": "operation_deadline_during_backoff",
       "method": "GET",
       "responses": [

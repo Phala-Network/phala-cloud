@@ -123,7 +123,7 @@ await client.safeDelete<T>(request, options?)
 ### Read retries
 
 Buffered GET and HEAD requests allow up to 30 retries by default. Set `retry: 0`
-or `retry: false` to disable them. `timeout` bounds each HTTP exchange; use a
+or `retry: false` to disable them. `timeout` applies to each attempt; use a
 signal to bound the whole operation, including retry waits:
 
 ```typescript

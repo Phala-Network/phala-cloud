@@ -6,7 +6,7 @@
   `Retry-After` support, capped exponential backoff, and cancellable waits.
   Preserve per-request timeouts when an operation signal is supplied.
 - Keep structured conflicts permanent across buffered response formats and
-  reject invalid retry budgets and delays outside the platform timer range.
+  reject invalid retry budgets. Use Ky's native `Retry-After` handling and timers.
 - Require Node 18.17 or newer for native abort-signal composition.
 
 ## [](https://github.com/Phala-Network/phala-cloud/compare/js-v0.3.0...js-v) (2026-07-25)

@@ -178,6 +178,7 @@ describe("Client", () => {
 
 	beforeEach(() => {
 		mockFetchInstance = vi.fn();
+		mockFetchInstance.create = () => mockFetchInstance;
 		mockFetchInstance.mockResolvedValue({ success: true });
 		mockFetchInstance.raw = async (...args: Parameters<typeof ofetch.raw>) => ({
 			status: 200,
@@ -610,6 +611,7 @@ describe("Client Event System", () => {
 
 	beforeEach(() => {
 		mockFetchInstance = vi.fn();
+		mockFetchInstance.create = () => mockFetchInstance;
 		Object.assign(mockFetchInstance, {
 			raw: async (...args: Parameters<typeof ofetch.raw>) => ({
 				status: 200,
