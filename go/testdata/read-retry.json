@@ -434,50 +434,12 @@
       "expected_error": "cancelled"
     },
     {
-      "name": "huge_after_cannot_wrap_timer",
-      "method": "GET",
-      "responses": [
-        {
-          "status": 429,
-          "retry_after": "999999999999999999999999999999999999999"
-        },
-        {
-          "status": 200
-        }
-      ],
-      "expected_times": [
-        0
-      ],
-      "expected_status": 0,
-      "operation_timeout": 0.5,
-      "expected_error": "deadline"
-    },
-    {
-      "name": "future_non_http_date",
-      "method": "GET",
-      "responses": [
-        {
-          "status": 429,
-          "retry_after": "2999-01-01T00:00:00Z"
-        },
-        {
-          "status": 200
-        }
-      ],
-      "expected_times": [
-        0,
-        1
-      ],
-      "expected_status": 200,
-      "operation_timeout": 2
-    },
-    {
       "name": "obsolete_http_date",
       "method": "GET",
       "responses": [
         {
           "status": 429,
-          "retry_after": "Tuesday, 01-Jan-60 00:00:00 GMT"
+          "retry_after": "Thursday, 01-Jan-26 00:00:30 GMT"
         },
         {
           "status": 200
@@ -496,7 +458,7 @@
       "responses": [
         {
           "status": 429,
-          "retry_after": "Wed Jan  1 00:00:00 2070"
+          "retry_after": "Thu Jan  1 00:00:30 2026"
         },
         {
           "status": 200

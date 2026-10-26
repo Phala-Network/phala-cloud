@@ -11,9 +11,11 @@ statuses, transport failures, and response-decoding errors return without a read
 retry.
 
 A positive `Retry-After` delay takes precedence, even when it exceeds the HTTP
-timeout or the backoff cap. Integer seconds and the three HTTP-date formats are
-accepted. Missing, invalid, zero, or expired values use exponential backoff:
+timeout or the backoff cap. Integer seconds and HTTP dates are accepted. Missing,
+invalid, zero, or expired values use exponential backoff:
 one, two, four, eight, sixteen, then twenty seconds for every remaining retry.
+JavaScript rejects delays above its platform timer limit (2,147,483,647 ms)
+instead of overflowing into an immediate retry.
 
 Zero retries disables automatic retries; negative or fractional counts are
 rejected. After exhaustion, the final HTTP error retains its status and details.

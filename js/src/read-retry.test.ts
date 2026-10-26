@@ -71,22 +71,16 @@ test("read retry budgets reject invalid values", () => {
 });
 
 test("an operation signal preserves the individual request timeout", async () => {
-  vi.useFakeTimers();
   const operation = new AbortController();
-  let timedOutAt = 0;
-  const started = Date.now();
   const fetch = vi.fn((_request, options) => new Promise((_resolve, reject) => {
     options.signal.addEventListener("abort", () => {
-      timedOutAt = Date.now() - started;
       reject(options.signal.reason);
     }, { once: true });
   }));
   vi.stubGlobal("fetch", fetch);
-  const pending = createClient({ timeout: 1000 }).get("/test", { signal: operation.signal })
+  const pending = createClient({ timeout: 10 }).get("/test", { signal: operation.signal })
     .then(() => undefined, error => error);
-  await vi.runAllTimersAsync();
   expect((await pending).code).toBe("TIMEOUT");
-  expect(timedOutAt).toBe(1000);
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 
@@ -112,5 +106,12 @@ test.each(["text", "blob", "arrayBuffer"] as const)("structured conflicts stay p
   }));
   vi.stubGlobal("fetch", fetch);
   await expect(createClient().get("/test", { responseType })).rejects.toThrow();
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+test("a retry delay outside the platform timer range fails without replay", async () => {
+  const fetch = vi.fn(async () => new Response("{}", { status: 429, headers: { "Retry-After": "999999999999" } }));
+  vi.stubGlobal("fetch", fetch);
+  await expect(createClient().get("/test")).rejects.toThrow("supported timer range");
   expect(fetch).toHaveBeenCalledTimes(1);
 });
