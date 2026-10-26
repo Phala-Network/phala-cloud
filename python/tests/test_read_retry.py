@@ -66,10 +66,11 @@ async def test_shared_read_retry_contract(case, asynchronous, monkeypatch):
         return httpx.Response(reply["status"], headers=headers, json=body)
 
     config = {
-        "max_retries": case.get("max_retries", CONTRACT["default_max_retries"]),
         "operation_timeout": case.get("operation_timeout"),
         "timeout": CONTRACT["request_timeout"],
     }
+    if "max_retries" in case:
+        config["max_retries"] = case["max_retries"]
     options = {"cancel_event": cancel} if "cancel_after" in case else {}
     caught = None
     try:
