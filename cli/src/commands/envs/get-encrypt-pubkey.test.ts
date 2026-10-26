@@ -216,6 +216,15 @@ describe("getEncryptPubkey", () => {
 			);
 		});
 
+		test("does not convert a numeric KMS output ID into an input selector", async () => {
+			await expect(
+				getEncryptPubkey(mockClient, {
+					app_id: "abc123",
+					kms_info: { chain_id: 1, id: 42 },
+				}),
+			).rejects.toThrow("KMS type is required");
+		});
+
 		test("throws when app_id is missing", async () => {
 			const cvm = {
 				app_id: null,

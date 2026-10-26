@@ -54,7 +54,7 @@ import { isValidHostname } from "../../utils/hostname";
  * // Example 3: With specific node and KMS type
  * const provision = await provisionCvm(client, {
  *   name: 'my-app',
- *   node_id: 123,                 // Specific node
+ *   node_id: 'node_abc123',                 // Specific node
  *   kms: 'PHALA',                 // KMS type (PHALA, BASE, ETHEREUM)
  *   disk_size: 40,
  *   image: 'dstack-0.5.5',
@@ -198,8 +198,14 @@ const NAME_VALIDATION_MESSAGE =
   "Name must be 5-63 characters, start with letter, and contain only letters/numbers/hyphens";
 export const ProvisionCvmRequestSchema = z
   .object({
-    node_id: z.number().optional(), // recommended - optional, system auto-selects if not specified
-    teepod_id: z.number().optional(), // deprecated, for compatibility
+    node_id: z
+      .string()
+      .regex(/^node_[A-Za-z0-9]+$/)
+      .optional(),
+    teepod_id: z
+      .string()
+      .regex(/^teepod_[A-Za-z0-9]+$/)
+      .optional(),
     region: z.string().optional(), // optional - region filter for auto-selection
     name: z
       .string()
@@ -248,7 +254,7 @@ export const ProvisionCvmRequestSchema = z
     kms_id: z.string().optional(),
     kms: z.enum(["PHALA", "ETHEREUM", "BASE"]).optional(), // KMS type selection (defaults to PHALA)
     kms_contract: z.string().optional(), // KMS contract address for on-chain KMS
-    kms_contract_id: z.union([z.string(), z.number()]).optional(),
+    kms_contract_id: z.string().optional(),
     key_provider_mode: z.enum(["kms", "local"]).optional(),
     skip_gateway: z.boolean().optional(),
     env_keys: z.array(z.string()).optional(),
@@ -267,8 +273,8 @@ export const ProvisionCvmRequestSchema = z
   });
 
 export type ProvisionCvmRequest = z.input<typeof ProvisionCvmRequestSchema> & {
-  node_id?: number; // recommended
-  teepod_id?: number; // deprecated
+  node_id?: string; // canonical Node hash ID
+  teepod_id?: string; // canonical Teepod hash ID
   compose_file?: {
     gateway_enabled?: boolean; // recommended
     tproxy_enabled?: boolean; // deprecated
@@ -276,7 +282,7 @@ export type ProvisionCvmRequest = z.input<typeof ProvisionCvmRequestSchema> & {
   };
   nonce?: number; // Manual nonce specification (Advanced - PHALA KMS only)
   app_id?: string; // Expected app_id (must match calculated app_id from nonce)
-  kms_contract_id?: string | number;
+  kms_contract_id?: string;
   key_provider_mode?: "kms" | "local";
   skip_gateway?: boolean;
 };
@@ -325,7 +331,7 @@ const { action: provisionCvm, safeAction: safeProvisionCvm } = defineAction<
 
   // The backend accepts both `node_id` (Node.id) and `teepod_id` (Teepod.id) as
   // distinct fields; they are not interchangeable. Pass them through as-is.
-  if (typeof body.teepod_id === "number" && typeof body.node_id !== "number") {
+  if (typeof body.teepod_id === "string" && typeof body.node_id !== "string") {
     console.warn("[phala/cloud] teepod_id is deprecated, please use node_id instead.");
   }
 

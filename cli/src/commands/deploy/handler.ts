@@ -649,7 +649,12 @@ export const buildProvisionPayload = (
 	}
 
 	if (options.nodeId) {
-		payload.teepod_id = Number(options.nodeId);
+		if (!/^node_[A-Za-z0-9]+$/.test(options.nodeId)) {
+			throw new Error(
+				"Use a node_ hash ID for --node-id. Run phala nodes to list placements.",
+			);
+		}
+		payload.node_id = options.nodeId;
 	}
 
 	if (options.region) {

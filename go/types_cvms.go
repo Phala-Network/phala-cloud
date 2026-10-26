@@ -253,26 +253,27 @@ type ProvisionCVMRequest struct {
 	ComposeFile  *ComposeFile `json:"compose_file,omitempty"`
 
 	// Optional fields.
-	VCPU              *int           `json:"vcpu,omitempty"`
-	Memory            *int           `json:"memory,omitempty"`
-	DiskSize          *int           `json:"disk_size,omitempty"`
-	TeepodID          *int           `json:"teepod_id,omitempty"`
-	Image             *string        `json:"image,omitempty"`
-	Region            *string        `json:"region,omitempty"`
-	KMSID             *string        `json:"kms_id,omitempty"`
-	KMS               *string        `json:"kms,omitempty"`
-	KMSType           *string        `json:"kms_type,omitempty"`
-	KMSContract       *string        `json:"kms_contract,omitempty"`
-	KMSContractID     *KMSContractID `json:"kms_contract_id,omitempty"`
-	KeyProviderMode   *string        `json:"key_provider_mode,omitempty"`
-	SkipGateway       *bool          `json:"skip_gateway,omitempty"`
-	Listed            *bool          `json:"listed,omitempty"`
-	Encrypted         *bool          `json:"encrypted,omitempty"`
-	SecureTime        *bool          `json:"secure_time,omitempty"`
-	SSHAuthorizedKeys []string       `json:"ssh_authorized_keys,omitempty"`
-	CustomAppID       *string        `json:"custom_app_id,omitempty"`
-	Nonce             *int64         `json:"nonce,omitempty"`
-	StorageFS         *string        `json:"storage_fs,omitempty"`
+	VCPU              *int     `json:"vcpu,omitempty"`
+	Memory            *int     `json:"memory,omitempty"`
+	DiskSize          *int     `json:"disk_size,omitempty"`
+	TeepodID          *string  `json:"teepod_id,omitempty"`
+	NodeID            *string  `json:"node_id,omitempty"`
+	Image             *string  `json:"image,omitempty"`
+	Region            *string  `json:"region,omitempty"`
+	KMSID             *string  `json:"kms_id,omitempty"`
+	KMS               *string  `json:"kms,omitempty"`
+	KMSType           *string  `json:"kms_type,omitempty"`
+	KMSContract       *string  `json:"kms_contract,omitempty"`
+	KMSContractID     *string  `json:"kms_contract_id,omitempty"`
+	KeyProviderMode   *string  `json:"key_provider_mode,omitempty"`
+	SkipGateway       *bool    `json:"skip_gateway,omitempty"`
+	Listed            *bool    `json:"listed,omitempty"`
+	Encrypted         *bool    `json:"encrypted,omitempty"`
+	SecureTime        *bool    `json:"secure_time,omitempty"`
+	SSHAuthorizedKeys []string `json:"ssh_authorized_keys,omitempty"`
+	CustomAppID       *string  `json:"custom_app_id,omitempty"`
+	Nonce             *int64   `json:"nonce,omitempty"`
+	StorageFS         *string  `json:"storage_fs,omitempty"`
 }
 
 // ComposeFile represents a compose file configuration.
@@ -437,7 +438,10 @@ type CVMActionResponse = CVMActionResponseV20260522
 
 // ReplicateCVMOptions holds options for replicating a CVM.
 type ReplicateCVMOptions struct {
-	NodeID *int `json:"node_id,omitempty"`
+	// NodeID is a Teepod hash ID for replica placement, despite the field name.
+	NodeID *string `json:"node_id,omitempty"`
+	// Deprecated: use NodeID. This alias also identifies a Teepod.
+	TeepodID *string `json:"teepod_id,omitempty"`
 	// OSImage pins the replica to a specific OS image slug. Empty means the
 	// replica inherits the source CVM's image.
 	OSImage string `json:"os_image,omitempty"`
@@ -582,14 +586,14 @@ type IsAllowedResult = IsAllowedResultV20260522
 // CheckCvmIsAllowedRequest is the request for checking CVM on-chain allowance.
 type CheckCvmIsAllowedRequest struct {
 	ComposeHash *string `json:"compose_hash,omitempty"`
-	NodeID      *int    `json:"node_id,omitempty"`
+	NodeID      *string `json:"node_id,omitempty"`
 	DeviceID    *string `json:"device_id,omitempty"`
 }
 
 // CheckAppIsAllowedRequest is the request for checking app contract allowance.
 type CheckAppIsAllowedRequest struct {
 	ComposeHash string  `json:"compose_hash"`
-	NodeID      *int    `json:"node_id,omitempty"`
+	NodeID      *string `json:"node_id,omitempty"`
 	DeviceID    *string `json:"device_id,omitempty"`
 	ChainID     *int    `json:"chain_id,omitempty"`
 }

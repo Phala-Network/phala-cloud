@@ -214,6 +214,9 @@ export const imageSchema = z.object({
 // TEEPod Schema with extended properties
 export const teepodSchema = z.object({
 	teepod_id: z.number().nullable(),
+	teepod_id_hashid: z.string().optional(),
+	node_id: z.number().nullable().optional(),
+	node_id_hashid: z.string().nullable().optional(),
 	id: z.number().optional(),
 	name: z.string(),
 	listed: z.boolean().optional(),

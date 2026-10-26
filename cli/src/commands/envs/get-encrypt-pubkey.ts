@@ -78,7 +78,7 @@ export async function getEncryptPubkey(
 		const kmsSlug =
 			cvm.kms_type ||
 			cvm.kms_info?.slug ||
-			(cvm.kms_info?.id != null ? String(cvm.kms_info.id) : null);
+			(typeof cvm.kms_info?.id === "string" ? cvm.kms_info.id : null);
 		if (!kmsSlug) {
 			throw new Error("KMS type is required for decentralized KMS");
 		}

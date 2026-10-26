@@ -2,6 +2,8 @@ module github.com/Phala-Network/phala-cloud/sdks/go
 
 go 1.25.0
 
+toolchain go1.26.10
+
 require (
 	github.com/Dstack-TEE/dstack/sdk/go v0.1.0
 	github.com/cenkalti/backoff/v5 v5.0.3

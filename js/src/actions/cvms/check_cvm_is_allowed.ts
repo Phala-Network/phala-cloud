@@ -35,7 +35,10 @@ export type IsAllowedResult = z.infer<typeof IsAllowedResultSchema>;
 const CheckCvmIsAllowedInputSchema = z.object({
   cvmId: z.string().min(1),
   compose_hash: z.string().optional(),
-  node_id: z.number().optional(),
+  node_id: z
+    .string()
+    .regex(/^node_[A-Za-z0-9]+$/)
+    .optional(),
   device_id: z.string().optional(),
 });
 

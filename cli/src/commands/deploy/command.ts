@@ -102,7 +102,7 @@ export const deployCommandMeta: CommandMeta = {
 		},
 		{
 			name: "node-id",
-			description: "Node ID (auto-selected if omitted)",
+			description: "Physical node hash ID (node_). Auto-selected if omitted.",
 			type: "string",
 			target: "nodeId",
 			group: "advanced",
