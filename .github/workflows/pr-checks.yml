@@ -6,14 +6,35 @@ on:
     paths:
       - 'js/**'
       - 'python/**'
+      - 'go/**'
       - '.github/workflows/pr-checks.yml'
   push:
     paths:
       - 'js/**'
       - 'python/**'
+      - 'go/**'
       - '.github/workflows/pr-checks.yml'
 
 jobs:
+  go-sdk-checks:
+    name: Go SDK Checks
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: go
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
+      - name: Test reads and shared SDK retry contract
+        run: go test -race ./...
+      - name: Vet Go SDK
+        run: go vet ./...
+
   js-sdk-checks:
     name: JavaScript SDK Checks
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}

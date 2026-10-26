@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import Mapping
 from typing import Any, Literal, TypeVar
@@ -39,6 +40,7 @@ from .models import (
     PaginatedCvmInfosV20260522,
 )
 from .result import SafeResult
+from .retry import DEFAULT_MAX_RETRIES, RetryContext, replayable_read, retry_delay, validate_retries
 
 ApiVersion = Literal["2025-10-28", "2026-01-21", "2026-05-22", "2026-06-23"]
 SUPPORTED_API_VERSIONS: tuple[ApiVersion, ...] = (
@@ -70,6 +72,8 @@ class _BaseConfig:
         timeout: float,
         use_cookie_auth: bool,
         headers: Mapping[str, str] | None,
+        max_retries: int,
+        operation_timeout: float | None,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url
@@ -77,6 +81,8 @@ class _BaseConfig:
         self.timeout = timeout
         self.use_cookie_auth = use_cookie_auth
         self.headers = dict(headers or {})
+        self.max_retries = validate_retries(max_retries)
+        self.operation_timeout = operation_timeout
 
     @property
     def request_headers(self) -> dict[str, str]:
@@ -103,6 +109,8 @@ class AsyncPhalaCloud:
         base_url: str | None = None,
         version: ApiVersion = DEFAULT_API_VERSION,
         timeout: float = DEFAULT_TIMEOUT,
+        max_retries: int = DEFAULT_MAX_RETRIES,
+        operation_timeout: float | None = None,
         use_cookie_auth: bool = False,
         headers: Mapping[str, str] | None = None,
         http_client: httpx.AsyncClient | None = None,
@@ -118,6 +126,8 @@ class AsyncPhalaCloud:
             timeout=timeout,
             use_cookie_auth=use_cookie_auth,
             headers=headers,
+            max_retries=max_retries,
+            operation_timeout=operation_timeout,
         )
         self._client = http_client or httpx.AsyncClient(
             base_url=self.config.base_url,
@@ -145,23 +155,48 @@ class AsyncPhalaCloud:
             timeout=self.config.timeout,
             use_cookie_auth=self.config.use_cookie_auth,
             headers=self.config.headers,
+            max_retries=self.config.max_retries,
+            operation_timeout=self.config.operation_timeout,
         )
 
-    async def request(self, method: str, path: str, **kwargs: Any) -> Any:
-        # Enforce this per request, including caller-supplied HTTP clients.
+    async def _request_response(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        retry = RetryContext(
+            kwargs.pop("max_retries", self.config.max_retries),
+            kwargs.pop("operation_timeout", self.config.operation_timeout),
+            kwargs.pop("cancel_event", None),
+            asynchronous=True,
+        )
         kwargs["follow_redirects"] = False
-        try:
-            response = await self._client.request(method.upper(), path, **kwargs)
-        except httpx.HTTPError as exc:
-            raise RequestError(str(exc)) from exc
+        can_retry = replayable_read(method, kwargs)
+        timeout = kwargs.pop("timeout", self._client.timeout)
+        for attempt in range(retry.max_retries + 1):
+            request_timeout = retry.request_timeout(timeout)
+            try:
+                remaining = retry.remaining()
+                request = self._client.request(
+                    method.upper(), path, timeout=request_timeout, **kwargs
+                )
+                response = (
+                    await request
+                    if remaining is None
+                    else await asyncio.wait_for(request, remaining)
+                )
+            except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+                raise RequestError(str(exc) or "Operation deadline exceeded") from exc
+            retry.remaining()
+            delay = retry_delay(response, attempt) if can_retry else None
+            if delay is None or attempt == retry.max_retries:
+                return response
+            await response.aclose()
+            await retry.wait_async(delay)
+        raise AssertionError("unreachable retry exhaustion")
+
+    async def request(self, method: str, path: str, **kwargs: Any) -> Any:
+        response = await self._request_response(method, path, **kwargs)
         return self._decode_or_raise(response)
 
     async def request_full(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
-        kwargs["follow_redirects"] = False
-        try:
-            response = await self._client.request(method.upper(), path, **kwargs)
-        except httpx.HTTPError as exc:
-            raise RequestError(str(exc)) from exc
+        response = await self._request_response(method, path, **kwargs)
 
         data = None
         if response.content:
@@ -395,6 +430,8 @@ class PhalaCloud:
         base_url: str | None = None,
         version: ApiVersion = DEFAULT_API_VERSION,
         timeout: float = DEFAULT_TIMEOUT,
+        max_retries: int = DEFAULT_MAX_RETRIES,
+        operation_timeout: float | None = None,
         use_cookie_auth: bool = False,
         headers: Mapping[str, str] | None = None,
         http_client: httpx.Client | None = None,
@@ -410,6 +447,8 @@ class PhalaCloud:
             timeout=timeout,
             use_cookie_auth=use_cookie_auth,
             headers=headers,
+            max_retries=max_retries,
+            operation_timeout=operation_timeout,
         )
         self._client = http_client or httpx.Client(
             base_url=self.config.base_url,
@@ -437,23 +476,41 @@ class PhalaCloud:
             timeout=self.config.timeout,
             use_cookie_auth=self.config.use_cookie_auth,
             headers=self.config.headers,
+            max_retries=self.config.max_retries,
+            operation_timeout=self.config.operation_timeout,
         )
 
-    def request(self, method: str, path: str, **kwargs: Any) -> Any:
-        # Enforce this per request, including caller-supplied HTTP clients.
+    def _request_response(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        retry = RetryContext(
+            kwargs.pop("max_retries", self.config.max_retries),
+            kwargs.pop("operation_timeout", self.config.operation_timeout),
+            kwargs.pop("cancel_event", None),
+        )
         kwargs["follow_redirects"] = False
-        try:
-            response = self._client.request(method.upper(), path, **kwargs)
-        except httpx.HTTPError as exc:
-            raise RequestError(str(exc)) from exc
+        can_retry = replayable_read(method, kwargs)
+        timeout = kwargs.pop("timeout", self._client.timeout)
+        for attempt in range(retry.max_retries + 1):
+            request_timeout = retry.request_timeout(timeout)
+            try:
+                response = self._client.request(
+                    method.upper(), path, timeout=request_timeout, **kwargs
+                )
+            except httpx.HTTPError as exc:
+                raise RequestError(str(exc)) from exc
+            retry.remaining()
+            delay = retry_delay(response, attempt) if can_retry else None
+            if delay is None or attempt == retry.max_retries:
+                return response
+            response.close()
+            retry.wait(delay)
+        raise AssertionError("unreachable retry exhaustion")
+
+    def request(self, method: str, path: str, **kwargs: Any) -> Any:
+        response = self._request_response(method, path, **kwargs)
         return self._decode_or_raise(response)
 
     def request_full(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
-        kwargs["follow_redirects"] = False
-        try:
-            response = self._client.request(method.upper(), path, **kwargs)
-        except httpx.HTTPError as exc:
-            raise RequestError(str(exc)) from exc
+        response = self._request_response(method, path, **kwargs)
 
         data = None
         if response.content:

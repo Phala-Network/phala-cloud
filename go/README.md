@@ -95,6 +95,9 @@ This read retry layer does not replay transport failures, failed response decodi
 or mutation requests. Mutation methods retain their existing explicit retry policies.
 A permanent quota shortage or an exhausted deadline still returns an error.
 
+The [shared SDK retry contract](../docs/sdk-read-retries.md) defines conformance
+cases for Go, JavaScript/TypeScript, and both Python clients.
+
 ## Usage Examples
 
 ### Deploy a CVM

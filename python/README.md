@@ -62,8 +62,33 @@ asyncio.run(main())
 - `base_url`
 - `version` (`2025-10-28` / `2026-01-21` / `2026-05-22`)
 - `timeout`
+- `max_retries` (30 by default; zero disables automatic read retries)
+- `operation_timeout` (optional total retry budget in seconds)
 - `headers`
 - `use_cookie_auth`
+
+## Read retries
+
+GET and HEAD retry transient HTTP 409, 429, and 503 responses. A structured
+409 business error is permanent. Positive `Retry-After` seconds or HTTP dates
+take precedence over the default one-second exponential backoff, capped at
+twenty seconds. Retries stop on exhaustion, cancellation, or an operation deadline.
+`request_full` uses the same policy and returns the final HTTP response.
+
+```python
+with create_client(timeout=30, operation_timeout=600, max_retries=30) as client:
+    info = client.get_cvm_info({"id": cvm_id})
+```
+
+`operation_timeout` and `max_retries` may also be passed to `request` or
+`request_full`. A synchronous request accepts `cancel_event=threading.Event()`;
+an asynchronous request accepts `cancel_event=asyncio.Event()` and supports native
+task cancellation. Cancellation interrupts retry waiting. An in-flight sync
+request uses HTTPX's socket timeouts and checks cancellation when it returns.
+`timeout` retains HTTPX's per-phase semantics; it is separate from retry waiting.
+
+The [shared SDK retry contract](../docs/sdk-read-retries.md) records the common
+cases, configuration mapping, and transport timing limits.
 
 ## Does the SDK follow redirects?
 

@@ -276,10 +276,10 @@ describe("Client", () => {
 				query: { include: "profile" },
 			});
 
-			expect(mockFetchInstance).toHaveBeenCalledWith("/users/1", {
+			expect(mockFetchInstance).toHaveBeenCalledWith("/users/1", expect.objectContaining({
 				query: { include: "profile" },
 				method: "GET",
-			});
+			}));
 			expect(result).toEqual(mockResponse);
 		});
 
@@ -752,4 +752,3 @@ describe("OIDC bearer auth", () => {
 		expect(client.config.workspace).toBe("ws-from-env");
 	});
 });
-

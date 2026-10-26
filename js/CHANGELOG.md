@@ -1,3 +1,13 @@
+## Unreleased
+
+### Fixed
+
+- Align buffered read retries with Go and Python: 30 retries by default,
+  `Retry-After` support, capped exponential backoff, and cancellable waits.
+  Preserve per-request timeouts when an operation signal is supplied.
+- Keep structured conflicts permanent across buffered response formats and
+  reject invalid retry budgets. Add shared SDK conformance cases to CI.
+
 ## [](https://github.com/Phala-Network/phala-cloud/compare/js-v0.3.0...js-v) (2026-07-25)
 
 ### ⚠ BREAKING CHANGE
