@@ -1,3 +1,13 @@
+## Unreleased
+
+### Fixed
+
+- Retry transient GET/HEAD failures, including rate-limited CVM deployment reads,
+  using `Retry-After` or capped exponential backoff within the operation context.
+  Per-request timeouts no longer prevent waiting for a longer quota reset.
+- Reject negative retry budgets and prevent numeric `Retry-After` values from
+  overflowing into immediate retries.
+
 ## [](https://github.com/Phala-Network/phala-cloud/compare/sdks/go/v0.1.1...sdks/go/v) (2026-07-26)
 
 ### feat
@@ -36,4 +46,3 @@
 
 * migrate resize endpoint across all SDKs ([56638f1](https://github.com/Phala-Network/phala-cloud/commit/56638f1c1592a1a48dab7fedf9152b60c8e52a01))
 # Changelog
-

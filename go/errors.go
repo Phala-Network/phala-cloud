@@ -123,12 +123,25 @@ func (e *APIError) RetryAfter() time.Duration {
 	if e.Headers == nil {
 		return 0
 	}
-	ra := e.Headers.Get("Retry-After")
+	ra := strings.TrimSpace(e.Headers.Get("Retry-After"))
 	if ra == "" {
 		return 0
 	}
-	// Try parsing as seconds first.
-	if secs, err := strconv.Atoi(ra); err == nil {
+	// delay-seconds is a non-negative decimal integer. Saturate values that
+	// cannot fit in a Duration instead of wrapping into an immediate retry.
+	digits := true
+	for _, ch := range ra {
+		if ch < '0' || ch > '9' {
+			digits = false
+			break
+		}
+	}
+	if digits {
+		secs, err := strconv.ParseUint(ra, 10, 64)
+		const maxDuration time.Duration = 1<<63 - 1
+		if err != nil || secs > uint64(maxDuration/time.Second) {
+			return maxDuration
+		}
 		return time.Duration(secs) * time.Second
 	}
 	// Try parsing as HTTP date.

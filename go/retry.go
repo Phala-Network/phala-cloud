@@ -16,6 +16,9 @@ const (
 func (c *Client) doWithRetry(ctx context.Context, fn func() error) error {
 	var lastErr error
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		err := fn()
 		if err == nil {
 			return nil

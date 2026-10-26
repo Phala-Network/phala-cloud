@@ -34,6 +34,9 @@ func NewClient(opts ...Option) (*Client, error) {
 	for _, opt := range opts {
 		opt(c)
 	}
+	if c.maxRetries < 0 {
+		return nil, fmt.Errorf("phala: max retries must be non-negative")
+	}
 
 	// Environment variable fallbacks.
 	if c.apiKey == "" {
