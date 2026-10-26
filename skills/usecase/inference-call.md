@@ -22,7 +22,7 @@ OpenAI-compatible inference on confidential GPUs at `https://inference.phala.com
 | "tool calling", "function calling" | **Tool Calling** |
 | "vision", "image input" | **Images & Vision** |
 | "structured output", "JSON mode" | **Structured Output** |
-| "verify the response", "signed receipt" | **Verify Signature** |
+| "verify private inference", "signed receipt" | **Verify private inference with PAP** |
 | "list models", "available models" | **Model Catalog** |
 
 ---
@@ -36,7 +36,7 @@ OpenAI-compatible inference on confidential GPUs at `https://inference.phala.com
 Store the key in your environment:
 
 ```bash
-export PRIVATE_AI_API_KEY="sk-..."
+export PHALA_AI_API_KEY="sk-..."
 ```
 
 ---
@@ -48,7 +48,7 @@ export PRIVATE_AI_API_KEY="sk-..."
 ```bash
 curl https://inference.phala.com/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $PRIVATE_AI_API_KEY" \
+  -H "Authorization: Bearer $PHALA_AI_API_KEY" \
   -d '{
     "model": "openai/gpt-oss-120b",
     "messages": [
@@ -99,7 +99,7 @@ The endpoint is OpenAI-compatible. Any OpenAI SDK works — just change the base
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ["PRIVATE_AI_API_KEY"],
+    api_key=os.environ["PHALA_AI_API_KEY"],
     base_url="https://inference.phala.com/v1",
 )
 
@@ -120,7 +120,7 @@ import OpenAI from "openai"
 
 const client = new OpenAI({
   baseURL: "https://inference.phala.com/v1",
-  apiKey: process.env.PRIVATE_AI_API_KEY,
+  apiKey: process.env.PHALA_AI_API_KEY,
 })
 
 const completion = await client.chat.completions.create({
@@ -139,7 +139,7 @@ from langchain_openai import ChatOpenAI
 llm = ChatOpenAI(
     model="deepseek/deepseek-v3.2",
     base_url="https://inference.phala.com/v1",
-    api_key=os.environ["PRIVATE_AI_API_KEY"],
+    api_key=os.environ["PHALA_AI_API_KEY"],
 )
 ```
 
@@ -161,7 +161,7 @@ cURL with SSE:
 
 ```bash
 curl https://inference.phala.com/v1/chat/completions \
-  -H "Authorization: Bearer $PRIVATE_AI_API_KEY" \
+  -H "Authorization: Bearer $PHALA_AI_API_KEY" \
   -H "Content-Type: application/json" \
   -N \
   -d '{
@@ -249,35 +249,58 @@ response = client.chat.completions.create(
 
 ---
 
-## Verify Signature
+## Verify private inference with PAP
 
-Verify the serving workload, protected connections, and response binding. For dstack GPU deployments, the standard boot policy verifies the GPU before application startup and key provisioning. Verify the CPU image and deployment policy that enforce this behavior.
-
-### Per-request attestation report
-
-Fetch a fresh attestation tied to a nonce:
+Use [PAP (Private AI Proxy)](https://github.com/Dstack-TEE/private-ai-gateway/blob/main/apps/desktop/docs/cli.md)
+as a local verifying endpoint for your existing API client:
 
 ```bash
-NONCE=$(openssl rand -hex 32)
-curl -s "https://api.redpill.ai/v1/attestation/report?model=phala/deepseek-chat-v3-0324&nonce=$NONCE" \
-  -H "Authorization: Bearer $PRIVATE_AI_API_KEY" > report.json
+npm install --global private-ai-proxy
+pap serve https://inference.phala.com
 ```
 
-The response has `nvidia_payload`, `intel_quote`, `signing_address`, and `signing_algo`.
+Set your client's base URL to `http://127.0.0.1:4180/v1` and use
+the value of `PHALA_AI_API_KEY` as its API key. Set the variable in the
+terminal running your client. PAP forwards the client's Authorization header
+and verifies the gateway and upstream TLS connection before forwarding prompts.
+The Phala inference endpoint enforces verified serving for every request. PAP
+audits signed receipts and cited sessions after streaming responses.
 
-### Response headers (per-request)
+PAP reports passed, failed, and skipped checks. Follow its CLI reference to
+configure approved releases and key-custody trust anchors.
 
-| Header | Meaning |
-|---|---|
-| `x-phala-receipt-sig` | Signature over `(model_id, prompt_hash, response_hash, timestamp)` |
-| `x-phala-compose-hash` | Compose-hash of the model-serving CVM |
-| `x-phala-app-id` | Per-app key identity |
+For the evidence-inspection walkthrough, see
+[Verify private inference](https://phala.com/confidential-ai-models/verification).
 
-### Full verification flow
+## Reproduce verification independently
 
-Follow `verify-attestation.md` for CPU identity, application identity and policy, protected connections, and response binding. For dstack GPU workloads, verify the approved CPU image and GPU policy; dstack performs GPU verification before starting the application. The GPU section also includes optional boot-time and fresh evidence retrieval for independent inspection. Apply the evidence contract of the deployed workload; a gateway CPU report is not model-worker GPU evidence.
+Use independent tools to reproduce the checks. Treat PAP's source as a reference
+implementation and comparison. Follow the canonical
+[ACI verification procedure](https://github.com/Dstack-TEE/private-ai-gateway/blob/main/spec/aci.md#9-verification-procedure):
 
-When using an existing verifier, check its coverage of the accepted CPU image and policy that enforce dstack’s fail-closed GPU boot gate. Independently appraising raw GPU evidence is an additional inspection path.
+1. Define trust inputs: vendor roots and collateral, accepted software releases,
+   OS measurements, key-custody anchors, and provider-specific policy.
+2. Preserve the fresh challenge, report, quote, event log, keyset, observed
+   connection key, exact request/response wire bytes, receipt, and cited session.
+3. Reproduce §9.1: verify the hardware quote, recompute the JCS keyset and nonce
+   binding, and check expiry. Appraise measured provenance, OS measurements, and
+   key custody under the chosen policy. Bind the actual serving connection
+   before sending data.
+4. Reproduce §9.2: recompute session IDs and evidence digests, appraise claims
+   under the chosen policy, and independently verify underlying provider evidence.
+   Verify and pin acceptable sessions before sending when the policy requires it.
+5. Reproduce §9.3: verify the receipt signature under the established keyset,
+   compare exact request/response wire hashes, and check the cited session,
+   validity window, and any session pins.
+6. Validate digest and signature constructions against the
+   [published test vectors](https://github.com/Dstack-TEE/private-ai-gateway/blob/main/spec/test-vectors.md).
+   These vectors exercise ACI bindings; live hardware and connection checks use
+   the collected evidence and policy inputs.
+
+Reference: [PAP verifier source](https://github.com/Dstack-TEE/private-ai-gateway/tree/main/apps/desktop/cli).
+Record each check, its inputs and implementation, and its passed, failed,
+skipped, or unestablished result. Keep independently reproduced checks distinct
+from PAP's comparison results.
 
 ---
 
@@ -298,12 +321,12 @@ When using an existing verifier, check its coverage of the accepted CPU image an
 
 ```bash
 # 1. Get an API key from cloud.phala.com → Private AI → API Keys (paid from your Balance)
-export PRIVATE_AI_API_KEY="sk-..."
+export PHALA_AI_API_KEY="sk-..."
 
 # 2. Call
 curl https://inference.phala.com/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $PRIVATE_AI_API_KEY" \
+  -H "Authorization: Bearer $PHALA_AI_API_KEY" \
   -d '{
     "model": "openai/gpt-oss-120b",
     "messages": [{"role":"user","content":"Hello world!"}]

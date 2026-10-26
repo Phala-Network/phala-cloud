@@ -4,8 +4,8 @@ description: |
   Verify a Phala Cloud TEE attestation against its platform vendor root,
   including Intel TDX and AMD SEV-SNP, the dstack CPU policy that verifies GPUs
   before application startup and keys, optional independent GPU evidence
-  appraisal against NVIDIA roots, report-data binding
-  the signing key + nonce, OS image hash to dstack-os reproducible
+  appraisal against NVIDIA roots, application-specific report-data binding,
+  OS image hash to dstack-os reproducible
   build, compose-hash to expected app, and Sigstore provenance for
   container images. Use this whenever a user asks "how do I verify
   this is really running in TEE?"
@@ -14,6 +14,8 @@ description: |
 # Verify TEE Attestation
 
 Verify a Phala Cloud workload against your accepted hardware, OS image, application, and key-release policy. For dstack GPU deployments, the standard GPU policy verifies the GPU during boot, before application startup and key provisioning. Verify the CPU image and deployment policy that enforce this behavior; failed GPU checks stop boot.
+
+For hosted Private AI requests, use [PAP](inference-call.md#verify-private-inference-with-pap) or [reproduce ACI verification independently](inference-call.md#reproduce-verification-independently). The procedures below cover general CVMs and self-hosted workloads.
 
 ## Operations
 
@@ -35,7 +37,7 @@ Verify a Phala Cloud workload against your accepted hardware, OS image, applicat
 
 ## Quick Check
 
-If you just want to confirm "yes, this CVM is running in TEE":
+Collect the deployment status and available attestation evidence:
 
 ```bash
 # Summary
@@ -47,15 +49,6 @@ phala cvms attestation my-app --json > attestation.json
 
 The CLI reports deployment status and available certificates. On legacy Intel TDX deployments, `app_certificates[0].quote` contains a raw TDX quote. For platform-adaptive verification, collect the versioned `/v1/Attest` response and use the [complete CVM policy example](#reference-verify-a-cvm-against-an-approved-policy) below. This supports AMD SEV-SNP as well as TDX.
 
-For inference (hosted Private AI API), use the per-request flow:
-
-```bash
-curl "https://api.redpill.ai/v1/attestation/report?model=phala/deepseek-chat-v3-0324&nonce=$(openssl rand -hex 32)" \
-  -H "Authorization: Bearer $PRIVATE_AI_API_KEY" > report.json
-```
-
-The response includes `nvidia_payload`, `intel_quote`, `signing_address`, and `signing_algo`.
-
 ---
 
 ## Why every step
@@ -66,7 +59,7 @@ The response includes `nvidia_payload`, `intel_quote`, `signing_address`, and `s
 | Counterfeit CPU pretending to be Intel TDX | **Verify Intel TDX** via DCAP / Phala verify endpoint |
 | Counterfeit or misconfigured GPU | **GPU boot gate** — the approved dstack CPU runtime verifies NVIDIA evidence and enforces the GPU policy |
 | Valid CPU and GPU evidence without an enforced handoff | **GPU boot gate** — accepted CPU code checks GPUs before readiness and key provisioning |
-| Signing key not actually inside the TEE | **Report-data binding** — first 32 bytes of `reportdata` = signing key |
+| Signing key not actually inside the TEE | **Report-data binding** — check the approved application’s key and nonce binding |
 | Operator swapped your code post-boot | **Compose manifest hash** — `mr_config` includes compose-hash |
 | Operator swapped the OS image | **OS image hash** — matches dstack-os reproducible build |
 | Container image swapped at registry | **Sigstore provenance** — built from expected source |
@@ -77,24 +70,9 @@ Apply the checks for your workload. GPU workloads also require the boot gate and
 
 ## Nonce Binding
 
-Generate a fresh 32-byte nonce per attestation request. The TEE embeds this nonce into the report — replayed quotes won't match.
+Generate the challenge on your verifying machine, then send it to the CVM for attestation. Compare it with the hardware-authenticated report data after verification. The [CVM policy example](#reference-verify-a-cvm-against-an-approved-policy) uses a fresh 32-byte challenge and checks its exact encoding.
 
-```python
-import secrets
-request_nonce = secrets.token_hex(32)   # 64 hex chars
-```
-
-Pass the nonce when you fetch the attestation report:
-
-```python
-import requests
-report = requests.get(
-    f"https://api.redpill.ai/v1/attestation/report?model={model}&nonce={request_nonce}",
-    headers={"Authorization": f"Bearer {api_key}"},
-).json()
-```
-
-For app-CVM attestation (not hosted-API), the nonce is bound at handshake time via RA-TLS, and you verify by extracting `report_data` from the TLS cert's TDX-quote extension.
+A signed output or TLS session also needs a binding to the key used by that connection or response. Follow the approved application's report-data format. For hosted inference, PAP handles the ACI challenge, keyset, and serving-connection bindings.
 
 ---
 
@@ -106,12 +84,14 @@ Normal verification checks the CPU attestation, approved dstack image, and deplo
 
 ### GPU boot gate
 
+The [TDX GPU boot example](#verify-a-tdx-gpu-boot) applies these event and security-state checks after maintained CPU verification. The generic CVM profile checks identity only.
+
 Verify the CPU quote, approved dstack image, and application configuration, including the measured GPU policy. The accepted policy must require GPU attestation and production security settings. The verified boot code enforces the GPU check before application startup and key provisioning, and the runtime uses the protected CPU-to-GPU connection for private data.
 
 For dstack TDX releases implementing the [measured GPU boot appraisal](https://github.com/Dstack-TEE/dstack/blob/250334c26a97a579fe26d911d89e8e90256d8572/docs/security/security-model.md#gpu-security-for-ai-workloads):
 
-1. Replay the event log against the verified quote's RTMR3. Require exactly one `gpu-policy-hash` event immediately after `compose-hash`, matching `SHA-256(JCS(requirements.gpu_policy))`. An omitted policy uses `{}`. Check `MrConfigV3.gpu_policy_hash` too when present. Accept only a policy requiring GPU attestation and the expected production security settings.
-2. Require exactly one `gpu-attestation` event before `system-ready`. Check the expected nonzero device count, CC state, and allowed DevTools/debug/secure-boot state. The accepted CPU code must enforce these checks before requesting app keys. The event itself is recorded after key provisioning for TPM-unseal compatibility.
+1. Replay the event log against the verified quote's RTMR3. Require exactly one `gpu-policy-hash` event after `compose-hash` and any measured init scripts, matching `SHA-256(JCS(requirements.gpu_policy))`. An omitted policy uses `{}`. Check `MrConfigV3.gpu_policy_hash` too when present. Accept only a policy requiring GPU attestation and the expected production security settings.
+2. Require exactly one version 3 `gpu-attestation` event before `system-ready`. Check the expected nonzero device count, CC state, and allowed DevTools/debug/secure-boot state. The accepted CPU code must enforce these checks before requesting app keys. The event itself is recorded after key provisioning for TPM-unseal compatibility.
 3. When independently appraising the boot-time NVIDIA evidence, request `/v1/Attest` with `include_boottime_gpu_evidence`. Select the `nvidia-nvattest-boottime-json-v1` bundle and compare `SHA-256(hex_decode(bundle.evidence))` with the measured event's `evidence_sha256`. Hash the exact decoded bytes, then appraise the authenticated evidence.
 
 On AMD SEV-SNP, verify the signed report and MrConfigV3 `HOST_DATA` binding. When present, `gpu_policy_hash` must match the expected GPU policy digest. This binds the policy; the current SNP path has no quote-bound runtime register binding the later GPU appraisal or boot-time evidence. The local boot check still enforces the accepted policy. See [AMD SEV-SNP attestation](https://github.com/Dstack-TEE/dstack/blob/250334c26a97a579fe26d911d89e8e90256d8572/docs/amd-sev-snp.md#attestation-and-image-identity).
@@ -198,7 +178,7 @@ nvattest attest --device gpu --verifier local \
 
 Install `nvattest` on the verifying machine using NVIDIA's linked instructions. Expect a successful exit and `result_code: 0`; then apply your accepted GPU policy to all returned claims. See the [command reference](https://docs.nvidia.com/attestation/nv-attestation-sdk-cpp/latest/sdk-cli/command-reference.html#attest) for `--relying-party-policy` and NRAS-backed appraisal. This appraises the GPU evidence independently; it does not establish the CPU boot gate or bind that GPU to this CVM. Keep the nonce with the saved evidence for later verification.
 
-Run `python3 extract-gpu-evidence.py boot` to save the boot record as `gpu-boot-record.json`. Authenticate those exact bytes through the CPU quote and measured event log before inspecting its claims. This is an appraisal record, not the fresh raw-evidence input to `nvattest attest` above.
+Run `python3 extract-gpu-evidence.py boot` to save the boot record as `gpu-boot-record.json`. On TDX, authenticate those exact bytes through the CPU quote and measured event log before inspecting its claims. On SNP, it remains a local appraisal record without that remote runtime binding. This is an appraisal record, not the fresh raw-evidence input to `nvattest attest` above.
 
 ---
 
@@ -220,9 +200,12 @@ Two paths — an online verifier service (easy) or local DCAP verification (offl
 ### Online (Phala verifier)
 
 ```python
+import json
+import requests
+
 intel_result = requests.post(
     "https://cloud-api.phala.com/api/v1/attestations/verify",
-    json={"hex": report["intel_quote"]},
+    json={"hex": json.load(open("attestation.json"))["app_certificates"][0]["quote"]},
 ).json()
 
 assert intel_result["quote"]["verified"] is True
@@ -240,38 +223,21 @@ dcap-qvl verify quote.bin
 
 This chains to Intel's PCS root cert, no network call to Phala.
 
-For an interactive sanity check without code, paste the hex `intel_quote` into the [TEE Attestation Explorer](https://proof.t16z.com/) — it decodes the quote and shows TDX version + security features.
+For an interactive sanity check without code, paste the raw TDX quote hex into the [TEE Attestation Explorer](https://proof.t16z.com/) — it decodes the quote and shows TDX version + security features.
 
 ---
 
 ## Report-Data Binding
 
-The TDX quote's `reportdata` field is 64 bytes the application provides to the hardware at attestation time. Phala packs it as:
+TDX and SNP reports cover 64 bytes of application-provided report data. The application protocol defines their meaning:
 
-| Bytes | Content |
+| Protocol | Binding to verify |
 |---|---|
-| 0–31 | Signing address (ECDSA: 20-byte Eth address right-padded; Ed25519: 32-byte pubkey) |
-| 32–63 | Your request nonce |
+| This guide's `/v1/Attest` or `/GetQuote` challenge | The 32-byte nonce followed by 32 zero bytes. This freshens the CVM evidence. |
+| Custom application or RA-TLS | The approved application's encoding of its signing or connection key and challenge. Check the actual key used to verify outputs or establish the connection. |
+| Hosted ACI inference | A digest of the canonical ACI statement, binding the workload, keyset, and challenge. Use [PAP or the ACI procedure](inference-call.md#verify-private-inference-with-pap). |
 
-Verify both halves match what you expect:
-
-```python
-report_data = bytes.fromhex(intel_result["quote"]["body"]["reportdata"].removeprefix("0x"))
-
-embedded_address = report_data[:32]
-embedded_nonce = report_data[32:64]
-
-if report["signing_algo"] == "ecdsa":
-    addr = bytes.fromhex(report["signing_address"].removeprefix("0x"))
-    assert embedded_address == addr.ljust(32, b"\x00")
-else:
-    pubkey = bytes.fromhex(report["signing_address"])
-    assert embedded_address == pubkey
-
-assert embedded_nonce.hex() == request_nonce
-```
-
-This proves: (1) the signing key was generated inside the TEE — it's bound into hardware-attested report data; (2) the attestation is fresh — it contains your unique nonce; (3) the signing key you'll use for verifying responses actually belongs to this TEE instance.
+A hardware signature authenticates those bytes. To establish that a key was generated and retained inside the CVM, also approve the measured code that creates and uses that key. A nonce-only CVM check does not bind a response or network connection.
 
 ---
 
@@ -295,84 +261,52 @@ If even one byte of the OS image differs, the measurements won't match.
 
 ## Compose Manifest
 
-Verify the exact `app_compose.json` hash against your approved configuration. Dstack binds this identity through the CPU attestation: TDX uses its measured identity fields; SNP uses MrConfigV3 bound by `HOST_DATA`. The [CVM policy example](#reference-verify-a-cvm-against-an-approved-policy) checks the authenticated compose hash on both platforms. The manual example below is TDX-specific.
+Verify the exact `app_compose.json` hash against your approved configuration. Dstack binds this identity through the CPU attestation: TDX uses its measured identity fields; SNP uses MrConfigV3 bound by `HOST_DATA`. The [CVM policy example](#reference-verify-a-cvm-against-an-approved-policy) checks the authenticated compose hash on both platforms.
 
-```python
-import json
-from hashlib import sha256
+The reference example compares the authenticated compose hash with an independently approved value. To prepare that value, hash the exact reviewed `app_compose.json` bytes on the verifying machine:
 
-tcb_info = report["info"]["tcb_info"]
-if isinstance(tcb_info, str):
-    tcb_info = json.loads(tcb_info)
-
-app_compose = tcb_info["app_compose"]
-compose_hash = sha256(app_compose.encode()).hexdigest()
-
-# `mr_config` field of TDX quote includes the compose hash, prefixed with "0x01"
-mr_config = intel_result["quote"]["body"]["mr_config_id"]
-expected = "0x01" + compose_hash
-assert mr_config.lower().startswith(expected.lower())
-
-# Optional: print the actual docker-compose so the user can review
-docker_compose = json.loads(app_compose)["docker_compose_file"]
-print(docker_compose)
+```bash
+sha256sum app_compose.json
 ```
 
-This proves the CVM booted with exactly the docker-compose you registered. Operator can't swap services, change images, or inject env vars after boot.
+Review its container digests, environment configuration, GPU policy when applicable, and any init scripts before approving the hash. A compose hash identifies the configuration; image provenance and the approved OS determine what that configuration runs.
 
 ---
 
 ## Sigstore Provenance
 
-Verify each container image in the compose was built from a known source repo (not a backdoor pushed to the registry).
+Verify each reviewed container digest against the expected source and builder before approving the compose hash. For a GitHub Actions release with Sigstore provenance, install [Cosign](https://docs.sigstore.dev/cosign/system_config/installation/) and set `IMAGE_AT_DIGEST` to the exact image reference (`registry/repository@sha256:...`) and `EXPECTED_WORKFLOW_IDENTITY` to the independently approved workflow identity:
 
-```python
-import re, requests
-
-digests = set(re.findall(r'@sha256:([0-9a-f]{64})', docker_compose))
-
-for digest in digests:
-    sigstore_url = f"https://search.sigstore.dev/?hash=sha256:{digest}"
-    r = requests.head(sigstore_url, timeout=10)
-    if r.status_code < 400:
-        print(f"✓ {sigstore_url}")
-    else:
-        print(f"✗ {sigstore_url} (HTTP {r.status_code})")
+```bash
+cosign verify-attestation \
+  --type slsaprovenance \
+  --certificate-identity "$EXPECTED_WORKFLOW_IDENTITY" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  "$IMAGE_AT_DIGEST"
 ```
 
-A passing Sigstore link lets the user open the URL and confirm the image was built from the expected GitHub repo, with the expected workflow, by the expected actor. If a digest has no Sigstore record, the user must trust the registry directly — flag this in your verifier UI.
+Check the authenticated provenance's source repository, commit, builder, and build inputs against the approved release. Use the predicate type and issuer published by that release. See [Sigstore attestation verification](https://docs.sigstore.dev/cosign/verifying/attestation/) for applying provenance policy. Opening a transparency-log URL alone does not verify provenance.
 
 ---
 
 ## Verify Signature
 
-Once you've verified the signing key is bound to a real TEE, verify response signatures from the Private AI API.
-
-Every response carries:
-
-| Header | Meaning |
-|---|---|
-| `x-phala-receipt-sig` | Signature over `(model_id, prompt_hash, response_hash, ts)` |
-| `x-phala-compose-hash` | Compose-hash of the model serving CVM |
-| `x-phala-app-id` | Per-app key identity |
+For a custom CVM application's signed outputs, first authenticate the signing key through its documented attestation binding and approved code. Then verify the signature over the exact bytes defined by that application's protocol, using a maintained library for its signature scheme. For example, for an Ed25519 application:
 
 ```python
-import hashlib
-from eth_keys import keys
+from pathlib import Path
+from nacl.signing import VerifyKey
 
-prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()
-response_hash = hashlib.sha256(response_text.encode()).hexdigest()
-payload = f"{model_id}|{prompt_hash}|{response_hash}|{timestamp}"
-
-# ECDSA verification (signing_algo == "ecdsa")
-signature = bytes.fromhex(receipt_sig.removeprefix("0x"))
-recovered = keys.ecdsa_recover(hashlib.sha256(payload.encode()).digest(), keys.Signature(signature))
-assert recovered.to_address() == report["signing_address"]
+# Set this to the public key authenticated through the application's attestation.
+public_key_hex = "<authenticated Ed25519 public key>"
+VerifyKey(bytes.fromhex(public_key_hex)).verify(
+    Path("message.bin").read_bytes(), Path("signature.bin").read_bytes()
+)
 ```
 
-For Ed25519, use `nacl.signing.VerifyKey(pubkey).verify(payload, signature)` instead.
+Install PyNaCl on the verifying machine. A successful call returns the verified message; a modified message, signature, or key raises an error. Check the application's request binding and freshness rules as well.
 
-This is the final link: the response YOU received is bound to the (verified-genuine) TEE that produced it.
+For hosted inference, [PAP verifies ACI receipts](inference-call.md#verify-private-inference-with-pap), including the request and response wire hashes and the cited upstream session. To implement those checks independently, follow the linked ACI procedure.
 
 ---
 
@@ -416,7 +350,7 @@ curl --fail-with-body --unix-socket /var/run/dstack.sock \
   -o cvm-attestation.json
 ```
 
-Copy `cvm-attestation.json` back to your verifying machine. Prepare `approved-policy.json` from your independently reviewed OS release, application configuration, and key-provider identity. Use the exact SHA-256 of the reviewed `app_compose.json` bytes for `compose_hash`; pin container digests and verify their provenance before approving that configuration. For GPU workloads, approve dstack code and configuration that enforce GPU verification before application startup, with GPU attestation enabled and production security settings. Obtain these trust inputs independently of the report being checked.
+Copy `cvm-attestation.json` back to your verifying machine. Prepare `approved-policy.json` from your independently reviewed OS release, application configuration, and key-provider identity. Use the exact SHA-256 of the reviewed `app_compose.json` bytes for `compose_hash`; pin container digests and verify their provenance before approving that configuration. For GPU event verification on TDX, also follow the GPU boot procedure below. The `gpu: null` profile checks CVM identity only. Obtain these trust inputs independently of the report being checked.
 
 ```json
 {
@@ -426,7 +360,8 @@ Copy `cvm-attestation.json` back to your verifying machine. Prepare `approved-po
   "os_image_hash": "<approved 64-character hex OS image hash>",
   "key_provider": {"name": "kms", "id": "<approved KMS identity>"},
   "accepted_tcb_statuses": ["UpToDate"],
-  "allowed_advisory_ids": []
+  "allowed_advisory_ids": [],
+  "gpu": null
 }
 ```
 
@@ -434,7 +369,6 @@ For AMD SEV-SNP, use `dstack-amd-sev-snp` and that deployment's approved values.
 
 ```python
 import json
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -444,15 +378,17 @@ IMAGE = "ghcr.io/dstack-tee/dstack-verifier@sha256:9f2c07a94efd3d8a1a89268e5faa3
 report_path, policy_path, nonce_hex = sys.argv[1:]
 policy = json.loads(Path(policy_path).read_text())
 required = {"tee_variant", "app_id", "compose_hash", "os_image_hash",
-            "key_provider", "accepted_tcb_statuses", "allowed_advisory_ids"}
+            "key_provider", "accepted_tcb_statuses", "allowed_advisory_ids", "gpu"}
 if set(policy) != required:
     raise ValueError("Policy must specify every required field")
+report_bytes = Path(report_path).read_bytes()
+report = json.loads(report_bytes)
 nonce = bytes.fromhex(nonce_hex)
 if len(nonce) != 32:
     raise ValueError("Expected the original 32-byte challenge")
 
 with tempfile.TemporaryDirectory() as directory:
-    shutil.copyfile(report_path, Path(directory) / "attestation.json")
+    (Path(directory) / "attestation.json").write_bytes(report_bytes)
     result = subprocess.run([
         "docker", "run", "--rm", "--mount",
         f"type=bind,src={directory},dst=/evidence", IMAGE,
@@ -477,7 +413,47 @@ for field in ("app_id", "compose_hash", "os_image_hash"):
         raise ValueError(f"Unexpected {field}")
 if details["key_provider"] != policy["key_provider"]:
     raise ValueError("Unexpected key provider")
-print("CVM BOOT VERIFIED against the approved image and deployment policy")
+if policy["gpu"] is not None:
+    gpu = policy["gpu"]
+    if set(gpu) != {"devices", "policy_hash"}:
+        raise ValueError("GPU policy must specify devices and policy_hash")
+    if type(gpu["devices"]) is not int or gpu["devices"] < 1:
+        raise ValueError("Expected a positive GPU count")
+    expected_policy_hash = bytes.fromhex(gpu["policy_hash"])
+    if len(expected_policy_hash) != 32:
+        raise ValueError("Expected a SHA-256 GPU policy digest")
+    if details["tee_variant"] != "dstack-tdx" or "attestation" in report:
+        raise ValueError("GPU event checks require a raw dstack TDX GetQuote response")
+    events = json.loads(report["event_log"])
+    runtime = [e for e in events if e["imr"] == 3]
+    def unique(name):
+        matches = [(i, e) for i, e in enumerate(runtime) if e["event"] == name]
+        if len(matches) != 1:
+            raise ValueError(f"Expected exactly one {name} event")
+        index, event = matches[0]
+        if event["event_type"] != 0x08000001:
+            raise ValueError("Unexpected runtime event type")
+        return index, bytes.fromhex(event["event_payload"])
+    compose_index, _ = unique("compose-hash")
+    policy_index, policy_bytes = unique("gpu-policy-hash")
+    appraisal_index, appraisal_bytes = unique("gpu-attestation")
+    ready_index, _ = unique("system-ready")
+    if not compose_index < policy_index < appraisal_index < ready_index:
+        raise ValueError("Unexpected GPU boot event order")
+    if any(e["event"] != "init-script-hash"
+           for e in runtime[compose_index + 1:policy_index]):
+        raise ValueError("GPU policy must follow compose and init-script measurements")
+    if policy_bytes != expected_policy_hash:
+        raise ValueError("Unexpected GPU policy digest")
+    appraisal = json.loads(appraisal_bytes)
+    expected = {"version": 3, "provider": "nvidia", "devices": gpu["devices"],
+                "cc_mode": "on", "devtools": False, "dbgstat": "disabled", "secboot": True}
+    if any(type(appraisal.get(k)) is not type(v) or appraisal[k] != v
+           for k, v in expected.items()):
+        raise ValueError("GPU count or production security state mismatch")
+    print("TDX GPU BOOT VERIFIED against the approved image and deployment policy")
+else:
+    print("CVM IDENTITY VERIFIED against the approved image and deployment policy")
 ```
 
 Run on the verifying machine, using the original challenge:
@@ -486,6 +462,75 @@ Run on the verifying machine, using the original challenge:
 python3 verify-cvm.py cvm-attestation.json approved-policy.json "$NONCE"
 ```
 
-A successful run prints `CVM BOOT VERIFIED against the approved image and deployment policy`. Signature, measurement, nonce, image, application, key-provider, TCB, or advisory failures exit unsuccessfully. GPU verification is enforced by the approved dstack boot code and configuration; optional direct evidence inspection is documented above.
+A successful run with `gpu: null` prints `CVM IDENTITY VERIFIED against the approved image and deployment policy`. Signature, measurement, nonce, image, application, key-provider, TCB, or advisory failures exit unsuccessfully. This profile authenticates CVM identity; it does not check GPU boot events or a serving connection.
+
+### Verify a TDX GPU boot
+
+For a dstack TDX GPU deployment using the version 3 GPU event contract above, use the same script with a fresh `/GetQuote` response. This TDX-specific endpoint exposes the event log for policy checks. The maintained verifier authenticates the quote, event-log replay, and OS image before the script checks the measured GPU events. Other platforms continue to use `/v1/Attest` for their CPU identity checks.
+
+Approve the guest image and exact application configuration independently. Require GPU attestation, production security settings, and your expected device count. For example, a one-GPU deployment can include this fragment in its dstack `app_compose.json` (not `docker-compose.yml`):
+
+```json
+{
+  "requirements": {
+    "gpu_policy": {
+      "attest_gpu": true,
+      "allow_devtools": false,
+      "allow_debug": false,
+      "allow_insecure_boot": false,
+      "rego": "package policy\ndefault nv_match = false\nnv_match { count(input) == 1 }\n"
+    }
+  }
+}
+```
+
+The Rego rule also rejects an empty GPU inventory. Set the count for your deployment before approving its compose hash. On the verifying machine, compute the GPU policy digest from the reviewed `app_compose.json`, using the RFC 8785 canonicalization library:
+
+```bash
+python3 -m pip install rfc8785
+```
+
+```python
+import hashlib
+import json
+from pathlib import Path
+import rfc8785
+
+compose = json.loads(Path("app_compose.json").read_text())
+policy_bytes = rfc8785.dumps(compose["requirements"]["gpu_policy"])
+print(hashlib.sha256(policy_bytes).hexdigest())
+```
+
+Preserve this independently approved `policy_hash` alongside the OS and compose hashes; do not copy it from the report under test.
+
+Copy `approved-policy.json` to `approved-gpu-policy.json`, keep its independently approved identity fields, and replace `gpu: null` with:
+
+```json
+{
+  "devices": 1,
+  "policy_hash": "<approved 64-character hex GPU policy digest>"
+}
+```
+
+Generate a new `NONCE` on the verifying machine. Inside the TDX GPU CVM, collect evidence using that challenge:
+
+```bash
+NONCE="<challenge from your verifying machine>"
+curl --fail-with-body --unix-socket /var/run/dstack.sock \
+  http://dstack/GetQuote \
+  -H 'Content-Type: application/json' \
+  -d "{\"report_data\":\"$NONCE\"}" \
+  -o gpu-cvm-quote.json
+```
+
+Copy `gpu-cvm-quote.json` back to the verifying machine and run:
+
+```bash
+python3 verify-cvm.py gpu-cvm-quote.json approved-gpu-policy.json "$NONCE"
+```
+
+A successful run prints `TDX GPU BOOT VERIFIED against the approved image and deployment policy`. It requires a single measured GPU policy and appraisal before `system-ready`, the approved policy digest, expected device count, and production security state. This verifies the recorded boot checks. For independent NVIDIA appraisal, use the optional evidence retrieval procedure above. A network client must separately bind its serving connection to the approved workload before sending secrets.
+
+On SNP, the CVM profile verifies the signed CPU report, image, and approved configuration, including a GPU policy that rejects missing GPUs. The local GPU boot check still applies, but SNP has no quote-bound runtime GPU appraisal in this release. The TDX GPU profile deliberately rejects SNP evidence rather than reporting equivalent GPU boot evidence.
 
 For hosted Private AI connection and response-receipt verification, follow the [PAP guide](https://phala.com/confidential-ai-models/verification). For a custom CVM application's signed outputs, also verify its key binding and signature as described in this guide.

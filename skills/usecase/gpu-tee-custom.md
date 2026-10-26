@@ -205,7 +205,7 @@ curl --fail-with-body --unix-socket /var/run/dstack.sock \
   -d '{}' -o cvm-attestation.json
 ```
 
-The response's `attestation` field carries versioned platform evidence, including Intel TDX or AMD SEV-SNP. For fresh verification, use a verifier-generated challenge and the [complete CVM policy example](verify-attestation.md#reference-verify-a-cvm-against-an-approved-policy). It verifies the approved dstack image and deployment configuration that enforce GPU checks before application startup. Local `nvidia-smi` output reports operational status.
+The response's `attestation` field carries versioned platform evidence, including Intel TDX or AMD SEV-SNP. For fresh CPU identity verification, use a verifier-generated challenge and the [CVM policy example](verify-attestation.md#reference-verify-a-cvm-against-an-approved-policy). For TDX GPU boot verification, use its [GPU profile](verify-attestation.md#verify-a-tdx-gpu-boot), which also checks the measured GPU policy, device count, and production security state. Local `nvidia-smi` output reports operational status.
 
 GPU evidence binding depends on the CPU platform: TDX uses measured RTMR3 events; SNP binds the GPU policy through MrConfigV3 `HOST_DATA` when its optional policy field is present. SNP currently has no equivalent runtime binding for the later GPU appraisal record. See the [GPU security model](https://github.com/Dstack-TEE/dstack/blob/250334c26a97a579fe26d911d89e8e90256d8572/docs/security/security-model.md#gpu-security-for-ai-workloads). The guide retains optional direct GPU evidence retrieval and appraisal.
 
