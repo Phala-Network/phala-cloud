@@ -172,9 +172,9 @@ vLLM auto-shards the model across all 8 GPUs.
 
 ## Verify GPU CC
 
-### From inside the CVM
+dstack verifies the GPU before starting vLLM and releasing workload keys. If verification fails, boot stops.
 
-Dstack’s standard GPU policy verifies GPU attestation and Confidential Computing mode before starting vLLM and provisioning workload keys. Failed verification stops boot. The following command checks operational status:
+You can inspect the running GPU's mode over SSH:
 
 ```bash
 phala ssh
@@ -182,18 +182,7 @@ nvidia-smi conf-compute -q
 # Expect: ConfComputeMode : ON
 ```
 
-### Full attestation flow
-
-Follow [verify-attestation.md](verify-attestation.md#verify-nvidia-gpu) to verify the CPU attestation, approved dstack image, and application configuration, including the GPU policy. Dstack performs the GPU check during boot. The same guide includes optional raw GPU evidence retrieval and independent appraisal.
-
-Collect the CPU attestation as a starting point:
-
-```bash
-phala cvms attestation my-llm --json > attestation.json
-# On legacy Intel TDX deployments, .app_certificates[0].quote is a raw TDX quote.
-# For platform-adaptive TDX/SNP verification, use the versioned Attest example.
-# Verify the approved dstack CPU image, application, and GPU policy.
-```
+Use the [attestation guide](verify-attestation.md#verify-nvidia-gpu) to verify the deployment. It also explains how to fetch GPU evidence yourself.
 
 ---
 
@@ -263,10 +252,9 @@ mkdir my-llm && cd my-llm
 phala login
 phala deploy -n my-llm -c docker-compose.yml -e .env -t h200.small --kms phala --wait
 
-# 3. Verify GPU CC + endpoint
+# 3. Verify the deployment, then test the endpoint
 phala cvms attestation my-llm --json > attestation.json
-# Complete verify-attestation.md before sending private data.
-# TDX GPU boot appraisal is bound through RTMR3 events, not report_data.
+# Follow verify-attestation.md before sending private data.
 phala ssh -- nvidia-smi conf-compute -q
 ENDPOINT=$(phala cvms get my-llm --json | jq -r '.endpoints[0]')
 curl $ENDPOINT/v1/chat/completions -H "Authorization: Bearer $VLLM_API_KEY" \

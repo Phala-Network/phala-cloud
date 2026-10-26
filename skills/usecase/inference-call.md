@@ -274,33 +274,7 @@ For the evidence-inspection walkthrough, see
 
 ## Reproduce verification independently
 
-Use independent tools to reproduce the checks. Treat PAP's source as a reference
-implementation and comparison. Follow the canonical
-[ACI verification procedure](https://github.com/Dstack-TEE/private-ai-gateway/blob/main/spec/aci.md#9-verification-procedure):
-
-1. Define trust inputs: vendor roots and collateral, accepted software releases,
-   OS measurements, key-custody anchors, and provider-specific policy.
-2. Preserve the fresh challenge, report, quote, event log, keyset, observed
-   connection key, exact request/response wire bytes, receipt, and cited session.
-3. Reproduce §9.1: verify the hardware quote, recompute the JCS keyset and nonce
-   binding, and check expiry. Appraise measured provenance, OS measurements, and
-   key custody under the chosen policy. Bind the actual serving connection
-   before sending data.
-4. Reproduce §9.2: recompute session IDs and evidence digests, appraise claims
-   under the chosen policy, and independently verify underlying provider evidence.
-   Verify and pin acceptable sessions before sending when the policy requires it.
-5. Reproduce §9.3: verify the receipt signature under the established keyset,
-   compare exact request/response wire hashes, and check the cited session,
-   validity window, and any session pins.
-6. Validate digest and signature constructions against the
-   [published test vectors](https://github.com/Dstack-TEE/private-ai-gateway/blob/main/spec/test-vectors.md).
-   These vectors exercise ACI bindings; live hardware and connection checks use
-   the collected evidence and policy inputs.
-
-Reference: [PAP verifier source](https://github.com/Dstack-TEE/private-ai-gateway/tree/main/apps/desktop/cli).
-Record each check, its inputs and implementation, and its passed, failed,
-skipped, or unestablished result. Keep independently reproduced checks distinct
-from PAP's comparison results.
+Follow the [ACI verification procedure](https://github.com/Dstack-TEE/private-ai-gateway/blob/main/spec/aci.md#9-verification-procedure) to implement the checks yourself. Use [PAP's source](https://github.com/Dstack-TEE/private-ai-gateway/tree/main/apps/desktop/cli) as a reference and the [test vectors](https://github.com/Dstack-TEE/private-ai-gateway/blob/main/spec/test-vectors.md) to check your implementation. The procedure covers the connection before sending a prompt as well as the receipt returned afterward.
 
 ---
 
