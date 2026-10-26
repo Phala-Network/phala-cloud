@@ -122,13 +122,9 @@ await client.safeDelete<T>(request, options?)
 
 ### Read retries
 
-Buffered GET and HEAD requests retry transient HTTP 409, 429, and 503 responses,
-up to 30 retries after the first attempt. A nonempty structured `error_code` makes
-a 409 permanent. Set `retry: 0` or `retry: false` to disable retries.
-
-Positive `Retry-After` seconds or HTTP dates take precedence. Otherwise the
-default delay doubles from one second to a twenty-second cap. Each HTTP exchange
-gets a fresh request timeout; the operation signal also bounds all retry waits:
+Buffered GET and HEAD requests allow up to 30 retries by default. Set `retry: 0`
+or `retry: false` to disable them. `timeout` bounds each HTTP exchange; use a
+signal to bound the whole operation, including retry waits:
 
 ```typescript
 const client = createClient({ apiKey, timeout: 30_000 });
@@ -137,10 +133,8 @@ const info = await client.get('/cvms/example', {
 });
 ```
 
-`requestFull` uses the same read policy and returns the final HTTP response.
-Transport and decoding failures do not trigger read retries. The advanced
-`.raw` interface and streaming reconnects retain their existing ofetch/lifecycle
-policies. See the [shared SDK retry contract](../../docs/sdk-read-retries.md).
+See the [retry policy](../../docs/sdk-read-retries.md) for retryable responses,
+`Retry-After` handling, and cancellation behavior.
 
 ### Basic Configuration
 

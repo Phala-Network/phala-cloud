@@ -6,9 +6,7 @@
   status classification, `Retry-After`, default budget, and backoff as Go/JS.
   Support operation deadlines and cancellation during retry waits.
 - Apply the same policy to full-response requests and preserve retry settings
-  across versioned clients. Add shared SDK conformance cases to CI.
-- Use Tenacity for synchronous and asynchronous retry execution under the shared
-  SDK policy.
+  across versioned clients.
 
 ## [](https://github.com/Phala-Network/phala-cloud/compare/python-v0.1.3...python-v) (2026-07-26)
 

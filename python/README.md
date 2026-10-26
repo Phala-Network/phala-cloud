@@ -69,11 +69,9 @@ asyncio.run(main())
 
 ## Read retries
 
-GET and HEAD retry transient HTTP 409, 429, and 503 responses. A structured
-409 business error is permanent. Positive `Retry-After` seconds or HTTP dates
-take precedence over the default one-second exponential backoff, capped at
-twenty seconds. Retries stop on exhaustion, cancellation, or an operation deadline.
-`request_full` uses the same policy and returns the final HTTP response.
+Both clients allow up to 30 retries for GET and HEAD by default; set
+`max_retries=0` to disable them. Use `operation_timeout` to bound the whole
+operation, including retry waits:
 
 ```python
 with create_client(timeout=30, operation_timeout=600, max_retries=30) as client:
@@ -87,8 +85,8 @@ task cancellation. Cancellation interrupts retry waiting. An in-flight sync
 request uses HTTPX's socket timeouts and checks cancellation when it returns.
 `timeout` retains HTTPX's per-phase semantics; it is separate from retry waiting.
 
-The [shared SDK retry contract](../docs/sdk-read-retries.md) records the common
-cases, configuration mapping, and transport timing limits.
+See the [retry policy](../docs/sdk-read-retries.md) for retryable responses and
+`Retry-After` handling.
 
 ## Does the SDK follow redirects?
 

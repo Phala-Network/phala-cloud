@@ -6,9 +6,7 @@
   `Retry-After` support, capped exponential backoff, and cancellable waits.
   Preserve per-request timeouts when an operation signal is supplied.
 - Keep structured conflicts permanent across buffered response formats and
-  reject invalid retry budgets. Add shared SDK conformance cases to CI.
-- Use `p-retry` and library-managed delays, preserving cancellable server waits
-  and Node 18 CommonJS support.
+  reject invalid retry budgets.
 
 ## [](https://github.com/Phala-Network/phala-cloud/compare/js-v0.3.0...js-v) (2026-07-25)
 

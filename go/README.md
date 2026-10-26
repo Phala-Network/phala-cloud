@@ -76,14 +76,9 @@ API calls return `APIError` for 3xx responses. SSE streams report an error inste
 
 ## How do retries and timeouts work?
 
-GET and HEAD requests retry transient HTTP 409, 429, and 503 responses. A 409
-with a structured error code is permanent. Retries honor `Retry-After` in seconds
-or HTTP-date form, including delays longer than the individual HTTP timeout.
-Without a usable header, delays are 1, 2, 4, 8, 16, then 20 seconds per retry.
-
-`WithMaxRetries` defaults to 30; zero disables retries. Cancellation interrupts
-backoff. `WithTimeout` bounds each HTTP exchange; use a context deadline to bound
-the entire operation, including all retry waits:
+GET and HEAD requests allow up to 30 retries by default; `WithMaxRetries(0)`
+disables them. `WithTimeout` bounds each HTTP exchange. Use a context deadline
+to bound the whole operation, including retry waits:
 
 ```go
 ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -91,12 +86,8 @@ defer cancel()
 info, err := client.GetCVMInfo(ctx, cvmID)
 ```
 
-This read retry layer does not replay transport failures, failed response decoding,
-or mutation requests. Mutation methods retain their existing explicit retry policies.
-A permanent quota shortage or an exhausted deadline still returns an error.
-
-The [shared SDK retry contract](../docs/sdk-read-retries.md) defines conformance
-cases for Go, JavaScript/TypeScript, and both Python clients.
+See the [retry policy](../docs/sdk-read-retries.md) for retryable responses,
+`Retry-After` handling, and cancellation behavior.
 
 ## Usage Examples
 

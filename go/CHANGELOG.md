@@ -7,7 +7,6 @@
   Per-request timeouts no longer prevent waiting for a longer quota reset.
 - Reject negative retry budgets and prevent numeric `Retry-After` values from
   overflowing into immediate retries.
-- Use `cenkalti/backoff/v5` to run retries while preserving the shared SDK policy.
 
 ## [](https://github.com/Phala-Network/phala-cloud/compare/sdks/go/v0.1.1...sdks/go/v) (2026-07-26)
 
