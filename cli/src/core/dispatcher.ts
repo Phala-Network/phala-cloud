@@ -401,7 +401,10 @@ export async function dispatchCommand(
 			);
 		}
 
-		const parsedInput = definition.schema.parse(mergedInput);
+		const parsedInput = definition.schema.parse(mergedInput) as Record<
+			string,
+			unknown
+		>;
 		const handlerInput = Object.freeze({
 			...parsedInput,
 			json: globalOptions.json,
@@ -440,8 +443,7 @@ export async function dispatchCommand(
 			const hasMissingRequired = error.issues.some(
 				(issue) =>
 					issue.code === "invalid_type" &&
-					issue.received === "undefined" &&
-					issue.message === "Required",
+					issue.message.endsWith("received undefined"),
 			);
 
 			// If missing required argument and no positionals were provided, show help

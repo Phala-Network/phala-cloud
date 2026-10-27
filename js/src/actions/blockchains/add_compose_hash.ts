@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { callbackSchema } from "../../types/common";
 import {
   type Chain,
   type Address,
@@ -244,9 +245,9 @@ const AddComposeHashRequestSchema = z
     signal: z.unknown().optional(),
 
     // Progress callbacks
-    onTransactionStateChange: z.function().optional(),
-    onTransactionSubmitted: z.function().optional(),
-    onTransactionConfirmed: z.function().optional(),
+    onTransactionStateChange: callbackSchema.optional(),
+    onTransactionSubmitted: callbackSchema.optional(),
+    onTransactionConfirmed: callbackSchema.optional(),
   })
   .passthrough()
   .refine(

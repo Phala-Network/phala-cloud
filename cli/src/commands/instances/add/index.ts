@@ -18,7 +18,6 @@ import { getEncryptPubkey } from "@/src/commands/envs/get-encrypt-pubkey";
 import { defineCommand } from "@/src/core/define-command";
 import { isInJsonMode } from "@/src/core/json-mode";
 import type { CommandContext } from "@/src/core/types";
-import { CLOUD_URL } from "@/src/utils/constants";
 import {
 	instancesAddCommandMeta,
 	instancesAddCommandSchema,
@@ -156,14 +155,7 @@ function formatInstanceOutput(
 	}
 
 	const vmUuid = typeof instance.vm_uuid === "string" ? instance.vm_uuid : "";
-	const vmUuidCompact = vmUuid.replace(/-/g, "");
-	const workspaceSlug = context.projectConfig.slug || "";
-	const appUrl =
-		workspaceSlug && vmUuidCompact && typeof instance.app_id === "string"
-			? `${CLOUD_URL}/${workspaceSlug}/apps/${instance.app_id}/instances/${vmUuidCompact}`
-			: typeof instance.app_url === "string"
-				? instance.app_url
-				: "-";
+	const appUrl = typeof instance.app_url === "string" ? instance.app_url : "-";
 	const teepodName =
 		typeof instance.teepod === "object" &&
 		instance.teepod !== null &&

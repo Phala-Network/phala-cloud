@@ -10,7 +10,7 @@ export const SshKeySchema = z.object({
   fingerprint: z.string(),
   key_type: z.string(),
   source: z.string(),
-  key_metadata: z.record(z.unknown()).nullable().optional(),
+  key_metadata: z.record(z.string(), z.unknown()).nullable().optional(),
   last_synced_at: z.string().nullable().optional(),
   created_at: z.string(),
   updated_at: z.string(),

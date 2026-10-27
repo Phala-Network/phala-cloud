@@ -4,6 +4,7 @@ import {
   watchCvmState,
   WatchAbortedError,
   MaxRetriesExceededError,
+  WatchCvmStateRequestSchema,
   type SSEEvent,
 } from "./watch_cvm_state";
 
@@ -252,5 +253,24 @@ describe("watchCvmState", () => {
 
     // Check headers
     expect(options.headers["Accept"]).toBe("text/event-stream");
+  });
+});
+
+describe("WatchCvmStateRequestSchema maxRetries", () => {
+  it("defaults to unlimited retries", () => {
+    const parsed = WatchCvmStateRequestSchema.parse({ target: "running" });
+    expect(parsed.maxRetries).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it("accepts an explicit Infinity", () => {
+    const parsed = WatchCvmStateRequestSchema.parse({
+      target: "running",
+      maxRetries: Number.POSITIVE_INFINITY,
+    });
+    expect(parsed.maxRetries).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it("rejects negative values", () => {
+    expect(WatchCvmStateRequestSchema.safeParse({ target: "running", maxRetries: -1 }).success).toBe(false);
   });
 });

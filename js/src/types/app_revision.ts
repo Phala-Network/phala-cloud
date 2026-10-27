@@ -30,7 +30,7 @@ export const AppRevisionDetailResponseSchema = z.object({
   vm_uuid: z.string(),
   compose_hash: z.string(),
   compose_file: z
-    .union([z.record(z.any()), z.string()])
+    .union([z.record(z.string(), z.any()), z.string()])
     .nullable()
     .optional(),
   encrypted_env: z.string(),

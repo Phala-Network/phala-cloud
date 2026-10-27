@@ -157,7 +157,7 @@ export const CvmInfoV20260121Schema = z.object({
   pre_launch_script_hash: z.string().nullable().optional(),
   gateway: CvmGatewayInfoV20260121Schema,
   logs: CvmLogUrlsV20260121Schema.optional().default({}),
-  services: z.array(z.record(z.any())).optional().default([]),
+  services: z.array(z.record(z.string(), z.any())).optional().default([]),
   endpoints: z.array(CvmNetworkUrlsV20251028Schema).nullable().optional(),
   public_logs: z.boolean().optional(),
   public_sysinfo: z.boolean().optional(),
@@ -185,7 +185,7 @@ export type CvmInfoV20260522 = z.infer<typeof CvmInfoV20260522Schema>;
 
 export const CvmInfoDetailV20260121Schema = CvmInfoV20260121Schema.extend({
   compose_file: z
-    .union([z.record(z.any()), z.string()])
+    .union([z.record(z.string(), z.any()), z.string()])
     .nullable()
     .optional(),
 });
@@ -193,7 +193,7 @@ export type CvmInfoDetailV20260121 = z.infer<typeof CvmInfoDetailV20260121Schema
 
 export const CvmInfoDetailV20260522Schema = CvmInfoV20260522Schema.extend({
   compose_file: z
-    .union([z.record(z.any()), z.string()])
+    .union([z.record(z.string(), z.any()), z.string()])
     .nullable()
     .optional(),
 });

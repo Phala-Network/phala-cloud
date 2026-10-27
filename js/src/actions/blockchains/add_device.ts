@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { callbackSchema } from "../../types/common";
 import {
   type Chain,
   type Address,
@@ -71,9 +72,9 @@ const AddDeviceRequestSchema = z
     timeout: z.number().optional().default(120000),
     retryOptions: z.unknown().optional(),
     signal: z.unknown().optional(),
-    onTransactionStateChange: z.function().optional(),
-    onTransactionSubmitted: z.function().optional(),
-    onTransactionConfirmed: z.function().optional(),
+    onTransactionStateChange: callbackSchema.optional(),
+    onTransactionSubmitted: callbackSchema.optional(),
+    onTransactionConfirmed: callbackSchema.optional(),
   })
   .passthrough()
   .refine((data) => !!data.privateKey !== !!data.walletClient, {
