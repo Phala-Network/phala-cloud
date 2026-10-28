@@ -1,5 +1,7 @@
 import { describe, test, expect, mock, beforeEach } from "bun:test";
 import type { CommandContext } from "@/src/core/types";
+import { instancesAddCommandSchema } from "./command";
+import { cvmsReplicateCommandSchema } from "../../cvms/replicate/command";
 
 class MockResourceError extends Error {}
 
@@ -103,7 +105,11 @@ describe("instances add command", () => {
 
 	test("sends custom name when creating an app instance", async () => {
 		const code = await instancesAddCommand.run(
-			{ appId: "app-123", name: "redis-0", nodeId: "teepod_test5" },
+			instancesAddCommandSchema.parse({
+				appId: "app-123",
+				name: "redis-0",
+				nodeId: "teepod_test5",
+			}),
 			makeContext(),
 		);
 
@@ -117,7 +123,10 @@ describe("instances add command", () => {
 
 	test("resolves instance placement names to the Teepod hash, not the physical Node hash", async () => {
 		const code = await instancesAddCommand.run(
-			{ appId: "app-123", nodeId: "test-node" },
+			instancesAddCommandSchema.parse({
+				appId: "app-123",
+				nodeId: "test-node",
+			}),
 			makeContext(),
 		);
 		expect(code).toBe(0);
@@ -130,7 +139,7 @@ describe("instances add command", () => {
 
 	test("resolves replica placement names to the Teepod hash when Node.id differs", async () => {
 		const code = await cvmsReplicateCommand.run(
-			{ nodeId: "test-node" },
+			cvmsReplicateCommandSchema.parse({ nodeId: "test-node" }),
 			makeContext({ cvmId: { id: "source-uuid" } }),
 		);
 		expect(code).toBe(0);
@@ -143,7 +152,7 @@ describe("instances add command", () => {
 
 	test("rejects numeric placement input without posting", async () => {
 		const code = await instancesAddCommand.run(
-			{ appId: "app-123", nodeId: "7" },
+			instancesAddCommandSchema.parse({ appId: "app-123", nodeId: "7" }),
 			makeContext(),
 		);
 		expect(code).toBe(1);
@@ -152,14 +161,14 @@ describe("instances add command", () => {
 
 	test("does not send custom name in commit mode", async () => {
 		const code = await instancesAddCommand.run(
-			{
+			instancesAddCommandSchema.parse({
 				appId: "app-123",
 				name: "redis-0",
 				commit: true,
 				token: "token-123",
 				composeHash: "hash-123",
 				transactionHash: "0xtx",
-			},
+			}),
 			makeContext(),
 		);
 

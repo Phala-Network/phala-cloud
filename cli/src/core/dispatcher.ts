@@ -401,7 +401,10 @@ export async function dispatchCommand(
 			);
 		}
 
-		const parsedInput = definition.schema.parse(mergedInput);
+		const parsedInput = definition.schema.parse(mergedInput, {
+			// Needed to tell a missing argument (input is undefined) from an invalid one.
+			reportInput: true,
+		}) as Record<string, unknown>;
 		const handlerInput = Object.freeze({
 			...parsedInput,
 			json: globalOptions.json,
@@ -440,8 +443,8 @@ export async function dispatchCommand(
 			const hasMissingRequired = error.issues.some(
 				(issue) =>
 					issue.code === "invalid_type" &&
-					issue.received === "undefined" &&
-					issue.message === "Required",
+					"input" in issue &&
+					issue.input === undefined,
 			);
 
 			// If missing required argument and no positionals were provided, show help

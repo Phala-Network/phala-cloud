@@ -170,8 +170,7 @@ function formatReplicaOutput(
 	}
 
 	const vmUuid = typeof replica.vm_uuid === "string" ? replica.vm_uuid : "";
-	const workspaceSlug =
-		sourceCvm?.workspace?.slug || context.projectConfig.slug || "";
+	const workspaceSlug = sourceCvm?.workspace?.slug || "";
 	const workspaceName = sourceCvm?.workspace?.name || workspaceSlug || "-";
 	const teamLabel =
 		workspaceSlug && workspaceSlug !== workspaceName

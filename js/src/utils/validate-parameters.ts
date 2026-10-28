@@ -51,7 +51,7 @@ export function safeValidateActionParameters<ReturnType>(parameters?: {
             },
           ],
         },
-      } as SafeResult<ReturnType>;
+      } as unknown as SafeResult<ReturnType>;
     }
   }
   return undefined;

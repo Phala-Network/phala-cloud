@@ -13,13 +13,13 @@ export const ApiErrorSchema = z.object({
           .object({
             msg: z.string(),
             type: z.string().optional(),
-            ctx: z.record(z.unknown()).optional(),
+            ctx: z.record(z.string(), z.unknown()).optional(),
             loc: z.array(z.union([z.string(), z.number()])).optional(),
             input: z.unknown().optional(),
           })
           .passthrough(), // Allow additional fields
       ),
-      z.record(z.unknown()),
+      z.record(z.string(), z.unknown()),
     ])
     .optional(),
   type: z.string().optional(),

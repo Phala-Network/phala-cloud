@@ -52,6 +52,7 @@ import {
 	safePatchCvm,
 	safeProvisionCvm,
 	safeUpdateCvmVisibility,
+	type ProvisionCvmRequest,
 } from "@phala/cloud";
 import dedent from "dedent";
 import fs from "fs-extra";
@@ -622,7 +623,7 @@ export const buildProvisionPayload = (
 		composeFile.key_provider = options.experimentalKeyProviderType;
 	}
 
-	const payload: Record<string, unknown> = {
+	const payload: ProvisionCvmRequest = {
 		name: name,
 		compose_file: composeFile,
 		listed: privacySettings.listed,

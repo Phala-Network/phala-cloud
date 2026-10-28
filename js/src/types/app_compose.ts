@@ -20,7 +20,7 @@ export function validateComposePayloadSize(
     const maxKB = MAX_COMPOSE_PAYLOAD_BYTES / 1024;
     const currentKB = Math.ceil(totalSize / 1024);
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: "custom",
       message: `Combined size of docker_compose_file and pre_launch_script must not exceed ${maxKB}KB (current: ${currentKB}KB)`,
     });
   }

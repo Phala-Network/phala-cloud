@@ -16,6 +16,15 @@ export type Prettify<T> = {
 } & {};
 
 /**
+ * Schema for an optional callback option. Zod 4 no longer provides `z.function()`
+ * as a schema, so this validates that the value is a function and keeps the
+ * `(...args: unknown[]) => unknown` type that `z.function()` inferred in Zod 3.
+ */
+export const callbackSchema = z.custom<(...args: unknown[]) => unknown>(
+  (value) => typeof value === "function",
+);
+
+/**
  * Common type for action parameters that control behavior (e.g., schema validation)
  */
 export type ActionParameters<T = undefined> = T extends z.ZodTypeAny

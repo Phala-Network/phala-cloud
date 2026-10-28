@@ -42,9 +42,9 @@ const WatchCvmStateParamsSchema = z.object({
   target: z.string().describe("Target status to wait for (e.g., 'running', 'stopped')"),
   interval: z.number().min(5).max(30).default(5).describe("Polling interval in seconds"),
   timeout: z.number().min(10).max(600).default(300).describe("Timeout per attempt in seconds"),
+  // Zod 4 rejects Infinity in z.number(), so allow it explicitly.
   maxRetries: z
-    .number()
-    .min(0)
+    .union([z.number().min(0), z.literal(Number.POSITIVE_INFINITY)])
     .default(Number.POSITIVE_INFINITY)
     .describe("Maximum number of retry attempts (Infinity for unlimited)"),
   retryDelay: z.number().min(0).default(5000).describe("Delay between retries in milliseconds"),

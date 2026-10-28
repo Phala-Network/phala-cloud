@@ -1,4 +1,4 @@
-import type { z, ZodTypeAny } from "zod";
+import type { z } from "zod";
 import type { CvmIdInput } from "@phala/cloud";
 import type { RuntimeProjectConfig } from "@/src/utils/project-config";
 
@@ -144,19 +144,19 @@ export interface CommandContext {
 	): void;
 }
 
-export interface CommandDefinition<Schema extends ZodTypeAny = ZodTypeAny> {
+export interface CommandDefinition<Schema extends z.ZodType = z.ZodType> {
 	readonly path: CommandPath;
 	readonly meta: CommandMeta;
 	readonly schema: Schema;
 	readonly run: CommandHandler<Schema>;
 }
 
-export type CommandHandler<Schema extends ZodTypeAny> = (
+export type CommandHandler<Schema extends z.ZodType> = (
 	input: Readonly<InferCommandInput<Schema>>,
 	context: CommandContext,
 ) => Promise<number | undefined> | number | undefined;
 
-export type InferCommandInput<Schema extends ZodTypeAny> = z.infer<Schema>;
+export type InferCommandInput<Schema extends z.ZodType> = z.infer<Schema>;
 
 export interface CommandGroup {
 	readonly path: CommandPath;
