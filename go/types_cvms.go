@@ -437,7 +437,7 @@ type CVMActionResponse = CVMActionResponseV20260522
 
 // ReplicateCVMOptions holds options for replicating a CVM.
 type ReplicateCVMOptions struct {
-	// Node is the physical node name. Omit it for automatic placement.
+	// Node is the physical node name. Omit it to inherit the source CVM's placement.
 	Node *string `json:"node,omitempty"`
 	// OSImage pins the replica to a specific OS image slug. Empty means the
 	// replica inherits the source CVM's image.

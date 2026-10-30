@@ -3,7 +3,7 @@ package phala
 // CreateAppInstanceRequest is the request body for creating an app instance.
 type CreateAppInstanceRequest struct {
 	Name *string `json:"name,omitempty"`
-	// Node is the physical node name. Omit it for automatic placement.
+	// Node is the physical node name. Omit it to inherit the template instance's placement.
 	Node              *string `json:"node,omitempty"`
 	DockerComposeFile *string `json:"docker_compose_file,omitempty"`
 	PreLaunchScript   *string `json:"pre_launch_script,omitempty"`
