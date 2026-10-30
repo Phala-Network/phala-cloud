@@ -18,14 +18,6 @@ func TestPlacementHashIDRequests(t *testing.T) {
 		call func(*Client) error
 	}{
 		{
-			name: "provision", path: "/cvms",
-			want: map[string]string{"node_id": nodeID, "teepod_id": teepodID},
-			call: func(c *Client) error {
-				_, err := c.ProvisionCVM(context.Background(), &ProvisionCVMRequest{NodeID: &nodeID, TeepodID: &teepodID})
-				return err
-			},
-		},
-		{
 			name: "replica", path: "/cvms/source/replicas",
 			want: map[string]string{"node_id": teepodID},
 			call: func(c *Client) error {
@@ -99,8 +91,11 @@ func TestPlacementHashIDRequests(t *testing.T) {
 
 func TestCapacityHashIDResponse(t *testing.T) {
 	var capacity TeepodCapacity
-	if err := json.Unmarshal([]byte(`{"teepod_id":7,"node_id":42,"teepod_id_hashid":"teepod_placement7","node_id_hashid":"node_physical42"}`), &capacity); err != nil {
+	if err := json.Unmarshal([]byte(`{"teepod_id":7,"node_id":42,"teepod_id_hashid":"teepod_placement7","node_id_hashid":"node_physical42","name":"teepod-name","node":"physical-name"}`), &capacity); err != nil {
 		t.Fatal(err)
+	}
+	if capacity.Node != "physical-name" || capacity.Name != "teepod-name" {
+		t.Fatalf("capacity names were not preserved: %+v", capacity)
 	}
 	if capacity.TeepodID != 7 || capacity.NodeID == nil || *capacity.NodeID != 42 || capacity.TeepodIDHashid != "teepod_placement7" || capacity.NodeIDHashid == nil || *capacity.NodeIDHashid != "node_physical42" {
 		t.Fatalf("capacity IDs were not preserved: %+v", capacity)

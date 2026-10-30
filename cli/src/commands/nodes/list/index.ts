@@ -1,13 +1,13 @@
-import { safeGetWorkspaceNodes, safeGetCurrentUser } from "@phala/cloud";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext, CommandMeta } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
 import { printTable } from "@/src/lib/table";
 import { logger } from "@/src/utils/logger";
+import { safeGetCurrentUser, safeGetWorkspaceNodes } from "@phala/cloud";
 import {
+	type NodesListCommandInput,
 	nodesListCommandMeta,
 	nodesListCommandSchema,
-	type NodesListCommandInput,
 } from "./command";
 
 async function runNodesListCommand(
@@ -55,17 +55,9 @@ async function runNodesListCommand(
 			return 0;
 		}
 
-		const columns = [
-			"ID",
-			"NAME",
-			"REGION",
-			"PPID",
-			"DEVICE_ID",
-			"VERSION",
-		] as const;
+		const columns = ["NAME", "REGION", "PPID", "DEVICE_ID", "VERSION"] as const;
 		const rows = data.items.map((node) => ({
-			ID: node.id?.toString() ?? "-",
-			NAME: node.name ?? "-",
+			NAME: node.node,
 			REGION: node.region ?? "-",
 			PPID: node.ppid ?? "-",
 			DEVICE_ID: node.device_id ?? "-",

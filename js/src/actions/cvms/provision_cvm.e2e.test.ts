@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, vi } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { createClient } from "../../client";
 import { provisionCvm, safeProvisionCvm } from "./provision_cvm";
 import { getAvailableNodes } from "../get_available_nodes";
@@ -19,10 +19,10 @@ describe.skipIf(skipIntegrationTests)("provisionCvm Integration Tests", () => {
     client = createClient({ timeout: 30000 });
     const nodes = await getAvailableNodes(client);
     node = nodes.nodes.find(n => n.listed && n.images.length > 0);
-    if (!node?.node_id_hashid || !node.teepod_id_hashid) throw new Error("No available placement with canonical hash IDs for testing");
+    if (!node?.node) throw new Error("No available physical node for testing");
     app_compose = {
       name: `sdk-e2e-test-${Date.now()}`,
-      node_id: node.node_id_hashid,
+      node: node.node,
       image: node.images[0].name,
       vcpu: 1,
       memory: 1024,
@@ -34,7 +34,7 @@ describe.skipIf(skipIntegrationTests)("provisionCvm Integration Tests", () => {
     };
   });
 
-  it("should provision a CVM with real API using node_id and auto-fill compose_file.name", async () => {
+  it("should provision a CVM with real API using node and auto-fill compose_file.name", async () => {
     try {
       const result = await provisionCvm(client, app_compose, { schema: false });
       expect(result).toBeDefined();
@@ -55,44 +55,6 @@ describe.skipIf(skipIntegrationTests)("provisionCvm Integration Tests", () => {
       } else {
         console.log("Error detail:", err.detail);
       }
-    }
-  }, 30000);
-
-  it("should provision a CVM with real API using deprecated teepod_id and print warning", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    // Create config with only teepod_id (no node_id)
-    const legacyConfig = { 
-      ...app_compose, 
-      teepod_id: node.teepod_id_hashid
-    };
-    delete legacyConfig.node_id; // Remove node_id to test teepod_id path
-    try {
-      const result = await provisionCvm(client, legacyConfig, { schema: false });
-      expect(result).toBeDefined();
-      expect(result).toHaveProperty("compose_hash");
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining("teepod_id is deprecated")
-      );
-      console.log("✅ provisionCvm (teepod_id) result:", result);
-    } catch (err: any) {
-      expect(err).toBeDefined();
-      expect(err.isRequestError).toBe(true);
-      expect(err.status).toBeGreaterThanOrEqual(400);
-      expect(err.status).toBeLessThanOrEqual(500);
-      expect(
-        typeof err.detail === "string" ||
-        (Array.isArray(err.detail) && err.detail.length > 0)
-      ).toBe(true);
-      if (Array.isArray(err.detail)) {
-        console.log("Error details:", err.detail.map((d: any) => d.msg).join("; "));
-      } else {
-        console.log("Error detail:", err.detail);
-      }
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining("teepod_id is deprecated")
-      );
-    } finally {
-      warnSpy.mockRestore();
     }
   }, 30000);
 
@@ -120,11 +82,11 @@ describe.skipIf(skipIntegrationTests)("provisionCvm Integration Tests", () => {
     }
   }, 30000);
 
-  it("should return error for invalid node_id", async () => {
-    const invalidConfig = { ...app_compose, node_id: "node_invalid" };
+  it("should return error for invalid node", async () => {
+    const invalidConfig = { ...app_compose, node: "nonexistent-node" };
     try {
       await provisionCvm(client, invalidConfig, { schema: false });
-      throw new Error("Should not succeed with invalid node_id");
+      throw new Error("Should not succeed with invalid node");
     } catch (err: any) {
       expect(err).toBeDefined();
       expect(err.isRequestError).toBe(true);
@@ -174,5 +136,5 @@ describe.skipIf(skipIntegrationTests)("provisionCvm Integration Tests", () => {
 });
 
 if (skipIntegrationTests) {
-  console.log(`\n⚠️  Integration tests for provisionCvm skipped!\nSet PHALA_CLOUD_API_KEY and ensure node_id/image/compose_file are valid to run.\n`);
+  console.log(`\n⚠️  Integration tests for provisionCvm skipped!\nSet PHALA_CLOUD_API_KEY and ensure node/image/compose_file are valid to run.\n`);
 }

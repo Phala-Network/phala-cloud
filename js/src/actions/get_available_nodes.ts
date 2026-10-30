@@ -92,6 +92,7 @@ export const TeepodCapacitySchema = z
       .regex(/^node_[A-Za-z0-9]+$/)
       .nullable(),
     name: z.string(),
+    node: z.string(),
     listed: z.boolean(),
     resource_score: z.number(),
     remaining_vcpu: z.number(),

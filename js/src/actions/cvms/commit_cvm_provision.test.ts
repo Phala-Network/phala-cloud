@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createClient } from "../../client";
+import { provisionCvm } from "./provision_cvm";
 import {
   commitCvmProvision,
   safeCommitCvmProvision,
@@ -63,6 +64,15 @@ describe("commitCvmProvision", () => {
       expect(mockPost).toHaveBeenCalledWith("/cvms", mockPayload);
       expect(result).toEqual(mockCvmData);
     });
+  });
+
+  it("commits the token returned by prepare on the same endpoint", async () => {
+    mockPost.mockResolvedValueOnce({ compose_hash: "hash", token: "actual-token", app_env_encrypt_pubkey: "pubkey" });
+    mockPost.mockResolvedValueOnce(mockCvmData);
+    const prepared = await provisionCvm(client, { name: "test-cvm", node: "usw5", compose_file: {} });
+    expect(prepared.app_env_encrypt_pubkey).toBe("pubkey");
+    await commitCvmProvision(client, { token: prepared.token, encrypted_env: "encrypted" });
+    expect(mockPost).toHaveBeenNthCalledWith(2, "/cvms", { token: "actual-token", encrypted_env: "encrypted" });
   });
 
   describe("request validation", () => {

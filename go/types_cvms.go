@@ -256,8 +256,7 @@ type ProvisionCVMRequest struct {
 	VCPU              *int     `json:"vcpu,omitempty"`
 	Memory            *int     `json:"memory,omitempty"`
 	DiskSize          *int     `json:"disk_size,omitempty"`
-	TeepodID          *string  `json:"teepod_id,omitempty"`
-	NodeID            *string  `json:"node_id,omitempty"`
+	Node              *string  `json:"node,omitempty"`
 	Image             *string  `json:"image,omitempty"`
 	Region            *string  `json:"region,omitempty"`
 	KMSID             *string  `json:"kms_id,omitempty"`

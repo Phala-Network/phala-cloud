@@ -14,7 +14,7 @@ const baseRequest = {
 
 function mockClient() {
   const post = vi.fn().mockResolvedValue({
-    compose_hash: "hash", id: "cvm_test", name: "replica", status: "running",
+    compose_hash: "hash", token: "token", id: "cvm_test", name: "replica", status: "running",
     teepod_id: 7, teepod: { id: 7, name: "test-node" }, app_id: "app_test",
     vm_uuid: "uuid-test", instance_id: null, vcpu: 2, memory: 4096, disk_size: 20,
     base_image: "dstack-0.6.0", created_at: "2026-01-01T00:00:00Z", encrypted_env_pubkey: null,
@@ -24,17 +24,10 @@ function mockClient() {
 }
 
 describe("non-admin placement identifiers", () => {
-  it("serializes distinct physical node and Teepod hash IDs for provisioning", async () => {
+  it("serializes the physical node name for provisioning", async () => {
     const { client, post } = mockClient();
-    await provisionCvm(client, {
-      ...baseRequest,
-      node_id: "node_physical42",
-      teepod_id: "teepod_placement7",
-      kms_id: "phala",
-    });
-    expect(post).toHaveBeenCalledWith("/cvms", expect.objectContaining({
-      node_id: "node_physical42", teepod_id: "teepod_placement7", kms_id: "phala",
-    }));
+    await provisionCvm(client, { ...baseRequest, node: "usw5", kms_id: "phala" });
+    expect(post).toHaveBeenCalledWith("/cvms", expect.objectContaining({ node: "usw5", kms_id: "phala" }));
   });
 
   it.each([42, "42", "teepod_wrong", "node_"])("rejects invalid provision node_id %s", (node_id) => {
@@ -54,7 +47,7 @@ describe("non-admin placement identifiers", () => {
 
   it("fails resource parsing when canonical placement identifiers are missing", () => {
     expect(TeepodCapacitySchema.safeParse({
-      teepod_id: 7, node_id: 42, name: "test-node", listed: true, resource_score: 1,
+      teepod_id: 7, node_id: 42, name: "test-node", node: "usw5", listed: true, resource_score: 1,
       remaining_vcpu: 8, remaining_memory: 16, remaining_cvm_slots: 4, images: [],
     }).success).toBe(false);
   });
@@ -63,7 +56,7 @@ describe("non-admin placement identifiers", () => {
     const capacity = TeepodCapacitySchema.parse({
       teepod_id: 7, node_id: 42,
       teepod_id_hashid: "teepod_placement7", node_id_hashid: "node_physical42",
-      name: "test-node", listed: true, resource_score: 1,
+      name: "test-node", node: "usw5", listed: true, resource_score: 1,
       remaining_vcpu: 8, remaining_memory: 16, remaining_cvm_slots: 4, images: [],
     });
     const { client, post } = mockClient();

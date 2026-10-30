@@ -101,10 +101,11 @@ export const deployCommandMeta: CommandMeta = {
 			group: "basic",
 		},
 		{
-			name: "node-id",
-			description: "Physical node hash ID (node_). Auto-selected if omitted.",
+			name: "node",
+			description:
+				"Physical node name, such as usw5. Auto-selected if omitted.",
 			type: "string",
-			target: "nodeId",
+			target: "node",
 			group: "advanced",
 		},
 		{
@@ -327,6 +328,10 @@ export const deployCommandMeta: CommandMeta = {
 			value: "phala deploy --instance-type tdx.medium",
 		},
 		{
+			name: "Deploy to a physical node",
+			value: "phala deploy --node usw5",
+		},
+		{
 			name: "Deploy to specific region",
 			value: "phala deploy --region us-west",
 		},
@@ -397,7 +402,7 @@ export const deployCommandSchema = z
 		fs: z.enum(["ext4", "zfs"]).optional(),
 		image: z.string().optional(),
 		region: z.string().optional(),
-		nodeId: z.string().optional(),
+		node: z.string().min(1).optional(),
 		env: z.array(z.string()).optional(),
 		envFile: z.string().optional(),
 		interactive: z.boolean().default(false),

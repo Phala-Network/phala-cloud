@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { type Client } from "../../client";
+import { NodeRefSchema as ImportedNodeRefSchema } from "../../types/cvm_info_v20260121";
 import { defineAction } from "../../utils/define-action";
 import { PaginationMetadataSchema } from "./list_workspaces";
-import { NodeRefSchema as ImportedNodeRefSchema } from "../../types/cvm_info_v20260121";
 
 /**
  * List nodes accessible by a workspace
@@ -76,7 +76,7 @@ export const NodeInfoSchema = NodeRefSchema;
 
 export const GetWorkspaceNodesSchema = z
   .object({
-    items: z.array(NodeRefSchema),
+    items: z.array(NodeRefSchema.extend({ node: z.string() })),
     total: z.number(),
     page: z.number(),
     page_size: z.number(),

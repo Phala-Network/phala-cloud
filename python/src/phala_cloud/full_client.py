@@ -121,6 +121,26 @@ class CvmIdRequest(BaseModel):
         )
 
 
+class CvmCreationRequest(BaseModel):
+    """Creation payload; node identifies the physical node by name."""
+
+    model_config = ConfigDict(extra="allow")
+    node: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_legacy_node_selection(cls, value: Any) -> Any:
+        if isinstance(value, Mapping):
+            removed = {"node_id", "teepod_id"} & value.keys()
+            if removed:
+                raise ValueError(f"Use node instead of {', '.join(sorted(removed))}")
+        return value
+
+
+def _cvm_creation_body(request: CvmCreationRequest | Mapping[str, Any]) -> dict[str, Any]:
+    return CvmCreationRequest.model_validate(request).model_dump(exclude_unset=True)
+
+
 class FamilyRequest(BaseModel):
     family: str
 
@@ -634,14 +654,14 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     def safe_get_cvm_info(self, request: CvmIdRequest | Mapping[str, Any]) -> SafeResult[Any]:
         return self.safe(self.get_cvm_info, request)
 
-    def provision_cvm(self, request: Mapping[str, Any]) -> Any:
+    def provision_cvm(self, request: CvmCreationRequest | Mapping[str, Any]) -> Any:
         """Prepare a CVM creation (phase 1 of the two-phase create).
 
         POSTs the provision payload to /cvms and returns app_id, compose_hash,
         the env-encryption pubkey, and a one-time commit token. The legacy
         POST /cvms/provision endpoint remains available but is deprecated.
         """
-        body = dict(request)
+        body = _cvm_creation_body(request)
         if "compose_file" in body:
             cf = dict(body["compose_file"])
             cf.setdefault("name", "")
@@ -651,10 +671,12 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         data = _SyncBase.request(self, "POST", "/cvms", json=body)
         return self._validate_by_model(ProvisionCvmResponse, data)
 
-    def safe_provision_cvm(self, request: Mapping[str, Any]) -> SafeResult[Any]:
+    def safe_provision_cvm(
+        self, request: CvmCreationRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
         return self.safe(self.provision_cvm, request)
 
-    def commit_cvm_provision(self, request: Mapping[str, Any]) -> Any:
+    def commit_cvm_provision(self, request: CvmCreationRequest | Mapping[str, Any]) -> Any:
         """Commit a provisioned CVM, creating the actual instance.
 
         Pass the token from provision_cvm (preferred), or app_id + compose_hash
@@ -663,9 +685,11 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         compose_hash for the same app_id raises ResourceError with error_code
         CVM_APP_ID_CONFLICT (409).
         """
-        return self._loose_validate(self.post("/cvms", json=dict(request)))
+        return self._loose_validate(self.post("/cvms", json=_cvm_creation_body(request)))
 
-    def safe_commit_cvm_provision(self, request: Mapping[str, Any]) -> SafeResult[Any]:
+    def safe_commit_cvm_provision(
+        self, request: CvmCreationRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
         return self.safe(self.commit_cvm_provision, request)
 
     def get_cvm_compose_file(self, request: CvmIdRequest | Mapping[str, Any]) -> Any:
@@ -1496,14 +1520,14 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
     async def safe_get_cvm_info(self, request: CvmIdRequest | Mapping[str, Any]) -> SafeResult[Any]:
         return await self.safe(self.get_cvm_info, request)
 
-    async def provision_cvm(self, request: Mapping[str, Any]) -> Any:
+    async def provision_cvm(self, request: CvmCreationRequest | Mapping[str, Any]) -> Any:
         """Prepare a CVM creation (phase 1 of the two-phase create).
 
         POSTs the provision payload to /cvms and returns app_id, compose_hash,
         the env-encryption pubkey, and a one-time commit token. The legacy
         POST /cvms/provision endpoint remains available but is deprecated.
         """
-        body = dict(request)
+        body = _cvm_creation_body(request)
         if "compose_file" in body:
             cf = dict(body["compose_file"])
             cf.setdefault("name", "")
@@ -1513,10 +1537,12 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         data = await _AsyncBase.request(self, "POST", "/cvms", json=body)
         return self._validate_by_model(ProvisionCvmResponse, data)
 
-    async def safe_provision_cvm(self, request: Mapping[str, Any]) -> SafeResult[Any]:
+    async def safe_provision_cvm(
+        self, request: CvmCreationRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
         return await self.safe(self.provision_cvm, request)
 
-    async def commit_cvm_provision(self, request: Mapping[str, Any]) -> Any:
+    async def commit_cvm_provision(self, request: CvmCreationRequest | Mapping[str, Any]) -> Any:
         """Commit a provisioned CVM, creating the actual instance.
 
         Pass the token from provision_cvm (preferred), or app_id + compose_hash
@@ -1525,9 +1551,11 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         compose_hash for the same app_id raises ResourceError with error_code
         CVM_APP_ID_CONFLICT (409).
         """
-        return self._loose_validate(await self.post("/cvms", json=dict(request)))
+        return self._loose_validate(await self.post("/cvms", json=_cvm_creation_body(request)))
 
-    async def safe_commit_cvm_provision(self, request: Mapping[str, Any]) -> SafeResult[Any]:
+    async def safe_commit_cvm_provision(
+        self, request: CvmCreationRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
         return await self.safe(self.commit_cvm_provision, request)
 
     async def get_cvm_compose_file(self, request: CvmIdRequest | Mapping[str, Any]) -> Any:

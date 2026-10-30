@@ -24,6 +24,7 @@ type TeepodCapacity struct {
 	NodeID            *int             `json:"node_id,omitempty"`
 	NodeIDHashid      *string          `json:"node_id_hashid,omitempty"`
 	Name              string           `json:"name"`
+	Node              string           `json:"node"`
 	Listed            bool             `json:"listed"`
 	ResourceScore     float64          `json:"resource_score"`
 	RemainingVCPU     float64          `json:"remaining_vcpu"`
