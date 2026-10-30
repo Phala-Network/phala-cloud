@@ -1,11 +1,11 @@
-import { z } from "zod";
-import type { CommandMeta } from "@/src/core/types";
 import {
 	interactiveOption,
 	privateKeyOption,
 	rpcUrlOption,
 	transactionHashOption,
 } from "@/src/core/common-flags";
+import type { CommandMeta } from "@/src/core/types";
+import { z } from "zod";
 
 export const instancesAddCommandMeta: CommandMeta = {
 	name: "add",
@@ -25,12 +25,10 @@ export const instancesAddCommandMeta: CommandMeta = {
 			target: "name",
 		},
 		{
-			name: "node-id",
-			aliases: ["teepod-id"],
-			description:
-				"Target Teepod hash ID (teepod_) or node name for the new instance.",
+			name: "node",
+			description: "Physical node name for the new instance.",
 			type: "string",
-			target: "nodeId",
+			target: "node",
 		},
 		{
 			name: "compose-file",
@@ -89,22 +87,21 @@ export const instancesAddCommandMeta: CommandMeta = {
 	examples: [
 		{
 			name: "Add instance with existing compose",
-			value: "phala instances add --app-id <app-id> --node-id teepod_abc123",
+			value: "phala instances add --app-id <app-id> --node usw5",
 		},
 		{
 			name: "Add instance with custom name",
-			value:
-				"phala instances add --app-id <app-id> --name redis-0 --node-id teepod_abc123",
+			value: "phala instances add --app-id <app-id> --name redis-0 --node usw5",
 		},
 		{
 			name: "Add instance with new Docker Compose",
 			value:
-				"phala instances add --app-id <app-id> --node-id teepod_abc123 --compose-file docker-compose.yml",
+				"phala instances add --app-id <app-id> --node usw5 --compose-file docker-compose.yml",
 		},
 		{
 			name: "Prepare for multisig approval",
 			value:
-				"phala instances add --app-id <app-id> --node-id teepod_abc123 --compose-file docker-compose.yml --prepare-only",
+				"phala instances add --app-id <app-id> --node usw5 --compose-file docker-compose.yml --prepare-only",
 		},
 		{
 			name: "Commit a prepared instance",
@@ -117,7 +114,7 @@ export const instancesAddCommandMeta: CommandMeta = {
 export const instancesAddCommandSchema = z.object({
 	appId: z.string().optional(),
 	name: z.string().optional(),
-	nodeId: z.string().optional(),
+	node: z.string().min(1).optional(),
 	composeFile: z.string().optional(),
 	preLaunchScript: z.string().optional(),
 	envFile: z.string().optional(),

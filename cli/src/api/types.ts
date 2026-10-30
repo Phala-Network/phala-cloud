@@ -219,6 +219,7 @@ export const teepodSchema = z.object({
 	node_id_hashid: z.string().nullable().optional(),
 	id: z.number().optional(),
 	name: z.string(),
+	node: z.string(),
 	listed: z.boolean().optional(),
 	resource_score: z.number().optional(),
 	remaining_vcpu: z.number().optional(),

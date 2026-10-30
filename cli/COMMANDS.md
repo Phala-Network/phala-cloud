@@ -89,7 +89,7 @@ Manage Phala Confidential Virtual Machines (CVMs).
     - `--vcpu <vcpu>`: Number of vCPUs (default: depends on configuration)
     - `--memory <memory>`: Memory in MB (default: depends on configuration)
     - `--disk-size <diskSize>`: Disk size in GB (default: depends on configuration)
-    - `--teepod-id <teepodId>`: TEEPod ID to use
+    - `--node <name>`: Physical node name, such as `usw5`
     - `--image <image>`: Version of dstack image to use
     - `-e, --env-file <envFile>`: Path to environment file
     - `--skip-env`: Skip environment variable prompt
@@ -139,15 +139,15 @@ Manage Phala Confidential Virtual Machines (CVMs).
   - Arguments:
     - `id`: ID of the CVM to replicate (which can be found with `phala cvms ls`)
   - Options:
-    - `--teepod-id <teepodId>`: TEEPod ID to use for the replica (optional, use `phala nodes list` to see available TEEPod IDs)
+    - `--node <name>`: Physical node name for the replica (optional; use `phala nodes list` to see available nodes)
     - `-e, --env-file <envFile>`: Path to environment file for the replica (optional)
   - Example:
     ```bash
-    # First, list available nodes to find a teepod-id
+    # List available nodes and choose a physical node name
     phala nodes list
-    
-    # Then use the teepod-id to create a replica
-    phala cvms replicate <cvm-id> --teepod-id <teepod-id>
+
+    # Use the node name to create a replica
+    phala cvms replicate <cvm-id> --node usw5
     ```
 
 ## Simulator Commands

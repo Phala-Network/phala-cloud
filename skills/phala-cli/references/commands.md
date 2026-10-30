@@ -90,7 +90,7 @@ Deploy new CVM or update existing one.
 | `--cvm-id <id>` | CVM ID for update (triggers update mode) |
 | `--disk-size <size>` | Disk size with unit (e.g., 50G) |
 | `--image <image>` | OS image version |
-| `--node-id <id>` | Specific node ID |
+| `--node <name>` | Physical node name, such as `usw5` |
 | `--custom-app-id <id>` | Custom App ID |
 | `--nonce <nonce>` | Nonce for deterministic app_id |
 | `--pre-launch-script <path>` | Pre-launch script path |
@@ -192,7 +192,7 @@ Restart a CVM.
 
 | Flag | Description |
 |------|-------------|
-| `--teepod-id <id>` | TEEPod ID for replica |
+| `--node <name>` | Physical node name for the replica, such as `usw5` |
 | `-e, --env-file <file>` | Environment file |
 | `-i, --interactive` | Interactive mode |
 

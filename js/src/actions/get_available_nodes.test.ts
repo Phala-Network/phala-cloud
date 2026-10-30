@@ -6,6 +6,7 @@ import {
   type AvailableNodes,
 } from "./get_available_nodes";
 import type { Client } from "../client";
+import { GetWorkspaceNodesSchema } from "./workspaces/get_workspace_nodes";
 import { SUPPORTED_CHAINS } from "../types/supported_chains";
 
 // Mock response data matching the API structure
@@ -19,6 +20,7 @@ const mockAvailableNodesData: AvailableNodes = {
   },
   nodes: [
     {
+      node: "usw5",
       teepod_id: 1,
       teepod_id_hashid: "teepod_test1",
       node_id_hashid: "node_test42",
@@ -149,5 +151,16 @@ describe("getAvailableNodes", () => {
         }
       }
     });
+  });
+});
+
+
+describe("workspace node catalog", () => {
+  it("preserves the physical node name separately from the Teepod name", () => {
+    const response = GetWorkspaceNodesSchema.parse({
+      items: [{ object_type: "node", id: 7, name: "teepod-display", node: "usw5" }],
+      total: 1, page: 1, page_size: 30, pages: 1,
+    });
+    expect(response.items[0]).toMatchObject({ id: 7, name: "teepod-display", node: "usw5" });
   });
 });

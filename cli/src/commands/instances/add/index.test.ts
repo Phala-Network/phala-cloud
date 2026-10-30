@@ -1,26 +1,15 @@
-import { describe, test, expect, mock, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { buildCommandSchemaInput } from "@/src/core/input-builder";
+import { parseCommandArguments } from "@/src/core/parser";
+import { CommandRegistry } from "@/src/core/registry";
 import type { CommandContext } from "@/src/core/types";
-import { instancesAddCommandSchema } from "./command";
-import { cvmsReplicateCommandSchema } from "../../cvms/replicate/command";
+import {
+	cvmsReplicateCommandMeta,
+	cvmsReplicateCommandSchema,
+} from "../../cvms/replicate/command";
+import { instancesAddCommandMeta, instancesAddCommandSchema } from "./command";
 
 class MockResourceError extends Error {}
-
-const mockAvailableNodes = mock(() =>
-	Promise.resolve({
-		success: true,
-		data: {
-			nodes: [
-				{
-					teepod_id: 7,
-					node_id: 42,
-					name: "test-node",
-					teepod_id_hashid: "teepod_placement7",
-					node_id_hashid: "node_physical42",
-				},
-			],
-		},
-	}),
-);
 
 const mockPost = mock(() =>
 	Promise.resolve({
@@ -37,6 +26,7 @@ const mockPost = mock(() =>
 
 mock.module("@phala/cloud", () => ({
 	ResourceError: MockResourceError,
+	SUPPORTED_CHAINS: {},
 	safeAddComposeHash: mock(() => Promise.resolve({ success: true, data: {} })),
 	safeAddDevice: mock(() => Promise.resolve({ success: true, data: {} })),
 	safeCheckOnChainPrerequisites: mock(() =>
@@ -45,7 +35,6 @@ mock.module("@phala/cloud", () => ({
 			data: { composeHashAllowed: true, deviceAllowed: true },
 		}),
 	),
-	safeGetAvailableNodes: mockAvailableNodes,
 	safeGetAppCvms: mock(() => Promise.resolve({ success: true, data: [] })),
 	safeGetCvmInfo: mock(() =>
 		Promise.resolve({ success: true, data: { vm_uuid: "source-uuid" } }),
@@ -103,60 +92,63 @@ describe("instances add command", () => {
 		mockPost.mockClear();
 	});
 
-	test("sends custom name when creating an app instance", async () => {
+	test("registers and parses only the physical node flag", () => {
+		const registry = new CommandRegistry();
+		registry.registerCommand(instancesAddCommand);
+		registry.registerCommand(cvmsReplicateCommand);
+		for (const [path, meta] of [
+			[["instances", "add"], instancesAddCommandMeta],
+			[["cvms", "replicate"], cvmsReplicateCommandMeta],
+		] as const) {
+			const registered = registry.resolveCommand(path)?.definition;
+			expect(registered?.meta).toBe(meta);
+			const parsed = parseCommandArguments(
+				["--node", "usw5"],
+				registered?.meta.options,
+			);
+			expect(buildCommandSchemaInput(meta, parsed).options.node).toBe("usw5");
+			expect(
+				meta.options?.some(
+					(option) => option.name === "node" && option.target === "node",
+				),
+			).toBe(true);
+			expect(
+				meta.options?.some(
+					(option) =>
+						option.name === "node-id" || option.aliases?.includes("teepod-id"),
+				),
+			).toBe(false);
+		}
+	});
+
+	test("sends physical node name for an instance", async () => {
 		const code = await instancesAddCommand.run(
 			instancesAddCommandSchema.parse({
 				appId: "app-123",
 				name: "redis-0",
-				nodeId: "teepod_test5",
-			}),
-			makeContext(),
-		);
-
-		expect(code).toBe(0);
-		expect(mockPost).toHaveBeenCalledWith(
-			"/apps/app-123/instances",
-			{ name: "redis-0", node_id: "teepod_test5" },
-			{ headers: undefined },
-		);
-	});
-
-	test("resolves instance placement names to the Teepod hash, not the physical Node hash", async () => {
-		const code = await instancesAddCommand.run(
-			instancesAddCommandSchema.parse({
-				appId: "app-123",
-				nodeId: "test-node",
+				node: "usw5",
 			}),
 			makeContext(),
 		);
 		expect(code).toBe(0);
 		expect(mockPost).toHaveBeenCalledWith(
 			"/apps/app-123/instances",
-			{ node_id: "teepod_placement7" },
+			{ name: "redis-0", node: "usw5" },
 			{ headers: undefined },
 		);
 	});
 
-	test("resolves replica placement names to the Teepod hash when Node.id differs", async () => {
+	test("sends physical node name for a replica", async () => {
 		const code = await cvmsReplicateCommand.run(
-			cvmsReplicateCommandSchema.parse({ nodeId: "test-node" }),
+			cvmsReplicateCommandSchema.parse({ node: "usw5" }),
 			makeContext({ cvmId: { id: "source-uuid" } }),
 		);
 		expect(code).toBe(0);
 		expect(mockPost).toHaveBeenCalledWith(
 			"/cvms/source-uuid/replicas",
-			{ node_id: "teepod_placement7" },
+			{ node: "usw5" },
 			{ headers: undefined },
 		);
-	});
-
-	test("rejects numeric placement input without posting", async () => {
-		const code = await instancesAddCommand.run(
-			instancesAddCommandSchema.parse({ appId: "app-123", nodeId: "7" }),
-			makeContext(),
-		);
-		expect(code).toBe(1);
-		expect(mockPost).not.toHaveBeenCalled();
 	});
 
 	test("does not send custom name in commit mode", async () => {

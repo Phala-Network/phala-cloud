@@ -56,7 +56,7 @@ from .client import PhalaCloud as _SyncBase
 from .errors import ApiError
 from .models.apps import DeviceAllowlistResponseV20260121, DeviceAllowlistResponseV20260522
 from .models.auth import CurrentUserV20251028, CurrentUserV20260121
-from .models.base import CloudModel
+from .models.base import CloudModel, NodeSelectionRequest
 from .models.cvms import (
     AppCvmsBatchIsAllowedResponseV20260121,
     AppCvmsBatchIsAllowedResponseV20260522,
@@ -121,6 +121,16 @@ class CvmIdRequest(BaseModel):
         )
 
 
+class CvmCreationRequest(NodeSelectionRequest):
+    """Creation payload; node identifies the physical node by name."""
+
+    model_config = ConfigDict(extra="allow")
+
+
+def _cvm_creation_body(request: CvmCreationRequest | Mapping[str, Any]) -> dict[str, Any]:
+    return CvmCreationRequest.model_validate(request).model_dump(exclude_unset=True)
+
+
 class FamilyRequest(BaseModel):
     family: str
 
@@ -145,10 +155,9 @@ class AppRevisionsRequest(_AliasModel):
     page_size: int | None = Field(default=None, ge=1)
 
 
-class CreateAppInstanceRequest(_AliasModel):
+class CreateAppInstanceRequest(NodeSelectionRequest, _AliasModel):
     app_id: str = Field(alias="appId")
     name: str | None = None
-    node_id: int | None = None
     docker_compose_file: str | None = None
     pre_launch_script: str | None = None
     encrypted_env: str | None = None
@@ -218,8 +227,7 @@ def _upgrade_pre_launch_script_headers(req: UpgradePreLaunchScriptRequest) -> di
     return headers
 
 
-class ReplicateCvmRequest(CvmIdRequest):
-    node_id: int | None = None
+class ReplicateCvmRequest(NodeSelectionRequest, CvmIdRequest):
     os_image: str | None = Field(default=None, min_length=1)
 
 
@@ -634,14 +642,14 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     def safe_get_cvm_info(self, request: CvmIdRequest | Mapping[str, Any]) -> SafeResult[Any]:
         return self.safe(self.get_cvm_info, request)
 
-    def provision_cvm(self, request: Mapping[str, Any]) -> Any:
+    def provision_cvm(self, request: CvmCreationRequest | Mapping[str, Any]) -> Any:
         """Prepare a CVM creation (phase 1 of the two-phase create).
 
         POSTs the provision payload to /cvms and returns app_id, compose_hash,
         the env-encryption pubkey, and a one-time commit token. The legacy
         POST /cvms/provision endpoint remains available but is deprecated.
         """
-        body = dict(request)
+        body = _cvm_creation_body(request)
         if "compose_file" in body:
             cf = dict(body["compose_file"])
             cf.setdefault("name", "")
@@ -651,10 +659,12 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         data = _SyncBase.request(self, "POST", "/cvms", json=body)
         return self._validate_by_model(ProvisionCvmResponse, data)
 
-    def safe_provision_cvm(self, request: Mapping[str, Any]) -> SafeResult[Any]:
+    def safe_provision_cvm(
+        self, request: CvmCreationRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
         return self.safe(self.provision_cvm, request)
 
-    def commit_cvm_provision(self, request: Mapping[str, Any]) -> Any:
+    def commit_cvm_provision(self, request: CvmCreationRequest | Mapping[str, Any]) -> Any:
         """Commit a provisioned CVM, creating the actual instance.
 
         Pass the token from provision_cvm (preferred), or app_id + compose_hash
@@ -663,9 +673,11 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         compose_hash for the same app_id raises ResourceError with error_code
         CVM_APP_ID_CONFLICT (409).
         """
-        return self._loose_validate(self.post("/cvms", json=dict(request)))
+        return self._loose_validate(self.post("/cvms", json=_cvm_creation_body(request)))
 
-    def safe_commit_cvm_provision(self, request: Mapping[str, Any]) -> SafeResult[Any]:
+    def safe_commit_cvm_provision(
+        self, request: CvmCreationRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
         return self.safe(self.commit_cvm_provision, request)
 
     def get_cvm_compose_file(self, request: CvmIdRequest | Mapping[str, Any]) -> Any:
@@ -1244,7 +1256,10 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         return self._loose_validate(
             self.post(
                 f"/cvms/{req.resolved}/replicas",
-                json={"node_id": req.node_id, "os_image": req.os_image},
+                json={
+                    "os_image": req.os_image,
+                    **({"node": req.node} if req.node is not None else {}),
+                },
             )
         )
 
@@ -1277,7 +1292,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         req = CreateAppInstanceRequest.model_validate(request)
         body = {
             "name": req.name,
-            "node_id": req.node_id,
+            **({"node": req.node} if req.node is not None else {}),
             "docker_compose_file": req.docker_compose_file,
             "pre_launch_script": req.pre_launch_script,
             "encrypted_env": req.encrypted_env,
@@ -1496,14 +1511,14 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
     async def safe_get_cvm_info(self, request: CvmIdRequest | Mapping[str, Any]) -> SafeResult[Any]:
         return await self.safe(self.get_cvm_info, request)
 
-    async def provision_cvm(self, request: Mapping[str, Any]) -> Any:
+    async def provision_cvm(self, request: CvmCreationRequest | Mapping[str, Any]) -> Any:
         """Prepare a CVM creation (phase 1 of the two-phase create).
 
         POSTs the provision payload to /cvms and returns app_id, compose_hash,
         the env-encryption pubkey, and a one-time commit token. The legacy
         POST /cvms/provision endpoint remains available but is deprecated.
         """
-        body = dict(request)
+        body = _cvm_creation_body(request)
         if "compose_file" in body:
             cf = dict(body["compose_file"])
             cf.setdefault("name", "")
@@ -1513,10 +1528,12 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         data = await _AsyncBase.request(self, "POST", "/cvms", json=body)
         return self._validate_by_model(ProvisionCvmResponse, data)
 
-    async def safe_provision_cvm(self, request: Mapping[str, Any]) -> SafeResult[Any]:
+    async def safe_provision_cvm(
+        self, request: CvmCreationRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
         return await self.safe(self.provision_cvm, request)
 
-    async def commit_cvm_provision(self, request: Mapping[str, Any]) -> Any:
+    async def commit_cvm_provision(self, request: CvmCreationRequest | Mapping[str, Any]) -> Any:
         """Commit a provisioned CVM, creating the actual instance.
 
         Pass the token from provision_cvm (preferred), or app_id + compose_hash
@@ -1525,9 +1542,11 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         compose_hash for the same app_id raises ResourceError with error_code
         CVM_APP_ID_CONFLICT (409).
         """
-        return self._loose_validate(await self.post("/cvms", json=dict(request)))
+        return self._loose_validate(await self.post("/cvms", json=_cvm_creation_body(request)))
 
-    async def safe_commit_cvm_provision(self, request: Mapping[str, Any]) -> SafeResult[Any]:
+    async def safe_commit_cvm_provision(
+        self, request: CvmCreationRequest | Mapping[str, Any]
+    ) -> SafeResult[Any]:
         return await self.safe(self.commit_cvm_provision, request)
 
     async def get_cvm_compose_file(self, request: CvmIdRequest | Mapping[str, Any]) -> Any:
@@ -2138,7 +2157,10 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         return self._loose_validate(
             await self.post(
                 f"/cvms/{req.resolved}/replicas",
-                json={"node_id": req.node_id, "os_image": req.os_image},
+                json={
+                    "os_image": req.os_image,
+                    **({"node": req.node} if req.node is not None else {}),
+                },
             )
         )
 
@@ -2173,7 +2195,7 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         req = CreateAppInstanceRequest.model_validate(request)
         body = {
             "name": req.name,
-            "node_id": req.node_id,
+            **({"node": req.node} if req.node is not None else {}),
             "docker_compose_file": req.docker_compose_file,
             "pre_launch_script": req.pre_launch_script,
             "encrypted_env": req.encrypted_env,

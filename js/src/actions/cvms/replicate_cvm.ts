@@ -3,6 +3,7 @@ import type { Client, SafeResult } from "../../client";
 import type { ApiVersion } from "../../types/client";
 import { CvmIdObjectSchema, CvmIdSchema, refineCvmId } from "../../types/cvm_id";
 import { type VMForVersion, getVMSchemaForVersion } from "../../types/cvm_info";
+import { placementRequest } from "../../utils/placement-request";
 
 /**
  * Replicate (scale up) a CVM by creating a new replica
@@ -19,7 +20,7 @@ import { type VMForVersion, getVMSchemaForVersion } from "../../types/cvm_info";
  * console.log(replica.vm_uuid); // new replica UUID
  *
  * // Replicate to a specific node
- * const replica2 = await replicateCvm(client, { id: 'my-cvm-id', node_id: 'teepod_abc123' });
+ * const replica2 = await replicateCvm(client, { id: 'my-cvm-id', node: 'usw5' });
  * ```
  *
  * ## Safe Version
@@ -36,20 +37,13 @@ import { type VMForVersion, getVMSchemaForVersion } from "../../types/cvm_info";
  * ```
  */
 
-export const ReplicateCvmRequestSchema = refineCvmId(
-  CvmIdObjectSchema.extend({
-    /** Replica placement uses a Teepod hash ID, despite the node_id name. */
-    node_id: z
-      .string()
-      .regex(/^teepod_[A-Za-z0-9]+$/)
-      .optional(),
-    /** @deprecated Use node_id; both fields identify a Teepod. */
-    teepod_id: z
-      .string()
-      .regex(/^teepod_[A-Za-z0-9]+$/)
-      .optional(),
-    os_image: z.string().min(1).optional(),
-  }),
+export const ReplicateCvmRequestSchema = placementRequest(
+  refineCvmId(
+    CvmIdObjectSchema.extend({
+      node: z.string().min(1).optional(),
+      os_image: z.string().min(1).optional(),
+    }),
+  ),
 );
 
 export type ReplicateCvmRequest = z.infer<typeof ReplicateCvmRequestSchema>;
@@ -64,10 +58,9 @@ export async function replicateCvm<V extends ApiVersion>(
 ): Promise<VMForVersion<V>> {
   const parsed = ReplicateCvmRequestSchema.parse(request);
   const { cvmId } = CvmIdSchema.parse(parsed);
-  const { node_id, teepod_id, os_image } = parsed;
+  const { node, os_image } = parsed;
   const response = await client.post(`/cvms/${cvmId}/replicas`, {
-    node_id,
-    teepod_id,
+    node,
     os_image,
   });
   return getVMSchemaForVersion(client.config.version).parse(response) as VMForVersion<V>;

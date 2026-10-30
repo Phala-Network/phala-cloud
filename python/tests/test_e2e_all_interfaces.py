@@ -198,8 +198,10 @@ def _deploy(client: Any) -> tuple[str, str | None, str | None]:
     assert compose_hash, f"missing compose_hash: {provision}"
     print(f"deploy: app_id={app_id} encrypt_pubkey={'yes' if encrypt_pubkey else 'no'}", flush=True)
 
+    token = _attr(provision, "token")
+    assert token, f"missing token: {provision}"
     print("deploy: committing ...", flush=True)
-    commit = client.commit_cvm_provision({"app_id": app_id, "compose_hash": compose_hash})
+    commit = client.commit_cvm_provision({"token": token})
     cvm_id = str(_attr(commit, "id") or _attr(commit, "cvm_id") or app_id)
 
     print(f"deploy: cvm_id={cvm_id}, waiting for idle ...", flush=True)
@@ -228,8 +230,10 @@ async def _deploy_async(client: Any) -> tuple[str, str | None, str | None]:
     assert app_id, f"missing app_id: {provision}"
     assert compose_hash, f"missing compose_hash: {provision}"
 
+    token = _attr(provision, "token")
+    assert token, f"missing token: {provision}"
     print(f"deploy(async): committing app_id={app_id} ...", flush=True)
-    commit = await client.commit_cvm_provision({"app_id": app_id, "compose_hash": compose_hash})
+    commit = await client.commit_cvm_provision({"token": token})
     cvm_id = str(_attr(commit, "id") or _attr(commit, "cvm_id") or app_id)
 
     print(f"deploy(async): cvm_id={cvm_id}, waiting for idle ...", flush=True)

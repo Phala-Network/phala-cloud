@@ -18,8 +18,16 @@ from .errors import (
     ServerError,
     ValidationError,
 )
-from .full_client import AsyncPhalaCloud, PhalaCloud, create_async_client, create_client
+from .full_client import (
+    AsyncPhalaCloud,
+    CreateAppInstanceRequest,
+    PhalaCloud,
+    ReplicateCvmRequest,
+    create_async_client,
+    create_client,
+)
 from .models import *  # noqa: F403
+from .models import CheckAppIsAllowedRequest, CheckCvmIsAllowedRequest
 from .result import SafeResult
 from .utils import (
     MAX_INIT_SCRIPTS,
@@ -48,10 +56,14 @@ __all__ = [
     "AuthError",
     "BusinessError",
     "ConflictError",
+    "CheckAppIsAllowedRequest",
+    "CheckCvmIsAllowedRequest",
+    "CreateAppInstanceRequest",
     "DEFAULT_API_VERSION",
     "DEFAULT_TIMEOUT",
     "PhalaCloud",
     "PhalaCloudError",
+    "ReplicateCvmRequest",
     "RequestError",
     "ResourceError",
     "SUPPORTED_API_VERSIONS",

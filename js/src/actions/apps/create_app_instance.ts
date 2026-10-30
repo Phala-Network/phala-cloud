@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { defineAction } from "../../utils/define-action";
 import { VMSchema } from "../../types/cvm_info";
+import { defineAction } from "../../utils/define-action";
+import { placementRequest } from "../../utils/placement-request";
 
 /**
  * Create a new instance under an existing app
@@ -20,14 +21,14 @@ import { VMSchema } from "../../types/cvm_info";
  * // Create instance with existing compose
  * const instance = await createAppInstance(client, {
  *   appId: '50b0e827cc6c53f4010b57e588a18c5ef9388cc1',
- *   node_id: 'teepod_abc123',
+ *   node: 'usw5',
  * });
  *
  * // Create instance with new Docker Compose
  * const instance2 = await createAppInstance(client, {
  *   appId: '50b0e827cc6c53f4010b57e588a18c5ef9388cc1',
  *   docker_compose_file: 'services:\n  app:\n    image: nginx',
- *   node_id: 'teepod_abc123',
+ *   node: 'usw5',
  * });
  * ```
  *
@@ -45,23 +46,21 @@ import { VMSchema } from "../../types/cvm_info";
  * ```
  */
 
-export const CreateAppInstanceRequestSchema = z
-  .object({
-    appId: z.string().min(1),
-    name: z.string().optional(),
-    /** Instance placement uses a Teepod hash ID, despite the node_id name. */
-    node_id: z
-      .string()
-      .regex(/^teepod_[A-Za-z0-9]+$/)
-      .optional(),
-    docker_compose_file: z.string().optional(),
-    pre_launch_script: z.string().optional(),
-    encrypted_env: z.string().optional(),
-    compose_hash: z.string().optional(),
-    token: z.string().optional(),
-    transaction_hash: z.string().optional(),
-  })
-  .strict();
+export const CreateAppInstanceRequestSchema = placementRequest(
+  z
+    .object({
+      appId: z.string().min(1),
+      name: z.string().optional(),
+      node: z.string().min(1).optional(),
+      docker_compose_file: z.string().optional(),
+      pre_launch_script: z.string().optional(),
+      encrypted_env: z.string().optional(),
+      compose_hash: z.string().optional(),
+      token: z.string().optional(),
+      transaction_hash: z.string().optional(),
+    })
+    .strict(),
+);
 
 export type CreateAppInstanceRequest = z.infer<typeof CreateAppInstanceRequestSchema>;
 

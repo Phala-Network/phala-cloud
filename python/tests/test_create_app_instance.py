@@ -12,7 +12,7 @@ def test_create_app_instance_sync() -> None:
         assert request.url.path == "/api/v1/apps/app-123/instances"
         body = json.loads(request.read())
         assert body["name"] == "redis-0"
-        assert body["node_id"] == 5
+        assert body["node"] == "usw5"
         assert body["docker_compose_file"] == "services:\n  app:\n    image: nginx"
         return httpx.Response(
             200,
@@ -31,7 +31,7 @@ def test_create_app_instance_sync() -> None:
             {
                 "appId": "app-123",
                 "name": "redis-0",
-                "node_id": 5,
+                "node": "usw5",
                 "docker_compose_file": "services:\n  app:\n    image: nginx",
             }
         )
@@ -46,6 +46,7 @@ async def test_create_app_instance_async() -> None:
         assert request.url.path == "/api/v1/apps/app-123/instances"
         body = json.loads(request.read())
         assert body["name"] == "worker-0"
+        assert body["node"] == "usw5"
         return httpx.Response(
             200,
             json={
@@ -65,7 +66,7 @@ async def test_create_app_instance_async() -> None:
             {
                 "app_id": "app-123",
                 "name": "worker-0",
-                "node_id": 3,
+                "node": "usw5",
                 "pre_launch_script": "#!/bin/sh\necho hello",
             }
         )

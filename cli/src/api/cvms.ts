@@ -1,16 +1,15 @@
-import {
-	safeGetCvmList,
-	safeGetCvmInfo,
-	type Client,
-	type CvmInfoDetailV20260522,
-} from "@phala/cloud";
 import { getClient } from "@/src/lib/client";
 import { logger } from "@/src/utils/logger";
 import {
+	type Client,
+	type CvmInfoDetailV20260522,
+	safeGetCvmInfo,
+	safeGetCvmList,
+} from "@phala/cloud";
+import inquirer from "inquirer";
+import {
 	cvmAttestationResponseSchema,
 	getCvmNetworkResponseSchema,
-	replicateCvmResponseSchema,
-	type ReplicateCvmResponse,
 } from "./types";
 import type {
 	CvmAttestationResponse,
@@ -18,7 +17,6 @@ import type {
 	GetCvmNetworkResponse,
 	UpgradeResponse,
 } from "./types";
-import inquirer from "inquirer";
 
 /**
  * Get CVM by App ID using SDK
@@ -144,28 +142,6 @@ export interface ResizeCvmPayload {
 	memory?: number;
 	disk_size?: number;
 	allow_restart?: number;
-}
-
-/**
- * Replicate a CVM instance
- * @param appId App ID (with or without app_ prefix)
- * @param vmUuid Source CVM UUID (with or without dashes)
- */
-export async function replicateCvm(
-	appId: string,
-	vmUuid: string,
-	payload: {
-		teepod_id?: string;
-		encrypted_env?: string;
-	},
-): Promise<ReplicateCvmResponse> {
-	const client = await getClient();
-	const cleanAppId = appId.replace(/^app_/, "");
-	const response = await client.post<ReplicateCvmResponse>(
-		`apps/${cleanAppId}/cvms/${vmUuid}/replicas`,
-		payload,
-	);
-	return replicateCvmResponseSchema.parse(response);
 }
 
 /**

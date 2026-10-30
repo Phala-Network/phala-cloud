@@ -36,7 +36,7 @@ Creates a new CVM by default. If `--cvm-id` is provided or `phala.toml` contains
 | `--cvm-id <id>` | | CVM ID for updating existing deployment |
 | `--disk-size <size>` | 20G | Disk size with unit (e.g., 50G, 100G) |
 | `--image <image>` | latest | OS image version |
-| `--node-id <id>` | | Deploy to specific node ID |
+| `--node <name>` | | Deploy to specific physical node name |
 | `--custom-app-id <id>` | | Use custom App ID (requires --nonce for PHALA KMS) |
 | `--nonce <nonce>` | | Nonce for deterministic app_id generation |
 | `--pre-launch-script <path>` | | Path to pre-launch script. An empty file is treated as unspecified and keeps the Phala Cloud default |
@@ -160,7 +160,7 @@ $ phala deploy --custom-app-id app_custom123 --nonce 42
 ### Deploy to specific node
 
 ```bash
-$ phala deploy --node-id node_xyz789
+$ phala deploy --node usw5
 ```
 
 ### Deploy with pre-launch script
@@ -192,7 +192,7 @@ Common deployment errors:
 | ERR-1003 | Insufficient CPU capacity | Reduce CPU requirements or try different region |
 | ERR-1004 | Insufficient memory | Reduce memory requirements or try different region |
 | ERR-2003 | OS image not available | Use `--image` to specify valid image version |
-| ERR-2005 | Node not accessible | Node may be offline, try different node or omit `--node-id` |
+| ERR-2005 | Node not accessible | Node may be offline, try different node or omit `--node` |
 
 ## Instance Types
 

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { type Client } from "../../client";
-import { KmsInfoSchema } from "../../types/kms_info";
 import { validateComposePayloadSize } from "../../types/app_compose";
+import { KmsInfoSchema } from "../../types/kms_info";
 import { defineAction } from "../../utils/define-action";
 import { isValidHostname } from "../../utils/hostname";
 
@@ -16,7 +16,7 @@ import { isValidHostname } from "../../utils/hostname";
  * ## Automatic Resource Selection
  *
  * The new matching engine automatically selects optimal resources based on your requirements:
- * - **Node Selection**: Specify `node_id` or `region`, or omit both for automatic best-match selection
+ * - **Node Selection**: Specify `node` or `region`, or omit both for automatic best-match selection
  * - **OS Image**: Specify exact image name or let system choose the latest stable version
  * - **KMS**: Choose KMS type via `kms` parameter (defaults to PHALA) or specify `kms_id` directly
  *
@@ -54,7 +54,7 @@ import { isValidHostname } from "../../utils/hostname";
  * // Example 3: With specific node and KMS type
  * const provision = await provisionCvm(client, {
  *   name: 'my-app',
- *   node_id: 'node_abc123',                 // Specific node
+ *   node: 'usw5',                 // Specific node
  *   kms: 'PHALA',                 // KMS type (PHALA, BASE, ETHEREUM)
  *   disk_size: 40,
  *   image: 'dstack-0.5.5',
@@ -81,7 +81,7 @@ import { isValidHostname } from "../../utils/hostname";
  * });
  *
  * console.log(provision.app_id);
- * console.log(provision.compose_hash); // Required for commitCvmProvision
+ * console.log(provision.token); // Required for commitCvmProvision
  * ```
  *
  * ## Required Parameters
@@ -111,7 +111,7 @@ import { isValidHostname } from "../../utils/hostname";
  * - If both omitted, system automatically generates the next available nonce
  *
  * ### Node Selection (all optional - system auto-selects if omitted)
- * - **node_id**: Specific node ID to deploy on
+ * - **node**: Physical node name to deploy on
  * - **region**: Region preference (e.g., "us-east", "eu-west")
  * - If both omitted, system automatically selects the best available node
  *
@@ -138,7 +138,8 @@ import { isValidHostname } from "../../utils/hostname";
  * Provision data object containing:
  * - **app_id**: Application identifier (required for commit step)
  * - **app_env_encrypt_pubkey**: Public key for encrypting environment variables
- * - **compose_hash**: Hash identifying this provision (required for commit step)
+ * - **compose_hash**: Hash identifying this provision
+ * - **token**: One-time token required for the create commit
  * - **device_id**: Device identifier for attestation
  * - **fmspc**: Firmware Security Patch Configuration value
  * - **os_image_hash**: Hash of the selected OS image
@@ -170,26 +171,14 @@ export const ProvisionCvmSchema = z
     device_id: z.string().nullable().optional(),
     os_image_hash: z.string().nullable().optional(),
     instance_type: z.string().nullable().optional(),
-    /**
-     * One-time commit token for the same-path two-phase create. Present when the
-     * backend supports token commit on POST /cvms; absent against older backends.
-     */
-    token: z.string().nullable().optional(),
-    teepod_id: z.number().nullable().optional(), // Will be transformed to node_id
+    token: z.string().min(1),
+    teepod_id: z.number().nullable().optional(),
     node_id: z.number().nullable().optional(),
     /** @deprecated Identifies a KMS node, not the on-chain KMS contract. Use kms_contract_id. */
     kms_id: z.string().nullable().optional(),
     kms_contract_id: z.union([z.string(), z.number()]).nullable().optional(),
   })
-  .passthrough()
-  .transform((data) => {
-    // Transform teepod_id to node_id (only when using this schema)
-    if ("teepod_id" in data && data.teepod_id !== undefined) {
-      const { teepod_id, ...rest } = data;
-      return { ...rest, node_id: teepod_id };
-    }
-    return data;
-  });
+  .passthrough();
 
 export type ProvisionCvm = z.infer<typeof ProvisionCvmSchema>;
 
@@ -198,14 +187,7 @@ const NAME_VALIDATION_MESSAGE =
   "Name must be 5-63 characters, start with letter, and contain only letters/numbers/hyphens";
 export const ProvisionCvmRequestSchema = z
   .object({
-    node_id: z
-      .string()
-      .regex(/^node_[A-Za-z0-9]+$/)
-      .optional(),
-    teepod_id: z
-      .string()
-      .regex(/^teepod_[A-Za-z0-9]+$/)
-      .optional(),
+    node: z.string().min(1).optional(),
     region: z.string().optional(), // optional - region filter for auto-selection
     name: z
       .string()
@@ -263,6 +245,16 @@ export const ProvisionCvmRequestSchema = z
     app_id: z.string().optional(), // Expected app_id (must match calculated app_id from nonce)
   })
   .passthrough()
+  .superRefine((data, ctx) => {
+    for (const key of ["node_id", "teepod_id"]) {
+      if (key in data)
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `Use node instead of ${key}`,
+        });
+    }
+  })
   .transform((data) => {
     // Smart default: only set instance_type to "tdx.small" when no resource params are specified
     // This allows vcpu/memory (deprecated) to work correctly with backend matching
@@ -273,8 +265,6 @@ export const ProvisionCvmRequestSchema = z
   });
 
 export type ProvisionCvmRequest = z.input<typeof ProvisionCvmRequestSchema> & {
-  node_id?: string; // canonical Node hash ID
-  teepod_id?: string; // canonical Teepod hash ID
   compose_file?: {
     gateway_enabled?: boolean; // recommended
     tproxy_enabled?: boolean; // deprecated
@@ -328,12 +318,6 @@ const { action: provisionCvm, safeAction: safeProvisionCvm } = defineAction<
 >(ProvisionCvmSchema, async (client, appCompose) => {
   const validated = ProvisionCvmRequestSchema.parse(appCompose);
   const body = handleGatewayCompatibility(validated);
-
-  // The backend accepts both `node_id` (Node.id) and `teepod_id` (Teepod.id) as
-  // distinct fields; they are not interchangeable. Pass them through as-is.
-  if (typeof body.teepod_id === "string" && typeof body.node_id !== "string") {
-    console.warn("[phala/cloud] teepod_id is deprecated, please use node_id instead.");
-  }
 
   // Same-path two-phase create: prepare POSTs to /cvms and returns a commit token.
   // The legacy POST /cvms/provision endpoint remains available but is deprecated.

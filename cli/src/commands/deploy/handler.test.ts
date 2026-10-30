@@ -5,10 +5,10 @@
  * proper handling of --dev-os / --no-dev-os flags.
  */
 
-import { describe, test, expect } from "bun:test";
-import type { CommandContext } from "@/src/core/types";
+import { describe, expect, test } from "bun:test";
 import { buildCommandSchemaInput } from "@/src/core/input-builder";
 import { parseCommandArguments } from "@/src/core/parser";
+import type { CommandContext } from "@/src/core/types";
 import { deployCommandMeta, deployCommandSchema } from "./command";
 import {
 	applyForceStopOption,
@@ -16,6 +16,24 @@ import {
 	buildUpdatePatchBody,
 	runDeploy,
 } from "./handler";
+
+describe("deploy node selection", () => {
+	test("parses --node and no longer exposes --node-id", () => {
+		const parsed = parseCommandArguments(
+			["--node", "usw5"],
+			deployCommandMeta.options,
+		);
+		const input = buildCommandSchemaInput(deployCommandMeta, parsed);
+		expect(deployCommandSchema.parse(input.options).node).toBe("usw5");
+		expect(
+			deployCommandMeta.options?.some((option) => option.name === "node"),
+		).toBe(true);
+		expect(deployCommandSchema.safeParse({ node: "" }).success).toBe(false);
+		expect(
+			deployCommandMeta.options?.some((option) => option.name === "node-id"),
+		).toBe(false);
+	});
+});
 
 describe("deploy --no-pre-launch-script", () => {
 	test("parses the flag as a boolean option", () => {
@@ -240,7 +258,7 @@ describe("buildProvisionPayload", () => {
 				vcpu: "2",
 				memory: "4G",
 				diskSize: "50G",
-				nodeId: "node_test123",
+				node: "usw5",
 				region: "us-west",
 				image: "dstack-dev-0.5.0",
 				kmsId: "phala",
@@ -259,25 +277,14 @@ describe("buildProvisionPayload", () => {
 			expect(payload.vcpu).toBe(2);
 			expect(payload.memory).toBe(4096); // 4G = 4096MB
 			expect(payload.disk_size).toBe(50); // 50G = 50GB
-			expect(payload.node_id).toBe("node_test123");
+			expect(payload.node).toBe("usw5");
+			expect(payload.node_id).toBeUndefined();
 			expect(payload.teepod_id).toBeUndefined();
 			expect(payload.region).toBe("us-west");
 			expect(payload.image).toBe("dstack-dev-0.5.0");
 			// --kms-id is deprecated and now a no-op; it is no longer sent.
 			expect(payload.kms_id).toBeUndefined();
 			expect(payload.prefer_dev).toBe(true);
-		});
-
-		test("rejects numeric node IDs instead of coercing them into placement inputs", () => {
-			expect(() =>
-				buildProvisionPayload(
-					{ nodeId: "123" },
-					defaultName,
-					defaultDockerCompose,
-					defaultEnvs,
-					defaultPrivacySettings,
-				),
-			).toThrow("Use a node_ hash ID");
 		});
 
 		test("should default kms to PHALA when not specified", () => {

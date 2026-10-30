@@ -28,6 +28,7 @@ class DeviceIdEntry(CloudModel):
 
 class TeepodCapacity(CloudModel):
     teepod_id: int
+    node: str
     name: str
     listed: bool
     resource_score: float

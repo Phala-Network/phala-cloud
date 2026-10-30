@@ -1,6 +1,6 @@
-import type { Client } from "../../client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { replicateCvm, ReplicateCvmRequestSchema } from "./replicate_cvm";
+import type { Client } from "../../client";
+import { ReplicateCvmRequestSchema, replicateCvm } from "./replicate_cvm";
 
 describe("replicateCvm", () => {
   let client: Client;
@@ -33,12 +33,12 @@ describe("replicateCvm", () => {
 
     await replicateCvm(client, {
       id: "source",
-      node_id: "teepod_test7",
+      node: "usw5",
       os_image: "dstack-0.5.8-target",
     });
 
     expect(client.post).toHaveBeenCalledWith("/cvms/source/replicas", {
-      node_id: "teepod_test7",
+      node: "usw5",
       os_image: "dstack-0.5.8-target",
     });
   });

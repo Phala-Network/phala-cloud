@@ -29,6 +29,7 @@ import {
 	type EnvVar,
 	MAX_COMPOSE_PAYLOAD_BYTES,
 	type MrConfigV3Input,
+	type ProvisionCvmRequest,
 	SUPPORTED_CHAINS,
 	buildMrConfigV3Document,
 	canonicalizeMrConfigV3Document,
@@ -52,7 +53,6 @@ import {
 	safePatchCvm,
 	safeProvisionCvm,
 	safeUpdateCvmVisibility,
-	type ProvisionCvmRequest,
 } from "@phala/cloud";
 import dedent from "dedent";
 import fs from "fs-extra";
@@ -74,7 +74,7 @@ interface Options {
 	fs?: string;
 	image?: string;
 	region?: string;
-	nodeId?: string;
+	node?: string;
 	env?: string[];
 	envFile?: string | boolean;
 	interactive?: boolean;
@@ -649,13 +649,8 @@ export const buildProvisionPayload = (
 		payload.disk_size = parseDiskSizeInput(options.diskSize);
 	}
 
-	if (options.nodeId) {
-		if (!/^node_[A-Za-z0-9]+$/.test(options.nodeId)) {
-			throw new Error(
-				"Use a node_ hash ID for --node-id. Run phala nodes to list placements.",
-			);
-		}
-		payload.node_id = options.nodeId;
+	if (options.node) {
+		payload.node = options.node;
 	}
 
 	if (options.region) {

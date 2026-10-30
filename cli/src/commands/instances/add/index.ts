@@ -1,27 +1,26 @@
 import fs from "node:fs";
 import path from "node:path";
-import {
-	ResourceError,
-	type Client,
-	type EnvVar,
-	SUPPORTED_CHAINS,
-	safeAddComposeHash,
-	safeAddDevice,
-	safeCheckOnChainPrerequisites,
-	safeGetAvailableNodes,
-	safeGetAppCvms,
-	safeGetCvmInfo,
-	encryptEnvVars,
-} from "@phala/cloud";
-import { getClient } from "@/src/lib/client";
 import { getEncryptPubkey } from "@/src/commands/envs/get-encrypt-pubkey";
 import { defineCommand } from "@/src/core/define-command";
 import { isInJsonMode } from "@/src/core/json-mode";
 import type { CommandContext } from "@/src/core/types";
+import { getClient } from "@/src/lib/client";
 import {
+	type Client,
+	type EnvVar,
+	ResourceError,
+	SUPPORTED_CHAINS,
+	encryptEnvVars,
+	safeAddComposeHash,
+	safeAddDevice,
+	safeCheckOnChainPrerequisites,
+	safeGetAppCvms,
+	safeGetCvmInfo,
+} from "@phala/cloud";
+import {
+	type InstancesAddCommandInput,
 	instancesAddCommandMeta,
 	instancesAddCommandSchema,
-	type InstancesAddCommandInput,
 } from "./command";
 
 interface PreparePayload {
@@ -102,47 +101,6 @@ async function loadEncryptedEnv(
 	const envVars = parseEnvFile(envPath);
 	const pubkey = await getEncryptPubkey(client, sourceCvm);
 	return encryptEnvVars(envVars, pubkey);
-}
-
-async function resolveNodeId(
-	client: Client<"2026-06-23">,
-	nodeInput?: string,
-): Promise<string | undefined> {
-	if (!nodeInput) {
-		return undefined;
-	}
-
-	const trimmed = nodeInput.trim();
-	if (/^teepod_[A-Za-z0-9]+$/.test(trimmed)) return trimmed;
-	if (/^\d+$/.test(trimmed)) {
-		throw new Error(
-			"Numeric placement IDs are not supported. Use a teepod_ hash ID or node name.",
-		);
-	}
-
-	const nodesResult = await safeGetAvailableNodes(client);
-	if (!nodesResult.success) {
-		const nodesError = "error" in nodesResult ? nodesResult.error : undefined;
-		throw new Error(
-			nodesError?.message || `Failed to resolve node name "${trimmed}"`,
-		);
-	}
-
-	const matches = nodesResult.data.nodes.filter(
-		(node) => node.name.toLowerCase() === trimmed.toLowerCase(),
-	);
-	if (matches.length === 0) {
-		throw new Error(`Node "${trimmed}" not found.`);
-	}
-	if (matches.length > 1) {
-		throw new Error(
-			`Node name "${trimmed}" is ambiguous (${matches.length} matches). Use an explicit node ID.`,
-		);
-	}
-	const hashId = matches[0].teepod_id_hashid;
-	if (!hashId)
-		throw new Error("The selected placement is missing its Teepod hash ID.");
-	return hashId;
 }
 
 function formatInstanceOutput(
@@ -306,13 +264,12 @@ async function runInstancesAddCommand(
 				input.envFile,
 			);
 		}
-		const resolvedNodeId = await resolveNodeId(client, input.nodeId);
 		const requestBody: Record<string, unknown> = {};
 		if (input.name) {
 			requestBody.name = input.name;
 		}
-		if (resolvedNodeId !== undefined) {
-			requestBody.node_id = resolvedNodeId;
+		if (input.node !== undefined) {
+			requestBody.node = input.node;
 		}
 		if (encryptedEnv) {
 			requestBody.encrypted_env = encryptedEnv;

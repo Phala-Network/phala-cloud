@@ -91,8 +91,8 @@ func TestCreateAppInstance(t *testing.T) {
 		if body.Name == nil || *body.Name != "redis-0" {
 			t.Errorf("name = %v, want redis-0", body.Name)
 		}
-		if body.NodeID == nil || *body.NodeID != "teepod_test5" {
-			t.Errorf("node_id = %v, want teepod_test5", body.NodeID)
+		if body.Node == nil || *body.Node != "physical-node-5" {
+			t.Errorf("node = %v, want physical-node-5", body.Node)
 		}
 		if body.DockerComposeFile == nil || *body.DockerComposeFile != "services:\n  app:\n    image: nginx" {
 			t.Errorf("docker_compose_file = %v", body.DockerComposeFile)
@@ -115,11 +115,11 @@ func TestCreateAppInstance(t *testing.T) {
 	}
 
 	dockerCompose := "services:\n  app:\n    image: nginx"
-	nodeID := "teepod_test5"
+	node := "physical-node-5"
 	name := "redis-0"
 	result, err := client.CreateAppInstance(context.Background(), "app-123", &CreateAppInstanceRequest{
 		Name:              &name,
-		NodeID:            &nodeID,
+		Node:              &node,
 		DockerComposeFile: &dockerCompose,
 	})
 	if err != nil {

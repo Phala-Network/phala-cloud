@@ -64,15 +64,15 @@ func TestReplicateCVMForwardsOSImage(t *testing.T) {
 		t.Fatalf("NewClient: %v", err)
 	}
 
-	nodeID := "teepod_test42"
+	node := "physical-node-42"
 	if _, err := client.ReplicateCVM(context.Background(), "cvm-123", &ReplicateCVMOptions{
-		NodeID:  &nodeID,
+		Node:    &node,
 		OSImage: "dstack-0.5.4",
 	}); err != nil {
 		t.Fatalf("ReplicateCVM: %v", err)
 	}
-	if got := body["node_id"]; got != "teepod_test42" {
-		t.Fatalf("node_id = %v, want teepod_test42", got)
+	if got := body["node"]; got != "physical-node-42" {
+		t.Fatalf("node = %v, want physical-node-42", got)
 	}
 	if got := body["os_image"]; got != "dstack-0.5.4" {
 		t.Fatalf("os_image = %v, want dstack-0.5.4", got)
@@ -80,7 +80,7 @@ func TestReplicateCVMForwardsOSImage(t *testing.T) {
 
 	body = nil
 	if _, err := client.ReplicateCVM(context.Background(), "cvm-123", &ReplicateCVMOptions{
-		NodeID: &nodeID,
+		Node: &node,
 	}); err != nil {
 		t.Fatalf("ReplicateCVM without OS image: %v", err)
 	}
