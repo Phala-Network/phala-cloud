@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from pydantic import Field, computed_field, model_validator
 
-from .base import AliasModel, CloudModel
+from .base import AliasModel, CloudModel, NodeSelectionRequest
 from .kms import KmsInfo
 from .nodes import DeviceIdEntry
 
@@ -377,10 +377,9 @@ PaginatedCvmInfos = PaginatedCvmInfosV20260522
 # Is-Allowed types
 
 
-class CheckCvmIsAllowedRequest(AliasModel):
+class CheckCvmIsAllowedRequest(NodeSelectionRequest, AliasModel):
     cvm_id: str = Field(..., alias="cvmId")
     compose_hash: str | None = None
-    node_id: int | None = None
     device_id: str | None = None
 
 
@@ -407,10 +406,9 @@ IsAllowedResultAny = IsAllowedResultV20260522 | IsAllowedResultV20260121
 IsAllowedResult = IsAllowedResultV20260522
 
 
-class CheckAppIsAllowedRequest(AliasModel):
+class CheckAppIsAllowedRequest(NodeSelectionRequest, AliasModel):
     app_id: str = Field(..., alias="appId")
     compose_hash: str
-    node_id: int | None = None
     device_id: str | None = None
     chain_id: int | None = None
 

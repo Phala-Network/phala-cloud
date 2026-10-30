@@ -8,9 +8,10 @@ import (
 	"testing"
 )
 
-func TestPlacementHashIDRequests(t *testing.T) {
-	nodeID := "node_physical42"
-	teepodID := "teepod_placement7"
+func TestPlacementNameRequests(t *testing.T) {
+	// The physical node name is not the Teepod display name.
+	physicalName := "physical-node-42"
+	deviceID := "device-123"
 	cases := []struct {
 		name string
 		path string
@@ -18,42 +19,58 @@ func TestPlacementHashIDRequests(t *testing.T) {
 		call func(*Client) error
 	}{
 		{
-			name: "replica", path: "/cvms/source/replicas",
-			want: map[string]string{"node_id": teepodID},
+			name: "replica", path: "/cvms/source/replicas", want: map[string]string{"node": physicalName},
 			call: func(c *Client) error {
-				_, err := c.ReplicateCVM(context.Background(), "source", &ReplicateCVMOptions{NodeID: &teepodID})
+				_, err := c.ReplicateCVM(context.Background(), "source", &ReplicateCVMOptions{Node: &physicalName})
 				return err
 			},
 		},
 		{
-			name: "legacy replica alias", path: "/cvms/source/replicas",
-			want: map[string]string{"teepod_id": teepodID},
+			name: "replica automatic", path: "/cvms/source/replicas",
 			call: func(c *Client) error {
-				_, err := c.ReplicateCVM(context.Background(), "source", &ReplicateCVMOptions{TeepodID: &teepodID})
+				_, err := c.ReplicateCVM(context.Background(), "source", &ReplicateCVMOptions{})
 				return err
 			},
 		},
 		{
-			name: "CVM allowance", path: "/cvms/source/is-allowed",
-			want: map[string]string{"node_id": nodeID},
+			name: "CVM allowance", path: "/cvms/source/is-allowed", want: map[string]string{"node": physicalName},
 			call: func(c *Client) error {
-				_, err := c.CheckCvmIsAllowed(context.Background(), "source", &CheckCvmIsAllowedRequest{NodeID: &nodeID})
+				_, err := c.CheckCvmIsAllowed(context.Background(), "source", &CheckCvmIsAllowedRequest{Node: &physicalName})
 				return err
 			},
 		},
 		{
-			name: "app allowance", path: "/apps/app_test/is-allowed",
-			want: map[string]string{"node_id": nodeID},
+			name: "CVM allowance device", path: "/cvms/source/is-allowed", want: map[string]string{"device_id": deviceID},
 			call: func(c *Client) error {
-				_, err := c.CheckAppIsAllowed(context.Background(), "app_test", &CheckAppIsAllowedRequest{NodeID: &nodeID})
+				_, err := c.CheckCvmIsAllowed(context.Background(), "source", &CheckCvmIsAllowedRequest{DeviceID: &deviceID})
 				return err
 			},
 		},
 		{
-			name: "app instance", path: "/apps/app_test/instances",
-			want: map[string]string{"node_id": teepodID},
+			name: "app allowance", path: "/apps/app_test/is-allowed", want: map[string]string{"node": physicalName, "compose_hash": "hash"},
 			call: func(c *Client) error {
-				_, err := c.CreateAppInstance(context.Background(), "app_test", &CreateAppInstanceRequest{NodeID: &teepodID})
+				_, err := c.CheckAppIsAllowed(context.Background(), "app_test", &CheckAppIsAllowedRequest{Node: &physicalName, ComposeHash: "hash"})
+				return err
+			},
+		},
+		{
+			name: "app allowance device", path: "/apps/app_test/is-allowed", want: map[string]string{"device_id": deviceID, "compose_hash": "hash"},
+			call: func(c *Client) error {
+				_, err := c.CheckAppIsAllowed(context.Background(), "app_test", &CheckAppIsAllowedRequest{DeviceID: &deviceID, ComposeHash: "hash"})
+				return err
+			},
+		},
+		{
+			name: "app instance", path: "/apps/app_test/instances", want: map[string]string{"node": physicalName},
+			call: func(c *Client) error {
+				_, err := c.CreateAppInstance(context.Background(), "app_test", &CreateAppInstanceRequest{Node: &physicalName})
+				return err
+			},
+		},
+		{
+			name: "app instance automatic", path: "/apps/app_test/instances",
+			call: func(c *Client) error {
+				_, err := c.CreateAppInstance(context.Background(), "app_test", &CreateAppInstanceRequest{})
 				return err
 			},
 		},
@@ -67,6 +84,18 @@ func TestPlacementHashIDRequests(t *testing.T) {
 				var body map[string]json.RawMessage
 				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 					t.Fatalf("decode request: %v", err)
+				}
+				for _, key := range []string{"node_id", "teepod_id"} {
+					if _, ok := body[key]; ok {
+						t.Errorf("legacy selector %s present in request", key)
+					}
+				}
+				for _, key := range []string{"node", "device_id"} {
+					if _, expected := tc.want[key]; !expected {
+						if _, present := body[key]; present {
+							t.Errorf("unexpected %s in request", key)
+						}
+					}
 				}
 				for key, want := range tc.want {
 					var got string

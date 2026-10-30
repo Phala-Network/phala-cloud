@@ -1,5 +1,3 @@
-import { z } from "zod";
-import type { CommandMeta } from "@/src/core/types";
 import {
 	cvmIdArgument,
 	interactiveOption,
@@ -7,6 +5,8 @@ import {
 	rpcUrlOption,
 	transactionHashOption,
 } from "@/src/core/common-flags";
+import type { CommandMeta } from "@/src/core/types";
+import { z } from "zod";
 
 export const cvmsReplicateCommandMeta: CommandMeta = {
 	name: "replicate",
@@ -15,12 +15,10 @@ export const cvmsReplicateCommandMeta: CommandMeta = {
 	arguments: [cvmIdArgument],
 	options: [
 		{
-			name: "node-id",
-			aliases: ["teepod-id"],
-			description:
-				"Target Teepod hash ID (teepod_) or node name for the replica.",
+			name: "node",
+			description: "Physical node name for the replica.",
 			type: "string",
-			target: "nodeId",
+			target: "node",
 		},
 		{
 			name: "compose-hash",
@@ -67,12 +65,12 @@ export const cvmsReplicateCommandMeta: CommandMeta = {
 	examples: [
 		{
 			name: "Replicate a CVM",
-			value: "phala cvms replicate 1234 --node-id teepod_abc123",
+			value: "phala cvms replicate 1234 --node usw5",
 		},
 		{
 			name: "Prepare a replica for multisig approval",
 			value:
-				"phala cvms replicate 1234 --node-id teepod_abc123 --compose-hash <hash> --prepare-only",
+				"phala cvms replicate 1234 --node usw5 --compose-hash <hash> --prepare-only",
 		},
 		{
 			name: "Commit a prepared replica",
@@ -84,7 +82,7 @@ export const cvmsReplicateCommandMeta: CommandMeta = {
 
 export const cvmsReplicateCommandSchema = z.object({
 	cvmId: z.string().optional(),
-	nodeId: z.string().optional(),
+	node: z.string().min(1).optional(),
 	composeHash: z.string().optional(),
 	envFile: z.string().optional(),
 	privateKey: z.string().optional(),

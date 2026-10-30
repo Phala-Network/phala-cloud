@@ -20,16 +20,16 @@ Suggestions:
 | Code | Message | Common Cause | Fix |
 |------|---------|-------------|-----|
 | ERR-1001 | Instance type not found | Typo in `--instance-type` | Run `phala instance-types` to see available types |
-| ERR-1002 | No available resources | All matching nodes are full | Try a different region, instance type, or remove `--node-id` |
-| ERR-1003 | Insufficient CPU capacity | Node lacks CPU | Use smaller instance type or omit `--node-id` |
-| ERR-1004 | Insufficient memory | Node lacks memory | Use smaller instance type or omit `--node-id` |
+| ERR-1002 | No available resources | All matching nodes are full | Try a different region or instance type, or remove `--node` |
+| ERR-1003 | Insufficient CPU capacity | Node lacks CPU | Use a smaller instance type or omit `--node` |
+| ERR-1004 | Insufficient memory | Node lacks memory | Use a smaller instance type or omit `--node` |
 
 ### Image/Node Errors (ERR-2xxx)
 
 | Code | Message | Common Cause | Fix |
 |------|---------|-------------|-----|
 | ERR-2003 | OS image not available | Image version doesn't exist on node | Omit `--image` for auto-selection, or check available images |
-| ERR-2005 | Node not accessible | Node is offline or maintenance | Remove `--node-id` to auto-select, or try later |
+| ERR-2005 | Node not accessible | Node is offline or maintenance | Remove `--node` to auto-select, or try later |
 
 ### General troubleshooting for deploy errors
 

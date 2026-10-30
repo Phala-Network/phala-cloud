@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { type Client, type SafeResult } from "../../client";
 import type { ApiVersion } from "../../types/client";
-import { CvmIdSchema, type CvmIdInput } from "../../types/cvm_id";
+import { type CvmIdInput, CvmIdSchema } from "../../types/cvm_id";
 import type { CheckCvmIsAllowedResponse } from "../../types/version-mappings";
+import { placementRequest } from "../../utils/placement-request";
 
 const IsAllowedResultBaseSchema = z.object({
   app_contract_address: z.string(),
@@ -32,15 +33,14 @@ export const IsAllowedResultAnySchema = z.union([
 export const IsAllowedResultSchema = IsAllowedResultV20260522Schema;
 export type IsAllowedResult = z.infer<typeof IsAllowedResultSchema>;
 
-const CheckCvmIsAllowedInputSchema = z.object({
-  cvmId: z.string().min(1),
-  compose_hash: z.string().optional(),
-  node_id: z
-    .string()
-    .regex(/^node_[A-Za-z0-9]+$/)
-    .optional(),
-  device_id: z.string().optional(),
-});
+const CheckCvmIsAllowedInputSchema = placementRequest(
+  z.object({
+    cvmId: z.string().min(1),
+    compose_hash: z.string().optional(),
+    node: z.string().min(1).optional(),
+    device_id: z.string().optional(),
+  }),
+);
 
 export const CheckCvmIsAllowedRequestSchema = CheckCvmIsAllowedInputSchema;
 
@@ -58,7 +58,7 @@ function getSchemaForVersion(version: ApiVersion) {
  * @param request - Request parameters
  * @param request.cvmId - CVM identifier
  * @param request.compose_hash - Optional compose hash override
- * @param request.node_id - Optional node ID override (resolves device_id)
+ * @param request.node - Optional physical node name override (resolves device_id)
  * @param request.device_id - Optional device ID override
  * @returns On-chain allowance check result
  */

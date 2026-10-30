@@ -29,9 +29,9 @@ def test_replicate_cvm_forwards_os_image_sync() -> None:
     transport = _capturing_transport(captured)
     with httpx.Client(transport=transport, base_url="https://cloud-api.phala.com/api/v1") as raw:
         client = PhalaCloud(http_client=raw)
-        client.replicate_cvm({"cvm_id": "cvm-123", "node_id": 42, "os_image": "dstack-0.5.4"})
+        client.replicate_cvm({"cvm_id": "cvm-123", "node": "usw5", "os_image": "dstack-0.5.4"})
 
-    assert captured == [{"node_id": 42, "os_image": "dstack-0.5.4"}]
+    assert captured == [{"node": "usw5", "os_image": "dstack-0.5.4"}]
 
 
 @pytest.mark.asyncio
@@ -44,7 +44,7 @@ async def test_replicate_cvm_forwards_os_image_async() -> None:
         client = AsyncPhalaCloud(http_client=raw)
         await client.replicate_cvm({"cvm_id": "cvm-123", "os_image": "dstack-0.5.4"})
 
-    assert captured == [{"node_id": None, "os_image": "dstack-0.5.4"}]
+    assert captured == [{"os_image": "dstack-0.5.4"}]
 
 
 def test_replicate_cvm_rejects_empty_os_image() -> None:

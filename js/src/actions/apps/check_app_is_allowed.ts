@@ -1,17 +1,17 @@
 import { z } from "zod";
 import { defineAction } from "../../utils/define-action";
-import { IsAllowedResultSchema, type IsAllowedResult } from "../cvms/check_cvm_is_allowed";
+import { placementRequest } from "../../utils/placement-request";
+import { type IsAllowedResult, IsAllowedResultSchema } from "../cvms/check_cvm_is_allowed";
 
-export const CheckAppIsAllowedRequestSchema = z.object({
-  appId: z.string().min(1),
-  compose_hash: z.string(),
-  node_id: z
-    .string()
-    .regex(/^node_[A-Za-z0-9]+$/)
-    .optional(),
-  device_id: z.string().optional(),
-  chain_id: z.number().optional(),
-});
+export const CheckAppIsAllowedRequestSchema = placementRequest(
+  z.object({
+    appId: z.string().min(1),
+    compose_hash: z.string(),
+    node: z.string().min(1).optional(),
+    device_id: z.string().optional(),
+    chain_id: z.number().optional(),
+  }),
+);
 
 export type CheckAppIsAllowedRequest = z.infer<typeof CheckAppIsAllowedRequestSchema>;
 
@@ -24,7 +24,7 @@ export type CheckAppIsAllowedRequest = z.infer<typeof CheckAppIsAllowedRequestSc
  * @param request - Request parameters
  * @param request.appId - App contract address
  * @param request.compose_hash - Compose hash to check
- * @param request.node_id - Node ID (resolves device_id from DB)
+ * @param request.node - Physical node name (resolves device_id from DB)
  * @param request.device_id - Device ID (hex, direct)
  * @param request.chain_id - Chain ID for RPC URL resolution
  * @returns On-chain allowance check result

@@ -240,7 +240,7 @@ Create a replica of an existing CVM.
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--teepod-id <id>` | | Target TeePod ID |
+| `--node <name>` | | Physical node name, such as `usw5` |
 | `--env-file <file>` / `-e` | | Environment file to override variables |
 | `--interactive` / `-i` | false | Interactive mode |
 
@@ -248,7 +248,7 @@ Create a replica of an existing CVM.
 
     $ phala cvms replicate
     $ phala cvms replicate abc-123-def-456
-    $ phala cvms replicate --teepod-id pod_xyz --env-file .env.prod
+    $ phala cvms replicate --node usw5 --env-file .env.prod
     $ phala cvms replicate --interactive
 
 ---

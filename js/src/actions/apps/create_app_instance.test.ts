@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createAppInstance, CreateAppInstanceRequestSchema } from "./create_app_instance";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Client } from "../../client";
+import { CreateAppInstanceRequestSchema, createAppInstance } from "./create_app_instance";
 
 describe("createAppInstance", () => {
   let mockClient: Client;
@@ -38,17 +38,17 @@ describe("createAppInstance", () => {
       created_at: "2026-01-01T00:00:00Z",
       encrypted_env_pubkey: "pubkey",
     };
-    (mockClient.post as any).mockResolvedValue(response);
+    vi.mocked(mockClient.post).mockResolvedValue(response);
 
     await createAppInstance(mockClient, {
       appId: "app-123",
       name: "redis-0",
-      node_id: "teepod_test5",
+      node: "usw5",
     });
 
     expect(mockClient.post).toHaveBeenCalledWith("/apps/app-123/instances", {
       name: "redis-0",
-      node_id: "teepod_test5",
+      node: "usw5",
     });
   });
 });

@@ -56,7 +56,7 @@ from .client import PhalaCloud as _SyncBase
 from .errors import ApiError
 from .models.apps import DeviceAllowlistResponseV20260121, DeviceAllowlistResponseV20260522
 from .models.auth import CurrentUserV20251028, CurrentUserV20260121
-from .models.base import CloudModel
+from .models.base import CloudModel, NodeSelectionRequest
 from .models.cvms import (
     AppCvmsBatchIsAllowedResponseV20260121,
     AppCvmsBatchIsAllowedResponseV20260522,
@@ -121,20 +121,10 @@ class CvmIdRequest(BaseModel):
         )
 
 
-class CvmCreationRequest(BaseModel):
+class CvmCreationRequest(NodeSelectionRequest):
     """Creation payload; node identifies the physical node by name."""
 
     model_config = ConfigDict(extra="allow")
-    node: str | None = Field(default=None, min_length=1)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _reject_legacy_node_selection(cls, value: Any) -> Any:
-        if isinstance(value, Mapping):
-            removed = {"node_id", "teepod_id"} & value.keys()
-            if removed:
-                raise ValueError(f"Use node instead of {', '.join(sorted(removed))}")
-        return value
 
 
 def _cvm_creation_body(request: CvmCreationRequest | Mapping[str, Any]) -> dict[str, Any]:
@@ -165,10 +155,9 @@ class AppRevisionsRequest(_AliasModel):
     page_size: int | None = Field(default=None, ge=1)
 
 
-class CreateAppInstanceRequest(_AliasModel):
+class CreateAppInstanceRequest(NodeSelectionRequest, _AliasModel):
     app_id: str = Field(alias="appId")
     name: str | None = None
-    node_id: int | None = None
     docker_compose_file: str | None = None
     pre_launch_script: str | None = None
     encrypted_env: str | None = None
@@ -238,8 +227,7 @@ def _upgrade_pre_launch_script_headers(req: UpgradePreLaunchScriptRequest) -> di
     return headers
 
 
-class ReplicateCvmRequest(CvmIdRequest):
-    node_id: int | None = None
+class ReplicateCvmRequest(NodeSelectionRequest, CvmIdRequest):
     os_image: str | None = Field(default=None, min_length=1)
 
 
@@ -1268,7 +1256,10 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         return self._loose_validate(
             self.post(
                 f"/cvms/{req.resolved}/replicas",
-                json={"node_id": req.node_id, "os_image": req.os_image},
+                json={
+                    "os_image": req.os_image,
+                    **({"node": req.node} if req.node is not None else {}),
+                },
             )
         )
 
@@ -1301,7 +1292,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         req = CreateAppInstanceRequest.model_validate(request)
         body = {
             "name": req.name,
-            "node_id": req.node_id,
+            **({"node": req.node} if req.node is not None else {}),
             "docker_compose_file": req.docker_compose_file,
             "pre_launch_script": req.pre_launch_script,
             "encrypted_env": req.encrypted_env,
@@ -2166,7 +2157,10 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         return self._loose_validate(
             await self.post(
                 f"/cvms/{req.resolved}/replicas",
-                json={"node_id": req.node_id, "os_image": req.os_image},
+                json={
+                    "os_image": req.os_image,
+                    **({"node": req.node} if req.node is not None else {}),
+                },
             )
         )
 
@@ -2201,7 +2195,7 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         req = CreateAppInstanceRequest.model_validate(request)
         body = {
             "name": req.name,
-            "node_id": req.node_id,
+            **({"node": req.node} if req.node is not None else {}),
             "docker_compose_file": req.docker_compose_file,
             "pre_launch_script": req.pre_launch_script,
             "encrypted_env": req.encrypted_env,

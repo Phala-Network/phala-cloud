@@ -437,10 +437,8 @@ type CVMActionResponse = CVMActionResponseV20260522
 
 // ReplicateCVMOptions holds options for replicating a CVM.
 type ReplicateCVMOptions struct {
-	// NodeID is a Teepod hash ID for replica placement, despite the field name.
-	NodeID *string `json:"node_id,omitempty"`
-	// Deprecated: use NodeID. This alias also identifies a Teepod.
-	TeepodID *string `json:"teepod_id,omitempty"`
+	// Node is the physical node name. Omit it for automatic placement.
+	Node *string `json:"node,omitempty"`
 	// OSImage pins the replica to a specific OS image slug. Empty means the
 	// replica inherits the source CVM's image.
 	OSImage string `json:"os_image,omitempty"`
@@ -585,16 +583,18 @@ type IsAllowedResult = IsAllowedResultV20260522
 // CheckCvmIsAllowedRequest is the request for checking CVM on-chain allowance.
 type CheckCvmIsAllowedRequest struct {
 	ComposeHash *string `json:"compose_hash,omitempty"`
-	NodeID      *string `json:"node_id,omitempty"`
-	DeviceID    *string `json:"device_id,omitempty"`
+	// Node is the physical node name.
+	Node     *string `json:"node,omitempty"`
+	DeviceID *string `json:"device_id,omitempty"`
 }
 
 // CheckAppIsAllowedRequest is the request for checking app contract allowance.
 type CheckAppIsAllowedRequest struct {
-	ComposeHash string  `json:"compose_hash"`
-	NodeID      *string `json:"node_id,omitempty"`
-	DeviceID    *string `json:"device_id,omitempty"`
-	ChainID     *int    `json:"chain_id,omitempty"`
+	ComposeHash string `json:"compose_hash"`
+	// Node is the physical node name.
+	Node     *string `json:"node,omitempty"`
+	DeviceID *string `json:"device_id,omitempty"`
+	ChainID  *int    `json:"chain_id,omitempty"`
 }
 
 // AppCvmsBatchIsAllowedResponseFields contains shared batch allowance fields.
