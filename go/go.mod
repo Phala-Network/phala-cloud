@@ -6,7 +6,7 @@ toolchain go1.26.10
 
 require (
 	github.com/Dstack-TEE/dstack/sdk/go v0.1.0
-	golang.org/x/crypto v0.49.0
+	golang.org/x/crypto v0.55.0
 )
 
 require (
@@ -14,5 +14,5 @@ require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/ethereum/go-ethereum v1.17.1 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
-	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 )
