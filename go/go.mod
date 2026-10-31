@@ -1,12 +1,12 @@
 module github.com/Phala-Network/phala-cloud/sdks/go
 
-go 1.26.0
+go 1.25.0
 
 toolchain go1.26.10
 
 require (
 	github.com/Dstack-TEE/dstack/sdk/go v0.1.0
-	golang.org/x/crypto v0.56.0
+	golang.org/x/crypto v0.55.0
 )
 
 require (
