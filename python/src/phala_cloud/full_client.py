@@ -1192,7 +1192,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
             if max_retries is not None and retries > max_retries:
                 break
             if req.retry_delay > 0:
-                time.sleep(req.retry_delay)
+                self._sleep(req.retry_delay)
 
         details = "; ".join(
             filter(None, [last_error, str(last_transport) if last_transport else None])
@@ -1201,6 +1201,9 @@ class PhalaCloud(_SyncBase, _ExtMixin):
             details = "Watch stream ended before completion"
         message = f"watch_cvm_state exceeded retries waiting for '{req.target}'"
         raise RequestError(f"{message}: {details}" if details else message) from last_transport
+
+    def _sleep(self, seconds: float) -> None:
+        time.sleep(seconds)
 
     def get_kms_info(self, request: KmsInfoRequest | Mapping[str, Any]) -> Any:
         req = KmsInfoRequest.model_validate(request)

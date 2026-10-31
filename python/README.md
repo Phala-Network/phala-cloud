@@ -97,6 +97,10 @@ else:
     print(result.error)
 ```
 
+## How do I commit a prepared CVM update?
+
+Pass the CVM ID and the one-time token to `commit_cvm_update`. `compose_hash` and `transaction_hash` are optional. If you omit the compose hash, the server reads it from the token. If you omit the transaction hash, the server checks whether the compose hash is already allowed on-chain. The server still validates the token and the update.
+
 ## How does watching a CVM retry?
 
 `watch_cvm_state` reconnects after a server timeout event, an incomplete stream, or a transient network failure. Set `max_retries` to limit reconnects; the default is unlimited. Set `retry_delay` in seconds (default 5). The aliases `maxRetries` and `retryDelay` also work. The stream read timeout is the requested `timeout` plus `interval` plus 5 seconds.
