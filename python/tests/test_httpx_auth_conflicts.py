@@ -29,6 +29,35 @@ async def test_cookie_mode_preserves_httpx_auth(async_client: bool) -> None:
 
 
 @pytest.mark.parametrize("async_client", [False, True])
+@pytest.mark.asyncio
+async def test_sdk_auth_rejects_userinfo_in_injected_base_url(async_client: bool) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("credentials conflict must be rejected before send")
+
+    transport = httpx.MockTransport(handler)
+    if async_client:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="https://a:b@api.example"
+        ) as raw:
+            client = AsyncPhalaCloud(http_client=raw, api_key="selected")
+            with pytest.raises(RequestError):
+                await client.get("/test")
+            with pytest.raises(RequestError):
+                await client.watch_cvm_state(
+                    {"cvm_id": "cvm_1", "target": "running", "max_retries": 0}
+                )
+    else:
+        with httpx.Client(transport=transport, base_url="https://a:b@api.example") as raw:
+            client_sync = PhalaCloud(http_client=raw, api_key="selected")
+            with pytest.raises(RequestError):
+                client_sync.get("/test")
+            with pytest.raises(RequestError):
+                client_sync.watch_cvm_state(
+                    {"cvm_id": "cvm_1", "target": "running", "max_retries": 0}
+                )
+
+
+@pytest.mark.parametrize("async_client", [False, True])
 @pytest.mark.parametrize("options", [{"api_key": "selected"}, {"bearer_token": "selected"}])
 @pytest.mark.asyncio
 async def test_httpx_auth_does_not_replace_sdk_identity(

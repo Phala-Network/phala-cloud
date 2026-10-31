@@ -97,11 +97,20 @@ class _BaseConfig:
             result["X-Phala-Workspace"] = self.workspace.strip()
         return result
 
-    def check_httpx_auth(self, path: str, client_auth: object, request_auth: object = None) -> None:
+    def check_httpx_auth(
+        self, path: str, base_url: httpx.URL, client_auth: object, request_auth: object = None
+    ) -> None:
         if self.use_cookie_auth or not (self.api_key or self.bearer_token):
             return
         url = httpx.URL(path)
-        if client_auth is not None or request_auth is not None or url.username or url.password:
+        if (
+            client_auth is not None
+            or request_auth is not None
+            or url.username
+            or url.password
+            or base_url.username
+            or base_url.password
+        ):
             raise RequestError("HTTPX auth conflicts with SDK authentication")
 
     def checked_headers(
@@ -193,7 +202,9 @@ class AsyncPhalaCloud:
     async def request(self, method: str, path: str, **kwargs: Any) -> Any:
         # Enforce this per request, including caller-supplied HTTP clients.
         _check_request_origin(path, self._client.base_url)
-        self.config.check_httpx_auth(path, self._client.auth, kwargs.get("auth"))
+        self.config.check_httpx_auth(
+            path, self._client.base_url, self._client.auth, kwargs.get("auth")
+        )
         kwargs["headers"] = self.config.checked_headers(
             self._client.headers, kwargs.pop("headers", None)
         )
@@ -206,7 +217,9 @@ class AsyncPhalaCloud:
 
     async def request_full(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         _check_request_origin(path, self._client.base_url)
-        self.config.check_httpx_auth(path, self._client.auth, kwargs.get("auth"))
+        self.config.check_httpx_auth(
+            path, self._client.base_url, self._client.auth, kwargs.get("auth")
+        )
         kwargs["headers"] = self.config.checked_headers(
             self._client.headers, kwargs.pop("headers", None)
         )
@@ -502,7 +515,9 @@ class PhalaCloud:
     def request(self, method: str, path: str, **kwargs: Any) -> Any:
         # Enforce this per request, including caller-supplied HTTP clients.
         _check_request_origin(path, self._client.base_url)
-        self.config.check_httpx_auth(path, self._client.auth, kwargs.get("auth"))
+        self.config.check_httpx_auth(
+            path, self._client.base_url, self._client.auth, kwargs.get("auth")
+        )
         kwargs["headers"] = self.config.checked_headers(
             self._client.headers, kwargs.pop("headers", None)
         )
@@ -515,7 +530,9 @@ class PhalaCloud:
 
     def request_full(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         _check_request_origin(path, self._client.base_url)
-        self.config.check_httpx_auth(path, self._client.auth, kwargs.get("auth"))
+        self.config.check_httpx_auth(
+            path, self._client.base_url, self._client.auth, kwargs.get("auth")
+        )
         kwargs["headers"] = self.config.checked_headers(
             self._client.headers, kwargs.pop("headers", None)
         )
