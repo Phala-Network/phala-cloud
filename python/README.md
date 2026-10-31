@@ -117,6 +117,14 @@ Pass the output of `parse_env_vars` or `dstack_sdk.EnvVar` objects to `encrypt_e
 
 This changes the previous `encrypt_env_vars` behavior: code that awaited it must switch to `async_encrypt_env_vars`.
 
+## How do I upgrade to these SDK changes?
+
+- Replace `await encrypt_env_vars(...)` with `await async_encrypt_env_vars(...)`. The `encrypt_env_vars` function now returns a string synchronously.
+- Use the JavaScript SDK for `add_compose_hash` and `deploy_app_auth`. Their Python wrappers have been removed.
+- Catch `RequestError` instead of `TimeoutError` when watch retries are exhausted. Watch HTTP errors now use SDK exceptions instead of `httpx.HTTPStatusError`.
+- Do not rely on a raw state event followed by a closed stream as a successful watch result. Only a complete event finishes the watch. Timeouts, incomplete streams, and transient network failures use the reconnect budget.
+- Remove conflicting HTTPX authentication and cross-origin request URLs before upgrading. The SDK now rejects them before sending a request.
+
 ## Development
 
 ```bash
