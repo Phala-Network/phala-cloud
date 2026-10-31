@@ -611,9 +611,8 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         self, req: WatchCvmStateRequest, params: Mapping[str, str]
     ) -> Iterator[httpx.Response]:
         path = f"/cvms/{req.resolved}/state"
-        self.config.check_httpx_auth(path, self._client.base_url, self._client.auth)
-        headers = self.config.checked_headers(
-            self._client.headers, {"Accept": "text/event-stream", "Cache-Control": "no-cache"}
+        headers = self.config.merged_headers(
+            {"Accept": "text/event-stream", "Cache-Control": "no-cache"}
         )
         timeout = httpx.Timeout(
             connect=self._client.timeout.connect,
@@ -1558,9 +1557,8 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         self, req: WatchCvmStateRequest, params: Mapping[str, str]
     ) -> AsyncIterator[httpx.Response]:
         path = f"/cvms/{req.resolved}/state"
-        self.config.check_httpx_auth(path, self._client.base_url, self._client.auth)
-        headers = self.config.checked_headers(
-            self._client.headers, {"Accept": "text/event-stream", "Cache-Control": "no-cache"}
+        headers = self.config.merged_headers(
+            {"Accept": "text/event-stream", "Cache-Control": "no-cache"}
         )
         timeout = httpx.Timeout(
             connect=self._client.timeout.connect,

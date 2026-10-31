@@ -71,13 +71,13 @@ asyncio.run(main())
 
 A non-empty client option takes precedence over its corresponding environment variable. After resolving both credentials, the SDK uses the API key if both are set. This includes an API key from `PHALA_CLOUD_API_KEY` when `bearer_token` is set explicitly. Cookie auth suppresses both generated authentication headers; it does not remove headers supplied by the caller. The SDK removes surrounding whitespace from the workspace value.
 
-When cookie auth is off, the SDK raises `RequestError` if the combined SDK and HTTPX headers contain both `X-API-Key` and `Authorization`. When an SDK API key or bearer token is selected, it also rejects HTTPX `auth` and credentials embedded in a request URL. Remove the conflicting credentials from the supplied client or request. When you supply `http_client`, its base URL and timeout control requests; configure them on that client. Watch streams use their own read timeout, as described below. The SDK does not close the supplied client.
+When you supply `http_client`, its base URL and timeout control requests; configure them on that client. Watch streams use their own read timeout, as described below. The SDK does not close the supplied client.
 
 ## Does the SDK follow redirects?
 
 No. Redirects can send your API key to another server, so the SDK stops at the first response. This applies to API calls and SSE streams. Set `base_url` to the final API URL instead of relying on a redirect.
 
-Direct calls raise `ApiError` for 3xx responses. `request_full` returns the original status, headers, and body with `ok=False`, so you can inspect the response without following it. The SDK also rejects cross-origin absolute request URLs with `RequestError` before sending a request.
+Direct calls raise `ApiError` for 3xx responses. `request_full` returns the original status, headers, and body with `ok=False`, so you can inspect the response without following it.
 
 The SDK ignores `follow_redirects=True` on SDK requests, including requests made with a supplied `http_client`. It does not change that client's settings or close the supplied client. Custom transports must not follow redirects internally.
 
@@ -123,8 +123,6 @@ This changes the previous `encrypt_env_vars` behavior: code that awaited it must
 - Use the JavaScript SDK for `add_compose_hash` and `deploy_app_auth`. Their Python wrappers have been removed.
 - Catch `RequestError` instead of `TimeoutError` when watch retries are exhausted. Watch HTTP errors now use SDK exceptions instead of `httpx.HTTPStatusError`.
 - Do not rely on a raw state event followed by a closed stream as a successful watch result. Only a complete event finishes the watch. Timeouts, incomplete streams, and transient network failures use the reconnect budget.
-- Use request URLs on the HTTPX client's origin. The SDK rejects cross-origin URLs before sending.
-- Remove conflicting authentication before upgrading. With cookie auth off, the SDK rejects combined API-key and `Authorization` headers. When an SDK API key or bearer token is selected, it also rejects HTTPX client or request `auth`, and credentials in the request or base URL. Cookie mode preserves caller-supplied authentication.
 
 ## Development
 
