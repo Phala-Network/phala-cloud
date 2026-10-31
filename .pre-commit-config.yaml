@@ -29,10 +29,9 @@ repos:
         priority: 20
       - id: gotest
         name: go test
-        entry: bash -c 'cd go && go test ./...'
+        entry: python3 scripts/focused_tests.py go
         language: system
         files: ^go/.*\.go$
-        pass_filenames: false
         require_serial: true
         priority: 30
 
@@ -68,11 +67,10 @@ repos:
         priority: 25
       - id: test-js
         name: JS SDK tests
-        entry: bash -c 'cd js && bun run test'
+        entry: python3 scripts/focused_tests.py js
         language: system
-        files: ^js/
-        types_or: [javascript, ts, tsx, jsx]
-        pass_filenames: false
+        files: ^js/(src|tests)/.*\.[cm]?[jt]sx?$
+        exclude: \.d\.[cm]?ts$
         require_serial: true
         priority: 30
 
@@ -108,10 +106,9 @@ repos:
         priority: 25
       - id: test-cli
         name: CLI tests
-        entry: bash -c 'cd cli && bun run test'
+        entry: python3 scripts/focused_tests.py cli
         language: system
-        files: ^cli/
-        types_or: [javascript, ts, tsx, jsx]
-        pass_filenames: false
+        files: ^cli/(src|test)/.*\.[cm]?[jt]sx?$
+        exclude: \.d\.[cm]?ts$
         require_serial: true
         priority: 30
