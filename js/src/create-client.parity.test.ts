@@ -1,6 +1,6 @@
 import { afterEach, expect, expectTypeOf, it, vi } from "vitest";
 import type { Client as BaseClient } from "./client";
-import type { GetAppInfoResponse } from "./types/version-mappings";
+import type { GetAppInfoResponse, RefreshCvmInstanceIdResponse } from "./types/version-mappings";
 import type { CvmSshKeysResponse } from "./actions/ssh_keys/get_cvm_ssh_keys";
 import { z } from "zod";
 import * as namedActions from "./actions";
@@ -121,6 +121,21 @@ it("preserves extensions on the base client and through repeated version switche
   expect(switched.first()).toBe("2026-01-21");
   expect(switched.second("x")).toBe("2026-01-21:x");
   expectTypeOf(switched.config.version).toEqualTypeOf<"2026-01-21">();
+});
+
+it("exposes typed refresh actions on versioned clients", async () => {
+  const requests: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: RequestInfo | URL) => {
+    requests.push(String(url));
+    return Response.json({ identifier: "cvm-123", status: "unchanged", source: "none", verified_with_gateway: false, cvm_id: "cvm-123" });
+  }));
+  const client = createClient({ baseURL: "https://example.test" }).withVersion("2026-05-22");
+  expectTypeOf(client.refreshCvmInstanceId).returns.toEqualTypeOf<Promise<RefreshCvmInstanceIdResponse<ApiVersion>>>();
+  expectTypeOf(client.safeRefreshCvmInstanceId).returns.toEqualTypeOf<Promise<import("./types/client").SafeResult<RefreshCvmInstanceIdResponse<ApiVersion>>>>();
+  const result = await client.refreshCvmInstanceId({ id: "cvm-123" });
+  expect(result.cvm_id).toBe("cvm-123");
+  expect((await client.safeRefreshCvmInstanceId({ id: "cvm-123" })).success).toBe(true);
+  expect(requests).toEqual(["https://example.test/cvms/cvm-123/instance-id", "https://example.test/cvms/cvm-123/instance-id"]);
 });
 
 it("passes requests and schema parameters to newly bound SSH actions", async () => {

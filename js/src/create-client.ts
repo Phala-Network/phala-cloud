@@ -382,13 +382,14 @@ type SchemaBoundAction<F, Safe extends boolean> = F extends {
       ): Promise<Safe extends true ? SafeResult<unknown> : unknown>;
     }
   : never;
+// Infer action arguments without structurally expanding the recursive Client type.
 type BoundAdditionalActions = {
   [K in Exclude<
     keyof typeof additionalActions,
     VersionedAppAction | SimpleAdditionalAction
   >]: K extends SchemaAction
     ? SchemaBoundAction<(typeof additionalActions)[K], K extends `safe${string}` ? true : false>
-    : (typeof additionalActions)[K] extends (client: BaseClient, ...args: infer P) => infer R
+    : (typeof additionalActions)[K] extends (client: never, ...args: infer P) => infer R
       ? (...args: P) => R
       : never;
 };
