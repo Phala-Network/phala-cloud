@@ -32,6 +32,7 @@ from .result import SafeResult
 from .utils import (
     MAX_INIT_SCRIPTS,
     MrConfigV3Document,
+    async_encrypt_env_vars,
     build_mr_config_v3_document,
     canonicalize_mr_config_v3_document,
     encrypt_env_vars,
@@ -71,6 +72,7 @@ __all__ = [
     "ServerError",
     "ValidationError",
     "add_compose_hash",
+    "async_encrypt_env_vars",
     "deploy_app_auth",
     "encrypt_env_vars",
     "error_codes",

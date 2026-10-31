@@ -89,6 +89,12 @@ else:
     print(result.error)
 ```
 
+## How do I encrypt environment variables?
+
+Pass the output of `parse_env_vars` or `dstack_sdk.EnvVar` objects to `encrypt_env_vars(envs, public_key_hex)`. It returns the encrypted string synchronously. In async code, use `await async_encrypt_env_vars(envs, public_key_hex)` instead.
+
+This changes the previous `encrypt_env_vars` behavior: code that awaited it must switch to `async_encrypt_env_vars`.
+
 ## Development
 
 ```bash
