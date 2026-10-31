@@ -1,6 +1,11 @@
 from . import error_codes
 from .actions import *  # noqa: F403
-from .actions import revoke_current_api_token, safe_revoke_current_api_token
+from .actions import (
+    commit_cvm_update,
+    revoke_current_api_token,
+    safe_commit_cvm_update,
+    safe_revoke_current_api_token,
+)
 from .client import (
     DEFAULT_API_VERSION,
     DEFAULT_TIMEOUT,
@@ -20,6 +25,8 @@ from .errors import (
 )
 from .full_client import (
     AsyncPhalaCloud,
+    CommitCvmUpdateRequest,
+    CommitCvmUpdateResult,
     CreateAppInstanceRequest,
     PhalaCloud,
     ReplicateCvmRequest,
@@ -59,6 +66,10 @@ __all__ = [
     "ConflictError",
     "CheckAppIsAllowedRequest",
     "CheckCvmIsAllowedRequest",
+    "CommitCvmUpdateRequest",
+    "CommitCvmUpdateResult",
+    "commit_cvm_update",
+    "safe_commit_cvm_update",
     "CreateAppInstanceRequest",
     "DEFAULT_API_VERSION",
     "DEFAULT_TIMEOUT",

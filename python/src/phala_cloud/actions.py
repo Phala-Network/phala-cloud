@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Mapping
 from typing import TYPE_CHECKING, Any, overload
 
 if TYPE_CHECKING:
-    from .full_client import AsyncPhalaCloud, PhalaCloud
+    from .full_client import (
+        AsyncPhalaCloud,
+        CommitCvmUpdateRequest,
+        CommitCvmUpdateResult,
+        PhalaCloud,
+    )
     from .result import SafeResult
 
 __all__ = [
+    "commit_cvm_update",
+    "safe_commit_cvm_update",
     "revoke_current_api_token",
     "safe_revoke_current_api_token",
     "get_current_user",
@@ -148,6 +155,42 @@ __all__ = [
     "get_app_device_allowlist",
     "safe_get_app_device_allowlist",
 ]
+
+
+@overload
+def commit_cvm_update(
+    client: PhalaCloud, request: CommitCvmUpdateRequest | Mapping[str, object]
+) -> CommitCvmUpdateResult: ...
+
+
+@overload
+def commit_cvm_update(
+    client: AsyncPhalaCloud, request: CommitCvmUpdateRequest | Mapping[str, object]
+) -> Awaitable[CommitCvmUpdateResult]: ...
+
+
+def commit_cvm_update(
+    client: PhalaCloud | AsyncPhalaCloud, request: CommitCvmUpdateRequest | Mapping[str, object]
+) -> CommitCvmUpdateResult | Awaitable[CommitCvmUpdateResult]:
+    return client.commit_cvm_update(request)
+
+
+@overload
+def safe_commit_cvm_update(
+    client: PhalaCloud, request: CommitCvmUpdateRequest | Mapping[str, object]
+) -> SafeResult[CommitCvmUpdateResult]: ...
+
+
+@overload
+def safe_commit_cvm_update(
+    client: AsyncPhalaCloud, request: CommitCvmUpdateRequest | Mapping[str, object]
+) -> Awaitable[SafeResult[CommitCvmUpdateResult]]: ...
+
+
+def safe_commit_cvm_update(
+    client: PhalaCloud | AsyncPhalaCloud, request: CommitCvmUpdateRequest | Mapping[str, object]
+) -> SafeResult[CommitCvmUpdateResult] | Awaitable[SafeResult[CommitCvmUpdateResult]]:
+    return client.safe_commit_cvm_update(request)
 
 
 @overload

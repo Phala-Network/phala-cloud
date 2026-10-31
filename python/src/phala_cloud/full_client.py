@@ -269,6 +269,17 @@ class RefreshCvmInstanceIdsRequest(BaseModel):
     dry_run: bool | None = None
 
 
+class CommitCvmUpdateRequest(CvmIdRequest):
+    token: str
+    compose_hash: str | None = None
+    transaction_hash: str | None = None
+
+
+class CommitCvmUpdateResult(BaseModel):
+    correlation_id: str
+    status: str
+
+
 class WatchCvmStateRequest(CvmIdRequest):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -1164,6 +1175,23 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     ) -> SafeResult[Any]:
         return self.safe(self.next_app_ids, request)
 
+    def commit_cvm_update(
+        self, request: CommitCvmUpdateRequest | Mapping[str, Any]
+    ) -> CommitCvmUpdateResult:
+        req = CommitCvmUpdateRequest.model_validate(request)
+        body = req.model_dump(
+            include={"token", "compose_hash", "transaction_hash"}, exclude_none=True
+        )
+        response = self.post(f"/cvms/{req.resolved}/commit-update", json=body)
+        return CommitCvmUpdateResult.model_validate(
+            response.model_dump() if isinstance(response, BaseModel) else response
+        )
+
+    def safe_commit_cvm_update(
+        self, request: CommitCvmUpdateRequest | Mapping[str, Any]
+    ) -> SafeResult[CommitCvmUpdateResult]:
+        return self.safe(self.commit_cvm_update, request)
+
     def revoke_current_api_token(self) -> None:
         self.request("DELETE", "/tokens/self")
 
@@ -2056,6 +2084,23 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         self, request: NextAppIdsRequest | Mapping[str, Any] | None = None
     ) -> SafeResult[Any]:
         return await self.safe(self.next_app_ids, request)
+
+    async def commit_cvm_update(
+        self, request: CommitCvmUpdateRequest | Mapping[str, Any]
+    ) -> CommitCvmUpdateResult:
+        req = CommitCvmUpdateRequest.model_validate(request)
+        body = req.model_dump(
+            include={"token", "compose_hash", "transaction_hash"}, exclude_none=True
+        )
+        response = await self.post(f"/cvms/{req.resolved}/commit-update", json=body)
+        return CommitCvmUpdateResult.model_validate(
+            response.model_dump() if isinstance(response, BaseModel) else response
+        )
+
+    async def safe_commit_cvm_update(
+        self, request: CommitCvmUpdateRequest | Mapping[str, Any]
+    ) -> SafeResult[CommitCvmUpdateResult]:
+        return await self.safe(self.commit_cvm_update, request)
 
     async def revoke_current_api_token(self) -> None:
         await self.request("DELETE", "/tokens/self")
