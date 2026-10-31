@@ -2,9 +2,30 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Awaitable, Mapping
+from typing import TYPE_CHECKING, Any, overload
+
+if TYPE_CHECKING:
+    from .full_client import (
+        AsyncPhalaCloud,
+        CommitCvmUpdateRequest,
+        CommitCvmUpdateResult,
+        CvmIdRequest,
+        CvmSshKeysResponse,
+        PhalaCloud,
+        UpdateCvmSshKeysRequest,
+    )
+    from .result import SafeResult
 
 __all__ = [
+    "get_cvm_ssh_keys",
+    "safe_get_cvm_ssh_keys",
+    "update_cvm_ssh_keys",
+    "safe_update_cvm_ssh_keys",
+    "commit_cvm_update",
+    "safe_commit_cvm_update",
+    "revoke_current_api_token",
+    "safe_revoke_current_api_token",
     "get_current_user",
     "safe_get_current_user",
     "get_available_nodes",
@@ -140,11 +161,141 @@ __all__ = [
     "safe_get_os_images",
     "get_app_device_allowlist",
     "safe_get_app_device_allowlist",
-    "add_compose_hash",
-    "safe_add_compose_hash",
-    "deploy_app_auth",
-    "safe_deploy_app_auth",
 ]
+
+
+@overload
+def get_cvm_ssh_keys(
+    client: PhalaCloud, request: CvmIdRequest | Mapping[str, object]
+) -> CvmSshKeysResponse: ...
+
+
+@overload
+def get_cvm_ssh_keys(
+    client: AsyncPhalaCloud, request: CvmIdRequest | Mapping[str, object]
+) -> Awaitable[CvmSshKeysResponse]: ...
+
+
+def get_cvm_ssh_keys(
+    client: PhalaCloud | AsyncPhalaCloud, request: CvmIdRequest | Mapping[str, object]
+) -> CvmSshKeysResponse | Awaitable[CvmSshKeysResponse]:
+    return client.get_cvm_ssh_keys(request)
+
+
+@overload
+def safe_get_cvm_ssh_keys(
+    client: PhalaCloud, request: CvmIdRequest | Mapping[str, object]
+) -> SafeResult[CvmSshKeysResponse]: ...
+
+
+@overload
+def safe_get_cvm_ssh_keys(
+    client: AsyncPhalaCloud, request: CvmIdRequest | Mapping[str, object]
+) -> Awaitable[SafeResult[CvmSshKeysResponse]]: ...
+
+
+def safe_get_cvm_ssh_keys(
+    client: PhalaCloud | AsyncPhalaCloud, request: CvmIdRequest | Mapping[str, object]
+) -> SafeResult[CvmSshKeysResponse] | Awaitable[SafeResult[CvmSshKeysResponse]]:
+    return client.safe_get_cvm_ssh_keys(request)
+
+
+@overload
+def update_cvm_ssh_keys(
+    client: PhalaCloud, request: UpdateCvmSshKeysRequest | Mapping[str, object]
+) -> CvmSshKeysResponse: ...
+
+
+@overload
+def update_cvm_ssh_keys(
+    client: AsyncPhalaCloud, request: UpdateCvmSshKeysRequest | Mapping[str, object]
+) -> Awaitable[CvmSshKeysResponse]: ...
+
+
+def update_cvm_ssh_keys(
+    client: PhalaCloud | AsyncPhalaCloud, request: UpdateCvmSshKeysRequest | Mapping[str, object]
+) -> CvmSshKeysResponse | Awaitable[CvmSshKeysResponse]:
+    return client.update_cvm_ssh_keys(request)
+
+
+@overload
+def safe_update_cvm_ssh_keys(
+    client: PhalaCloud, request: UpdateCvmSshKeysRequest | Mapping[str, object]
+) -> SafeResult[CvmSshKeysResponse]: ...
+
+
+@overload
+def safe_update_cvm_ssh_keys(
+    client: AsyncPhalaCloud, request: UpdateCvmSshKeysRequest | Mapping[str, object]
+) -> Awaitable[SafeResult[CvmSshKeysResponse]]: ...
+
+
+def safe_update_cvm_ssh_keys(
+    client: PhalaCloud | AsyncPhalaCloud, request: UpdateCvmSshKeysRequest | Mapping[str, object]
+) -> SafeResult[CvmSshKeysResponse] | Awaitable[SafeResult[CvmSshKeysResponse]]:
+    return client.safe_update_cvm_ssh_keys(request)
+
+
+@overload
+def commit_cvm_update(
+    client: PhalaCloud, request: CommitCvmUpdateRequest | Mapping[str, object]
+) -> CommitCvmUpdateResult: ...
+
+
+@overload
+def commit_cvm_update(
+    client: AsyncPhalaCloud, request: CommitCvmUpdateRequest | Mapping[str, object]
+) -> Awaitable[CommitCvmUpdateResult]: ...
+
+
+def commit_cvm_update(
+    client: PhalaCloud | AsyncPhalaCloud, request: CommitCvmUpdateRequest | Mapping[str, object]
+) -> CommitCvmUpdateResult | Awaitable[CommitCvmUpdateResult]:
+    return client.commit_cvm_update(request)
+
+
+@overload
+def safe_commit_cvm_update(
+    client: PhalaCloud, request: CommitCvmUpdateRequest | Mapping[str, object]
+) -> SafeResult[CommitCvmUpdateResult]: ...
+
+
+@overload
+def safe_commit_cvm_update(
+    client: AsyncPhalaCloud, request: CommitCvmUpdateRequest | Mapping[str, object]
+) -> Awaitable[SafeResult[CommitCvmUpdateResult]]: ...
+
+
+def safe_commit_cvm_update(
+    client: PhalaCloud | AsyncPhalaCloud, request: CommitCvmUpdateRequest | Mapping[str, object]
+) -> SafeResult[CommitCvmUpdateResult] | Awaitable[SafeResult[CommitCvmUpdateResult]]:
+    return client.safe_commit_cvm_update(request)
+
+
+@overload
+def revoke_current_api_token(client: PhalaCloud) -> None: ...
+
+
+@overload
+def revoke_current_api_token(client: AsyncPhalaCloud) -> Awaitable[None]: ...
+
+
+def revoke_current_api_token(client: PhalaCloud | AsyncPhalaCloud) -> None | Awaitable[None]:
+    return client.revoke_current_api_token()
+
+
+@overload
+def safe_revoke_current_api_token(client: PhalaCloud) -> SafeResult[None]: ...
+
+
+@overload
+def safe_revoke_current_api_token(client: AsyncPhalaCloud) -> Awaitable[SafeResult[None]]: ...
+
+
+def safe_revoke_current_api_token(
+    client: PhalaCloud | AsyncPhalaCloud,
+) -> SafeResult[None] | Awaitable[SafeResult[None]]:
+    return client.safe_revoke_current_api_token()
 
 
 def get_current_user(client: Any, *args: Any, **kwargs: Any) -> Any:
@@ -685,19 +836,3 @@ def get_app_device_allowlist(client: Any, *args: Any, **kwargs: Any) -> Any:
 
 def safe_get_app_device_allowlist(client: Any, *args: Any, **kwargs: Any) -> Any:
     return client.safe_get_app_device_allowlist(*args, **kwargs)
-
-
-def add_compose_hash(client: Any, *args: Any, **kwargs: Any) -> Any:
-    return client.add_compose_hash(*args, **kwargs)
-
-
-def safe_add_compose_hash(client: Any, *args: Any, **kwargs: Any) -> Any:
-    return client.safe_add_compose_hash(*args, **kwargs)
-
-
-def deploy_app_auth(client: Any, *args: Any, **kwargs: Any) -> Any:
-    return client.deploy_app_auth(*args, **kwargs)
-
-
-def safe_deploy_app_auth(client: Any, *args: Any, **kwargs: Any) -> Any:
-    return client.safe_deploy_app_auth(*args, **kwargs)

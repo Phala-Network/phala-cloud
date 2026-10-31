@@ -1,4 +1,5 @@
 import { createClient as createBaseClient, Client as BaseClient } from "./client";
+import * as actions from "./actions";
 import type { ClientConfig, ApiVersion, DefaultApiVersion } from "./types/client";
 import type { z } from "zod";
 import type {
@@ -253,6 +254,146 @@ import type { VM } from "./types/cvm_info";
 
 import type { SafeResult } from "./types/client";
 
+// These actions take the cloud client as their first argument.
+const additionalActions = {
+  getWorkspaceNodes: actions.getWorkspaceNodes,
+  safeGetWorkspaceNodes: actions.safeGetWorkspaceNodes,
+  getWorkspaceQuotas: actions.getWorkspaceQuotas,
+  safeGetWorkspaceQuotas: actions.safeGetWorkspaceQuotas,
+  replicateCvm: actions.replicateCvm,
+  safeReplicateCvm: actions.safeReplicateCvm,
+  watchCvmState: actions.watchCvmState,
+  patchCvm: actions.patchCvm,
+  safePatchCvm: actions.safePatchCvm,
+  confirmCvmPatch: actions.confirmCvmPatch,
+  safeConfirmCvmPatch: actions.safeConfirmCvmPatch,
+  commitCvmUpdate: actions.commitCvmUpdate,
+  safeCommitCvmUpdate: actions.safeCommitCvmUpdate,
+  refreshCvmInstanceId: actions.refreshCvmInstanceId,
+  safeRefreshCvmInstanceId: actions.safeRefreshCvmInstanceId,
+  refreshCvmInstanceIds: actions.refreshCvmInstanceIds,
+  safeRefreshCvmInstanceIds: actions.safeRefreshCvmInstanceIds,
+  getCvmStatusBatch: actions.getCvmStatusBatch,
+  safeGetCvmStatusBatch: actions.safeGetCvmStatusBatch,
+  getCvmUserConfig: actions.getCvmUserConfig,
+  safeGetCvmUserConfig: actions.safeGetCvmUserConfig,
+  getCvmSshKeys: actions.getCvmSshKeys,
+  safeGetCvmSshKeys: actions.safeGetCvmSshKeys,
+  updateCvmSshKeys: actions.updateCvmSshKeys,
+  safeUpdateCvmSshKeys: actions.safeUpdateCvmSshKeys,
+  revokeCurrentApiToken: actions.revokeCurrentApiToken,
+  safeRevokeCurrentApiToken: actions.safeRevokeCurrentApiToken,
+  checkCvmIsAllowed: actions.checkCvmIsAllowed,
+  safeCheckCvmIsAllowed: actions.safeCheckCvmIsAllowed,
+  checkAppIsAllowed: actions.checkAppIsAllowed,
+  safeCheckAppIsAllowed: actions.safeCheckAppIsAllowed,
+  checkAppCvmsIsAllowed: actions.checkAppCvmsIsAllowed,
+  safeCheckAppCvmsIsAllowed: actions.safeCheckAppCvmsIsAllowed,
+  getAppList: actions.getAppList,
+  safeGetAppList: actions.safeGetAppList,
+  getAppInfo: actions.getAppInfo,
+  safeGetAppInfo: actions.safeGetAppInfo,
+  getAppCvms: actions.getAppCvms,
+  safeGetAppCvms: actions.safeGetAppCvms,
+  createAppInstance: actions.createAppInstance,
+  safeCreateAppInstance: actions.safeCreateAppInstance,
+  getAppDeviceAllowlist: actions.getAppDeviceAllowlist,
+  safeGetAppDeviceAllowlist: actions.safeGetAppDeviceAllowlist,
+  getAppRevisions: actions.getAppRevisions,
+  safeGetAppRevisions: actions.safeGetAppRevisions,
+  getAppRevisionDetail: actions.getAppRevisionDetail,
+  safeGetAppRevisionDetail: actions.safeGetAppRevisionDetail,
+  getAppFilterOptions: actions.getAppFilterOptions,
+  safeGetAppFilterOptions: actions.safeGetAppFilterOptions,
+  getAppAttestation: actions.getAppAttestation,
+  safeGetAppAttestation: actions.safeGetAppAttestation,
+};
+
+// On-chain actions are independent of the cloud client and retain their original signatures.
+const onChainActions = {
+  addComposeHash: actions.addComposeHash,
+  safeAddComposeHash: actions.safeAddComposeHash,
+  deployAppAuth: actions.deployAppAuth,
+  safeDeployAppAuth: actions.safeDeployAppAuth,
+  addDevice: actions.addDevice,
+  safeAddDevice: actions.safeAddDevice,
+  removeDevice: actions.removeDevice,
+  safeRemoveDevice: actions.safeRemoveDevice,
+  setAllowAnyDevice: actions.setAllowAnyDevice,
+  safeSetAllowAnyDevice: actions.safeSetAllowAnyDevice,
+  getAllowedDevices: actions.getAllowedDevices,
+  safeGetAllowedDevices: actions.safeGetAllowedDevices,
+  checkDeviceAllowed: actions.checkDeviceAllowed,
+  safeCheckDeviceAllowed: actions.safeCheckDeviceAllowed,
+  checkComposeHashAllowed: actions.checkComposeHashAllowed,
+  safeCheckComposeHashAllowed: actions.safeCheckComposeHashAllowed,
+  checkOnChainPrerequisites: actions.checkOnChainPrerequisites,
+  safeCheckOnChainPrerequisites: actions.safeCheckOnChainPrerequisites,
+};
+
+type OnChainActions = typeof onChainActions;
+
+type VersionedAppAction =
+  | "getAppList"
+  | "safeGetAppList"
+  | "getAppInfo"
+  | "safeGetAppInfo"
+  | "getAppCvms"
+  | "safeGetAppCvms"
+  | "replicateCvm"
+  | "safeReplicateCvm";
+type SimpleAdditionalAction = "revokeCurrentApiToken" | "safeRevokeCurrentApiToken";
+type SchemaAction =
+  | "getWorkspaceNodes"
+  | "safeGetWorkspaceNodes"
+  | "getWorkspaceQuotas"
+  | "safeGetWorkspaceQuotas"
+  | "patchCvm"
+  | "safePatchCvm"
+  | "confirmCvmPatch"
+  | "safeConfirmCvmPatch"
+  | "commitCvmUpdate"
+  | "safeCommitCvmUpdate"
+  | "getCvmStatusBatch"
+  | "safeGetCvmStatusBatch"
+  | "getCvmUserConfig"
+  | "safeGetCvmUserConfig"
+  | "getCvmSshKeys"
+  | "safeGetCvmSshKeys"
+  | "updateCvmSshKeys"
+  | "safeUpdateCvmSshKeys"
+  | "checkAppIsAllowed"
+  | "safeCheckAppIsAllowed"
+  | "createAppInstance"
+  | "safeCreateAppInstance"
+  | "getAppAttestation"
+  | "safeGetAppAttestation";
+type SchemaBoundAction<F, Safe extends boolean> = F extends {
+  (client: never, ...args: infer P): infer R;
+  (client: never, ...args: never[]): unknown;
+  (client: never, ...args: never[]): unknown;
+}
+  ? ((...args: P) => R) & {
+      <T extends z.ZodTypeAny>(
+        ...args: [...P, { schema: T }]
+      ): Promise<Safe extends true ? SafeResult<z.infer<T>> : z.infer<T>>;
+      (
+        ...args: [...P, { schema: false }]
+      ): Promise<Safe extends true ? SafeResult<unknown> : unknown>;
+    }
+  : never;
+// Infer action arguments without structurally expanding the recursive Client type.
+type BoundAdditionalActions = {
+  [K in Exclude<
+    keyof typeof additionalActions,
+    VersionedAppAction | SimpleAdditionalAction
+  >]: K extends SchemaAction
+    ? SchemaBoundAction<(typeof additionalActions)[K], K extends `safe${string}` ? true : false>
+    : (typeof additionalActions)[K] extends (client: never, ...args: infer P) => infer R
+      ? (...args: P) => R
+      : never;
+};
+
 /**
  * Create a full-featured Phala Cloud client with all actions
  *
@@ -298,12 +439,17 @@ export function createClient(
 export function createClient(
   config: ClientConfig<"2025-10-28"> & { version: "2025-10-28" },
 ): Client<"2025-10-28">;
+export function createClient<V extends ApiVersion>(
+  config: ClientConfig<V> & { version: V },
+): Client<V>;
 export function createClient(config?: ClientConfig): Client<DefaultApiVersion>;
 export function createClient<V extends ApiVersion = DefaultApiVersion>(
   config: ClientConfig<V> = {} as ClientConfig<V>,
 ): Client<V> {
-  const client = createBaseClient(config) as BaseClient<V>;
+  return buildClient(createBaseClient(config) as BaseClient<V>);
+}
 
+function buildClient<V extends ApiVersion>(client: BaseClient<V>): Client<V> {
   // Type annotation ensures proper type inference for extend()
   const allActions: {
     readonly getCurrentUser: typeof getCurrentUser;
@@ -505,7 +651,12 @@ export function createClient<V extends ApiVersion = DefaultApiVersion>(
     safeGetKmsOnChainDetail,
   };
 
-  return client.extend(allActions) as unknown as Client<V>;
+  const extended = client.extend(allActions).extend(additionalActions) as unknown as Client<V>;
+  Object.assign(extended, onChainActions);
+  // The clone shares the original's event emitter, so `on(...)` listeners carry over.
+  extended.withVersion = <NewV extends ApiVersion>(version: NewV): Client<NewV> =>
+    buildClient(client.withVersion(version));
+  return extended;
 }
 
 /**
@@ -514,7 +665,42 @@ export function createClient<V extends ApiVersion = DefaultApiVersion>(
  * This type definition ensures proper type inference for all action methods,
  * including their overload signatures for schema parameters.
  */
-export interface Client<V extends ApiVersion = DefaultApiVersion> extends BaseClient<V> {
+export interface Client<V extends ApiVersion = DefaultApiVersion>
+  extends BaseClient<V>,
+    BoundAdditionalActions,
+    OnChainActions {
+  replicateCvm(
+    request: actions.ReplicateCvmRequest,
+  ): Promise<import("./types/cvm_info").VMForVersion<V>>;
+  safeReplicateCvm(
+    request: actions.ReplicateCvmRequest,
+  ): Promise<SafeResult<import("./types/cvm_info").VMForVersion<V>>>;
+  revokeCurrentApiToken(): Promise<void>;
+  revokeCurrentApiToken<T extends z.ZodTypeAny>(parameters: { schema: T }): Promise<z.infer<T>>;
+  revokeCurrentApiToken(parameters: { schema: false }): Promise<unknown>;
+  safeRevokeCurrentApiToken(): Promise<SafeResult<void>>;
+  safeRevokeCurrentApiToken<T extends z.ZodTypeAny>(parameters: { schema: T }): Promise<
+    SafeResult<z.infer<T>>
+  >;
+  safeRevokeCurrentApiToken(parameters: { schema: false }): Promise<SafeResult<unknown>>;
+  getAppList(
+    request?: actions.GetAppListRequest,
+  ): Promise<import("./types/version-mappings").GetAppListResponse<V>>;
+  safeGetAppList(
+    request?: actions.GetAppListRequest,
+  ): Promise<SafeResult<import("./types/version-mappings").GetAppListResponse<V>>>;
+  getAppInfo(
+    request: actions.GetAppInfoRequest,
+  ): Promise<import("./types/version-mappings").GetAppInfoResponse<V>>;
+  safeGetAppInfo(
+    request: actions.GetAppInfoRequest,
+  ): Promise<SafeResult<import("./types/version-mappings").GetAppInfoResponse<V>>>;
+  getAppCvms(
+    request: actions.GetAppCvmsRequest,
+  ): Promise<import("./types/version-mappings").GetAppCvmsResponse<V>>;
+  safeGetAppCvms(
+    request: actions.GetAppCvmsRequest,
+  ): Promise<SafeResult<import("./types/version-mappings").GetAppCvmsResponse<V>>>;
   // Version switching
   withVersion<NewV extends ApiVersion>(version: NewV): Client<NewV>;
 

@@ -18,12 +18,26 @@ func (c *Client) newRequest(ctx context.Context, method, path string, body io.Re
 		return nil, err
 	}
 
-	req.Header.Set("X-API-Key", c.apiKey)
+	if c.apiKey != "" {
+		req.Header.Set("X-API-Key", c.apiKey)
+	}
+	if c.bearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.bearerToken)
+	}
+	if c.workspace != "" {
+		req.Header.Set("X-Phala-Workspace", c.workspace)
+	}
 	req.Header.Set("X-Phala-Version", c.apiVersion)
 	req.Header.Set("User-Agent", c.userAgent)
 
 	for k, v := range c.headers {
 		req.Header.Set(k, v)
+	}
+	// The API key takes precedence even when credentials came from custom headers.
+	if req.Header.Get("X-API-Key") != "" {
+		req.Header.Del("Authorization")
+	} else {
+		req.Header.Del("X-API-Key")
 	}
 
 	return req, nil

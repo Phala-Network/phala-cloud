@@ -54,16 +54,24 @@ asyncio.run(main())
 ### Environment variables
 
 - `PHALA_CLOUD_API_KEY`
+- `PHALA_OIDC_TOKEN`
+- `PHALA_CLOUD_WORKSPACE`
 - `PHALA_CLOUD_API_PREFIX` (e.g. `https://cloud-api.phala.com/api/v1`)
 
 ### Client options
 
 - `api_key`
+- `bearer_token`
+- `workspace`
 - `base_url`
 - `version` (`2025-10-28` / `2026-01-21` / `2026-05-22`)
 - `timeout`
 - `headers`
 - `use_cookie_auth`
+
+A non-empty client option takes precedence over its corresponding environment variable. After resolving both credentials, the SDK uses the API key if both are set. This includes an API key from `PHALA_CLOUD_API_KEY` when `bearer_token` is set explicitly. Cookie auth suppresses both generated authentication headers; it does not remove headers supplied by the caller. The SDK removes surrounding whitespace from the workspace value.
+
+When you supply `http_client`, its base URL and timeout control requests; configure them on that client. Watch streams use their own read timeout, as described below. The SDK does not close the supplied client.
 
 ## Does the SDK follow redirects?
 
@@ -88,6 +96,33 @@ if result.ok:
 else:
     print(result.error)
 ```
+
+## How do I commit a prepared CVM update?
+
+Pass the CVM ID and the one-time token to `commit_cvm_update`. `compose_hash` and `transaction_hash` are optional. If you omit the compose hash, the server reads it from the token. If you omit the transaction hash, the server checks whether the compose hash is already allowed on-chain. The server still validates the token and the update.
+
+## How does watching a CVM retry?
+
+`watch_cvm_state` reconnects after a server timeout event, an incomplete stream, or a transient network failure. Set `max_retries` to limit reconnects; the default is unlimited. Set `retry_delay` in seconds (default 5). The aliases `maxRetries` and `retryDelay` also work. The stream read timeout is the requested `timeout` plus `interval` plus 5 seconds.
+
+Only a complete event finishes the watch. The server may send an error event and then continue streaming. If retries are exhausted, the SDK raises `RequestError` with the last available server and network error details. HTTP errors use the same SDK exception types as other requests and are not retried. In async code, cancelling the task closes the stream and propagates cancellation. Previous versions raised `TimeoutError` on retry exhaustion; catch `RequestError` instead.
+
+## Are blockchain actions supported?
+
+The Python SDK no longer exposes `add_compose_hash`, `deploy_app_auth`, or their safe wrappers. These wrappers did not implement the blockchain operations. Use the JavaScript SDK for these operations instead.
+
+## How do I encrypt environment variables?
+
+Pass the output of `parse_env_vars` or `dstack_sdk.EnvVar` objects to `encrypt_env_vars(envs, public_key_hex)`. It returns the encrypted string synchronously. In async code, use `await async_encrypt_env_vars(envs, public_key_hex)` instead.
+
+This changes the previous `encrypt_env_vars` behavior: code that awaited it must switch to `async_encrypt_env_vars`.
+
+## How do I upgrade to these SDK changes?
+
+- Replace `await encrypt_env_vars(...)` with `await async_encrypt_env_vars(...)`. The `encrypt_env_vars` function now returns a string synchronously.
+- Use the JavaScript SDK for `add_compose_hash` and `deploy_app_auth`. Their Python wrappers have been removed.
+- Catch `RequestError` instead of `TimeoutError` when watch retries are exhausted. Watch HTTP errors now use SDK exceptions instead of `httpx.HTTPStatusError`.
+- Do not rely on a raw state event followed by a closed stream as a successful watch result. Only a complete event finishes the watch. Timeouts, incomplete streams, and transient network failures use the reconnect budget.
 
 ## Development
 

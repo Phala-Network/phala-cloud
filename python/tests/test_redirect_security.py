@@ -149,7 +149,7 @@ def test_sync_stream_redirect_never_leaks_key(origins: Origins, status: int) -> 
         base_url=origins.api, headers={"X-API-Key": KEY}, follow_redirects=True
     ) as transport:
         with PhalaCloud(api_key=KEY, http_client=transport) as client:
-            with pytest.raises(httpx.HTTPStatusError):
+            with pytest.raises(ApiError):
                 client.watch_cvm_state({"id": "cvm-test", "target": "running", "max_retries": 0})
         assert transport.follow_redirects is True
     assert origins.api_keys == [KEY]
@@ -207,7 +207,7 @@ async def test_async_stream_redirect_never_leaks_key(origins: Origins, status: i
         base_url=origins.api, headers={"X-API-Key": KEY}, follow_redirects=True
     ) as transport:
         async with AsyncPhalaCloud(api_key=KEY, http_client=transport) as client:
-            with pytest.raises(httpx.HTTPStatusError):
+            with pytest.raises(ApiError):
                 await client.watch_cvm_state(
                     {"id": "cvm-test", "target": "running", "max_retries": 0}
                 )

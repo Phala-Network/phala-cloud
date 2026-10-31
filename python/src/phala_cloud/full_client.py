@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import re
+import ssl
 import time
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Iterator, Mapping
+from contextlib import asynccontextmanager, contextmanager
 from typing import Any, cast
 
+import httpx
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from .action_responses import (
@@ -49,11 +52,9 @@ from .action_responses import (
     WorkspaceQuotasResponse,
     WorkspaceResponse,
 )
-from .blockchains import add_compose_hash as _add_compose_hash
-from .blockchains import deploy_app_auth as _deploy_app_auth
 from .client import AsyncPhalaCloud as _AsyncBase
 from .client import PhalaCloud as _SyncBase
-from .errors import ApiError
+from .errors import ApiError, RequestError
 from .models.apps import DeviceAllowlistResponseV20260121, DeviceAllowlistResponseV20260522
 from .models.auth import CurrentUserV20251028, CurrentUserV20260121
 from .models.base import CloudModel, NodeSelectionRequest
@@ -88,6 +89,21 @@ from .models.nodes import (
 )
 from .models.os_images import GetOsImagesRequest, GetOsImagesResponse
 from .result import SafeResult
+
+
+class _WatchTransportError(RequestError):
+    """A retryable transport failure while reading a watch stream."""
+
+
+def _is_certificate_error(error: BaseException) -> bool:
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        if isinstance(current, ssl.SSLCertVerificationError):
+            return True
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return False
 
 
 class _AliasModel(BaseModel):
@@ -271,7 +287,42 @@ class RefreshCvmInstanceIdsRequest(BaseModel):
     dry_run: bool | None = None
 
 
+class UpdateCvmSshKeysRequest(CvmIdRequest):
+    ssh_key_ids: list[str]
+    usernames: list[str] | None = None
+    apply_now: bool = False
+
+
+class CvmSshKey(BaseModel):
+    id: str
+    owner_user_id: str
+    owner_username: str
+    added_by_user_id: str
+    name: str
+    public_key: str
+    fingerprint: str
+    key_type: str
+
+
+class CvmSshKeysResponse(BaseModel):
+    keys: list[CvmSshKey]
+    restart_required: bool
+
+
+class CommitCvmUpdateRequest(CvmIdRequest):
+    token: str
+    compose_hash: str | None = None
+    transaction_hash: str | None = None
+
+
+class CommitCvmUpdateResult(BaseModel):
+    correlation_id: str
+    status: str
+
+
 class WatchCvmStateRequest(CvmIdRequest):
+    model_config = ConfigDict(populate_by_name=True)
+
     target: str
     interval: int = Field(default=5, ge=5, le=30)
     timeout: int = Field(default=300, ge=10, le=600)
@@ -555,6 +606,35 @@ class _ExtMixin:
 
 
 class PhalaCloud(_SyncBase, _ExtMixin):
+    @contextmanager
+    def _watch_stream(
+        self, req: WatchCvmStateRequest, params: Mapping[str, str]
+    ) -> Iterator[httpx.Response]:
+        path = f"/cvms/{req.resolved}/state"
+        headers = self.config.merged_headers(
+            {"Accept": "text/event-stream", "Cache-Control": "no-cache"}
+        )
+        timeout = httpx.Timeout(
+            connect=self._client.timeout.connect,
+            read=req.timeout + req.interval + 5,
+            write=self._client.timeout.write,
+            pool=self._client.timeout.pool,
+        )
+        try:
+            with self._client.stream(
+                "GET", path, follow_redirects=False, params=params, headers=headers, timeout=timeout
+            ) as response:
+                if not response.is_success:
+                    response.read()
+                    self._decode_or_raise(response)
+                yield response
+        except (httpx.NetworkError, httpx.TimeoutException, httpx.RemoteProtocolError) as exc:
+            if _is_certificate_error(exc):
+                raise RequestError(str(exc)) from exc
+            raise _WatchTransportError(str(exc)) from exc
+        except httpx.HTTPError as exc:
+            raise RequestError(str(exc)) from exc
+
     def request(self, method: str, path: str, **kwargs: Any) -> Any:
         data = super().request(method, path, **kwargs)
         version = (kwargs.get("headers") or {}).get("X-Phala-Version", self.config.version)
@@ -1048,6 +1128,8 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     def watch_cvm_state(self, request: WatchCvmStateRequest | Mapping[str, Any]) -> Any:
         req = WatchCvmStateRequest.model_validate(request)
         retries = 0
+        last_error: str | None = None
+        last_transport: _WatchTransportError | None = None
         max_retries = req.max_retries
 
         while max_retries is None or retries <= max_retries:
@@ -1056,71 +1138,78 @@ class PhalaCloud(_SyncBase, _ExtMixin):
                 "interval": str(req.interval),
                 "timeout": str(req.timeout),
             }
-            last_state: Any = None
             should_retry = False
             event_type: str | None = None
             event_data: str | None = None
 
             def process_event(ev: str | None, data: str | None) -> Any | None:
-                nonlocal last_state, should_retry
+                nonlocal last_error, should_retry
                 if not ev or not data:
                     return None
                 try:
                     payload = TypeAdapter(dict[str, Any]).validate_json(data)
                 except Exception:
                     payload = {"error": "invalid_sse_payload", "raw": data}
-                if ev == "state":
-                    last_state = GenericObject.model_validate(payload)
-                    return None
                 if ev == "complete":
-                    return GenericObject.model_validate(payload)
-                if ev in {"timeout", "error"}:
+                    if payload.get("status") == req.target:
+                        return GenericObject.model_validate(payload)
+                    last_error = (
+                        f"complete event status {payload.get('status')!r} "
+                        f"does not match target {req.target!r}"
+                    )
+                    should_retry = True
+                    return None
+                if ev == "error":
+                    last_error = str(payload.get("error", "Watch stream error"))
+                if ev == "timeout":
                     should_retry = True
                 return None
 
-            with self._client.stream(
-                "GET",
-                f"/cvms/{req.resolved}/state",
-                follow_redirects=False,
-                params=params,
-                headers={"Accept": "text/event-stream", "Cache-Control": "no-cache"},
-            ) as response:
-                response.raise_for_status()
-                for raw in response.iter_lines():
-                    line = raw.decode() if isinstance(raw, bytes) else raw
-                    line = line.strip()
-                    if line.startswith("event:"):
-                        maybe = process_event(event_type, event_data)
-                        if maybe is not None:
-                            return maybe
-                        event_type = line[6:].strip()
-                        event_data = None
-                    elif line.startswith("data:"):
-                        event_data = line[5:].strip()
-                    elif line == "":
-                        maybe = process_event(event_type, event_data)
-                        if maybe is not None:
-                            return maybe
-                        event_type = None
-                        event_data = None
-
-            maybe = process_event(event_type, event_data)
-            if maybe is not None:
-                return maybe
-
-            if (
-                isinstance(last_state, BaseModel)
-                and getattr(last_state, "status", None) == req.target
-            ):
-                return last_state
+            try:
+                with self._watch_stream(req, params) as response:
+                    for raw in response.iter_lines():
+                        line = raw.decode() if isinstance(raw, bytes) else raw
+                        line = line.strip()
+                        if line.startswith("event:"):
+                            maybe = process_event(event_type, event_data)
+                            if maybe is not None:
+                                return maybe
+                            if should_retry:
+                                break
+                            event_type = line[6:].strip()
+                            event_data = None
+                        elif line.startswith("data:"):
+                            event_data = line[5:].strip()
+                        elif line == "":
+                            maybe = process_event(event_type, event_data)
+                            if maybe is not None:
+                                return maybe
+                            if should_retry:
+                                break
+                            event_type = None
+                            event_data = None
+                maybe = process_event(event_type, event_data)
+                if maybe is not None:
+                    return maybe
+            except _WatchTransportError as exc:
+                last_transport = exc
 
             retries += 1
             if max_retries is not None and retries > max_retries:
                 break
             if req.retry_delay > 0:
-                time.sleep(req.retry_delay)
+                self._sleep(req.retry_delay)
 
-        raise TimeoutError(f"watch_cvm_state exceeded retries waiting for '{req.target}'")
+        details = "; ".join(
+            filter(None, [last_error, str(last_transport) if last_transport else None])
+        )
+        if not details and not should_retry:
+            details = "Watch stream ended before completion"
+        message = f"watch_cvm_state exceeded retries waiting for '{req.target}'"
+        raise RequestError(f"{message}: {details}" if details else message) from last_transport
+
+    def _sleep(self, seconds: float) -> None:
+        time.sleep(seconds)
 
     def get_kms_info(self, request: KmsInfoRequest | Mapping[str, Any]) -> Any:
         req = KmsInfoRequest.model_validate(request)
@@ -1159,6 +1248,56 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         self, request: NextAppIdsRequest | Mapping[str, Any] | None = None
     ) -> SafeResult[Any]:
         return self.safe(self.next_app_ids, request)
+
+    def commit_cvm_update(
+        self, request: CommitCvmUpdateRequest | Mapping[str, Any]
+    ) -> CommitCvmUpdateResult:
+        req = CommitCvmUpdateRequest.model_validate(request)
+        body = req.model_dump(
+            include={"token", "compose_hash", "transaction_hash"}, exclude_none=True
+        )
+        response = self.post(f"/cvms/{req.resolved}/commit-update", json=body)
+        return CommitCvmUpdateResult.model_validate(
+            response.model_dump() if isinstance(response, BaseModel) else response
+        )
+
+    def safe_commit_cvm_update(
+        self, request: CommitCvmUpdateRequest | Mapping[str, Any]
+    ) -> SafeResult[CommitCvmUpdateResult]:
+        return self.safe(self.commit_cvm_update, request)
+
+    def get_cvm_ssh_keys(self, request: CvmIdRequest | Mapping[str, Any]) -> CvmSshKeysResponse:
+        req = CvmIdRequest.model_validate(request)
+        response = self.get(f"/cvms/{req.resolved}/ssh-keys")
+        return CvmSshKeysResponse.model_validate(
+            response.model_dump() if isinstance(response, BaseModel) else response
+        )
+
+    def safe_get_cvm_ssh_keys(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmSshKeysResponse]:
+        return self.safe(self.get_cvm_ssh_keys, request)
+
+    def update_cvm_ssh_keys(
+        self, request: UpdateCvmSshKeysRequest | Mapping[str, Any]
+    ) -> CvmSshKeysResponse:
+        req = UpdateCvmSshKeysRequest.model_validate(request)
+        body = req.model_dump(include={"ssh_key_ids", "usernames", "apply_now"}, exclude_none=True)
+        response = self.request("PUT", f"/cvms/{req.resolved}/ssh-keys", json=body)
+        return CvmSshKeysResponse.model_validate(
+            response.model_dump() if isinstance(response, BaseModel) else response
+        )
+
+    def safe_update_cvm_ssh_keys(
+        self, request: UpdateCvmSshKeysRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmSshKeysResponse]:
+        return self.safe(self.update_cvm_ssh_keys, request)
+
+    def revoke_current_api_token(self) -> None:
+        self.request("DELETE", "/tokens/self")
+
+    def safe_revoke_current_api_token(self) -> SafeResult[None]:
+        return self.safe(self.revoke_current_api_token)
 
     def list_ssh_keys(self) -> Any:
         return self._loose_validate(self.get("/user/ssh-keys"))
@@ -1411,20 +1550,37 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     ) -> SafeResult[Any]:
         return self.safe(self.check_app_cvms_is_allowed, request)
 
-    def add_compose_hash(self, *args: Any, **kwargs: Any) -> Any:
-        return _add_compose_hash(*args, **kwargs)
-
-    def safe_add_compose_hash(self, *args: Any, **kwargs: Any) -> SafeResult[Any]:
-        return self.safe(self.add_compose_hash, *args, **kwargs)
-
-    def deploy_app_auth(self, *args: Any, **kwargs: Any) -> Any:
-        return _deploy_app_auth(*args, **kwargs)
-
-    def safe_deploy_app_auth(self, *args: Any, **kwargs: Any) -> SafeResult[Any]:
-        return self.safe(self.deploy_app_auth, *args, **kwargs)
-
 
 class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
+    @asynccontextmanager
+    async def _watch_stream(
+        self, req: WatchCvmStateRequest, params: Mapping[str, str]
+    ) -> AsyncIterator[httpx.Response]:
+        path = f"/cvms/{req.resolved}/state"
+        headers = self.config.merged_headers(
+            {"Accept": "text/event-stream", "Cache-Control": "no-cache"}
+        )
+        timeout = httpx.Timeout(
+            connect=self._client.timeout.connect,
+            read=req.timeout + req.interval + 5,
+            write=self._client.timeout.write,
+            pool=self._client.timeout.pool,
+        )
+        try:
+            async with self._client.stream(
+                "GET", path, follow_redirects=False, params=params, headers=headers, timeout=timeout
+            ) as response:
+                if not response.is_success:
+                    await response.aread()
+                    self._decode_or_raise(response)
+                yield response
+        except (httpx.NetworkError, httpx.TimeoutException, httpx.RemoteProtocolError) as exc:
+            if _is_certificate_error(exc):
+                raise RequestError(str(exc)) from exc
+            raise _WatchTransportError(str(exc)) from exc
+        except httpx.HTTPError as exc:
+            raise RequestError(str(exc)) from exc
+
     async def request(self, method: str, path: str, **kwargs: Any) -> Any:
         data = await super().request(method, path, **kwargs)
         version = (kwargs.get("headers") or {}).get("X-Phala-Version", self.config.version)
@@ -1931,6 +2087,8 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
     async def watch_cvm_state(self, request: WatchCvmStateRequest | Mapping[str, Any]) -> Any:
         req = WatchCvmStateRequest.model_validate(request)
         retries = 0
+        last_error: str | None = None
+        last_transport: _WatchTransportError | None = None
         max_retries = req.max_retries
 
         while max_retries is None or retries <= max_retries:
@@ -1939,62 +2097,60 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
                 "interval": str(req.interval),
                 "timeout": str(req.timeout),
             }
-            last_state: Any = None
             should_retry = False
             event_type: str | None = None
             event_data: str | None = None
 
             def process_event(ev: str | None, data: str | None) -> Any | None:
-                nonlocal last_state, should_retry
+                nonlocal last_error, should_retry
                 if not ev or not data:
                     return None
                 try:
                     payload = TypeAdapter(dict[str, Any]).validate_json(data)
                 except Exception:
                     payload = {"error": "invalid_sse_payload", "raw": data}
-                if ev == "state":
-                    last_state = GenericObject.model_validate(payload)
-                    return None
                 if ev == "complete":
-                    return GenericObject.model_validate(payload)
-                if ev in {"timeout", "error"}:
+                    if payload.get("status") == req.target:
+                        return GenericObject.model_validate(payload)
+                    last_error = (
+                        f"complete event status {payload.get('status')!r} "
+                        f"does not match target {req.target!r}"
+                    )
+                    should_retry = True
+                    return None
+                if ev == "error":
+                    last_error = str(payload.get("error", "Watch stream error"))
+                if ev == "timeout":
                     should_retry = True
                 return None
 
-            async with self._client.stream(
-                "GET",
-                f"/cvms/{req.resolved}/state",
-                follow_redirects=False,
-                params=params,
-                headers={"Accept": "text/event-stream", "Cache-Control": "no-cache"},
-            ) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    line = line.strip()
-                    if line.startswith("event:"):
-                        maybe = process_event(event_type, event_data)
-                        if maybe is not None:
-                            return maybe
-                        event_type = line[6:].strip()
-                        event_data = None
-                    elif line.startswith("data:"):
-                        event_data = line[5:].strip()
-                    elif line == "":
-                        maybe = process_event(event_type, event_data)
-                        if maybe is not None:
-                            return maybe
-                        event_type = None
-                        event_data = None
-
-            maybe = process_event(event_type, event_data)
-            if maybe is not None:
-                return maybe
-
-            if (
-                isinstance(last_state, BaseModel)
-                and getattr(last_state, "status", None) == req.target
-            ):
-                return last_state
+            try:
+                async with self._watch_stream(req, params) as response:
+                    async for line in response.aiter_lines():
+                        line = line.strip()
+                        if line.startswith("event:"):
+                            maybe = process_event(event_type, event_data)
+                            if maybe is not None:
+                                return maybe
+                            if should_retry:
+                                break
+                            event_type = line[6:].strip()
+                            event_data = None
+                        elif line.startswith("data:"):
+                            event_data = line[5:].strip()
+                        elif line == "":
+                            maybe = process_event(event_type, event_data)
+                            if maybe is not None:
+                                return maybe
+                            if should_retry:
+                                break
+                            event_type = None
+                            event_data = None
+                maybe = process_event(event_type, event_data)
+                if maybe is not None:
+                    return maybe
+            except _WatchTransportError as exc:
+                last_transport = exc
 
             retries += 1
             if max_retries is not None and retries > max_retries:
@@ -2002,7 +2158,13 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
             if req.retry_delay > 0:
                 await self._sleep(req.retry_delay)
 
-        raise TimeoutError(f"watch_cvm_state exceeded retries waiting for '{req.target}'")
+        details = "; ".join(
+            filter(None, [last_error, str(last_transport) if last_transport else None])
+        )
+        if not details and not should_retry:
+            details = "Watch stream ended before completion"
+        message = f"watch_cvm_state exceeded retries waiting for '{req.target}'"
+        raise RequestError(f"{message}: {details}" if details else message) from last_transport
 
     async def _sleep(self, seconds: float) -> None:
         import asyncio
@@ -2054,6 +2216,58 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         self, request: NextAppIdsRequest | Mapping[str, Any] | None = None
     ) -> SafeResult[Any]:
         return await self.safe(self.next_app_ids, request)
+
+    async def commit_cvm_update(
+        self, request: CommitCvmUpdateRequest | Mapping[str, Any]
+    ) -> CommitCvmUpdateResult:
+        req = CommitCvmUpdateRequest.model_validate(request)
+        body = req.model_dump(
+            include={"token", "compose_hash", "transaction_hash"}, exclude_none=True
+        )
+        response = await self.post(f"/cvms/{req.resolved}/commit-update", json=body)
+        return CommitCvmUpdateResult.model_validate(
+            response.model_dump() if isinstance(response, BaseModel) else response
+        )
+
+    async def safe_commit_cvm_update(
+        self, request: CommitCvmUpdateRequest | Mapping[str, Any]
+    ) -> SafeResult[CommitCvmUpdateResult]:
+        return await self.safe(self.commit_cvm_update, request)
+
+    async def get_cvm_ssh_keys(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> CvmSshKeysResponse:
+        req = CvmIdRequest.model_validate(request)
+        response = await self.get(f"/cvms/{req.resolved}/ssh-keys")
+        return CvmSshKeysResponse.model_validate(
+            response.model_dump() if isinstance(response, BaseModel) else response
+        )
+
+    async def safe_get_cvm_ssh_keys(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmSshKeysResponse]:
+        return await self.safe(self.get_cvm_ssh_keys, request)
+
+    async def update_cvm_ssh_keys(
+        self, request: UpdateCvmSshKeysRequest | Mapping[str, Any]
+    ) -> CvmSshKeysResponse:
+        req = UpdateCvmSshKeysRequest.model_validate(request)
+        body = req.model_dump(include={"ssh_key_ids", "usernames", "apply_now"}, exclude_none=True)
+        response = await self.request("PUT", f"/cvms/{req.resolved}/ssh-keys", json=body)
+        return CvmSshKeysResponse.model_validate(
+            response.model_dump() if isinstance(response, BaseModel) else response
+        )
+
+    async def safe_update_cvm_ssh_keys(
+        self, request: UpdateCvmSshKeysRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmSshKeysResponse]:
+        return await self.safe(self.update_cvm_ssh_keys, request)
+
+    async def revoke_current_api_token(self) -> None:
+        await self.request("DELETE", "/tokens/self")
+
+    async def safe_revoke_current_api_token(self) -> SafeResult[None]:
+        return await self.safe(self.revoke_current_api_token)
 
     async def list_ssh_keys(self) -> Any:
         return self._loose_validate(await self.get("/user/ssh-keys"))
@@ -2323,18 +2537,6 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         self, request: CheckAppCvmsIsAllowedRequest | Mapping[str, Any]
     ) -> SafeResult[Any]:
         return await self.safe(self.check_app_cvms_is_allowed, request)
-
-    async def add_compose_hash(self, *args: Any, **kwargs: Any) -> Any:
-        return _add_compose_hash(*args, **kwargs)
-
-    async def safe_add_compose_hash(self, *args: Any, **kwargs: Any) -> SafeResult[Any]:
-        return await self.safe(self.add_compose_hash, *args, **kwargs)
-
-    async def deploy_app_auth(self, *args: Any, **kwargs: Any) -> Any:
-        return _deploy_app_auth(*args, **kwargs)
-
-    async def safe_deploy_app_auth(self, *args: Any, **kwargs: Any) -> SafeResult[Any]:
-        return await self.safe(self.deploy_app_auth, *args, **kwargs)
 
 
 def create_client(**kwargs: Any) -> PhalaCloud:

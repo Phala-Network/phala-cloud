@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal, TypedDict
+
+from dstack_sdk import EnvVar
+from dstack_sdk import encrypt_env_vars as _async_encrypt_env_vars
+from dstack_sdk import encrypt_env_vars_sync as _encrypt_env_vars_sync
 
 
 def parse_env_vars(content: str) -> list[dict[str, str]]:
@@ -25,13 +29,20 @@ def parse_env(path: str) -> list[dict[str, str]]:
         return parse_env_vars(f.read())
 
 
-def encrypt_env_vars(*args: Any, **kwargs: Any) -> Any:
-    try:
-        from dstack_sdk import encrypt_env_vars as _impl  # type: ignore
+def _normalize_env_vars(envs: Sequence[Mapping[str, str] | EnvVar]) -> list[EnvVar]:
+    return [EnvVar(env["key"], env["value"]) if isinstance(env, Mapping) else env for env in envs]
 
-        return _impl(*args, **kwargs)
-    except Exception as exc:  # pragma: no cover
-        raise RuntimeError("encrypt_env_vars requires dstack-sdk in Python environment") from exc
+
+def encrypt_env_vars(envs: Sequence[Mapping[str, str] | EnvVar], public_key_hex: str) -> str:
+    """Synchronously encrypt parsed environment variables or dstack EnvVar objects."""
+    return _encrypt_env_vars_sync(_normalize_env_vars(envs), public_key_hex)
+
+
+async def async_encrypt_env_vars(
+    envs: Sequence[Mapping[str, str] | EnvVar], public_key_hex: str
+) -> str:
+    """Encrypt environment variables in asynchronous code."""
+    return await _async_encrypt_env_vars(_normalize_env_vars(envs), public_key_hex)
 
 
 # Optional app-compose fields the backend drops from the hashed compose when null.
@@ -127,11 +138,11 @@ def get_mr_config_id(
     Returns:
         48-byte mr_config_id (0x02 || keccak256(...) || zero_pad).
     """
-    import sha3  # type: ignore[import-untyped]
+    from eth_hash.auto import keccak
 
     kp_byte = _KEY_PROVIDER_BYTE[key_provider_type]
     payload = compose_hash + app_id + bytes([kp_byte]) + key_provider_id
-    digest = sha3.keccak_256(payload).digest()
+    digest = keccak(payload)
     result = bytearray(48)
     result[0] = 2
     result[1:33] = digest[:32]

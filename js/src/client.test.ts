@@ -215,15 +215,15 @@ describe("Client", () => {
 				expect.objectContaining({
 					baseURL: "https://custom.api.com",
 					timeout: 15000,
-					headers: expect.objectContaining({
-						"X-API-Key": "test-key",
-						"Content-Type": "application/json",
-						Custom: "header",
-					}),
+					headers: expect.any(Headers),
 					onResponseError: expect.any(Function),
 				}),
 				expect.objectContaining({ fetch: expect.any(Function) }),
 			);
+			const headers = vi.mocked(ofetch.create).mock.calls[0][0].headers as Headers;
+			expect(headers.get("X-API-Key")).toBe("test-key");
+			expect(headers.get("Content-Type")).toBe("application/json");
+			expect(headers.get("Custom")).toBe("header");
 		});
 
 		test("should use default values when not provided", () => {
@@ -244,14 +244,14 @@ describe("Client", () => {
 				expect.objectContaining({
 					baseURL: "https://cloud-api.phala.com/api/v1",
 					timeout: 60000,
-					headers: expect.objectContaining({
-						"X-API-Key": "test-key",
-						"Content-Type": "application/json",
-					}),
+					headers: expect.any(Headers),
 					onResponseError: expect.any(Function),
 				}),
 				expect.objectContaining({ fetch: expect.any(Function) }),
 			);
+			const headers = vi.mocked(ofetch.create).mock.calls[0][0].headers as Headers;
+			expect(headers.get("X-API-Key")).toBe("test-key");
+			expect(headers.get("Content-Type")).toBe("application/json");
 
 			// Restore environment variable
 			if (oldPrefix !== undefined) process.env.PHALA_CLOUD_API_PREFIX = oldPrefix;
