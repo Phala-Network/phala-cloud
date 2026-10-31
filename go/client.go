@@ -59,6 +59,10 @@ func NewClient(opts ...Option) (*Client, error) {
 		return nil, fmt.Errorf("phala: API key or bearer token is required")
 	}
 
+	if c.maxRetries < 0 {
+		return nil, fmt.Errorf("phala: max retries must be non-negative")
+	}
+
 	c.baseURL = strings.TrimRight(c.baseURL, "/")
 	baseURL, err := url.Parse(c.baseURL)
 	if err != nil {
