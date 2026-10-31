@@ -1111,6 +1111,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
                     should_retry = True
                 return None
 
+            self.config.check_httpx_auth(f"/cvms/{req.resolved}/state", self._client.auth)
             with self._client.stream(
                 "GET",
                 f"/cvms/{req.resolved}/state",
@@ -2035,6 +2036,7 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
                     should_retry = True
                 return None
 
+            self.config.check_httpx_auth(f"/cvms/{req.resolved}/state", self._client.auth)
             async with self._client.stream(
                 "GET",
                 f"/cvms/{req.resolved}/state",
