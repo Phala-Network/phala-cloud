@@ -445,6 +445,19 @@ type ReplicateCVMOptions struct {
 	OSImage string `json:"os_image,omitempty"`
 }
 
+// CommitCVMUpdateRequest identifies a prepared update and its on-chain transaction.
+type CommitCVMUpdateRequest struct {
+	Token           string `json:"token"`
+	ComposeHash     string `json:"compose_hash"`
+	TransactionHash string `json:"transaction_hash"`
+}
+
+// CommitCVMUpdateResponse identifies the resulting update operation.
+type CommitCVMUpdateResponse struct {
+	CorrelationID string `json:"correlation_id"`
+	Status        string `json:"status"`
+}
+
 // PatchCVMRequest is the request for patching a CVM (multi-field update).
 type PatchCVMRequest struct {
 	DockerComposeFile *string  `json:"docker_compose_file,omitempty"`
