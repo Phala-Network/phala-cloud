@@ -34,6 +34,18 @@ class FocusedTests(unittest.TestCase):
         ])
         self.assertEqual(selected, ["src/client.extend.type.test.ts", "src/client.test.ts", "tests/regression.spec.ts"])
 
+    def test_js_never_selects_e2e_tests(self) -> None:
+        self.put("js/src/actions/get_current_user.ts")
+        self.put("js/src/actions/get_current_user.test.ts")
+        self.put("js/src/actions/get_current_user.e2e.test.ts")
+        self.put("cli/test/e2e-full/nodes-list.test.ts")
+        self.put("cli/test/nodes.test.ts")
+        self.assertEqual(focused_tests.select_js(self.root, "js", ["js/src/actions/get_current_user.ts"]),
+                         ["src/actions/get_current_user.test.ts"])
+        self.assertEqual(focused_tests.select_js(self.root, "js", ["js/src/actions/get_current_user.e2e.test.ts"]), [])
+        self.assertEqual(focused_tests.select_js(self.root, "cli", [
+            "cli/test/e2e-full/nodes-list.test.ts", "cli/test/nodes.test.ts"]), ["test/nodes.test.ts"])
+
     def test_untracked_adjacent_tests_are_not_selected(self) -> None:
         self.put("js/src/client.ts")
         self.put("js/src/client.test.ts", tracked=False)

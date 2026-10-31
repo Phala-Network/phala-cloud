@@ -22,6 +22,11 @@ def indexed_files(root: Path, project: str) -> set[str]:
     return {os.fsdecode(name) for name in output.split(b"\0") if name}
 
 
+def is_e2e(relative: Path) -> bool:
+    """E2E tests need live services and never run from the commit hook."""
+    return ".e2e.test." in relative.name or "e2e-full" in relative.parts
+
+
 def select_js(root: Path, project: str, filenames: Sequence[str]) -> list[str]:
     base = root / project
     indexed = indexed_files(root, project)
@@ -30,13 +35,16 @@ def select_js(root: Path, project: str, filenames: Sequence[str]) -> list[str]:
         path = root / filename
         if filename not in indexed or not path.is_file():
             continue
+        if is_e2e(path.relative_to(base)):
+            continue
         if TEST_FILE.search(path.name):
             selected.add(path.relative_to(base).as_posix())
             continue
         stem = path.stem
         for candidate in path.parent.iterdir():
             if (candidate.relative_to(root).as_posix() in indexed and candidate.is_file()
-                    and candidate.name.startswith(stem + ".") and TEST_FILE.search(candidate.name)):
+                    and candidate.name.startswith(stem + ".") and TEST_FILE.search(candidate.name)
+                    and not is_e2e(candidate.relative_to(base))):
                 selected.add(candidate.relative_to(base).as_posix())
     return sorted(selected)
 
