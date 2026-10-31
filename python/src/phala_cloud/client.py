@@ -138,17 +138,21 @@ class AsyncPhalaCloud:
             await self._client.aclose()
 
     def with_version(self, version: ApiVersion) -> AsyncPhalaCloud:
-        return AsyncPhalaCloud(
+        return type(self)(
             api_key=self.config.api_key,
             base_url=self.config.base_url,
             version=version,
             timeout=self.config.timeout,
             use_cookie_auth=self.config.use_cookie_auth,
             headers=self.config.headers,
+            http_client=None if self._owns_client else self._client,
         )
 
     async def request(self, method: str, path: str, **kwargs: Any) -> Any:
         # Enforce this per request, including caller-supplied HTTP clients.
+        headers = httpx.Headers(self.config.request_headers)
+        headers.update(kwargs.pop("headers", None))
+        kwargs["headers"] = headers
         kwargs["follow_redirects"] = False
         try:
             response = await self._client.request(method.upper(), path, **kwargs)
@@ -157,6 +161,9 @@ class AsyncPhalaCloud:
         return self._decode_or_raise(response)
 
     async def request_full(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        headers = httpx.Headers(self.config.request_headers)
+        headers.update(kwargs.pop("headers", None))
+        kwargs["headers"] = headers
         kwargs["follow_redirects"] = False
         try:
             response = await self._client.request(method.upper(), path, **kwargs)
@@ -430,17 +437,21 @@ class PhalaCloud:
             self._client.close()
 
     def with_version(self, version: ApiVersion) -> PhalaCloud:
-        return PhalaCloud(
+        return type(self)(
             api_key=self.config.api_key,
             base_url=self.config.base_url,
             version=version,
             timeout=self.config.timeout,
             use_cookie_auth=self.config.use_cookie_auth,
             headers=self.config.headers,
+            http_client=None if self._owns_client else self._client,
         )
 
     def request(self, method: str, path: str, **kwargs: Any) -> Any:
         # Enforce this per request, including caller-supplied HTTP clients.
+        headers = httpx.Headers(self.config.request_headers)
+        headers.update(kwargs.pop("headers", None))
+        kwargs["headers"] = headers
         kwargs["follow_redirects"] = False
         try:
             response = self._client.request(method.upper(), path, **kwargs)
@@ -449,6 +460,9 @@ class PhalaCloud:
         return self._decode_or_raise(response)
 
     def request_full(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        headers = httpx.Headers(self.config.request_headers)
+        headers.update(kwargs.pop("headers", None))
+        kwargs["headers"] = headers
         kwargs["follow_redirects"] = False
         try:
             response = self._client.request(method.upper(), path, **kwargs)
