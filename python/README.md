@@ -71,7 +71,7 @@ asyncio.run(main())
 
 A non-empty client option takes precedence over its environment variable. If both an API key and bearer token are set, the SDK uses the API key. Cookie auth suppresses both generated authentication headers; it does not remove headers supplied by the caller. The SDK removes surrounding whitespace from the workspace value.
 
-When cookie auth is off, the SDK raises `RequestError` if the combined SDK and HTTPX headers contain both `X-API-Key` and `Authorization`. When an SDK API key or bearer token is selected, it also rejects HTTPX `auth` and credentials embedded in a request URL. Remove the conflicting credentials from the supplied client or request. When you supply `http_client`, its base URL and timeout control requests; configure them on that client. The SDK does not close it.
+When cookie auth is off, the SDK raises `RequestError` if the combined SDK and HTTPX headers contain both `X-API-Key` and `Authorization`. When an SDK API key or bearer token is selected, it also rejects HTTPX `auth` and credentials embedded in a request URL. Remove the conflicting credentials from the supplied client or request. When you supply `http_client`, its base URL and timeout control requests; configure them on that client. Watch streams use their own read timeout, as described below. The SDK does not close the supplied client.
 
 ## Does the SDK follow redirects?
 
@@ -96,6 +96,12 @@ if result.ok:
 else:
     print(result.error)
 ```
+
+## How does watching a CVM retry?
+
+`watch_cvm_state` reconnects after a server timeout event. Set `max_retries` to limit reconnects; the default is unlimited. Set `retry_delay` in seconds (default 5). The aliases `maxRetries` and `retryDelay` also work. The stream read timeout is the requested `timeout` plus `interval` plus 5 seconds.
+
+HTTP errors use the same SDK exception types as other requests. Stream errors, network errors, an unexpected end of stream, and exhausted retries raise `RequestError` without further retries. In async code, cancelling the task closes the stream and propagates cancellation. Previous versions raised `TimeoutError` on retry exhaustion; catch `RequestError` instead.
 
 ## Are blockchain actions supported?
 

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import re
 import time
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Iterator, Mapping
+from contextlib import asynccontextmanager, contextmanager
 from typing import Any, cast
 
+import httpx
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from .action_responses import (
@@ -51,7 +53,7 @@ from .action_responses import (
 )
 from .client import AsyncPhalaCloud as _AsyncBase
 from .client import PhalaCloud as _SyncBase
-from .errors import ApiError
+from .errors import ApiError, RequestError
 from .models.apps import DeviceAllowlistResponseV20260121, DeviceAllowlistResponseV20260522
 from .models.auth import CurrentUserV20251028, CurrentUserV20260121
 from .models.base import CloudModel, NodeSelectionRequest
@@ -588,6 +590,32 @@ class _ExtMixin:
 
 
 class PhalaCloud(_SyncBase, _ExtMixin):
+    @contextmanager
+    def _watch_stream(
+        self, req: WatchCvmStateRequest, params: Mapping[str, str]
+    ) -> Iterator[httpx.Response]:
+        path = f"/cvms/{req.resolved}/state"
+        self.config.check_httpx_auth(path, self._client.base_url, self._client.auth)
+        headers = self.config.checked_headers(
+            self._client.headers, {"Accept": "text/event-stream", "Cache-Control": "no-cache"}
+        )
+        timeout = httpx.Timeout(
+            connect=self._client.timeout.connect,
+            read=req.timeout + req.interval + 5,
+            write=self._client.timeout.write,
+            pool=self._client.timeout.pool,
+        )
+        try:
+            with self._client.stream(
+                "GET", path, follow_redirects=False, params=params, headers=headers, timeout=timeout
+            ) as response:
+                if not response.is_success:
+                    response.read()
+                    self._decode_or_raise(response)
+                yield response
+        except httpx.HTTPError as exc:
+            raise RequestError(str(exc)) from exc
+
     def request(self, method: str, path: str, **kwargs: Any) -> Any:
         data = super().request(method, path, **kwargs)
         version = (kwargs.get("headers") or {}).get("X-Phala-Version", self.config.version)
@@ -1107,24 +1135,13 @@ class PhalaCloud(_SyncBase, _ExtMixin):
                     return None
                 if ev == "complete":
                     return GenericObject.model_validate(payload)
-                if ev in {"timeout", "error"}:
+                if ev == "error":
+                    raise RequestError(str(payload.get("error", "Watch stream error")))
+                if ev == "timeout":
                     should_retry = True
                 return None
 
-            self.config.check_httpx_auth(
-                f"/cvms/{req.resolved}/state", self._client.base_url, self._client.auth
-            )
-            with self._client.stream(
-                "GET",
-                f"/cvms/{req.resolved}/state",
-                follow_redirects=False,
-                params=params,
-                headers=self.config.checked_headers(
-                    self._client.headers,
-                    {"Accept": "text/event-stream", "Cache-Control": "no-cache"},
-                ),
-            ) as response:
-                response.raise_for_status()
+            with self._watch_stream(req, params) as response:
                 for raw in response.iter_lines():
                     line = raw.decode() if isinstance(raw, bytes) else raw
                     line = line.strip()
@@ -1132,6 +1149,8 @@ class PhalaCloud(_SyncBase, _ExtMixin):
                         maybe = process_event(event_type, event_data)
                         if maybe is not None:
                             return maybe
+                        if should_retry:
+                            break
                         event_type = line[6:].strip()
                         event_data = None
                     elif line.startswith("data:"):
@@ -1140,6 +1159,8 @@ class PhalaCloud(_SyncBase, _ExtMixin):
                         maybe = process_event(event_type, event_data)
                         if maybe is not None:
                             return maybe
+                        if should_retry:
+                            break
                         event_type = None
                         event_data = None
 
@@ -1153,13 +1174,15 @@ class PhalaCloud(_SyncBase, _ExtMixin):
             ):
                 return last_state
 
+            if not should_retry:
+                raise RequestError("Watch stream ended before completion")
             retries += 1
             if max_retries is not None and retries > max_retries:
                 break
             if req.retry_delay > 0:
                 time.sleep(req.retry_delay)
 
-        raise TimeoutError(f"watch_cvm_state exceeded retries waiting for '{req.target}'")
+        raise RequestError(f"watch_cvm_state exceeded retries waiting for '{req.target}'")
 
     def get_kms_info(self, request: KmsInfoRequest | Mapping[str, Any]) -> Any:
         req = KmsInfoRequest.model_validate(request)
@@ -1502,6 +1525,32 @@ class PhalaCloud(_SyncBase, _ExtMixin):
 
 
 class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
+    @asynccontextmanager
+    async def _watch_stream(
+        self, req: WatchCvmStateRequest, params: Mapping[str, str]
+    ) -> AsyncIterator[httpx.Response]:
+        path = f"/cvms/{req.resolved}/state"
+        self.config.check_httpx_auth(path, self._client.base_url, self._client.auth)
+        headers = self.config.checked_headers(
+            self._client.headers, {"Accept": "text/event-stream", "Cache-Control": "no-cache"}
+        )
+        timeout = httpx.Timeout(
+            connect=self._client.timeout.connect,
+            read=req.timeout + req.interval + 5,
+            write=self._client.timeout.write,
+            pool=self._client.timeout.pool,
+        )
+        try:
+            async with self._client.stream(
+                "GET", path, follow_redirects=False, params=params, headers=headers, timeout=timeout
+            ) as response:
+                if not response.is_success:
+                    await response.aread()
+                    self._decode_or_raise(response)
+                yield response
+        except httpx.HTTPError as exc:
+            raise RequestError(str(exc)) from exc
+
     async def request(self, method: str, path: str, **kwargs: Any) -> Any:
         data = await super().request(method, path, **kwargs)
         version = (kwargs.get("headers") or {}).get("X-Phala-Version", self.config.version)
@@ -2034,30 +2083,21 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
                     return None
                 if ev == "complete":
                     return GenericObject.model_validate(payload)
-                if ev in {"timeout", "error"}:
+                if ev == "error":
+                    raise RequestError(str(payload.get("error", "Watch stream error")))
+                if ev == "timeout":
                     should_retry = True
                 return None
 
-            self.config.check_httpx_auth(
-                f"/cvms/{req.resolved}/state", self._client.base_url, self._client.auth
-            )
-            async with self._client.stream(
-                "GET",
-                f"/cvms/{req.resolved}/state",
-                follow_redirects=False,
-                params=params,
-                headers=self.config.checked_headers(
-                    self._client.headers,
-                    {"Accept": "text/event-stream", "Cache-Control": "no-cache"},
-                ),
-            ) as response:
-                response.raise_for_status()
+            async with self._watch_stream(req, params) as response:
                 async for line in response.aiter_lines():
                     line = line.strip()
                     if line.startswith("event:"):
                         maybe = process_event(event_type, event_data)
                         if maybe is not None:
                             return maybe
+                        if should_retry:
+                            break
                         event_type = line[6:].strip()
                         event_data = None
                     elif line.startswith("data:"):
@@ -2066,6 +2106,8 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
                         maybe = process_event(event_type, event_data)
                         if maybe is not None:
                             return maybe
+                        if should_retry:
+                            break
                         event_type = None
                         event_data = None
 
@@ -2079,13 +2121,15 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
             ):
                 return last_state
 
+            if not should_retry:
+                raise RequestError("Watch stream ended before completion")
             retries += 1
             if max_retries is not None and retries > max_retries:
                 break
             if req.retry_delay > 0:
                 await self._sleep(req.retry_delay)
 
-        raise TimeoutError(f"watch_cvm_state exceeded retries waiting for '{req.target}'")
+        raise RequestError(f"watch_cvm_state exceeded retries waiting for '{req.target}'")
 
     async def _sleep(self, seconds: float) -> None:
         import asyncio

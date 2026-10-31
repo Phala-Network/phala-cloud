@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from phala_cloud import AsyncPhalaCloud, PhalaCloud
+from phala_cloud import AsyncPhalaCloud, PhalaCloud, RequestError
 
 
 @pytest.mark.parametrize("async_client", [False, True])
@@ -29,7 +29,7 @@ async def test_oidc_workspace_and_api_key_precedence(
             )
             await AsyncPhalaCloud(http_client=raw, api_key="key").get("/custom")
             await AsyncPhalaCloud(http_client=raw, use_cookie_auth=True).get("/custom")
-            with pytest.raises(TimeoutError):
+            with pytest.raises(RequestError):
                 await AsyncPhalaCloud(http_client=raw).watch_cvm_state(
                     {"cvm_id": "cvm_123", "target": "running", "max_retries": 0}
                 )
@@ -41,7 +41,7 @@ async def test_oidc_workspace_and_api_key_precedence(
             ).get("/custom")
             PhalaCloud(http_client=raw, api_key="key").get("/custom")
             PhalaCloud(http_client=raw, use_cookie_auth=True).get("/custom")
-            with pytest.raises(TimeoutError):
+            with pytest.raises(RequestError):
                 PhalaCloud(http_client=raw).watch_cvm_state(
                     {"cvm_id": "cvm_123", "target": "running", "max_retries": 0}
                 )

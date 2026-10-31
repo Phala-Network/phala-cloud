@@ -1,0 +1,130 @@
+import asyncio
+
+import httpx
+import pytest
+
+from phala_cloud import AsyncPhalaCloud, AuthError, PhalaCloud, RequestError
+
+
+@pytest.mark.parametrize("async_client", [False, True])
+@pytest.mark.parametrize("response", ["http", "event", "network", "eof"])
+@pytest.mark.asyncio
+async def test_watch_permanent_errors_are_typed_and_not_retried(
+    async_client: bool, response: str
+) -> None:
+    count = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal count
+        count += 1
+        if response == "http":
+            return httpx.Response(401, json={"detail": "unauthorized"})
+        if response == "network":
+            raise httpx.ConnectError("offline", request=request)
+        if response == "eof":
+            return httpx.Response(200, text="")
+        return httpx.Response(200, text='event: error\ndata: {"error":"invalid cvm"}\n\n')
+
+    transport = httpx.MockTransport(handler)
+    expected = AuthError if response == "http" else RequestError
+    req = {"cvm_id": "cvm_1", "target": "running", "max_retries": 3, "retry_delay": 0}
+    if async_client:
+        async with httpx.AsyncClient(transport=transport, base_url="https://api.example") as raw:
+            with pytest.raises(expected):
+                await AsyncPhalaCloud(http_client=raw).watch_cvm_state(req)
+    else:
+        with httpx.Client(transport=transport, base_url="https://api.example") as raw:
+            with pytest.raises(expected):
+                PhalaCloud(http_client=raw).watch_cvm_state(req)
+    assert count == 1
+
+
+@pytest.mark.parametrize("async_client", [False, True])
+@pytest.mark.parametrize("delay_name", ["retry_delay", "retryDelay"])
+@pytest.mark.asyncio
+async def test_watch_retries_timeout_then_completes(async_client: bool, delay_name: str) -> None:
+    count = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal count
+        count += 1
+        assert request.extensions["timeout"]["read"] == 310
+        if count == 1:
+            return httpx.Response(200, text='event: timeout\ndata: {"error":"timeout"}\n\n')
+        return httpx.Response(200, text='event: complete\ndata: {"status":"running"}\n\n')
+
+    req = {"cvm_id": "cvm_1", "target": "running", "max_retries": 1, delay_name: 0}
+    transport = httpx.MockTransport(handler)
+    if async_client:
+        async with httpx.AsyncClient(transport=transport, base_url="https://api.example") as raw:
+            result = await AsyncPhalaCloud(http_client=raw).watch_cvm_state(req)
+    else:
+        with httpx.Client(transport=transport, base_url="https://api.example") as raw:
+            result = PhalaCloud(http_client=raw).watch_cvm_state(req)
+    assert result.status == "running"
+    assert count == 2
+
+
+@pytest.mark.asyncio
+async def test_timeout_event_reconnects_without_waiting_for_stream_to_close() -> None:
+    closed = asyncio.Event()
+    count = 0
+
+    class TimeoutStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b'event: timeout\ndata: {"error":"timeout"}\n\n'
+            await asyncio.Event().wait()
+
+        async def aclose(self) -> None:
+            closed.set()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal count
+        count += 1
+        if count == 1:
+            return httpx.Response(200, stream=TimeoutStream())
+        return httpx.Response(200, text='event: complete\ndata: {"status":"running"}\n\n')
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://api.example"
+    ) as raw:
+        result = await asyncio.wait_for(
+            AsyncPhalaCloud(http_client=raw).watch_cvm_state(
+                {"cvm_id": "cvm_1", "target": "running", "max_retries": 1, "retry_delay": 0}
+            ),
+            1,
+        )
+    assert result.status == "running"
+    assert count == 2 and closed.is_set()
+
+
+@pytest.mark.asyncio
+async def test_watch_cancellation_closes_stream() -> None:
+    started = asyncio.Event()
+    closed = asyncio.Event()
+
+    class BlockingStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            started.set()
+            await asyncio.Event().wait()
+            yield b""
+
+        async def aclose(self) -> None:
+            closed.set()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, stream=BlockingStream())
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://api.example"
+    ) as raw:
+        task = asyncio.create_task(
+            AsyncPhalaCloud(http_client=raw).watch_cvm_state(
+                {"cvm_id": "cvm_1", "target": "running"}
+            )
+        )
+        await asyncio.wait_for(started.wait(), 1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert closed.is_set()
