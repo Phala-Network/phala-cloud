@@ -2,9 +2,13 @@ from . import error_codes
 from .actions import *  # noqa: F403
 from .actions import (
     commit_cvm_update,
+    get_cvm_ssh_keys,
     revoke_current_api_token,
     safe_commit_cvm_update,
+    safe_get_cvm_ssh_keys,
     safe_revoke_current_api_token,
+    safe_update_cvm_ssh_keys,
+    update_cvm_ssh_keys,
 )
 from .client import (
     DEFAULT_API_VERSION,
@@ -28,8 +32,12 @@ from .full_client import (
     CommitCvmUpdateRequest,
     CommitCvmUpdateResult,
     CreateAppInstanceRequest,
+    CvmIdRequest,
+    CvmSshKey,
+    CvmSshKeysResponse,
     PhalaCloud,
     ReplicateCvmRequest,
+    UpdateCvmSshKeysRequest,
     create_async_client,
     create_client,
 )
@@ -71,6 +79,14 @@ __all__ = [
     "commit_cvm_update",
     "safe_commit_cvm_update",
     "CreateAppInstanceRequest",
+    "CvmIdRequest",
+    "CvmSshKey",
+    "CvmSshKeysResponse",
+    "UpdateCvmSshKeysRequest",
+    "get_cvm_ssh_keys",
+    "safe_get_cvm_ssh_keys",
+    "update_cvm_ssh_keys",
+    "safe_update_cvm_ssh_keys",
     "DEFAULT_API_VERSION",
     "DEFAULT_TIMEOUT",
     "PhalaCloud",

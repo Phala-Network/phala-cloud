@@ -269,6 +269,28 @@ class RefreshCvmInstanceIdsRequest(BaseModel):
     dry_run: bool | None = None
 
 
+class UpdateCvmSshKeysRequest(CvmIdRequest):
+    ssh_key_ids: list[str]
+    usernames: list[str] | None = None
+    apply_now: bool = False
+
+
+class CvmSshKey(BaseModel):
+    id: str
+    owner_user_id: str
+    owner_username: str
+    added_by_user_id: str
+    name: str
+    public_key: str
+    fingerprint: str
+    key_type: str
+
+
+class CvmSshKeysResponse(BaseModel):
+    keys: list[CvmSshKey]
+    restart_required: bool
+
+
 class CommitCvmUpdateRequest(CvmIdRequest):
     token: str
     compose_hash: str | None = None
@@ -1191,6 +1213,33 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     ) -> SafeResult[CommitCvmUpdateResult]:
         return self.safe(self.commit_cvm_update, request)
 
+    def get_cvm_ssh_keys(self, request: CvmIdRequest | Mapping[str, Any]) -> CvmSshKeysResponse:
+        req = CvmIdRequest.model_validate(request)
+        response = self.get(f"/cvms/{req.resolved}/ssh-keys")
+        return CvmSshKeysResponse.model_validate(
+            response.model_dump() if isinstance(response, BaseModel) else response
+        )
+
+    def safe_get_cvm_ssh_keys(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmSshKeysResponse]:
+        return self.safe(self.get_cvm_ssh_keys, request)
+
+    def update_cvm_ssh_keys(
+        self, request: UpdateCvmSshKeysRequest | Mapping[str, Any]
+    ) -> CvmSshKeysResponse:
+        req = UpdateCvmSshKeysRequest.model_validate(request)
+        body = req.model_dump(include={"ssh_key_ids", "usernames", "apply_now"}, exclude_none=True)
+        response = self.request("PUT", f"/cvms/{req.resolved}/ssh-keys", json=body)
+        return CvmSshKeysResponse.model_validate(
+            response.model_dump() if isinstance(response, BaseModel) else response
+        )
+
+    def safe_update_cvm_ssh_keys(
+        self, request: UpdateCvmSshKeysRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmSshKeysResponse]:
+        return self.safe(self.update_cvm_ssh_keys, request)
+
     def revoke_current_api_token(self) -> None:
         self.request("DELETE", "/tokens/self")
 
@@ -2099,6 +2148,35 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         self, request: CommitCvmUpdateRequest | Mapping[str, Any]
     ) -> SafeResult[CommitCvmUpdateResult]:
         return await self.safe(self.commit_cvm_update, request)
+
+    async def get_cvm_ssh_keys(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> CvmSshKeysResponse:
+        req = CvmIdRequest.model_validate(request)
+        response = await self.get(f"/cvms/{req.resolved}/ssh-keys")
+        return CvmSshKeysResponse.model_validate(
+            response.model_dump() if isinstance(response, BaseModel) else response
+        )
+
+    async def safe_get_cvm_ssh_keys(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmSshKeysResponse]:
+        return await self.safe(self.get_cvm_ssh_keys, request)
+
+    async def update_cvm_ssh_keys(
+        self, request: UpdateCvmSshKeysRequest | Mapping[str, Any]
+    ) -> CvmSshKeysResponse:
+        req = UpdateCvmSshKeysRequest.model_validate(request)
+        body = req.model_dump(include={"ssh_key_ids", "usernames", "apply_now"}, exclude_none=True)
+        response = await self.request("PUT", f"/cvms/{req.resolved}/ssh-keys", json=body)
+        return CvmSshKeysResponse.model_validate(
+            response.model_dump() if isinstance(response, BaseModel) else response
+        )
+
+    async def safe_update_cvm_ssh_keys(
+        self, request: UpdateCvmSshKeysRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmSshKeysResponse]:
+        return await self.safe(self.update_cvm_ssh_keys, request)
 
     async def revoke_current_api_token(self) -> None:
         await self.request("DELETE", "/tokens/self")
