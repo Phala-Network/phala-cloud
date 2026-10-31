@@ -416,8 +416,9 @@ type CVMUserConfig = GenericObject
 
 // CVMActionResponseFields contains shared lifecycle action response fields.
 type CVMActionResponseFields struct {
-	Name   string `json:"name,omitempty"`
-	Status string `json:"status,omitempty"`
+	Name          string `json:"name,omitempty"`
+	Status        string `json:"status,omitempty"`
+	CorrelationID string `json:"correlation_id,omitempty"`
 }
 
 // CVMActionResponseV20260121 is a lifecycle action response before hashed CVM IDs.

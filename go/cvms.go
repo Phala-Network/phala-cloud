@@ -376,7 +376,11 @@ func (c *Client) PatchCVM(ctx context.Context, cvmID string, req *PatchCVMReques
 // ConfirmCVMPatch confirms a CVM patch with on-chain transaction hash.
 func (c *Client) ConfirmCVMPatch(ctx context.Context, cvmID string, req *ConfirmCVMPatchRequest) (*CVMActionResponse, error) {
 	var result CVMActionResponse
-	if err := c.doJSON(ctx, "PATCH", cvmPath(cvmID), req, &result); err != nil {
+	if req == nil {
+		return nil, fmt.Errorf("phala: confirm patch request is required")
+	}
+	headers := map[string]string{"X-Compose-Hash": req.ComposeHash, "X-Transaction-Hash": req.TransactionHash}
+	if err := c.doText(ctx, "PATCH", cvmPath(cvmID), "application/json", "{}", headers, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -385,7 +389,11 @@ func (c *Client) ConfirmCVMPatch(ctx context.Context, cvmID string, req *Confirm
 // ConfirmCVMPatchV20260121 confirms a CVM patch using the pre-hashid response schema.
 func (c *Client) ConfirmCVMPatchV20260121(ctx context.Context, cvmID string, req *ConfirmCVMPatchRequest) (*CVMActionResponseV20260121, error) {
 	var result CVMActionResponseV20260121
-	if err := c.doJSON(ctx, "PATCH", cvmPath(cvmID), req, &result); err != nil {
+	if req == nil {
+		return nil, fmt.Errorf("phala: confirm patch request is required")
+	}
+	headers := map[string]string{"X-Compose-Hash": req.ComposeHash, "X-Transaction-Hash": req.TransactionHash, "X-Phala-Version": "2026-01-21"}
+	if err := c.doText(ctx, "PATCH", cvmPath(cvmID), "application/json", "{}", headers, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
