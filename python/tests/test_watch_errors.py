@@ -23,20 +23,53 @@ async def test_watch_permanent_errors_are_typed_and_not_retried(
             raise httpx.ConnectError("offline", request=request)
         if response == "eof":
             return httpx.Response(200, text="")
-        return httpx.Response(200, text='event: error\ndata: {"error":"invalid cvm"}\n\n')
+        return httpx.Response(
+            200,
+            text=(
+                'event: state\ndata: {"status":"running"}\n\n'
+                'event: error\ndata: {"error":"invalid cvm"}\n\n'
+            ),
+        )
 
     transport = httpx.MockTransport(handler)
     expected = AuthError if response == "http" else RequestError
     req = {"cvm_id": "cvm_1", "target": "running", "max_retries": 3, "retry_delay": 0}
     if async_client:
         async with httpx.AsyncClient(transport=transport, base_url="https://api.example") as raw:
-            with pytest.raises(expected):
+            with pytest.raises(expected) as exc:
                 await AsyncPhalaCloud(http_client=raw).watch_cvm_state(req)
     else:
         with httpx.Client(transport=transport, base_url="https://api.example") as raw:
-            with pytest.raises(expected):
+            with pytest.raises(expected) as exc:
                 PhalaCloud(http_client=raw).watch_cvm_state(req)
     assert count == 1
+    if response == "event":
+        assert "invalid cvm" in str(exc.value)
+
+
+@pytest.mark.parametrize("async_client", [False, True])
+@pytest.mark.asyncio
+async def test_watch_continues_after_transient_error_event(async_client: bool) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            text=(
+                'event: state\ndata: {"status":"starting"}\n\n'
+                'event: error\ndata: {"error":"temporary backend error"}\n\n'
+                'event: state\ndata: {"status":"running"}\n\n'
+                'event: complete\ndata: {"status":"running"}\n\n'
+            ),
+        )
+
+    transport = httpx.MockTransport(handler)
+    req = {"cvm_id": "cvm_1", "target": "running", "max_retries": 0}
+    if async_client:
+        async with httpx.AsyncClient(transport=transport, base_url="https://api.example") as raw:
+            result = await AsyncPhalaCloud(http_client=raw).watch_cvm_state(req)
+    else:
+        with httpx.Client(transport=transport, base_url="https://api.example") as raw:
+            result = PhalaCloud(http_client=raw).watch_cvm_state(req)
+    assert result.status == "running"
 
 
 @pytest.mark.parametrize("async_client", [False, True])

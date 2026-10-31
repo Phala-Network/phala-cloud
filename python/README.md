@@ -101,7 +101,7 @@ else:
 
 `watch_cvm_state` reconnects after a server timeout event. Set `max_retries` to limit reconnects; the default is unlimited. Set `retry_delay` in seconds (default 5). The aliases `maxRetries` and `retryDelay` also work. The stream read timeout is the requested `timeout` plus `interval` plus 5 seconds.
 
-HTTP errors use the same SDK exception types as other requests. Stream errors, network errors, an unexpected end of stream, and exhausted retries raise `RequestError` without further retries. In async code, cancelling the task closes the stream and propagates cancellation. Previous versions raised `TimeoutError` on retry exhaustion; catch `RequestError` instead.
+HTTP errors use the same SDK exception types as other requests. The server may send an error event and then continue streaming. If the stream ends after an error without completing, the SDK raises `RequestError` with the server's error message. Network errors, an unexpected end of stream, and exhausted retries also raise `RequestError`. In async code, cancelling the task closes the stream and propagates cancellation. Previous versions raised `TimeoutError` on retry exhaustion; catch `RequestError` instead.
 
 ## Are blockchain actions supported?
 

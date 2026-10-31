@@ -1118,12 +1118,13 @@ class PhalaCloud(_SyncBase, _ExtMixin):
                 "timeout": str(req.timeout),
             }
             last_state: Any = None
+            last_error: str | None = None
             should_retry = False
             event_type: str | None = None
             event_data: str | None = None
 
             def process_event(ev: str | None, data: str | None) -> Any | None:
-                nonlocal last_state, should_retry
+                nonlocal last_state, last_error, should_retry
                 if not ev or not data:
                     return None
                 try:
@@ -1136,7 +1137,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
                 if ev == "complete":
                     return GenericObject.model_validate(payload)
                 if ev == "error":
-                    raise RequestError(str(payload.get("error", "Watch stream error")))
+                    last_error = str(payload.get("error", "Watch stream error"))
                 if ev == "timeout":
                     should_retry = True
                 return None
@@ -1169,13 +1170,14 @@ class PhalaCloud(_SyncBase, _ExtMixin):
                 return maybe
 
             if (
-                isinstance(last_state, BaseModel)
+                not last_error
+                and isinstance(last_state, BaseModel)
                 and getattr(last_state, "status", None) == req.target
             ):
                 return last_state
 
             if not should_retry:
-                raise RequestError("Watch stream ended before completion")
+                raise RequestError(last_error or "Watch stream ended before completion")
             retries += 1
             if max_retries is not None and retries > max_retries:
                 break
@@ -2066,12 +2068,13 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
                 "timeout": str(req.timeout),
             }
             last_state: Any = None
+            last_error: str | None = None
             should_retry = False
             event_type: str | None = None
             event_data: str | None = None
 
             def process_event(ev: str | None, data: str | None) -> Any | None:
-                nonlocal last_state, should_retry
+                nonlocal last_state, last_error, should_retry
                 if not ev or not data:
                     return None
                 try:
@@ -2084,7 +2087,7 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
                 if ev == "complete":
                     return GenericObject.model_validate(payload)
                 if ev == "error":
-                    raise RequestError(str(payload.get("error", "Watch stream error")))
+                    last_error = str(payload.get("error", "Watch stream error"))
                 if ev == "timeout":
                     should_retry = True
                 return None
@@ -2116,13 +2119,14 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
                 return maybe
 
             if (
-                isinstance(last_state, BaseModel)
+                not last_error
+                and isinstance(last_state, BaseModel)
                 and getattr(last_state, "status", None) == req.target
             ):
                 return last_state
 
             if not should_retry:
-                raise RequestError("Watch stream ended before completion")
+                raise RequestError(last_error or "Watch stream ended before completion")
             retries += 1
             if max_retries is not None and retries > max_retries:
                 break
