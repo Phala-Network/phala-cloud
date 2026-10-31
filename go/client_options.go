@@ -13,6 +13,16 @@ func WithAPIKey(key string) Option {
 	return func(c *Client) { c.apiKey = key }
 }
 
+// WithBearerToken sets a bearer token for authentication.
+func WithBearerToken(token string) Option {
+	return func(c *Client) { c.bearerToken = token }
+}
+
+// WithWorkspace selects the workspace for API requests.
+func WithWorkspace(workspace string) Option {
+	return func(c *Client) { c.workspace = workspace }
+}
+
 // WithBaseURL sets the base URL for the API.
 func WithBaseURL(url string) Option {
 	return func(c *Client) { c.baseURL = url }
@@ -42,9 +52,10 @@ func WithUserAgent(ua string) Option {
 	return func(c *Client) { c.userAgent = ua }
 }
 
-// WithHeader adds a custom header to all requests.
+// WithHeader adds a custom header to all requests. If both an API key and
+// Authorization are present after applying custom headers, the API key wins.
 func WithHeader(key, value string) Option {
-	return func(c *Client) { c.headers[key] = value }
+	return func(c *Client) { c.headers[http.CanonicalHeaderKey(key)] = value }
 }
 
 // WithMaxRetries sets the maximum number of retries for retryable errors.
