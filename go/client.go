@@ -21,6 +21,19 @@ type Client struct {
 	maxRetries  int
 }
 
+// withVersion returns an isolated client view for version-specific operations.
+func (c *Client) withVersion(version string) *Client {
+	copy := *c
+	copy.apiVersion = version
+	copy.headers = make(map[string]string, len(c.headers))
+	for key, value := range c.headers {
+		if !strings.EqualFold(key, "X-Phala-Version") {
+			copy.headers[key] = value
+		}
+	}
+	return &copy
+}
+
 // NewClient creates a new Phala Cloud API client with the given options.
 // API key is resolved from options or the PHALA_CLOUD_API_KEY environment variable.
 // Base URL is resolved from options or the PHALA_CLOUD_API_PREFIX environment variable.

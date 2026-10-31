@@ -126,6 +126,7 @@ func (c *Client) RefreshCVMInstanceID(ctx context.Context, cvmID string, opts *R
 
 // RefreshCVMInstanceIDV20260121 refreshes the instance ID using the pre-hashid response schema.
 func (c *Client) RefreshCVMInstanceIDV20260121(ctx context.Context, cvmID string, opts *RefreshInstanceIDOptions) (*RefreshInstanceIDResponseV20260121, error) {
+	c = c.withVersion("2026-01-21")
 	var body any
 	if opts != nil {
 		body = opts
@@ -196,6 +197,7 @@ func (c *Client) RefreshCVMInstanceIDs(ctx context.Context, req *RefreshInstance
 
 // RefreshCVMInstanceIDsV20260121 refreshes instance IDs using the pre-hashid response schema.
 func (c *Client) RefreshCVMInstanceIDsV20260121(ctx context.Context, req *RefreshInstanceIDsRequest) (*RefreshInstanceIDsResponseV20260121, error) {
+	c = c.withVersion("2026-01-21")
 	var body any
 	if req != nil {
 		body = req

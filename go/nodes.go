@@ -22,6 +22,7 @@ func (c *Client) GetCVMCreateResources(ctx context.Context) (*CVMCreateResources
 
 // GetCVMCreateResourcesV20260121 returns the resource graph using the pre-hashid-only schema.
 func (c *Client) GetCVMCreateResourcesV20260121(ctx context.Context) (*CVMCreateResourcesV20260121, error) {
+	c = c.withVersion("2026-01-21")
 	var result CVMCreateResourcesV20260121
 	if err := c.doJSON(ctx, "GET", "/teepods/cvm-create-resources", nil, &result); err != nil {
 		return nil, err
