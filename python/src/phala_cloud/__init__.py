@@ -1,6 +1,5 @@
 from . import error_codes
 from .actions import *  # noqa: F403
-from .blockchains import add_compose_hash, deploy_app_auth
 from .client import (
     DEFAULT_API_VERSION,
     DEFAULT_TIMEOUT,
@@ -71,9 +70,7 @@ __all__ = [
     "SafeResult",
     "ServerError",
     "ValidationError",
-    "add_compose_hash",
     "async_encrypt_env_vars",
-    "deploy_app_auth",
     "encrypt_env_vars",
     "error_codes",
     "get_compose_hash",

@@ -140,10 +140,6 @@ __all__ = [
     "safe_get_os_images",
     "get_app_device_allowlist",
     "safe_get_app_device_allowlist",
-    "add_compose_hash",
-    "safe_add_compose_hash",
-    "deploy_app_auth",
-    "safe_deploy_app_auth",
 ]
 
 
@@ -685,19 +681,3 @@ def get_app_device_allowlist(client: Any, *args: Any, **kwargs: Any) -> Any:
 
 def safe_get_app_device_allowlist(client: Any, *args: Any, **kwargs: Any) -> Any:
     return client.safe_get_app_device_allowlist(*args, **kwargs)
-
-
-def add_compose_hash(client: Any, *args: Any, **kwargs: Any) -> Any:
-    return client.add_compose_hash(*args, **kwargs)
-
-
-def safe_add_compose_hash(client: Any, *args: Any, **kwargs: Any) -> Any:
-    return client.safe_add_compose_hash(*args, **kwargs)
-
-
-def deploy_app_auth(client: Any, *args: Any, **kwargs: Any) -> Any:
-    return client.deploy_app_auth(*args, **kwargs)
-
-
-def safe_deploy_app_auth(client: Any, *args: Any, **kwargs: Any) -> Any:
-    return client.safe_deploy_app_auth(*args, **kwargs)

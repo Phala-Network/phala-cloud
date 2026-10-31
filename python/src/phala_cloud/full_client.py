@@ -49,8 +49,6 @@ from .action_responses import (
     WorkspaceQuotasResponse,
     WorkspaceResponse,
 )
-from .blockchains import add_compose_hash as _add_compose_hash
-from .blockchains import deploy_app_auth as _deploy_app_auth
 from .client import AsyncPhalaCloud as _AsyncBase
 from .client import PhalaCloud as _SyncBase
 from .errors import ApiError
@@ -1411,18 +1409,6 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     ) -> SafeResult[Any]:
         return self.safe(self.check_app_cvms_is_allowed, request)
 
-    def add_compose_hash(self, *args: Any, **kwargs: Any) -> Any:
-        return _add_compose_hash(*args, **kwargs)
-
-    def safe_add_compose_hash(self, *args: Any, **kwargs: Any) -> SafeResult[Any]:
-        return self.safe(self.add_compose_hash, *args, **kwargs)
-
-    def deploy_app_auth(self, *args: Any, **kwargs: Any) -> Any:
-        return _deploy_app_auth(*args, **kwargs)
-
-    def safe_deploy_app_auth(self, *args: Any, **kwargs: Any) -> SafeResult[Any]:
-        return self.safe(self.deploy_app_auth, *args, **kwargs)
-
 
 class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
     async def request(self, method: str, path: str, **kwargs: Any) -> Any:
@@ -2323,18 +2309,6 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         self, request: CheckAppCvmsIsAllowedRequest | Mapping[str, Any]
     ) -> SafeResult[Any]:
         return await self.safe(self.check_app_cvms_is_allowed, request)
-
-    async def add_compose_hash(self, *args: Any, **kwargs: Any) -> Any:
-        return _add_compose_hash(*args, **kwargs)
-
-    async def safe_add_compose_hash(self, *args: Any, **kwargs: Any) -> SafeResult[Any]:
-        return await self.safe(self.add_compose_hash, *args, **kwargs)
-
-    async def deploy_app_auth(self, *args: Any, **kwargs: Any) -> Any:
-        return _deploy_app_auth(*args, **kwargs)
-
-    async def safe_deploy_app_auth(self, *args: Any, **kwargs: Any) -> SafeResult[Any]:
-        return await self.safe(self.deploy_app_auth, *args, **kwargs)
 
 
 def create_client(**kwargs: Any) -> PhalaCloud:

@@ -89,6 +89,10 @@ else:
     print(result.error)
 ```
 
+## Are blockchain actions supported?
+
+The Python SDK no longer exposes `add_compose_hash`, `deploy_app_auth`, or their safe wrappers. These wrappers did not implement the blockchain operations. Use the JavaScript SDK for these operations instead.
+
 ## How do I encrypt environment variables?
 
 Pass the output of `parse_env_vars` or `dstack_sdk.EnvVar` objects to `encrypt_env_vars(envs, public_key_hex)`. It returns the encrypted string synchronously. In async code, use `await async_encrypt_env_vars(envs, public_key_hex)` instead.
