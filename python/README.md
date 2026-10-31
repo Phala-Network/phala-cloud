@@ -123,7 +123,8 @@ This changes the previous `encrypt_env_vars` behavior: code that awaited it must
 - Use the JavaScript SDK for `add_compose_hash` and `deploy_app_auth`. Their Python wrappers have been removed.
 - Catch `RequestError` instead of `TimeoutError` when watch retries are exhausted. Watch HTTP errors now use SDK exceptions instead of `httpx.HTTPStatusError`.
 - Do not rely on a raw state event followed by a closed stream as a successful watch result. Only a complete event finishes the watch. Timeouts, incomplete streams, and transient network failures use the reconnect budget.
-- Remove conflicting HTTPX authentication and cross-origin request URLs before upgrading. The SDK now rejects them before sending a request.
+- Use request URLs on the HTTPX client's origin. The SDK rejects cross-origin URLs before sending.
+- Remove conflicting authentication before upgrading. With cookie auth off, the SDK rejects combined API-key and `Authorization` headers. When an SDK API key or bearer token is selected, it also rejects HTTPX client or request `auth`, and credentials in the request or base URL. Cookie mode preserves caller-supplied authentication.
 
 ## Development
 
