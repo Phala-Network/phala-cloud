@@ -1152,7 +1152,14 @@ class PhalaCloud(_SyncBase, _ExtMixin):
                 except Exception:
                     payload = {"error": "invalid_sse_payload", "raw": data}
                 if ev == "complete":
-                    return GenericObject.model_validate(payload)
+                    if payload.get("status") == req.target:
+                        return GenericObject.model_validate(payload)
+                    last_error = (
+                        f"complete event status {payload.get('status')!r} "
+                        f"does not match target {req.target!r}"
+                    )
+                    should_retry = True
+                    return None
                 if ev == "error":
                     last_error = str(payload.get("error", "Watch stream error"))
                 if ev == "timeout":
@@ -2105,7 +2112,14 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
                 except Exception:
                     payload = {"error": "invalid_sse_payload", "raw": data}
                 if ev == "complete":
-                    return GenericObject.model_validate(payload)
+                    if payload.get("status") == req.target:
+                        return GenericObject.model_validate(payload)
+                    last_error = (
+                        f"complete event status {payload.get('status')!r} "
+                        f"does not match target {req.target!r}"
+                    )
+                    should_retry = True
+                    return None
                 if ev == "error":
                     last_error = str(payload.get("error", "Watch stream error"))
                 if ev == "timeout":

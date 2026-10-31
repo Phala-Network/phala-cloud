@@ -148,3 +148,54 @@ async def test_watch_auth_failure_never_retried(asynchronous: bool) -> None:
             with pytest.raises(AuthError):
                 PhalaCloud(http_client=raw).watch_cvm_state(req)
     assert calls == 1
+
+
+def _sse(body: str) -> httpx.Response:
+    return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=body.encode())
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_watch_complete_with_other_status_is_not_success(asynchronous: bool) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        status = "stopped" if calls == 1 else "running"
+        return _sse(f'event: complete\ndata: {{"status":"{status}"}}\n\n')
+
+    req = {"cvm_id": "cvm_1", "target": "running", "max_retries": 1, "retry_delay": 0}
+    transport = httpx.MockTransport(handler)
+    if asynchronous:
+        async with httpx.AsyncClient(transport=transport, base_url="https://example.com") as raw:
+            result = await AsyncPhalaCloud(http_client=raw).watch_cvm_state(req)
+    else:
+        with httpx.Client(transport=transport, base_url="https://example.com") as raw:
+            result = PhalaCloud(http_client=raw).watch_cvm_state(req)
+    assert result.status == "running"
+    assert calls == 2
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_watch_complete_status_mismatch_exhausts_budget(asynchronous: bool) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return _sse('event: complete\ndata: {"status":"stopped"}\n\n')
+
+    req = {"cvm_id": "cvm_1", "target": "running", "max_retries": 1, "retry_delay": 0}
+    transport = httpx.MockTransport(handler)
+    if asynchronous:
+        async with httpx.AsyncClient(transport=transport, base_url="https://example.com") as raw:
+            with pytest.raises(RequestError) as exc:
+                await AsyncPhalaCloud(http_client=raw).watch_cvm_state(req)
+    else:
+        with httpx.Client(transport=transport, base_url="https://example.com") as raw:
+            with pytest.raises(RequestError) as exc:
+                PhalaCloud(http_client=raw).watch_cvm_state(req)
+    assert calls == 2
+    assert "does not match target 'running'" in str(exc.value)
