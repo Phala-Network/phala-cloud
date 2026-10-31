@@ -2,6 +2,49 @@ package phala
 
 import "context"
 
+// CVMSSHKeyEntry describes an SSH key authorized on a CVM.
+type CVMSSHKeyEntry struct {
+	ID            string `json:"id"`
+	OwnerUserID   string `json:"owner_user_id"`
+	OwnerUsername string `json:"owner_username"`
+	AddedByUserID string `json:"added_by_user_id"`
+	Name          string `json:"name"`
+	PublicKey     string `json:"public_key"`
+	Fingerprint   string `json:"fingerprint"`
+	KeyType       string `json:"key_type"`
+}
+
+// CVMSSHKeysResponse contains the desired authorized keys and restart status.
+type CVMSSHKeysResponse struct {
+	Keys            []CVMSSHKeyEntry `json:"keys"`
+	RestartRequired bool             `json:"restart_required"`
+}
+
+// UpdateCVMSSHKeysRequest replaces the authorized key set.
+type UpdateCVMSSHKeysRequest struct {
+	SSHKeyIDs []string `json:"ssh_key_ids"`
+	Usernames []string `json:"usernames,omitempty"`
+	ApplyNow  bool     `json:"apply_now,omitempty"`
+}
+
+// GetCVMSSHKeys returns the CVM's desired authorized key set.
+func (c *Client) GetCVMSSHKeys(ctx context.Context, cvmID string) (*CVMSSHKeysResponse, error) {
+	var result CVMSSHKeysResponse
+	if err := c.doJSON(ctx, "GET", cvmPath(cvmID, "ssh-keys"), nil, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// UpdateCVMSSHKeys replaces the CVM's authorized key set.
+func (c *Client) UpdateCVMSSHKeys(ctx context.Context, cvmID string, req *UpdateCVMSSHKeysRequest) (*CVMSSHKeysResponse, error) {
+	var result CVMSSHKeysResponse
+	if err := c.doJSON(ctx, "PUT", cvmPath(cvmID, "ssh-keys"), req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // UpdateResourcesRequest is the request for updating CVM resources.
 type UpdateResourcesRequest struct {
 	VCPU         *int    `json:"vcpu,omitempty"`

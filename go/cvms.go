@@ -369,6 +369,15 @@ func (c *Client) ReplicateCVMV20260121(ctx context.Context, cvmID string, opts *
 	return &result, nil
 }
 
+// CommitCVMUpdate completes a prepared CVM update with its one-time token.
+func (c *Client) CommitCVMUpdate(ctx context.Context, cvmID string, req *CommitCVMUpdateRequest) (*CommitCVMUpdateResponse, error) {
+	var result CommitCVMUpdateResponse
+	if err := c.doJSON(ctx, "POST", cvmPath(cvmID, "commit-update"), req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // PatchCVM applies a multi-field patch to a CVM.
 func (c *Client) PatchCVM(ctx context.Context, cvmID string, req *PatchCVMRequest) (*PatchCVMResponse, error) {
 	var result PatchCVMResponse
