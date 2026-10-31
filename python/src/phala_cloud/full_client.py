@@ -1164,6 +1164,12 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     ) -> SafeResult[Any]:
         return self.safe(self.next_app_ids, request)
 
+    def revoke_current_api_token(self) -> None:
+        self.request("DELETE", "/tokens/self")
+
+    def safe_revoke_current_api_token(self) -> SafeResult[None]:
+        return self.safe(self.revoke_current_api_token)
+
     def list_ssh_keys(self) -> Any:
         return self._loose_validate(self.get("/user/ssh-keys"))
 
@@ -2050,6 +2056,12 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         self, request: NextAppIdsRequest | Mapping[str, Any] | None = None
     ) -> SafeResult[Any]:
         return await self.safe(self.next_app_ids, request)
+
+    async def revoke_current_api_token(self) -> None:
+        await self.request("DELETE", "/tokens/self")
+
+    async def safe_revoke_current_api_token(self) -> SafeResult[None]:
+        return await self.safe(self.revoke_current_api_token)
 
     async def list_ssh_keys(self) -> Any:
         return self._loose_validate(await self.get("/user/ssh-keys"))

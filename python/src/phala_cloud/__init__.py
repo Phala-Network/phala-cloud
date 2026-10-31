@@ -1,5 +1,6 @@
 from . import error_codes
 from .actions import *  # noqa: F403
+from .actions import revoke_current_api_token, safe_revoke_current_api_token
 from .client import (
     DEFAULT_API_VERSION,
     DEFAULT_TIMEOUT,
@@ -65,6 +66,8 @@ __all__ = [
     "PhalaCloudError",
     "ReplicateCvmRequest",
     "RequestError",
+    "revoke_current_api_token",
+    "safe_revoke_current_api_token",
     "ResourceError",
     "SUPPORTED_API_VERSIONS",
     "SafeResult",

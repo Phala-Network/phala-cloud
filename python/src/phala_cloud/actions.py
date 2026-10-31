@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Awaitable
+from typing import TYPE_CHECKING, Any, overload
+
+if TYPE_CHECKING:
+    from .full_client import AsyncPhalaCloud, PhalaCloud
+    from .result import SafeResult
 
 __all__ = [
+    "revoke_current_api_token",
+    "safe_revoke_current_api_token",
     "get_current_user",
     "safe_get_current_user",
     "get_available_nodes",
@@ -141,6 +148,32 @@ __all__ = [
     "get_app_device_allowlist",
     "safe_get_app_device_allowlist",
 ]
+
+
+@overload
+def revoke_current_api_token(client: PhalaCloud) -> None: ...
+
+
+@overload
+def revoke_current_api_token(client: AsyncPhalaCloud) -> Awaitable[None]: ...
+
+
+def revoke_current_api_token(client: PhalaCloud | AsyncPhalaCloud) -> None | Awaitable[None]:
+    return client.revoke_current_api_token()
+
+
+@overload
+def safe_revoke_current_api_token(client: PhalaCloud) -> SafeResult[None]: ...
+
+
+@overload
+def safe_revoke_current_api_token(client: AsyncPhalaCloud) -> Awaitable[SafeResult[None]]: ...
+
+
+def safe_revoke_current_api_token(
+    client: PhalaCloud | AsyncPhalaCloud,
+) -> SafeResult[None] | Awaitable[SafeResult[None]]:
+    return client.safe_revoke_current_api_token()
 
 
 def get_current_user(client: Any, *args: Any, **kwargs: Any) -> Any:
