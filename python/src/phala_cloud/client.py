@@ -97,6 +97,27 @@ class _BaseConfig:
             result["X-Phala-Workspace"] = self.workspace.strip()
         return result
 
+    def checked_headers(
+        self, client_headers: httpx.Headers, additional: Mapping[str, str] | None = None
+    ) -> httpx.Headers:
+        headers = httpx.Headers(self.request_headers)
+        headers.update(additional)
+        combined = httpx.Headers(client_headers)
+        combined.update(headers)
+        if not self.use_cookie_auth and "x-api-key" in combined and "authorization" in combined:
+            raise RequestError("Conflicting API key and Authorization headers")
+        return headers
+
+
+def _check_request_origin(path: str, base_url: httpx.URL) -> None:
+    url = httpx.URL(path)
+    if url.host and (url.scheme, url.host, url.port) != (
+        base_url.scheme,
+        base_url.host,
+        base_url.port,
+    ):
+        raise RequestError("Cross-origin SDK requests are not allowed")
+
 
 class AsyncPhalaCloud:
     """Async Phala Cloud client.
@@ -164,9 +185,10 @@ class AsyncPhalaCloud:
 
     async def request(self, method: str, path: str, **kwargs: Any) -> Any:
         # Enforce this per request, including caller-supplied HTTP clients.
-        headers = httpx.Headers(self.config.request_headers)
-        headers.update(kwargs.pop("headers", None))
-        kwargs["headers"] = headers
+        _check_request_origin(path, self._client.base_url)
+        kwargs["headers"] = self.config.checked_headers(
+            self._client.headers, kwargs.pop("headers", None)
+        )
         kwargs["follow_redirects"] = False
         try:
             response = await self._client.request(method.upper(), path, **kwargs)
@@ -175,9 +197,10 @@ class AsyncPhalaCloud:
         return self._decode_or_raise(response)
 
     async def request_full(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
-        headers = httpx.Headers(self.config.request_headers)
-        headers.update(kwargs.pop("headers", None))
-        kwargs["headers"] = headers
+        _check_request_origin(path, self._client.base_url)
+        kwargs["headers"] = self.config.checked_headers(
+            self._client.headers, kwargs.pop("headers", None)
+        )
         kwargs["follow_redirects"] = False
         try:
             response = await self._client.request(method.upper(), path, **kwargs)
@@ -469,9 +492,10 @@ class PhalaCloud:
 
     def request(self, method: str, path: str, **kwargs: Any) -> Any:
         # Enforce this per request, including caller-supplied HTTP clients.
-        headers = httpx.Headers(self.config.request_headers)
-        headers.update(kwargs.pop("headers", None))
-        kwargs["headers"] = headers
+        _check_request_origin(path, self._client.base_url)
+        kwargs["headers"] = self.config.checked_headers(
+            self._client.headers, kwargs.pop("headers", None)
+        )
         kwargs["follow_redirects"] = False
         try:
             response = self._client.request(method.upper(), path, **kwargs)
@@ -480,9 +504,10 @@ class PhalaCloud:
         return self._decode_or_raise(response)
 
     def request_full(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
-        headers = httpx.Headers(self.config.request_headers)
-        headers.update(kwargs.pop("headers", None))
-        kwargs["headers"] = headers
+        _check_request_origin(path, self._client.base_url)
+        kwargs["headers"] = self.config.checked_headers(
+            self._client.headers, kwargs.pop("headers", None)
+        )
         kwargs["follow_redirects"] = False
         try:
             response = self._client.request(method.upper(), path, **kwargs)

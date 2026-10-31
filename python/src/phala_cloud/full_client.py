@@ -1094,11 +1094,10 @@ class PhalaCloud(_SyncBase, _ExtMixin):
                 f"/cvms/{req.resolved}/state",
                 follow_redirects=False,
                 params=params,
-                headers={
-                    **self.config.request_headers,
-                    "Accept": "text/event-stream",
-                    "Cache-Control": "no-cache",
-                },
+                headers=self.config.checked_headers(
+                    self._client.headers,
+                    {"Accept": "text/event-stream", "Cache-Control": "no-cache"},
+                ),
             ) as response:
                 response.raise_for_status()
                 for raw in response.iter_lines():
@@ -1992,11 +1991,10 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
                 f"/cvms/{req.resolved}/state",
                 follow_redirects=False,
                 params=params,
-                headers={
-                    **self.config.request_headers,
-                    "Accept": "text/event-stream",
-                    "Cache-Control": "no-cache",
-                },
+                headers=self.config.checked_headers(
+                    self._client.headers,
+                    {"Accept": "text/event-stream", "Cache-Control": "no-cache"},
+                ),
             ) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():

@@ -69,13 +69,15 @@ asyncio.run(main())
 - `headers`
 - `use_cookie_auth`
 
-A non-empty client option takes precedence over its environment variable. If both an API key and bearer token are set, the SDK uses the API key. Cookie auth suppresses both generated authentication headers. The SDK removes surrounding whitespace from the workspace value.
+A non-empty client option takes precedence over its environment variable. If both an API key and bearer token are set, the SDK uses the API key. Cookie auth suppresses both generated authentication headers; it does not remove headers supplied by the caller. The SDK removes surrounding whitespace from the workspace value.
+
+When cookie auth is off, the SDK raises `RequestError` if the combined SDK and HTTPX headers contain both `X-API-Key` and `Authorization`. Remove the conflicting header from the supplied client or request. When you supply `http_client`, its base URL and timeout control requests; configure them on that client. The SDK does not close it.
 
 ## Does the SDK follow redirects?
 
 No. Redirects can send your API key to another server, so the SDK stops at the first response. This applies to API calls and SSE streams. Set `base_url` to the final API URL instead of relying on a redirect.
 
-Direct calls raise `ApiError` for 3xx responses. `request_full` returns the original status, headers, and body with `ok=False`, so you can inspect the response without following it.
+Direct calls raise `ApiError` for 3xx responses. `request_full` returns the original status, headers, and body with `ok=False`, so you can inspect the response without following it. The SDK also rejects cross-origin absolute request URLs with `RequestError` before sending a request.
 
 The SDK ignores `follow_redirects=True` on SDK requests, including requests made with a supplied `http_client`. It does not change that client's settings or close the supplied client. Custom transports must not follow redirects internally.
 
