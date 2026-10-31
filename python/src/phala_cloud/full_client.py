@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import ssl
 import time
 from collections.abc import AsyncIterator, Iterator, Mapping
 from contextlib import asynccontextmanager, contextmanager
@@ -88,6 +89,21 @@ from .models.nodes import (
 )
 from .models.os_images import GetOsImagesRequest, GetOsImagesResponse
 from .result import SafeResult
+
+
+class _WatchTransportError(RequestError):
+    """A retryable transport failure while reading a watch stream."""
+
+
+def _is_certificate_error(error: BaseException) -> bool:
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        if isinstance(current, ssl.SSLCertVerificationError):
+            return True
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return False
 
 
 class _AliasModel(BaseModel):
@@ -613,6 +629,10 @@ class PhalaCloud(_SyncBase, _ExtMixin):
                     response.read()
                     self._decode_or_raise(response)
                 yield response
+        except (httpx.NetworkError, httpx.TimeoutException, httpx.RemoteProtocolError) as exc:
+            if _is_certificate_error(exc):
+                raise RequestError(str(exc)) from exc
+            raise _WatchTransportError(str(exc)) from exc
         except httpx.HTTPError as exc:
             raise RequestError(str(exc)) from exc
 
@@ -1109,6 +1129,8 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     def watch_cvm_state(self, request: WatchCvmStateRequest | Mapping[str, Any]) -> Any:
         req = WatchCvmStateRequest.model_validate(request)
         retries = 0
+        last_error: str | None = None
+        last_transport: _WatchTransportError | None = None
         max_retries = req.max_retries
 
         while max_retries is None or retries <= max_retries:
@@ -1117,7 +1139,6 @@ class PhalaCloud(_SyncBase, _ExtMixin):
                 "interval": str(req.interval),
                 "timeout": str(req.timeout),
             }
-            last_error: str | None = None
             should_retry = False
             event_type: str | None = None
             event_data: str | None = None
@@ -1138,42 +1159,48 @@ class PhalaCloud(_SyncBase, _ExtMixin):
                     should_retry = True
                 return None
 
-            with self._watch_stream(req, params) as response:
-                for raw in response.iter_lines():
-                    line = raw.decode() if isinstance(raw, bytes) else raw
-                    line = line.strip()
-                    if line.startswith("event:"):
-                        maybe = process_event(event_type, event_data)
-                        if maybe is not None:
-                            return maybe
-                        if should_retry:
-                            break
-                        event_type = line[6:].strip()
-                        event_data = None
-                    elif line.startswith("data:"):
-                        event_data = line[5:].strip()
-                    elif line == "":
-                        maybe = process_event(event_type, event_data)
-                        if maybe is not None:
-                            return maybe
-                        if should_retry:
-                            break
-                        event_type = None
-                        event_data = None
+            try:
+                with self._watch_stream(req, params) as response:
+                    for raw in response.iter_lines():
+                        line = raw.decode() if isinstance(raw, bytes) else raw
+                        line = line.strip()
+                        if line.startswith("event:"):
+                            maybe = process_event(event_type, event_data)
+                            if maybe is not None:
+                                return maybe
+                            if should_retry:
+                                break
+                            event_type = line[6:].strip()
+                            event_data = None
+                        elif line.startswith("data:"):
+                            event_data = line[5:].strip()
+                        elif line == "":
+                            maybe = process_event(event_type, event_data)
+                            if maybe is not None:
+                                return maybe
+                            if should_retry:
+                                break
+                            event_type = None
+                            event_data = None
+                maybe = process_event(event_type, event_data)
+                if maybe is not None:
+                    return maybe
+            except _WatchTransportError as exc:
+                last_transport = exc
 
-            maybe = process_event(event_type, event_data)
-            if maybe is not None:
-                return maybe
-
-            if not should_retry:
-                raise RequestError(last_error or "Watch stream ended before completion")
             retries += 1
             if max_retries is not None and retries > max_retries:
                 break
             if req.retry_delay > 0:
                 time.sleep(req.retry_delay)
 
-        raise RequestError(f"watch_cvm_state exceeded retries waiting for '{req.target}'")
+        details = "; ".join(
+            filter(None, [last_error, str(last_transport) if last_transport else None])
+        )
+        if not details and not should_retry:
+            details = "Watch stream ended before completion"
+        message = f"watch_cvm_state exceeded retries waiting for '{req.target}'"
+        raise RequestError(f"{message}: {details}" if details else message) from last_transport
 
     def get_kms_info(self, request: KmsInfoRequest | Mapping[str, Any]) -> Any:
         req = KmsInfoRequest.model_validate(request)
@@ -1539,6 +1566,10 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
                     await response.aread()
                     self._decode_or_raise(response)
                 yield response
+        except (httpx.NetworkError, httpx.TimeoutException, httpx.RemoteProtocolError) as exc:
+            if _is_certificate_error(exc):
+                raise RequestError(str(exc)) from exc
+            raise _WatchTransportError(str(exc)) from exc
         except httpx.HTTPError as exc:
             raise RequestError(str(exc)) from exc
 
@@ -2048,6 +2079,8 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
     async def watch_cvm_state(self, request: WatchCvmStateRequest | Mapping[str, Any]) -> Any:
         req = WatchCvmStateRequest.model_validate(request)
         retries = 0
+        last_error: str | None = None
+        last_transport: _WatchTransportError | None = None
         max_retries = req.max_retries
 
         while max_retries is None or retries <= max_retries:
@@ -2056,7 +2089,6 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
                 "interval": str(req.interval),
                 "timeout": str(req.timeout),
             }
-            last_error: str | None = None
             should_retry = False
             event_type: str | None = None
             event_data: str | None = None
@@ -2077,41 +2109,47 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
                     should_retry = True
                 return None
 
-            async with self._watch_stream(req, params) as response:
-                async for line in response.aiter_lines():
-                    line = line.strip()
-                    if line.startswith("event:"):
-                        maybe = process_event(event_type, event_data)
-                        if maybe is not None:
-                            return maybe
-                        if should_retry:
-                            break
-                        event_type = line[6:].strip()
-                        event_data = None
-                    elif line.startswith("data:"):
-                        event_data = line[5:].strip()
-                    elif line == "":
-                        maybe = process_event(event_type, event_data)
-                        if maybe is not None:
-                            return maybe
-                        if should_retry:
-                            break
-                        event_type = None
-                        event_data = None
+            try:
+                async with self._watch_stream(req, params) as response:
+                    async for line in response.aiter_lines():
+                        line = line.strip()
+                        if line.startswith("event:"):
+                            maybe = process_event(event_type, event_data)
+                            if maybe is not None:
+                                return maybe
+                            if should_retry:
+                                break
+                            event_type = line[6:].strip()
+                            event_data = None
+                        elif line.startswith("data:"):
+                            event_data = line[5:].strip()
+                        elif line == "":
+                            maybe = process_event(event_type, event_data)
+                            if maybe is not None:
+                                return maybe
+                            if should_retry:
+                                break
+                            event_type = None
+                            event_data = None
+                maybe = process_event(event_type, event_data)
+                if maybe is not None:
+                    return maybe
+            except _WatchTransportError as exc:
+                last_transport = exc
 
-            maybe = process_event(event_type, event_data)
-            if maybe is not None:
-                return maybe
-
-            if not should_retry:
-                raise RequestError(last_error or "Watch stream ended before completion")
             retries += 1
             if max_retries is not None and retries > max_retries:
                 break
             if req.retry_delay > 0:
                 await self._sleep(req.retry_delay)
 
-        raise RequestError(f"watch_cvm_state exceeded retries waiting for '{req.target}'")
+        details = "; ".join(
+            filter(None, [last_error, str(last_transport) if last_transport else None])
+        )
+        if not details and not should_retry:
+            details = "Watch stream ended before completion"
+        message = f"watch_cvm_state exceeded retries waiting for '{req.target}'"
+        raise RequestError(f"{message}: {details}" if details else message) from last_transport
 
     async def _sleep(self, seconds: float) -> None:
         import asyncio

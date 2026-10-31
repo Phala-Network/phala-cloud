@@ -33,7 +33,7 @@ async def test_watch_permanent_errors_are_typed_and_not_retried(
 
     transport = httpx.MockTransport(handler)
     expected = AuthError if response == "http" else RequestError
-    req = {"cvm_id": "cvm_1", "target": "running", "max_retries": 3, "retry_delay": 0}
+    req = {"cvm_id": "cvm_1", "target": "running", "max_retries": 0, "retry_delay": 0}
     if async_client:
         async with httpx.AsyncClient(transport=transport, base_url="https://api.example") as raw:
             with pytest.raises(expected) as exc:
@@ -65,7 +65,12 @@ async def test_raw_running_state_never_completes_watch_without_complete_event(
         return httpx.Response(200, text=state + timeout)
 
     transport = httpx.MockTransport(handler)
-    req = {"cvm_id": "cvm_1", "target": "running", "max_retries": 1, "retry_delay": 0}
+    req = {
+        "cvm_id": "cvm_1",
+        "target": "running",
+        "max_retries": 1 if timeout_event else 0,
+        "retry_delay": 0,
+    }
     if async_client:
         async with httpx.AsyncClient(transport=transport, base_url="https://api.example") as raw:
             client = AsyncPhalaCloud(http_client=raw)
