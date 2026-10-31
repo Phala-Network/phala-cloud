@@ -20,7 +20,10 @@ type SSETimeoutEvent = {
   type: "timeout";
   data: { error: string; elapsed: number; target: string };
 };
-type SSEErrorEvent = { type: "error"; data: { error: string; elapsed?: number; message?: string } };
+type SSEErrorEvent = {
+  type: "error";
+  data: { error: string; elapsed?: number; message?: string };
+};
 
 export type SSEEvent = SSEStateEvent | SSECompleteEvent | SSETimeoutEvent | SSEErrorEvent;
 
@@ -70,12 +73,21 @@ export class WatchAbortedError extends Error {
   }
 }
 
+class TerminalWatchError extends Error {}
+
 /**
  * Error thrown when max retries exceeded
  */
 export class MaxRetriesExceededError extends Error {
-  constructor(public readonly attempts: number) {
-    super(`Maximum retry attempts (${attempts}) exceeded`);
+  constructor(
+    public readonly attempts: number,
+    public readonly lastServerError?: SSEErrorEvent["data"],
+    public readonly lastAttemptError?: unknown,
+  ) {
+    const detail = lastServerError
+      ? `: ${lastServerError.error}${lastServerError.message ? `: ${lastServerError.message}` : ""}`
+      : "";
+    super(`Maximum retry attempts (${attempts}) exceeded${detail}`);
     this.name = "MaxRetriesExceededError";
   }
 }
@@ -177,8 +189,13 @@ export async function watchCvmState(
   const { signal, onEvent } = options;
 
   let attempt = 0;
+  let lastServerError: SSEErrorEvent["data"] | undefined;
+  const handleEvent = (event: SSEEvent) => {
+    if (event.type === "error") lastServerError = event.data;
+    onEvent?.(event);
+  };
 
-  while (attempt < maxRetries) {
+  while (attempt <= maxRetries) {
     // Check if aborted before starting attempt
     if (signal?.aborted) {
       throw new WatchAbortedError();
@@ -194,7 +211,7 @@ export async function watchCvmState(
         interval,
         timeout,
         signal,
-        onEvent,
+        handleEvent,
       );
 
       if (result) {
@@ -202,8 +219,8 @@ export async function watchCvmState(
       }
 
       // Timeout occurred, retry if not at max
-      if (attempt >= maxRetries) {
-        throw new MaxRetriesExceededError(attempt);
+      if (attempt > maxRetries) {
+        throw new MaxRetriesExceededError(attempt, lastServerError);
       }
 
       // Wait before retry
@@ -214,12 +231,17 @@ export async function watchCvmState(
         throw new WatchAbortedError();
       }
 
-      if (error instanceof WatchAbortedError || error instanceof MaxRetriesExceededError) {
+      if (
+        error instanceof WatchAbortedError ||
+        error instanceof MaxRetriesExceededError ||
+        error instanceof TerminalWatchError
+      ) {
         throw error;
       }
 
-      // For other errors, retry if possible
-      if (attempt >= maxRetries) {
+      // Preserve both the last server diagnostic and the final transport error.
+      if (attempt > maxRetries) {
+        if (lastServerError) throw new MaxRetriesExceededError(attempt, lastServerError, error);
         throw error;
       }
 
@@ -227,7 +249,9 @@ export async function watchCvmState(
       if (onEvent) {
         onEvent({
           type: "error",
-          data: { error: error instanceof Error ? error.message : String(error) },
+          data: {
+            error: error instanceof Error ? error.message : String(error),
+          },
         });
       }
 
@@ -235,7 +259,7 @@ export async function watchCvmState(
     }
   }
 
-  throw new MaxRetriesExceededError(attempt);
+  throw new MaxRetriesExceededError(attempt, lastServerError);
 }
 
 /**
@@ -264,42 +288,48 @@ async function watchSingleAttempt(
   const fullUrl = `${baseURL}/cvms/${cvmId}/state?${params.toString()}`;
 
   // Build headers manually - native() may not inherit configured headers
-  const headers: Record<string, string> = {
+  const headers = new Headers({
     Accept: "text/event-stream",
     "Cache-Control": "no-cache",
-  };
+  });
+  new Headers(client.config.headers).forEach((value, key) => headers.set(key, value));
+  headers.set("X-Phala-Version", client.config.version);
 
-  // Add authentication header if not using cookie auth
   if (!client.config.useCookieAuth && client.config.apiKey) {
-    headers["X-API-Key"] = client.config.apiKey;
+    headers.set("X-API-Key", client.config.apiKey);
+  } else if (!client.config.useCookieAuth && client.config.bearerToken) {
+    headers.set("Authorization", `Bearer ${client.config.bearerToken}`);
+  }
+  if (client.config.workspace?.trim()) {
+    headers.set("X-Phala-Workspace", client.config.workspace.trim());
   }
 
-  // Add any user-provided headers
-  if (client.config.headers) {
-    Object.entries(client.config.headers).forEach(([key, value]) => {
-      if (typeof value === "string") {
-        headers[key] = value;
-      }
-    });
-  }
+  const requestHeaders: Record<string, string> = {};
+  headers.forEach((value, key) => {
+    requestHeaders[key === "accept" ? "Accept" : key] = value;
+  });
 
   const response = await client.raw.native(fullUrl, {
     method: "GET",
-    headers,
+    headers: requestHeaders,
     signal,
     ...(client.config.useCookieAuth ? { credentials: "include" } : {}),
   });
 
   if (!response.ok) {
     await response.body?.cancel();
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    const message = `HTTP ${response.status}: ${response.statusText}`;
+    if (response.status < 500 && response.status !== 429 && response.status !== 408) {
+      throw new TerminalWatchError(message);
+    }
+    throw new Error(message);
   }
 
   if (!response.body) {
     throw new Error("Response body is null");
   }
 
-  return parseSSEStream(response.body, signal, onEvent);
+  return parseSSEStream(response.body, target, signal, onEvent);
 }
 
 /**
@@ -307,10 +337,15 @@ async function watchSingleAttempt(
  */
 async function parseSSEStream(
   stream: ReadableStream<Uint8Array>,
+  target: string,
   signal: AbortSignal | undefined,
   onEvent: ((event: SSEEvent) => void) | undefined,
 ): Promise<CvmState | null> {
   const reader = stream.getReader();
+  const cancelRead = () => {
+    void reader.cancel().catch(() => {});
+  };
+  signal?.addEventListener("abort", cancelRead, { once: true });
   const decoder = new TextDecoder();
   let buffer = "";
   let finalState: CvmState | null = null;
@@ -334,10 +369,13 @@ async function parseSSEStream(
         }
 
         onEvent?.(event);
+        if (signal?.aborted) throw new WatchAbortedError();
 
         // Check for terminal events
         if (event.type === "complete") {
-          return "complete";
+          return event.data.status === target && event.data.target === target
+            ? "complete"
+            : "timeout";
         }
         if (event.type === "timeout") {
           return "timeout";
@@ -359,6 +397,7 @@ async function parseSSEStream(
       }
 
       const { done, value } = await reader.read();
+      if (signal?.aborted) throw new WatchAbortedError();
 
       if (done) {
         break;
@@ -382,14 +421,16 @@ async function parseSSEStream(
       }
     }
 
-    // Stream ended without complete/timeout
-    return finalState;
+    // A disconnected stream cannot establish that the target was reached.
+    return null;
   } catch (error) {
     if (error instanceof WatchAbortedError) {
       throw error;
     }
     throw new Error(`SSE stream error: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
+    signal?.removeEventListener("abort", cancelRead);
+    await reader.cancel().catch(() => {});
     reader.releaseLock();
   }
 }
@@ -404,13 +445,14 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
       return;
     }
 
-    const timer = setTimeout(resolve, ms);
-
-    if (signal) {
-      signal.addEventListener("abort", () => {
-        clearTimeout(timer);
-        reject(new WatchAbortedError());
-      });
-    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new WatchAbortedError());
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
