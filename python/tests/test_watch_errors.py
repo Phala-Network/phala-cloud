@@ -48,6 +48,44 @@ async def test_watch_permanent_errors_are_typed_and_not_retried(
 
 
 @pytest.mark.parametrize("async_client", [False, True])
+@pytest.mark.parametrize("timeout_event", [False, True])
+@pytest.mark.asyncio
+async def test_raw_running_state_never_completes_watch_without_complete_event(
+    async_client: bool, timeout_event: bool
+) -> None:
+    count = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal count
+        count += 1
+        if count > 1:
+            return httpx.Response(200, text='event: complete\ndata: {"status":"running"}\n\n')
+        state = 'event: state\ndata: {"status":"running","boot_progress":"booting"}\n\n'
+        timeout = 'event: timeout\ndata: {"error":"timeout"}\n\n' if timeout_event else ""
+        return httpx.Response(200, text=state + timeout)
+
+    transport = httpx.MockTransport(handler)
+    req = {"cvm_id": "cvm_1", "target": "running", "max_retries": 1, "retry_delay": 0}
+    if async_client:
+        async with httpx.AsyncClient(transport=transport, base_url="https://api.example") as raw:
+            client = AsyncPhalaCloud(http_client=raw)
+            if timeout_event:
+                assert (await client.watch_cvm_state(req)).status == "running"
+            else:
+                with pytest.raises(RequestError, match="ended before completion"):
+                    await client.watch_cvm_state(req)
+    else:
+        with httpx.Client(transport=transport, base_url="https://api.example") as raw:
+            client_sync = PhalaCloud(http_client=raw)
+            if timeout_event:
+                assert client_sync.watch_cvm_state(req).status == "running"
+            else:
+                with pytest.raises(RequestError, match="ended before completion"):
+                    client_sync.watch_cvm_state(req)
+    assert count == (2 if timeout_event else 1)
+
+
+@pytest.mark.parametrize("async_client", [False, True])
 @pytest.mark.asyncio
 async def test_watch_continues_after_transient_error_event(async_client: bool) -> None:
     def handler(request: httpx.Request) -> httpx.Response:

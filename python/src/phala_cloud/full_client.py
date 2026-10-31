@@ -1117,23 +1117,19 @@ class PhalaCloud(_SyncBase, _ExtMixin):
                 "interval": str(req.interval),
                 "timeout": str(req.timeout),
             }
-            last_state: Any = None
             last_error: str | None = None
             should_retry = False
             event_type: str | None = None
             event_data: str | None = None
 
             def process_event(ev: str | None, data: str | None) -> Any | None:
-                nonlocal last_state, last_error, should_retry
+                nonlocal last_error, should_retry
                 if not ev or not data:
                     return None
                 try:
                     payload = TypeAdapter(dict[str, Any]).validate_json(data)
                 except Exception:
                     payload = {"error": "invalid_sse_payload", "raw": data}
-                if ev == "state":
-                    last_state = GenericObject.model_validate(payload)
-                    return None
                 if ev == "complete":
                     return GenericObject.model_validate(payload)
                 if ev == "error":
@@ -1168,13 +1164,6 @@ class PhalaCloud(_SyncBase, _ExtMixin):
             maybe = process_event(event_type, event_data)
             if maybe is not None:
                 return maybe
-
-            if (
-                not last_error
-                and isinstance(last_state, BaseModel)
-                and getattr(last_state, "status", None) == req.target
-            ):
-                return last_state
 
             if not should_retry:
                 raise RequestError(last_error or "Watch stream ended before completion")
@@ -2067,23 +2056,19 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
                 "interval": str(req.interval),
                 "timeout": str(req.timeout),
             }
-            last_state: Any = None
             last_error: str | None = None
             should_retry = False
             event_type: str | None = None
             event_data: str | None = None
 
             def process_event(ev: str | None, data: str | None) -> Any | None:
-                nonlocal last_state, last_error, should_retry
+                nonlocal last_error, should_retry
                 if not ev or not data:
                     return None
                 try:
                     payload = TypeAdapter(dict[str, Any]).validate_json(data)
                 except Exception:
                     payload = {"error": "invalid_sse_payload", "raw": data}
-                if ev == "state":
-                    last_state = GenericObject.model_validate(payload)
-                    return None
                 if ev == "complete":
                     return GenericObject.model_validate(payload)
                 if ev == "error":
@@ -2117,13 +2102,6 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
             maybe = process_event(event_type, event_data)
             if maybe is not None:
                 return maybe
-
-            if (
-                not last_error
-                and isinstance(last_state, BaseModel)
-                and getattr(last_state, "status", None) == req.target
-            ):
-                return last_state
 
             if not should_retry:
                 raise RequestError(last_error or "Watch stream ended before completion")
