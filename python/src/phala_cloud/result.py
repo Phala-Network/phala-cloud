@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, cast
 
 T = TypeVar("T")
 
@@ -13,8 +13,8 @@ class SafeResult(Generic[T]):
     error: Exception | None = None
 
     def unwrap(self) -> T:
-        if self.ok and self.data is not None:
-            return self.data
+        if self.ok:
+            return cast(T, self.data)
         if self.error is not None:
             raise self.error
         raise RuntimeError("Invalid SafeResult state")
