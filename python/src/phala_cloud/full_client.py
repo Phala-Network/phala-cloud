@@ -270,6 +270,8 @@ class RefreshCvmInstanceIdsRequest(BaseModel):
 
 
 class WatchCvmStateRequest(CvmIdRequest):
+    model_config = ConfigDict(populate_by_name=True)
+
     target: str
     interval: int = Field(default=5, ge=5, le=30)
     timeout: int = Field(default=300, ge=10, le=600)
