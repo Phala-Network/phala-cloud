@@ -4,7 +4,10 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -16,6 +19,15 @@ type CVMStateEvent struct {
 	Error error         `json:"-"`
 }
 
+// WatchStreamError reports a stream ending before a complete event.
+// Its cause can be inspected with errors.Is or errors.As.
+type WatchStreamError struct {
+	Cause error
+}
+
+func (e *WatchStreamError) Error() string { return "phala: watch stream: " + e.Cause.Error() }
+func (e *WatchStreamError) Unwrap() error { return e.Cause }
+
 // WatchCVMStateOptions holds options for watching CVM state.
 type WatchCVMStateOptions struct {
 	Target     string
@@ -26,27 +38,50 @@ type WatchCVMStateOptions struct {
 }
 
 // WatchCVMState watches CVM state changes via SSE. Returns a channel that emits state events.
-// The channel is closed when the stream ends or context is cancelled.
+// The channel is closed when the stream ends or context is cancelled. Reconnects
+// are unlimited by default; use a context deadline to bound total waiting time.
 func (c *Client) WatchCVMState(ctx context.Context, cvmID string, opts *WatchCVMStateOptions) (<-chan CVMStateEvent, error) {
-	if opts == nil {
-		opts = &WatchCVMStateOptions{}
+	options := WatchCVMStateOptions{}
+	if opts != nil {
+		options = *opts
+	}
+	opts = &options
+	if opts.Target == "" {
+		return nil, fmt.Errorf("phala: watch target is required")
+	}
+	if opts.MaxRetries != nil && *opts.MaxRetries < 0 {
+		return nil, fmt.Errorf("phala: max retries must be non-negative")
+	}
+	if opts.RetryDelay < 0 {
+		return nil, fmt.Errorf("phala: retry delay must be non-negative")
 	}
 	if opts.Interval == 0 {
 		opts.Interval = 5
 	}
 	if opts.Timeout == 0 {
-		opts.Timeout = 60
+		opts.Timeout = 300
 	}
 	if opts.RetryDelay == 0 {
 		opts.RetryDelay = 5 * time.Second
 	}
 
-	path := fmt.Sprintf("%s?interval=%d&timeout=%d", cvmPath(cvmID, "state"), opts.Interval, opts.Timeout)
-	if opts.Target != "" {
-		path += "&target=" + opts.Target
+	if opts.Interval < 5 || opts.Interval > 30 || opts.Timeout < 10 || opts.Timeout > 600 {
+		return nil, fmt.Errorf("phala: interval must be 5-30 and timeout must be 10-600 seconds")
 	}
+	query := url.Values{"interval": {fmt.Sprint(opts.Interval)}, "timeout": {fmt.Sprint(opts.Timeout)}}
+	if opts.Target != "" {
+		query.Set("target", opts.Target)
+	}
+	path := cvmPath(cvmID, "state") + "?" + query.Encode()
 
 	ch := make(chan CVMStateEvent, 16)
+	if !c.timeoutExplicit {
+		clientCopy := *c
+		httpCopy := *c.httpClient
+		httpCopy.Timeout = 0
+		clientCopy.httpClient = &httpCopy
+		c = &clientCopy
+	}
 
 	go func() {
 		defer close(ch)
@@ -58,8 +93,13 @@ func (c *Client) WatchCVMState(ctx context.Context, cvmID string, opts *WatchCVM
 				return
 			}
 
-			if opts.MaxRetries != nil && retries >= *opts.MaxRetries {
-				ch <- CVMStateEvent{Event: "error", Error: err}
+			var apiErr *APIError
+			permanent := errors.As(err, &apiErr) && !watchRetryableStatus(apiErr.StatusCode)
+			if permanent || (opts.MaxRetries != nil && retries >= *opts.MaxRetries) {
+				select {
+				case ch <- CVMStateEvent{Event: "error", Error: err}:
+				case <-ctx.Done():
+				}
 				return
 			}
 			retries++
@@ -75,6 +115,15 @@ func (c *Client) WatchCVMState(ctx context.Context, cvmID string, opts *WatchCVM
 	return ch, nil
 }
 
+func watchRetryableStatus(status int) bool {
+	switch status {
+	case 408, 429, 500, 502, 503, 504:
+		return true
+	default:
+		return false
+	}
+}
+
 func (c *Client) streamSSE(ctx context.Context, path string, ch chan<- CVMStateEvent) error {
 	req, err := c.newRequest(ctx, "GET", path, nil)
 	if err != nil {
@@ -83,15 +132,11 @@ func (c *Client) streamSSE(ctx context.Context, path string, ch chan<- CVMStateE
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Cache-Control", "no-cache")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(ctx, req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("SSE stream returned status %d", resp.StatusCode)
-	}
 
 	scanner := bufio.NewScanner(resp.Body)
 	var eventType, data string
@@ -109,14 +154,26 @@ func (c *Client) streamSSE(ctx context.Context, path string, ch chan<- CVMStateE
 						evt.Data = obj
 					}
 				}
+				if eventType == "complete" {
+					status, ok := evt.Data["status"].(string)
+					if !ok || status == "" {
+						return fmt.Errorf("SSE complete event has no status")
+					}
+				}
+				if eventType == "error" {
+					evt.Error = fmt.Errorf("SSE error: %s", data)
+				}
 				select {
 				case ch <- evt:
 				case <-ctx.Done():
 					return ctx.Err()
 				}
 
-				if eventType == "complete" || eventType == "error" || eventType == "timeout" {
+				if eventType == "complete" {
 					return nil
+				}
+				if eventType == "timeout" {
+					return fmt.Errorf("SSE stream timed out")
 				}
 			}
 			eventType = ""
@@ -131,5 +188,8 @@ func (c *Client) streamSSE(ctx context.Context, path string, ch chan<- CVMStateE
 		}
 	}
 
-	return scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return &WatchStreamError{Cause: err}
+	}
+	return &WatchStreamError{Cause: io.ErrUnexpectedEOF}
 }
