@@ -666,10 +666,13 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
    * ```
    */
   withVersion<NewV extends ApiVersion>(version: NewV): Client<NewV> {
-    return new Client<NewV>({
+    const clone = new Client<NewV>({
       ...this.config,
       version,
     } as ClientConfig<NewV>);
+    // Share the emitter so listeners registered on this client also see the clone's events.
+    clone.emitter = this.emitter;
+    return clone;
   }
 
   /**

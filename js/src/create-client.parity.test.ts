@@ -171,3 +171,14 @@ it("binds safe and ordinary token actions to the cloned transport", async () => 
     { url: "https://example.test/tokens/self", method: "DELETE", version: "2025-10-28" },
   ]);
 });
+
+it("withVersion clones keep event listeners registered on the original client", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ detail: "boom" }, { status: 500 })));
+  const original = createClient({ baseURL: "https://example.test" });
+  const seen: string[] = [];
+  original.on("error", () => seen.push("original"));
+  await original.safeGet("/x");
+  await original.withVersion("2025-10-28").safeGet("/x");
+  await original.withVersion("2025-10-28").withVersion("2026-01-21").safeGet("/x");
+  expect(seen).toEqual(["original", "original", "original"]);
+});

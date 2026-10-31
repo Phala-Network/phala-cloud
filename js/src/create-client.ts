@@ -446,8 +446,10 @@ export function createClient(config?: ClientConfig): Client<DefaultApiVersion>;
 export function createClient<V extends ApiVersion = DefaultApiVersion>(
   config: ClientConfig<V> = {} as ClientConfig<V>,
 ): Client<V> {
-  const client = createBaseClient(config) as BaseClient<V>;
+  return buildClient(createBaseClient(config) as BaseClient<V>);
+}
 
+function buildClient<V extends ApiVersion>(client: BaseClient<V>): Client<V> {
   // Type annotation ensures proper type inference for extend()
   const allActions: {
     readonly getCurrentUser: typeof getCurrentUser;
@@ -651,10 +653,9 @@ export function createClient<V extends ApiVersion = DefaultApiVersion>(
 
   const extended = client.extend(allActions).extend(additionalActions) as unknown as Client<V>;
   Object.assign(extended, onChainActions);
+  // The clone shares the original's event emitter, so `on(...)` listeners carry over.
   extended.withVersion = <NewV extends ApiVersion>(version: NewV): Client<NewV> =>
-    createClient({ ...client.config, version } as ClientConfig<NewV> & {
-      version: NewV;
-    });
+    buildClient(client.withVersion(version));
   return extended;
 }
 
