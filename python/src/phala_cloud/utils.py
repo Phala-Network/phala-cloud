@@ -127,11 +127,11 @@ def get_mr_config_id(
     Returns:
         48-byte mr_config_id (0x02 || keccak256(...) || zero_pad).
     """
-    import sha3  # type: ignore[import-untyped]
+    from eth_hash.auto import keccak
 
     kp_byte = _KEY_PROVIDER_BYTE[key_provider_type]
     payload = compose_hash + app_id + bytes([kp_byte]) + key_provider_id
-    digest = sha3.keccak_256(payload).digest()
+    digest = keccak(payload)
     result = bytearray(48)
     result[0] = 2
     result[1:33] = digest[:32]

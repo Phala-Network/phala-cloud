@@ -28,7 +28,7 @@ dependencies = [
   "certifi>=2026.10.19",
   "pydantic>=2.7.0",
   "dstack-sdk>=0.5.4",
-  "pysha3>=1.0.2",
+  "eth-hash[pycryptodome]>=0.8.0",
 ]
 
 [project.optional-dependencies]
