@@ -39,12 +39,16 @@ func WithHTTPClient(hc *http.Client) Option {
 	return func(c *Client) {
 		copy := *hc
 		c.httpClient = &copy
+		c.timeoutExplicit = true
 	}
 }
 
 // WithTimeout sets the HTTP client timeout.
 func WithTimeout(d time.Duration) Option {
-	return func(c *Client) { c.httpClient.Timeout = d }
+	return func(c *Client) {
+		c.httpClient.Timeout = d
+		c.timeoutExplicit = true
+	}
 }
 
 // WithUserAgent sets a custom User-Agent header.

@@ -10,15 +10,16 @@ import (
 
 // Client is the Phala Cloud API client.
 type Client struct {
-	baseURL     string
-	apiKey      string
-	bearerToken string
-	workspace   string
-	apiVersion  string
-	httpClient  *http.Client
-	userAgent   string
-	headers     map[string]string
-	maxRetries  int
+	baseURL         string
+	apiKey          string
+	bearerToken     string
+	workspace       string
+	apiVersion      string
+	httpClient      *http.Client
+	timeoutExplicit bool
+	userAgent       string
+	headers         map[string]string
+	maxRetries      int
 }
 
 // withVersion returns an isolated client view for version-specific operations.
@@ -71,7 +72,6 @@ func NewClient(opts ...Option) (*Client, error) {
 	if c.apiKey == "" && c.bearerToken == "" {
 		return nil, fmt.Errorf("phala: API key or bearer token is required")
 	}
-
 	if c.maxRetries < 0 {
 		return nil, fmt.Errorf("phala: max retries must be non-negative")
 	}
