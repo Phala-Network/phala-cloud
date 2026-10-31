@@ -17,21 +17,21 @@ repos:
         name: gofmt
         entry: bash -c 'cd go && files=$(gofmt -l .); [ -z "$files" ] || gofmt -l -w $files'
         language: system
-        files: ^go/.*\.go$
+        files: ^go/(.*\.go|go\.mod|go\.sum)$
         pass_filenames: false
         priority: 10
       - id: govet
         name: go vet
         entry: bash -c 'cd go && go vet ./...'
         language: system
-        files: ^go/.*\.go$
+        files: ^go/(.*\.go|go\.mod|go\.sum)$
         pass_filenames: false
         priority: 20
       - id: gotest
         name: go test
         entry: python3 scripts/focused_tests.py go
         language: system
-        files: ^go/.*\.go$
+        files: ^go/(.*\.go|go\.mod|go\.sum)$
         require_serial: true
         priority: 30
 

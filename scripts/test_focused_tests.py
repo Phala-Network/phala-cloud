@@ -52,17 +52,51 @@ class FocusedTests(unittest.TestCase):
         self.put("go/client.go")
         self.put("go/client_test.go", "func TestFuture(t *testing.T) {}\n", tracked=False)
         self.assertEqual(focused_tests.select_js(self.root, "js", ["js/src/client.ts"]), [])
-        self.assertEqual(focused_tests.go_commands(self.root, ["go/client.go"]), [])
+        self.assertEqual(focused_tests.go_commands(self.root, ["go/client.go"]), ([], ["client.go"]))
 
     def test_go_names_by_package_and_safe_arguments(self) -> None:
         self.put("go/a/source file.go")
         self.put("go/a/source file_test.go", "func TestOne(t *testing.T) {}\nfunc ExampleTwo() {}\nfunc FuzzThree(f *testing.F) {}\n")
         self.put("go/b/other_test.go", "func TestOther(t *testing.T) {}\n")
-        commands = focused_tests.go_commands(self.root, ["go/a/source file.go", "go/b/other_test.go"])
+        commands, unmapped = focused_tests.go_commands(self.root, ["go/a/source file.go", "go/b/other_test.go"])
+        self.assertEqual(unmapped, [])
         self.assertEqual(commands, [
             (["a/source file_test.go"], ["go", "test", "./a", "-run", "^(ExampleTwo|FuzzThree|TestOne)$", "-count=1"]),
             (["b/other_test.go"], ["go", "test", "./b", "-run", "^(TestOther)$", "-count=1"]),
         ])
+
+    def test_go_sources_without_adjacent_tests_use_mapping_table(self) -> None:
+        for name in ("request.go", "cvms_watch.go", "client.go", "cvms.go", "lonely.go"):
+            self.put("go/" + name)
+        self.put("go/client_test.go", "func TestClient(t *testing.T) {}\n")
+        self.put("go/retry_test.go", "func TestRetry(t *testing.T) {}\n")
+        self.put("go/parity_watch_test.go", "func TestWatch(t *testing.T) {}\n")
+        self.put("go/parity_confirm_test.go", "func TestConfirm(t *testing.T) {}\n")
+        self.put("go/e2e/live_test.go", "func TestLive(t *testing.T) {}\n")
+        commands, unmapped = focused_tests.go_commands(self.root, [
+            "go/request.go", "go/cvms_watch.go", "go/client.go", "go/cvms.go", "go/lonely.go", "go/e2e/live_test.go",
+        ])
+        self.assertEqual(unmapped, ["lonely.go"])
+        self.assertEqual(commands, [(
+            ["client_test.go", "parity_confirm_test.go", "parity_watch_test.go", "retry_test.go"],
+            ["go", "test", ".", "-run", "^(TestClient|TestConfirm|TestRetry|TestWatch)$", "-count=1"],
+        )])
+
+    def test_go_mod_runs_build_and_vet_only(self) -> None:
+        self.put("go/go.mod")
+        self.put("go/go.sum")
+        commands, unmapped = focused_tests.go_commands(self.root, ["go/go.mod", "go/go.sum"])
+        self.assertEqual(unmapped, [])
+        self.assertEqual(commands, [
+            (["go.mod", "go.sum"], ["go", "build", "./..."]),
+            (["go.mod", "go.sum"], ["go", "vet", "./..."]),
+        ])
+
+    def test_go_source_without_mapped_tests_exits_zero_without_running(self) -> None:
+        self.put("go/lonely.go")
+        with patch.object(focused_tests, "ROOT", self.root), patch("focused_tests.run_tests") as run:
+            self.assertEqual(focused_tests.main(["go", "go/lonely.go"]), 0)
+            run.assert_not_called()
 
     def test_no_fallback_and_exit_status(self) -> None:
         self.put("js/src/unmapped.ts")

@@ -49,20 +49,64 @@ def select_js(root: Path, project: str, filenames: Sequence[str]) -> list[str]:
     return sorted(selected)
 
 
-def go_commands(root: Path, filenames: Sequence[str]) -> list[tuple[list[str], list[str]]]:
+# Source files whose behaviour is exercised by tests that do not share their stem.
+# Derived from which test files call each source file's functions. The SDK is one
+# root package, so this keeps the hook from running the whole suite locally.
+_TRANSPORT_TESTS = (
+    "client_test.go", "errors_test.go", "parity_auth_test.go", "parity_version_test.go",
+    "redirect_security_test.go", "request_compat_test.go", "retry_test.go",
+)
+GO_RELATED_TESTS: dict[str, tuple[str, ...]] = {
+    "client.go": _TRANSPORT_TESTS,
+    "client_options.go": _TRANSPORT_TESTS,
+    "request.go": _TRANSPORT_TESTS,
+    "retry.go": _TRANSPORT_TESTS,
+    "errors.go": _TRANSPORT_TESTS,
+    "auth.go": ("parity_actions_test.go", "parity_auth_test.go"),
+    "apps.go": ("placement_identifiers_test.go",),
+    "compose_hash.go": ("compose_hash_vectors_test.go", "parity_hash_test.go"),
+    "cvms.go": ("parity_confirm_test.go", "parity_provision_test.go", "parity_env_schema_test.go",
+                "parity_actions_test.go", "placement_identifiers_test.go", "create_node_test.go"),
+    "cvms_compose.go": ("parity_compose_read_test.go", "parity_env_schema_test.go", "cvms_config_test.go"),
+    "cvms_config.go": ("parity_actions_test.go", "parity_arrays_test.go"),
+    "cvms_watch.go": ("parity_watch_test.go", "parity_watch_timeout_test.go", "redirect_security_test.go"),
+    "types_cvms.go": ("parity_arrays_test.go",),
+    "types_kms.go": ("kms_contract_test.go", "nodes_test.go"),
+}
+GO_BUILD_FILES = ("go.mod", "go.sum")
+
+
+def go_commands(
+    root: Path, filenames: Sequence[str]
+) -> tuple[list[tuple[list[str], list[str]]], list[str]]:
+    """Return (commands, unmapped source files) for staged Go paths.
+
+    Tests are chosen by name: the adjacent <stem>_test.go plus GO_RELATED_TESTS.
+    Changes to go.mod/go.sum run build and vet instead of any tests.
+    """
     base = root / "go"
     indexed = indexed_files(root, "go")
-    selected = set()
+    selected: set[Path] = set()
+    build_files: list[str] = []
+    unmapped: list[str] = []
     for filename in filenames:
         path = root / filename
         if filename not in indexed or not path.is_file():
             continue
-        if path.name.endswith("_test.go"):
+        relative = path.relative_to(base)
+        if relative.parts[0] == "e2e":
+            continue
+        if relative.as_posix() in GO_BUILD_FILES:
+            build_files.append(relative.as_posix())
+        elif path.name.endswith("_test.go"):
             selected.add(path)
         elif path.suffix == ".go":
-            candidate = path.with_name(path.stem + "_test.go")
-            if candidate.relative_to(root).as_posix() in indexed and candidate.is_file():
-                selected.add(candidate)
+            related = [path.with_name(path.stem + "_test.go")]
+            related += [path.with_name(name) for name in GO_RELATED_TESTS.get(path.name, ())]
+            found = [c for c in related if c.relative_to(root).as_posix() in indexed and c.is_file()]
+            selected.update(found)
+            if not found:
+                unmapped.append(relative.as_posix())
     packages: dict[str, tuple[list[str], set[str]]] = {}
     for path in sorted(selected):
         relative = path.relative_to(base)
@@ -77,7 +121,10 @@ def go_commands(root: Path, filenames: Sequence[str]) -> list[tuple[list[str], l
         target = "." if package == "." else "./" + package
         pattern = "^(" + "|".join(re.escape(name) for name in sorted(names)) + ")$"
         commands.append((files, ["go", "test", target, "-run", pattern, "-count=1"]))
-    return commands
+    if build_files:
+        commands.append((build_files, ["go", "build", "./..."]))
+        commands.append((build_files, ["go", "vet", "./..."]))
+    return commands, unmapped
 
 
 def run_tests(command: list[str], cwd: Path) -> int:
@@ -91,7 +138,11 @@ def main(args: Sequence[str]) -> int:
     project, *filenames = args
     try:
         if project == "go":
-            commands = go_commands(ROOT, filenames)
+            commands, unmapped = go_commands(ROOT, filenames)
+            for filename in unmapped:
+                print(f"No Go tests mapped to go/{filename}; the full Go suite runs in CI.", flush=True)
+            if unmapped and not commands:
+                return 0
         else:
             files = select_js(ROOT, project, filenames)
             if project == "js":
@@ -105,8 +156,8 @@ def main(args: Sequence[str]) -> int:
             print("Selected test files:", flush=True)
             for filename in files:
                 print(f"  {project}/{filename}", flush=True)
-            if project == "go":
-                print(f"Selected Go test names: {command[4]}", flush=True)
+            if "-run" in command:
+                print(f"Selected Go test names: {command[command.index('-run') + 1]}", flush=True)
             status = run_tests(command, ROOT / project)
             if status:
                 return status
