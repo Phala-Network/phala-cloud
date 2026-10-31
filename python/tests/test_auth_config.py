@@ -6,6 +6,27 @@ from phala_cloud import AsyncPhalaCloud, PhalaCloud, RequestError
 
 @pytest.mark.parametrize("async_client", [False, True])
 @pytest.mark.asyncio
+async def test_environment_api_key_precedes_explicit_bearer(
+    monkeypatch: pytest.MonkeyPatch, async_client: bool
+) -> None:
+    monkeypatch.setenv("PHALA_CLOUD_API_KEY", "environment-key")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["x-api-key"] == "environment-key"
+        assert "authorization" not in request.headers
+        return httpx.Response(200, json={})
+
+    transport = httpx.MockTransport(handler)
+    if async_client:
+        async with httpx.AsyncClient(transport=transport, base_url="https://example.com") as raw:
+            await AsyncPhalaCloud(http_client=raw, bearer_token="explicit-token").get("/custom")
+    else:
+        with httpx.Client(transport=transport, base_url="https://example.com") as raw:
+            PhalaCloud(http_client=raw, bearer_token="explicit-token").get("/custom")
+
+
+@pytest.mark.parametrize("async_client", [False, True])
+@pytest.mark.asyncio
 async def test_oidc_workspace_and_api_key_precedence(
     monkeypatch: pytest.MonkeyPatch, async_client: bool
 ) -> None:
