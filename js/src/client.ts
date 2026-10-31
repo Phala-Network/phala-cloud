@@ -12,6 +12,7 @@ import {
 } from "./types/client";
 import type { Prettify } from "./types/common";
 import { parseApiError, PhalaCloudError, RequestError } from "./utils/errors";
+import { fetchWithReadRetry, readRetryBudget } from "./utils/read-retry";
 export type {
   SafeResult,
   FullResponse,
@@ -91,6 +92,7 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
   private emitter: Emitter<ClientEvents>;
 
   constructor(config: ClientConfig<V> = {} as ClientConfig<V>) {
+    readRetryBudget(config.retry);
     // Initialize event emitter
     this.emitter = mitt<ClientEvents>();
     // Resolve configuration with environment variables
@@ -332,9 +334,11 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
     request: FetchRequest,
     options?: Parameters<typeof this.fetchInstance<T>>[1],
   ): Promise<T> {
-    const response = await this.fetchInstance.raw<T>(
+    const response = await fetchWithReadRetry<T, "json">(
+      this.fetchInstance,
       request,
-      options as Parameters<typeof this.fetchInstance.raw<T>>[1],
+      options ?? {},
+      this.config,
     );
     if (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400)) {
       if (!response.bodyUsed) await response.body?.cancel();
@@ -373,11 +377,16 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
   async requestFull<T = unknown>(url: string, options?: RequestOptions): Promise<FullResponse<T>> {
     try {
       const method = options?.method || "GET";
-      const response = await this.fetchInstance.raw(url, {
-        ...options,
-        method,
-        ignoreResponseError: true,
-      } as Parameters<(typeof this.fetchInstance)["raw"]>[1]);
+      const response = await fetchWithReadRetry<T>(
+        this.fetchInstance,
+        url,
+        {
+          ...options,
+          method,
+          ignoreResponseError: true,
+        } as Parameters<(typeof this.fetchInstance)["raw"]>[1],
+        this.config,
+      );
 
       if (response.type === "opaqueredirect") {
         throw new RequestError("API redirects are not allowed");

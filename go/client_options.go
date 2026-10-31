@@ -32,7 +32,8 @@ func WithHTTPClient(hc *http.Client) Option {
 	}
 }
 
-// WithTimeout sets the HTTP client timeout.
+// WithTimeout sets the timeout for each HTTP request, excluding retry waits.
+// Use the operation's context deadline to bound requests and backoff together.
 func WithTimeout(d time.Duration) Option {
 	return func(c *Client) { c.httpClient.Timeout = d }
 }
@@ -48,6 +49,7 @@ func WithHeader(key, value string) Option {
 }
 
 // WithMaxRetries sets the maximum number of retries for retryable errors.
+// The default is 30; zero disables retries. Negative values are rejected by NewClient.
 func WithMaxRetries(n int) Option {
 	return func(c *Client) { c.maxRetries = n }
 }

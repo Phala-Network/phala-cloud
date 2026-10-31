@@ -1,3 +1,13 @@
+## Unreleased
+
+### Fixed
+
+- Add read retries to synchronous and asynchronous clients with the same
+  status classification, `Retry-After`, default budget, and backoff as Go/JS.
+  Support operation deadlines and cancellation during retry waits.
+- Apply the same policy to full-response requests and preserve retry settings
+  across versioned clients.
+
 ## [](https://github.com/Phala-Network/phala-cloud/compare/python-v0.1.3...python-v) (2026-07-26)
 
 ### ⚠ BREAKING CHANGE
@@ -30,4 +40,3 @@
 
 * migrate resize endpoint across all SDKs ([56638f1](https://github.com/Phala-Network/phala-cloud/commit/56638f1c1592a1a48dab7fedf9152b60c8e52a01))
 # Changelog
-

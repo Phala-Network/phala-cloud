@@ -31,6 +31,33 @@ func (c *Client) newRequest(ctx context.Context, method, path string, body io.Re
 
 // do executes an HTTP request and returns the response. Non-2xx responses return *APIError.
 func (c *Client) do(ctx context.Context, req *http.Request) (*http.Response, error) {
+	// Only reads are automatically replayed here. Mutation endpoints retain
+	// their existing, explicit retry policies. A consumed response body or an
+	// ambiguous transport error is never replayed by this layer.
+	if (req.Method != http.MethodGet && req.Method != http.MethodHead) ||
+		(req.Body != nil && req.Body != http.NoBody && req.GetBody == nil) {
+		return c.doOnce(req)
+	}
+	var resp *http.Response
+	first := true
+	err := c.doWithRetry(ctx, func() error {
+		attempt := req.Clone(ctx)
+		if !first && req.GetBody != nil {
+			body, err := req.GetBody()
+			if err != nil {
+				return err
+			}
+			attempt.Body = body
+		}
+		first = false
+		var err error
+		resp, err = c.doOnce(attempt)
+		return err
+	})
+	return resp, err
+}
+
+func (c *Client) doOnce(req *http.Request) (*http.Response, error) {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err

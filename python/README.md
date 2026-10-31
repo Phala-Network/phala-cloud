@@ -62,8 +62,31 @@ asyncio.run(main())
 - `base_url`
 - `version` (`2025-10-28` / `2026-01-21` / `2026-05-22`)
 - `timeout`
+- `max_retries` (30 by default; zero disables automatic read retries)
+- `operation_timeout` (optional total retry budget in seconds)
 - `headers`
 - `use_cookie_auth`
+
+## Read retries
+
+Both clients allow up to 30 retries for GET and HEAD by default; set
+`max_retries=0` to disable them. Use `operation_timeout` to bound the whole
+operation, including retry waits:
+
+```python
+with create_client(timeout=30, operation_timeout=600, max_retries=30) as client:
+    info = client.get_cvm_info({"id": cvm_id})
+```
+
+`operation_timeout` and `max_retries` may also be passed to `request` or
+`request_full`. A synchronous request accepts `cancel_event=threading.Event()`;
+an asynchronous request accepts `cancel_event=asyncio.Event()` and supports native
+task cancellation. Cancellation interrupts retry waiting. An in-flight sync
+request uses HTTPX's socket timeouts and checks cancellation when it returns.
+`timeout` retains HTTPX's per-phase semantics; it is separate from retry waiting.
+
+See the [retry policy](../docs/sdk-read-retries.md) for retryable responses and
+`Retry-After` handling.
 
 ## Does the SDK follow redirects?
 

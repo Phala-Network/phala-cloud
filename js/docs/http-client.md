@@ -120,6 +120,22 @@ await client.safeDelete<T>(request, options?)
 
 ## Configuration
 
+### Read retries
+
+Buffered GET and HEAD requests allow up to 30 retries by default. Set `retry: 0`
+or `retry: false` to disable them. `timeout` applies to each attempt; use a
+signal to bound the whole operation, including retry waits:
+
+```typescript
+const client = createClient({ apiKey, timeout: 30_000 });
+const info = await client.get('/cvms/example', {
+  signal: AbortSignal.timeout(600_000),
+});
+```
+
+See the [retry policy](../../docs/sdk-read-retries.md) for retryable responses,
+`Retry-After` handling, and cancellation behavior.
+
 ### Basic Configuration
 
 ```typescript
@@ -285,4 +301,4 @@ async function updateUserProfile(userId: string, updates: Partial<User>) {
 ```
 
 
-This design philosophy, inspired by [viem's client patterns](https://viem.sh/docs/clients/public) and [Zod's safe parsing approach](https://zod.dev/basics), provides both simplicity for basic use cases and power for complex error handling scenarios. 
+This design philosophy, inspired by [viem's client patterns](https://viem.sh/docs/clients/public) and [Zod's safe parsing approach](https://zod.dev/basics), provides both simplicity for basic use cases and power for complex error handling scenarios.

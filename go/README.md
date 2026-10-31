@@ -74,6 +74,21 @@ API calls return `APIError` for 3xx responses. SSE streams report an error inste
 
 `WithHTTPClient` copies the supplied client's settings and replaces `CheckRedirect` only in the SDK's copy. Its transport and cookie jar stay shared. `WithTimeout` changes only the SDK's copy, not the supplied client. Custom transports must not follow redirects internally.
 
+## How do retries and timeouts work?
+
+GET and HEAD requests allow up to 30 retries by default; `WithMaxRetries(0)`
+disables them. `WithTimeout` bounds each HTTP exchange. Use a context deadline
+to bound the whole operation, including retry waits:
+
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+defer cancel()
+info, err := client.GetCVMInfo(ctx, cvmID)
+```
+
+See the [retry policy](../docs/sdk-read-retries.md) for retryable responses,
+`Retry-After` handling, and cancellation behavior.
+
 ## Usage Examples
 
 ### Deploy a CVM
