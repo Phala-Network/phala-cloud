@@ -3,19 +3,22 @@ package phala
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 )
 
 // Client is the Phala Cloud API client.
 type Client struct {
-	baseURL    string
-	apiKey     string
-	apiVersion string
-	httpClient *http.Client
-	userAgent  string
-	headers    map[string]string
-	maxRetries int
+	baseURL     string
+	apiKey      string
+	bearerToken string
+	workspace   string
+	apiVersion  string
+	httpClient  *http.Client
+	userAgent   string
+	headers     map[string]string
+	maxRetries  int
 }
 
 // NewClient creates a new Phala Cloud API client with the given options.
@@ -39,6 +42,12 @@ func NewClient(opts ...Option) (*Client, error) {
 	if c.apiKey == "" {
 		c.apiKey = os.Getenv("PHALA_CLOUD_API_KEY")
 	}
+	if c.bearerToken == "" {
+		c.bearerToken = os.Getenv("PHALA_OIDC_TOKEN")
+	}
+	if c.workspace == "" {
+		c.workspace = os.Getenv("PHALA_CLOUD_WORKSPACE")
+	}
 	if envURL := os.Getenv("PHALA_CLOUD_API_PREFIX"); envURL != "" {
 		// Only use env URL if no explicit option was set (check if still default).
 		if c.baseURL == DefaultBaseURL {
@@ -46,11 +55,18 @@ func NewClient(opts ...Option) (*Client, error) {
 		}
 	}
 
-	if c.apiKey == "" {
-		return nil, fmt.Errorf("phala: API key is required (set via WithAPIKey or PHALA_CLOUD_API_KEY)")
+	if c.apiKey == "" && c.bearerToken == "" {
+		return nil, fmt.Errorf("phala: API key or bearer token is required")
 	}
 
 	c.baseURL = strings.TrimRight(c.baseURL, "/")
+	baseURL, err := url.Parse(c.baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("phala: invalid base URL")
+	}
+	if baseURL.User != nil {
+		return nil, fmt.Errorf("phala: base URL must not contain userinfo")
+	}
 
 	// Never forward API credentials to a redirect target, including SSE requests.
 	// Apply after options so a custom HTTP client cannot re-enable redirects.
