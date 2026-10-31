@@ -18,10 +18,12 @@ def test_with_version_preserves_sync_client_and_injected_transport() -> None:
         clone = original.with_version("2026-01-21")
         assert isinstance(clone, PhalaCloud)
         assert hasattr(clone, "list_workspaces")
+        assert original.get("/custom") == {"ok": True}
         assert clone.get("/custom") == {"ok": True}
+        assert original.get("/custom") == {"ok": True}
         clone.close()
         assert original.get("/custom") == {"ok": True}
-        assert versions == ["2026-01-21", "2025-10-28"]
+        assert versions == ["2025-10-28", "2026-01-21", "2025-10-28", "2025-10-28"]
 
 
 @pytest.mark.asyncio
@@ -39,7 +41,9 @@ async def test_with_version_preserves_async_client_and_injected_transport() -> N
         clone = original.with_version("2026-01-21")
         assert isinstance(clone, AsyncPhalaCloud)
         assert hasattr(clone, "list_workspaces")
+        assert await original.get("/custom") == {"ok": True}
         assert await clone.get("/custom") == {"ok": True}
+        assert await original.get("/custom") == {"ok": True}
         await clone.aclose()
         assert await original.get("/custom") == {"ok": True}
-        assert versions == ["2026-01-21", "2025-10-28"]
+        assert versions == ["2025-10-28", "2026-01-21", "2025-10-28", "2025-10-28"]

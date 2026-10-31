@@ -54,16 +54,22 @@ asyncio.run(main())
 ### Environment variables
 
 - `PHALA_CLOUD_API_KEY`
+- `PHALA_OIDC_TOKEN`
+- `PHALA_CLOUD_WORKSPACE`
 - `PHALA_CLOUD_API_PREFIX` (e.g. `https://cloud-api.phala.com/api/v1`)
 
 ### Client options
 
 - `api_key`
+- `bearer_token`
+- `workspace`
 - `base_url`
 - `version` (`2025-10-28` / `2026-01-21` / `2026-05-22`)
 - `timeout`
 - `headers`
 - `use_cookie_auth`
+
+A non-empty client option takes precedence over its environment variable. If both an API key and bearer token are set, the SDK uses the API key. Cookie auth suppresses both generated authentication headers. The SDK removes surrounding whitespace from the workspace value.
 
 ## Does the SDK follow redirects?
 

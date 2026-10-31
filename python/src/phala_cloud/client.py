@@ -65,6 +65,8 @@ class _BaseConfig:
         self,
         *,
         api_key: str | None,
+        bearer_token: str | None,
+        workspace: str | None,
         base_url: str,
         version: ApiVersion,
         timeout: float,
@@ -72,6 +74,8 @@ class _BaseConfig:
         headers: Mapping[str, str] | None,
     ) -> None:
         self.api_key = api_key
+        self.bearer_token = bearer_token
+        self.workspace = workspace
         self.base_url = base_url
         self.version = version
         self.timeout = timeout
@@ -87,6 +91,10 @@ class _BaseConfig:
         result.update(self.headers)
         if not self.use_cookie_auth and self.api_key:
             result["X-API-Key"] = self.api_key
+        elif not self.use_cookie_auth and self.bearer_token:
+            result["Authorization"] = f"Bearer {self.bearer_token}"
+        if self.workspace and self.workspace.strip():
+            result["X-Phala-Workspace"] = self.workspace.strip()
         return result
 
 
@@ -105,6 +113,8 @@ class AsyncPhalaCloud:
         timeout: float = DEFAULT_TIMEOUT,
         use_cookie_auth: bool = False,
         headers: Mapping[str, str] | None = None,
+        bearer_token: str | None = None,
+        workspace: str | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
         resolved_version = version if version in SUPPORTED_API_VERSIONS else DEFAULT_API_VERSION
@@ -113,6 +123,8 @@ class AsyncPhalaCloud:
 
         self.config = _BaseConfig(
             api_key=resolved_key,
+            bearer_token=bearer_token or os.getenv("PHALA_OIDC_TOKEN"),
+            workspace=workspace or os.getenv("PHALA_CLOUD_WORKSPACE"),
             base_url=resolved_base_url,
             version=resolved_version,
             timeout=timeout,
@@ -140,6 +152,8 @@ class AsyncPhalaCloud:
     def with_version(self, version: ApiVersion) -> AsyncPhalaCloud:
         return type(self)(
             api_key=self.config.api_key,
+            bearer_token=self.config.bearer_token,
+            workspace=self.config.workspace,
             base_url=self.config.base_url,
             version=version,
             timeout=self.config.timeout,
@@ -404,6 +418,8 @@ class PhalaCloud:
         timeout: float = DEFAULT_TIMEOUT,
         use_cookie_auth: bool = False,
         headers: Mapping[str, str] | None = None,
+        bearer_token: str | None = None,
+        workspace: str | None = None,
         http_client: httpx.Client | None = None,
     ) -> None:
         resolved_version = version if version in SUPPORTED_API_VERSIONS else DEFAULT_API_VERSION
@@ -412,6 +428,8 @@ class PhalaCloud:
 
         self.config = _BaseConfig(
             api_key=resolved_key,
+            bearer_token=bearer_token or os.getenv("PHALA_OIDC_TOKEN"),
+            workspace=workspace or os.getenv("PHALA_CLOUD_WORKSPACE"),
             base_url=resolved_base_url,
             version=resolved_version,
             timeout=timeout,
@@ -439,6 +457,8 @@ class PhalaCloud:
     def with_version(self, version: ApiVersion) -> PhalaCloud:
         return type(self)(
             api_key=self.config.api_key,
+            bearer_token=self.config.bearer_token,
+            workspace=self.config.workspace,
             base_url=self.config.base_url,
             version=version,
             timeout=self.config.timeout,
