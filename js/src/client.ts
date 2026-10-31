@@ -29,6 +29,40 @@ export const SUPPORTED_API_VERSIONS = [
 export const DEFAULT_API_VERSION: DefaultApiVersion = "2026-06-23";
 const logger = debug("phala::api-client");
 
+type BoundActions<A> = {
+  [K in keyof A]: A[K] extends (client: never, ...args: infer P) => infer R
+    ? (...args: P) => R
+    : never;
+};
+
+// An extension can depend on the original version; its result cannot be
+// re-inferred for a cloned client. Keep parameters but widen the result.
+type ReboundActions<A> = {
+  [K in keyof A]: A[K] extends (...args: infer P) => unknown ? (...args: P) => unknown : unknown;
+};
+
+type VersionedExtension<C, V extends ApiVersion, NewV extends ApiVersion> = (C extends Pick<
+  import("./create-client").Client<V>,
+  "getAppInfo"
+>
+  ? import("./create-client").Client<NewV>
+  : Client<NewV>) &
+  ReboundActions<Omit<C, keyof import("./create-client").Client<V>>>;
+
+type ExtendedClient<C, V extends ApiVersion, A> = Omit<C, "withVersion" | "extend"> &
+  BoundActions<A> & {
+    extend<B extends Record<string, unknown>>(
+      actions: B | ((client: Client<ApiVersion>) => B),
+    ): ExtendedClient<Omit<C, "withVersion" | "extend"> & BoundActions<A>, V, B>;
+    withVersion<NewV extends ApiVersion>(
+      version: NewV,
+    ): ExtendedClient<
+      VersionedExtension<Omit<C, "withVersion" | "extend">, V, NewV>,
+      NewV,
+      ReboundActions<A>
+    >;
+  };
+
 /**
  * Client event types
  */
@@ -130,30 +164,20 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
       ...fetchOptions
     } = this.config;
 
-    const requestHeaders: Record<string, string> = {
-      "X-Phala-Version": version,
-      "Content-Type": "application/json",
-    };
-
-    // Merge additional headers if provided
-    if (headers && typeof headers === "object") {
-      Object.entries(headers).forEach(([key, value]) => {
-        if (typeof value === "string") {
-          requestHeaders[key] = value;
-        }
-      });
-    }
+    const requestHeaders = new Headers({ "Content-Type": "application/json" });
+    new Headers(headers).forEach((value, key) => requestHeaders.set(key, value));
+    requestHeaders.set("X-Phala-Version", version);
 
     // Only add API key / bearer headers when not using cookie auth.
     // Prefer X-API-Key when both are present so existing API-key flows stay unchanged.
     if (!useCookieAuth && apiKey) {
-      requestHeaders["X-API-Key"] = apiKey;
+      requestHeaders.set("X-API-Key", apiKey);
     } else if (!useCookieAuth && bearerToken) {
-      requestHeaders["Authorization"] = `Bearer ${bearerToken}`;
+      requestHeaders.set("Authorization", `Bearer ${bearerToken}`);
     }
 
     if (workspace && typeof workspace === "string" && workspace.trim().length > 0) {
-      requestHeaders["X-Phala-Workspace"] = workspace.trim();
+      requestHeaders.set("X-Phala-Workspace", workspace.trim());
     }
 
     const defaultOptions: FetchOptions = {
@@ -184,13 +208,9 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
 
           // Convert headers to a plain object for formatting
           const headerObj: Record<string, string> = {};
-          if (options.headers && typeof options.headers === "object") {
-            Object.entries(options.headers).forEach(([key, value]) => {
-              if (typeof value === "string") {
-                headerObj[key] = value;
-              }
-            });
-          }
+          new Headers(options.headers).forEach((value, key) => {
+            headerObj[key] = value;
+          });
 
           const curlCommand = [
             `> curl -X ${method} "${fullUrl}"`,
@@ -653,7 +673,12 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
   }
 
   /**
-   * Extend client with additional actions
+   * Extend client with additional actions.
+   *
+   * A factory receives a client typed with the `ApiVersion` union. When
+   * `withVersion` creates a clone, it rebinds the actions and reruns the factory.
+   * Extension method return types become `unknown` on the clone because they
+   * may depend on the original version. Narrow the results before using them.
    *
    * @example
    * ```typescript
@@ -665,25 +690,11 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
    * ```
    */
   extend<TActions extends Record<string, unknown>>(
-    actions: TActions | ((client: Client<V>) => TActions),
-  ): Prettify<
-    this & {
-      [K in keyof TActions]: TActions[K] extends (client: Client<V>) => infer R
-        ? () => R
-        : TActions[K] extends (client: Client<V>, ...args: infer P) => infer R
-          ? (...args: P) => R
-          : never;
-    }
-  > {
+    actions: TActions | ((client: Client<ApiVersion>) => TActions),
+  ): Prettify<ExtendedClient<this, V, TActions>> {
     const actionsObj = (typeof actions === "function" ? actions(this) : actions) as TActions;
 
-    const extended = Object.create(this) as this & {
-      [K in keyof TActions]: TActions[K] extends (client: Client<V>) => infer R
-        ? () => R
-        : TActions[K] extends (client: Client<V>, ...args: infer P) => infer R
-          ? (...args: P) => R
-          : never;
-    };
+    const extended = Object.create(this) as ExtendedClient<this, V, TActions>;
 
     // Bind all actions to this client
     for (const [key, action] of Object.entries(actionsObj)) {
@@ -692,7 +703,12 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
       }
     }
 
-    return extended;
+    Object.defineProperty(extended, "withVersion", {
+      value: (version: ApiVersion) => this.withVersion(version).extend(actions),
+      configurable: true,
+      writable: true,
+    });
+    return extended as Prettify<ExtendedClient<this, V, TActions>>;
   }
 }
 
@@ -737,6 +753,9 @@ export function createClient(
 export function createClient(
   config: ClientConfig<"2025-10-28"> & { version: "2025-10-28" },
 ): Client<"2025-10-28">;
+export function createClient<V extends ApiVersion>(
+  config: ClientConfig<V> & { version: V },
+): Client<V>;
 export function createClient(config?: ClientConfig): Client<DefaultApiVersion>;
 export function createClient<V extends ApiVersion>(
   config: ClientConfig<V> = {} as ClientConfig<V>,
