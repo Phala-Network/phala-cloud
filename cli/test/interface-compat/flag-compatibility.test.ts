@@ -39,6 +39,13 @@ async function testCommandFlags(
 			continue;
 		}
 
+		if (flag.long === "--node-id" || flag.long === "--teepod-id") {
+			// Numeric node/teepod IDs were replaced by physical node names.
+			// deploy --node-id and cvms replicate --teepod-id are gone; --node is the replacement.
+			expect(hasFlag(helpText, "--node")).toBe(true);
+			continue;
+		}
+
 		expect(hasFlag(helpText, flag.long)).toBe(true);
 		if (flag.short) {
 			expect(hasFlag(helpText, flag.short)).toBe(true);
@@ -127,6 +134,16 @@ describe("CLI Interface Compatibility - Flag Support (v1.0.40 baseline)", () => 
 
 			expect(hasFlag(helpText, "--compose")).toBe(true);
 			expect(hasFlag(helpText, "-c")).toBe(true);
+		});
+
+		test("deploy and cvms replicate select nodes with --node", async () => {
+			for (const cmd of ["deploy", "cvms replicate"]) {
+				const helpText = await getHelpText(cmd);
+
+				expect(hasFlag(helpText, "--node")).toBe(true);
+				expect(helpText.includes("--node-id")).toBe(false);
+				expect(helpText.includes("--teepod-id")).toBe(false);
+			}
 		});
 
 		test("cvms resize supports --json flag (new in v1.1.0)", async () => {
