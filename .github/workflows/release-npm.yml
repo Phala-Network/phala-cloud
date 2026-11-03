@@ -42,7 +42,7 @@ permissions:
   id-token: write  # Required for npm Trusted Publishers (OIDC)
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '24'
 
 jobs:
   parse:
@@ -69,7 +69,7 @@ jobs:
     steps:
       - name: Parse release command
         id: parse
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -291,7 +291,7 @@ jobs:
           esac
 
       - name: Checkout source
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ env.SOURCE_REF }}
@@ -302,10 +302,11 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Setup Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
-          registry-url: https://registry.npmjs.org/
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
@@ -451,8 +452,9 @@ jobs:
 
       - name: Upgrade npm for trusted publishing
         run: |
-          # Ensure npm 11.17.0 or later for OIDC trusted publishing support
-          npm install -g npm@11.17.0 --ignore-scripts
+          # Trusted publishing requires Node >= 22.14 and npm >= 11.5.1.
+          npm install -g npm@11.21.1 --ignore-scripts
+          node --version
           npm --version
 
       - name: Verify OIDC token and npm authentication
@@ -489,7 +491,7 @@ jobs:
         working-directory: ${{ env.PACKAGE }}
         run: |
           set -o pipefail
-          echo "🚀 Publishing @phala/cloud..."
+          echo "🚀 Publishing ${{ steps.pkgmeta.outputs.npm_name }}..."
           echo ""
           echo "Package info:"
           cat package.json | grep -E '"name"|"version"'
@@ -498,7 +500,7 @@ jobs:
           echo ""
 
           # Publish using OIDC authentication (npm Trusted Publishers)
-          # Requires npm >= 11.5.1 and id-token: write permission
+          # Requires Node >= 22.14, npm >= 11.5.1, and id-token: write permission
           # Provenance attestations are generated automatically
           npm publish --access public --tag "$NPM_TAG" --verbose 2>&1 | tee publish.log || {
             echo ""
@@ -514,12 +516,12 @@ jobs:
             echo ""
             echo "🔍 Checking Trusted Publisher configuration..."
             echo "   Expected configuration on npmjs.com:"
-            echo "   - Package: @phala/cloud"
+            echo "   - Package: ${{ steps.pkgmeta.outputs.npm_name }}"
             echo "   - Provider: GitHub Actions"
             echo "   - Owner: Phala-Network"
             echo "   - Repository: phala-cloud"
             echo "   - Workflow: release-npm.yml"
-            echo "   - Environment: (empty)"
+            echo "   - Environment: release"
             echo ""
             echo "   Actual workflow context:"
             echo "   - Repository: ${{ github.repository }}"
@@ -599,7 +601,7 @@ jobs:
 
       - name: Comment success
         if: ${{ success() && env.ISSUE_NUMBER != '' }}
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           FILE_LIST: ${{ steps.pack_info.outputs.file_list }}
         with:
@@ -652,7 +654,7 @@ jobs:
 
       - name: Comment failure
         if: ${{ failure() && env.ISSUE_NUMBER != '' }}
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
