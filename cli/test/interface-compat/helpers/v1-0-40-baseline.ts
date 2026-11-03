@@ -53,7 +53,7 @@ export const v1_0_40_interface = {
 				memory: { long: "--memory", required: false },
 				diskSize: { long: "--disk-size", required: false },
 				image: { long: "--image", required: false },
-				nodeId: { long: "--node-id", required: false },
+				nodeId: { long: "--node-id", required: false }, // replaced by --node (physical name)
 				uuid: { long: "--uuid", required: false },
 				json: { long: "--json", required: false },
 				noJson: { long: "--no-json", required: false }, // v1.0.40 HAD THIS
@@ -173,7 +173,7 @@ export const v1_0_40_interface = {
 			name: "cvms replicate",
 			hasHelp: true,
 			flags: {
-				teepodId: { long: "--teepod-id", required: false },
+				teepodId: { long: "--teepod-id", required: false }, // replaced by --node (physical name)
 				envFile: { long: "--env-file", short: "-e", required: false },
 			},
 		} as CommandSpec,
