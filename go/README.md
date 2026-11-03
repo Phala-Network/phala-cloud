@@ -344,6 +344,15 @@ go/
 PHALA_CLOUD_E2E_API_KEY=your-key go test -tags e2e -v -timeout 30m ./e2e/
 ```
 
+## How do I upgrade to these SDK changes?
+
+- Remove `EncryptedEnv` from `ProvisionComposeUpdateRequest`. Send encrypted environment variables through `CommitComposeUpdateRequest`.
+- `GetComposeHash` now normalizes the compose by default. Hashes computed before the upgrade can differ from new ones. Pass `false` as the second argument to keep the old unnormalized value.
+- `NewClient` now returns an error for a negative `WithMaxRetries`, for a base URL that contains userinfo, and when neither an API key nor a bearer token is set.
+- `WatchCVMState` reconnects when the stream ends without a `complete` event. `MaxRetries` defaults to nil, which means unlimited reconnects, so pass a cancellable context or set `MaxRetries`.
+- `[]string` request fields now use `omitzero` instead of `omitempty`. A non-nil empty slice is sent as `[]`; only a nil slice is omitted.
+- `ConfirmCVMPatch` now sends `X-Compose-Hash` and `X-Transaction-Hash` headers with an empty JSON object body, and the response includes `correlation_id`.
+
 ## License
 
 Apache-2.0

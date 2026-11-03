@@ -65,6 +65,8 @@ class _BaseConfig:
         self,
         *,
         api_key: str | None,
+        bearer_token: str | None,
+        workspace: str | None,
         base_url: str,
         version: ApiVersion,
         timeout: float,
@@ -72,6 +74,8 @@ class _BaseConfig:
         headers: Mapping[str, str] | None,
     ) -> None:
         self.api_key = api_key
+        self.bearer_token = bearer_token
+        self.workspace = workspace
         self.base_url = base_url
         self.version = version
         self.timeout = timeout
@@ -87,7 +91,16 @@ class _BaseConfig:
         result.update(self.headers)
         if not self.use_cookie_auth and self.api_key:
             result["X-API-Key"] = self.api_key
+        elif not self.use_cookie_auth and self.bearer_token:
+            result["Authorization"] = f"Bearer {self.bearer_token}"
+        if self.workspace and self.workspace.strip():
+            result["X-Phala-Workspace"] = self.workspace.strip()
         return result
+
+    def merged_headers(self, additional: Mapping[str, str] | None = None) -> httpx.Headers:
+        headers = httpx.Headers(self.request_headers)
+        headers.update(additional)
+        return headers
 
 
 class AsyncPhalaCloud:
@@ -105,6 +118,8 @@ class AsyncPhalaCloud:
         timeout: float = DEFAULT_TIMEOUT,
         use_cookie_auth: bool = False,
         headers: Mapping[str, str] | None = None,
+        bearer_token: str | None = None,
+        workspace: str | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
         resolved_version = version if version in SUPPORTED_API_VERSIONS else DEFAULT_API_VERSION
@@ -113,6 +128,8 @@ class AsyncPhalaCloud:
 
         self.config = _BaseConfig(
             api_key=resolved_key,
+            bearer_token=bearer_token or os.getenv("PHALA_OIDC_TOKEN"),
+            workspace=workspace or os.getenv("PHALA_CLOUD_WORKSPACE"),
             base_url=resolved_base_url,
             version=resolved_version,
             timeout=timeout,
@@ -138,17 +155,20 @@ class AsyncPhalaCloud:
             await self._client.aclose()
 
     def with_version(self, version: ApiVersion) -> AsyncPhalaCloud:
-        return AsyncPhalaCloud(
+        return type(self)(
             api_key=self.config.api_key,
+            bearer_token=self.config.bearer_token,
+            workspace=self.config.workspace,
             base_url=self.config.base_url,
             version=version,
             timeout=self.config.timeout,
             use_cookie_auth=self.config.use_cookie_auth,
             headers=self.config.headers,
+            http_client=None if self._owns_client else self._client,
         )
 
     async def request(self, method: str, path: str, **kwargs: Any) -> Any:
-        # Enforce this per request, including caller-supplied HTTP clients.
+        kwargs["headers"] = self.config.merged_headers(kwargs.pop("headers", None))
         kwargs["follow_redirects"] = False
         try:
             response = await self._client.request(method.upper(), path, **kwargs)
@@ -157,6 +177,7 @@ class AsyncPhalaCloud:
         return self._decode_or_raise(response)
 
     async def request_full(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        kwargs["headers"] = self.config.merged_headers(kwargs.pop("headers", None))
         kwargs["follow_redirects"] = False
         try:
             response = await self._client.request(method.upper(), path, **kwargs)
@@ -397,6 +418,8 @@ class PhalaCloud:
         timeout: float = DEFAULT_TIMEOUT,
         use_cookie_auth: bool = False,
         headers: Mapping[str, str] | None = None,
+        bearer_token: str | None = None,
+        workspace: str | None = None,
         http_client: httpx.Client | None = None,
     ) -> None:
         resolved_version = version if version in SUPPORTED_API_VERSIONS else DEFAULT_API_VERSION
@@ -405,6 +428,8 @@ class PhalaCloud:
 
         self.config = _BaseConfig(
             api_key=resolved_key,
+            bearer_token=bearer_token or os.getenv("PHALA_OIDC_TOKEN"),
+            workspace=workspace or os.getenv("PHALA_CLOUD_WORKSPACE"),
             base_url=resolved_base_url,
             version=resolved_version,
             timeout=timeout,
@@ -430,17 +455,20 @@ class PhalaCloud:
             self._client.close()
 
     def with_version(self, version: ApiVersion) -> PhalaCloud:
-        return PhalaCloud(
+        return type(self)(
             api_key=self.config.api_key,
+            bearer_token=self.config.bearer_token,
+            workspace=self.config.workspace,
             base_url=self.config.base_url,
             version=version,
             timeout=self.config.timeout,
             use_cookie_auth=self.config.use_cookie_auth,
             headers=self.config.headers,
+            http_client=None if self._owns_client else self._client,
         )
 
     def request(self, method: str, path: str, **kwargs: Any) -> Any:
-        # Enforce this per request, including caller-supplied HTTP clients.
+        kwargs["headers"] = self.config.merged_headers(kwargs.pop("headers", None))
         kwargs["follow_redirects"] = False
         try:
             response = self._client.request(method.upper(), path, **kwargs)
@@ -449,6 +477,7 @@ class PhalaCloud:
         return self._decode_or_raise(response)
 
     def request_full(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        kwargs["headers"] = self.config.merged_headers(kwargs.pop("headers", None))
         kwargs["follow_redirects"] = False
         try:
             response = self._client.request(method.upper(), path, **kwargs)

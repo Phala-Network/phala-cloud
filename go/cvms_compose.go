@@ -31,8 +31,7 @@ type ProvisionComposeUpdateRequest struct {
 	DockerComposeFile string   `json:"docker_compose_file"`
 	GatewayEnabled    *bool    `json:"gateway_enabled,omitempty"`
 	PreLaunchScript   *string  `json:"pre_launch_script,omitempty"`
-	EncryptedEnv      *string  `json:"encrypted_env,omitempty"`
-	AllowedEnvs       []string `json:"allowed_envs,omitempty"`
+	AllowedEnvs       []string `json:"allowed_envs,omitzero"`
 	PublicLogs        *bool    `json:"public_logs,omitempty"`
 	PublicSysinfo     *bool    `json:"public_sysinfo,omitempty"`
 	PublicTcbinfo     *bool    `json:"public_tcbinfo,omitempty"`
@@ -56,7 +55,7 @@ func (c *Client) ProvisionCVMComposeFileUpdate(ctx context.Context, cvmID string
 type CommitComposeUpdateRequest struct {
 	ComposeHash   string   `json:"compose_hash"`
 	EncryptedEnv  *string  `json:"encrypted_env,omitempty"`
-	EnvKeys       []string `json:"env_keys,omitempty"`
+	EnvKeys       []string `json:"env_keys,omitzero"`
 	UpdateEnvVars *bool    `json:"update_env_vars,omitempty"`
 }
 

@@ -17,6 +17,7 @@ func (c *Client) GetAppList(ctx context.Context) (*GetAppListResponse, error) {
 
 // GetAppListV20260121 returns the app list using the v20260121 response schema.
 func (c *Client) GetAppListV20260121(ctx context.Context) (*GetAppListResponseV20260121, error) {
+	c = c.withVersion("2026-01-21")
 	var result GetAppListResponseV20260121
 	if err := c.doJSON(ctx, "GET", "/apps", nil, &result); err != nil {
 		return nil, err
@@ -35,6 +36,7 @@ func (c *Client) GetAppInfo(ctx context.Context, appID string) (*AppInfo, error)
 
 // GetAppInfoV20260121 returns app information using the v20260121 response schema.
 func (c *Client) GetAppInfoV20260121(ctx context.Context, appID string) (*AppInfoV20260121, error) {
+	c = c.withVersion("2026-01-21")
 	var result AppInfoV20260121
 	if err := c.doJSON(ctx, "GET", "/apps/"+appID, nil, &result); err != nil {
 		return nil, err
@@ -53,6 +55,7 @@ func (c *Client) GetAppCVMs(ctx context.Context, appID string) ([]CVMInfoV202605
 
 // GetAppCVMsV20260121 returns app CVMs using the v20260121 response schema.
 func (c *Client) GetAppCVMsV20260121(ctx context.Context, appID string) ([]CVMInfoV20260121, error) {
+	c = c.withVersion("2026-01-21")
 	var result []CVMInfoV20260121
 	if err := c.doJSON(ctx, "GET", "/apps/"+appID+"/cvms", nil, &result); err != nil {
 		return nil, err
@@ -71,6 +74,7 @@ func (c *Client) CreateAppInstance(ctx context.Context, appID string, req *Creat
 
 // CreateAppInstanceV20260121 creates an app instance using the v20260121 response schema.
 func (c *Client) CreateAppInstanceV20260121(ctx context.Context, appID string, req *CreateAppInstanceRequest) (*CVMInfoV20260121, error) {
+	c = c.withVersion("2026-01-21")
 	var result CVMInfoV20260121
 	if err := c.doJSON(ctx, "POST", "/apps/"+appID+"/instances", req, &result); err != nil {
 		return nil, err
@@ -92,6 +96,7 @@ func (c *Client) ReplicateAppCVM(ctx context.Context, appID, vmUUID string, opts
 
 // ReplicateAppCVMV20260121 creates an app CVM replica using the pre-hashid response schema.
 func (c *Client) ReplicateAppCVMV20260121(ctx context.Context, appID, vmUUID string, opts *ReplicateCVMOptions) (*CVMActionResponseV20260121, error) {
+	c = c.withVersion("2026-01-21")
 	var result CVMActionResponseV20260121
 	path := "/apps/" + appID + "/cvms/" + vmUUID + "/replicas"
 	if err := c.doJSON(ctx, "POST", path, opts, &result); err != nil {
@@ -201,6 +206,7 @@ func (c *Client) GetAppDeviceAllowlist(ctx context.Context, appID string) (*Devi
 
 // GetAppDeviceAllowlistV20260121 returns the device allowlist using the pre-hashid schema.
 func (c *Client) GetAppDeviceAllowlistV20260121(ctx context.Context, appID string) (*DeviceAllowlistResponseV20260121, error) {
+	c = c.withVersion("2026-01-21")
 	var result DeviceAllowlistResponseV20260121
 	if err := c.doJSON(ctx, "GET", "/apps/"+appID+"/device-allowlist", nil, &result); err != nil {
 		return nil, err
@@ -228,6 +234,7 @@ func (c *Client) CheckAppIsAllowed(ctx context.Context, appID string, req *Check
 
 // CheckAppIsAllowedV20260121 checks app allowance using the pre-hashid response schema.
 func (c *Client) CheckAppIsAllowedV20260121(ctx context.Context, appID string, req *CheckAppIsAllowedRequest) (*IsAllowedResultV20260121, error) {
+	c = c.withVersion("2026-01-21")
 	var result IsAllowedResultV20260121
 	if err := c.doJSON(ctx, "POST", fmt.Sprintf("/apps/%s/is-allowed", appID), req, &result); err != nil {
 		return nil, err
@@ -246,6 +253,7 @@ func (c *Client) CheckAppCvmsIsAllowed(ctx context.Context, appID string) (*AppC
 
 // CheckAppCvmsIsAllowedV20260121 batch checks allowance using the pre-hashid response schema.
 func (c *Client) CheckAppCvmsIsAllowedV20260121(ctx context.Context, appID string) (*AppCvmsBatchIsAllowedResponseV20260121, error) {
+	c = c.withVersion("2026-01-21")
 	var result AppCvmsBatchIsAllowedResponseV20260121
 	if err := c.doJSON(ctx, "POST", fmt.Sprintf("/apps/%s/cvms/is-allowed", appID), struct{}{}, &result); err != nil {
 		return nil, err

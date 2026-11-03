@@ -119,6 +119,11 @@ The SDK enforces `redirect: "manual"` at the fetch boundary, even if configurati
 - `client.safePatch<T>(request, body?, options?): Promise<SafeResult<T>>`
 - `client.safeDelete<T>(request, options?): Promise<SafeResult<T>>`
 
+## How do I upgrade to these SDK changes?
+
+- `watchCvmState` with `maxRetries: N` now makes up to N+1 attempts, and `MaxRetriesExceededError.attempts` is N+1.
+- The `extend()` factory now receives a `Client<ApiVersion>`. Its result type is derived from the client without `withVersion` and `extend`, which are re-typed on the result. Extension methods on a client returned by `withVersion` return `unknown`; narrow the result before using it.
+
 ## License
 
 Apache-2.0

@@ -18,8 +18,8 @@ var composeOmitWhenEmpty = []string{"default_gateway_domain", "key_provider_id",
 
 // GetComposeHash computes the compose hash the way the Phala Cloud backend does.
 //
-// When normalize is true the compose is normalized first (see
-// GetComposeHashFromMap). AppCompose only models a subset of the app-compose
+// The compose is normalized by default (see GetComposeHashFromMap).
+// Pass false to hash the unnormalized compose. AppCompose only models a subset of the app-compose
 // fields, so fields such as port_policy, requirements or init_script cannot
 // be hashed through it; use GetComposeHashFromMap for those.
 func GetComposeHash(appCompose AppCompose, normalize ...bool) (string, error) {
@@ -27,7 +27,7 @@ func GetComposeHash(appCompose AppCompose, normalize ...bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if len(normalize) > 0 && normalize[0] {
+	if len(normalize) == 0 || normalize[0] {
 		normalizeComposeMap(compose)
 	}
 	return hashComposeMap(compose)

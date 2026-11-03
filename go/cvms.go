@@ -41,6 +41,7 @@ func (c *Client) CommitCVMProvision(ctx context.Context, req *CommitCVMProvision
 
 // CommitCVMProvisionV20260121 commits a provisioned CVM using the pre-hashid response schema.
 func (c *Client) CommitCVMProvisionV20260121(ctx context.Context, req *CommitCVMProvisionRequest) (*CommitCVMProvisionResponseV20260121, error) {
+	c = c.withVersion("2026-01-21")
 	var result CommitCVMProvisionResponseV20260121
 	if err := c.doJSON(ctx, "POST", "/cvms", req, &result); err != nil {
 		return nil, err
@@ -60,6 +61,7 @@ func (c *Client) GetCVMList(ctx context.Context, opts *GetCVMListOptions) (*Pagi
 
 // GetCVMListV20260121 returns a paginated list of CVMs using the v20260121 response schema.
 func (c *Client) GetCVMListV20260121(ctx context.Context, opts *GetCVMListOptions) (*PaginatedCVMInfosV20260121, error) {
+	c = c.withVersion("2026-01-21")
 	path := buildCVMListPath(opts)
 	var result PaginatedCVMInfosV20260121
 	if err := c.doJSON(ctx, "GET", path, nil, &result); err != nil {
@@ -103,6 +105,7 @@ func (c *Client) GetCVMInfo(ctx context.Context, cvmID string) (*CVMInfo, error)
 
 // GetCVMInfoV20260121 returns CVM information using the v20260121 response schema.
 func (c *Client) GetCVMInfoV20260121(ctx context.Context, cvmID string) (*CVMInfoV20260121, error) {
+	c = c.withVersion("2026-01-21")
 	var result CVMInfoV20260121
 	if err := c.doJSON(ctx, "GET", cvmPath(cvmID), nil, &result); err != nil {
 		return nil, err
@@ -187,6 +190,7 @@ func (c *Client) StartCVM(ctx context.Context, cvmID string) (*CVMActionResponse
 
 // StartCVMV20260121 starts a CVM using the pre-hashid response schema.
 func (c *Client) StartCVMV20260121(ctx context.Context, cvmID string) (*CVMActionResponseV20260121, error) {
+	c = c.withVersion("2026-01-21")
 	var result CVMActionResponseV20260121
 	err := c.doWithRetry(ctx, func() error {
 		return c.doJSON(ctx, "POST", cvmPath(cvmID, "start"), nil, &result)
@@ -265,6 +269,7 @@ func (c *Client) StopCVM(ctx context.Context, cvmID string) (*CVMActionResponse,
 
 // StopCVMV20260121 stops a CVM using the pre-hashid response schema.
 func (c *Client) StopCVMV20260121(ctx context.Context, cvmID string) (*CVMActionResponseV20260121, error) {
+	c = c.withVersion("2026-01-21")
 	var result CVMActionResponseV20260121
 	err := c.doWithRetry(ctx, func() error {
 		return c.doJSON(ctx, "POST", cvmPath(cvmID, "stop"), nil, &result)
@@ -289,6 +294,7 @@ func (c *Client) ShutdownCVM(ctx context.Context, cvmID string) (*CVMActionRespo
 
 // ShutdownCVMV20260121 gracefully shuts down a CVM using the pre-hashid response schema.
 func (c *Client) ShutdownCVMV20260121(ctx context.Context, cvmID string) (*CVMActionResponseV20260121, error) {
+	c = c.withVersion("2026-01-21")
 	var result CVMActionResponseV20260121
 	err := c.doWithRetry(ctx, func() error {
 		return c.doJSON(ctx, "POST", cvmPath(cvmID, "shutdown"), nil, &result)
@@ -322,6 +328,7 @@ func (c *Client) RestartCVM(ctx context.Context, cvmID string, opts *RestartCVMO
 
 // RestartCVMV20260121 restarts a CVM using the pre-hashid response schema.
 func (c *Client) RestartCVMV20260121(ctx context.Context, cvmID string, opts *RestartCVMOptions) (*CVMActionResponseV20260121, error) {
+	c = c.withVersion("2026-01-21")
 	body := map[string]bool{"force": false}
 	if opts != nil {
 		body["force"] = opts.Force
@@ -354,8 +361,18 @@ func (c *Client) ReplicateCVM(ctx context.Context, cvmID string, opts *Replicate
 
 // ReplicateCVMV20260121 replicates a CVM using the pre-hashid response schema.
 func (c *Client) ReplicateCVMV20260121(ctx context.Context, cvmID string, opts *ReplicateCVMOptions) (*CVMActionResponseV20260121, error) {
+	c = c.withVersion("2026-01-21")
 	var result CVMActionResponseV20260121
 	if err := c.doJSON(ctx, "POST", cvmPath(cvmID, "replicas"), opts, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// CommitCVMUpdate completes a prepared CVM update with its one-time token.
+func (c *Client) CommitCVMUpdate(ctx context.Context, cvmID string, req *CommitCVMUpdateRequest) (*CommitCVMUpdateResponse, error) {
+	var result CommitCVMUpdateResponse
+	if err := c.doJSON(ctx, "POST", cvmPath(cvmID, "commit-update"), req, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -376,7 +393,11 @@ func (c *Client) PatchCVM(ctx context.Context, cvmID string, req *PatchCVMReques
 // ConfirmCVMPatch confirms a CVM patch with on-chain transaction hash.
 func (c *Client) ConfirmCVMPatch(ctx context.Context, cvmID string, req *ConfirmCVMPatchRequest) (*CVMActionResponse, error) {
 	var result CVMActionResponse
-	if err := c.doJSON(ctx, "PATCH", cvmPath(cvmID), req, &result); err != nil {
+	if req == nil {
+		return nil, fmt.Errorf("phala: confirm patch request is required")
+	}
+	headers := map[string]string{"X-Compose-Hash": req.ComposeHash, "X-Transaction-Hash": req.TransactionHash}
+	if err := c.doText(ctx, "PATCH", cvmPath(cvmID), "application/json", "{}", headers, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -385,7 +406,11 @@ func (c *Client) ConfirmCVMPatch(ctx context.Context, cvmID string, req *Confirm
 // ConfirmCVMPatchV20260121 confirms a CVM patch using the pre-hashid response schema.
 func (c *Client) ConfirmCVMPatchV20260121(ctx context.Context, cvmID string, req *ConfirmCVMPatchRequest) (*CVMActionResponseV20260121, error) {
 	var result CVMActionResponseV20260121
-	if err := c.doJSON(ctx, "PATCH", cvmPath(cvmID), req, &result); err != nil {
+	if req == nil {
+		return nil, fmt.Errorf("phala: confirm patch request is required")
+	}
+	headers := map[string]string{"X-Compose-Hash": req.ComposeHash, "X-Transaction-Hash": req.TransactionHash, "X-Phala-Version": "2026-01-21"}
+	if err := c.doText(ctx, "PATCH", cvmPath(cvmID), "application/json", "{}", headers, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -402,6 +427,7 @@ func (c *Client) CheckCvmIsAllowed(ctx context.Context, cvmID string, req *Check
 
 // CheckCvmIsAllowedV20260121 checks CVM allowance using the pre-hashid response schema.
 func (c *Client) CheckCvmIsAllowedV20260121(ctx context.Context, cvmID string, req *CheckCvmIsAllowedRequest) (*IsAllowedResultV20260121, error) {
+	c = c.withVersion("2026-01-21")
 	var result IsAllowedResultV20260121
 	if err := c.doJSON(ctx, "POST", cvmPath(cvmID, "is-allowed"), req, &result); err != nil {
 		return nil, err

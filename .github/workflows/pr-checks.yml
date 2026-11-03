@@ -6,11 +6,13 @@ on:
     paths:
       - 'js/**'
       - 'python/**'
+      - 'go/**'
       - '.github/workflows/pr-checks.yml'
   push:
     paths:
       - 'js/**'
       - 'python/**'
+      - 'go/**'
       - '.github/workflows/pr-checks.yml'
 
 jobs:
@@ -167,6 +169,36 @@ jobs:
       - name: Run Python tests (exclude e2e)
         working-directory: python
         run: uv run pytest -q -m "not e2e"
+
+  go-sdk-checks:
+    name: Go SDK Checks (non-e2e)
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
+
+      - name: Run format check
+        working-directory: go
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Run gofmt on:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Run vet
+        working-directory: go
+        run: go vet ./...
+
+      - name: Run Go tests (exclude live-API e2e)
+        working-directory: go
+        run: go test $(go list ./... | grep -v /e2e) -count=1
 
   compatibility-checks:
     name: Compatibility Checks
