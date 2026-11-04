@@ -71,7 +71,7 @@ configs:
       \gexec
       SQL
     name: dstack_postgres_init_101a877e6d70
-  topup_57d769deaaa9:
+  topup_b6b827e155a3:
     content: |
       # The Phala Cloud template's topup configuration (docs/configuration.md): the four test routes and
       # the read/verify endpoints of Phala's staging instance. It leaves out the public origin (the app's
@@ -80,11 +80,16 @@ configs:
       # at startup, and they are not attested. A production instance attests them (docs/self-hosting.md).
       environment: testnet
       max_attached_pending_refunds: 2
+      max_refund_attachments_per_day: 1
+      discovery:
+        quote_window_hours: 24
+        deposit_window_days: 7
       admin_key:
         id: admin/v1
       # Independent Ankr read and Infura verify endpoints, with both sealed keys.
       rpc:
         - chain_id: 11155111
+          max_issued_addresses: 1000
           read:
             id: ankr-sepolia
             url: "https://rpc.ankr.com/eth_sepolia/{key}"
@@ -96,6 +101,7 @@ configs:
             sealed_key: TOPUP_RPC_INFURA_KEY
             max_log_blocks: 3000
         - chain_id: 84532
+          max_issued_addresses: 1000
           read:
             id: ankr-base-sepolia
             url: "https://rpc.ankr.com/base_sepolia/{key}"
@@ -107,6 +113,7 @@ configs:
             sealed_key: TOPUP_RPC_INFURA_KEY
             max_log_blocks: 3000
         - chain_id: 1
+          max_issued_addresses: 1000
           read:
             id: ankr-mainnet
             url: "https://rpc.ankr.com/eth/{key}"
@@ -118,6 +125,7 @@ configs:
             sealed_key: TOPUP_RPC_INFURA_KEY
             max_log_blocks: 3000
         - chain_id: 8453
+          max_issued_addresses: 1000
           read:
             id: ankr-base-mainnet
             url: "https://rpc.ankr.com/base/{key}"
@@ -270,7 +278,7 @@ configs:
             max_deposit_atomic: { default: "10000000000" } # 10,000 USDT, as on the USDC route
             min_refund_atomic: { default: "1000000" } # 1 USDT, as on the USDC route
             quote_spread_bps: { default: 0 } # valued at a fixed 1.00 USD: no price move within the quote window for a spread to cover
-    name: dstack_topup_57d769deaaa9
+    name: dstack_topup_b6b827e155a3
 name: dstack
 networks:
   default:
@@ -311,7 +319,7 @@ services:
       WALG_S3_PREFIX: ${WALG_S3_PREFIX:-}
       WALG_WAL_ATTEMPTS: "1"
       WALG_WAL_TIMEOUT_SECONDS: "10"
-    image: ghcr.io/phala-network/postgres-walg@sha256:ef0513eef0b01745be7cbf8e136e6eeac205ccd00d29fd456378493c1388afc3
+    image: ghcr.io/phala-network/postgres-walg@sha256:51e69a3fbad34dead19604b51a1736bf263f9727bd8bd8e66db470b9aea2fac5
     networks:
       default: null
     restart: unless-stopped
@@ -349,7 +357,7 @@ services:
     entrypoint:
       - bash
       - /etc/topup/capacity.sh
-    image: ghcr.io/phala-network/postgres-walg@sha256:ef0513eef0b01745be7cbf8e136e6eeac205ccd00d29fd456378493c1388afc3
+    image: ghcr.io/phala-network/postgres-walg@sha256:51e69a3fbad34dead19604b51a1736bf263f9727bd8bd8e66db470b9aea2fac5
     mem_limit: 64m
     networks:
       default: null
@@ -383,7 +391,7 @@ services:
     environment:
       DATABASE_URL: postgres://topup_service@postgres:5432/topup
       PGPASSFILE: /run/db-app/topup_service.pgpass
-    image: ghcr.io/phala-network/phala-pay@sha256:5151d9a98069688b265334ac181a7aacb2ae761c58e005e01644e8621399ba41
+    image: ghcr.io/phala-network/phala-pay@sha256:1960807ecb8235bbca168e4d49ecd78e36d02ad532b6e257356109f4ab32bd54
     mem_limit: 256m
     networks:
       default: null
@@ -427,7 +435,7 @@ services:
         - --app-dir
         - /run/db-app
       timeout: 5s
-    image: ghcr.io/phala-network/phala-pay@sha256:5151d9a98069688b265334ac181a7aacb2ae761c58e005e01644e8621399ba41
+    image: ghcr.io/phala-network/phala-pay@sha256:1960807ecb8235bbca168e4d49ecd78e36d02ad532b6e257356109f4ab32bd54
     networks:
       default: null
     restart: unless-stopped
@@ -461,7 +469,7 @@ services:
     environment:
       DATABASE_URL: postgres://postgres@postgres:5432/topup
       PGPASSFILE: /run/db-owner/postgres.pgpass
-    image: ghcr.io/phala-network/phala-pay@sha256:5151d9a98069688b265334ac181a7aacb2ae761c58e005e01644e8621399ba41
+    image: ghcr.io/phala-network/phala-pay@sha256:1960807ecb8235bbca168e4d49ecd78e36d02ad532b6e257356109f4ab32bd54
     networks:
       default: null
     restart: "no"
@@ -508,7 +516,7 @@ services:
         - CMD-SHELL
         - psql -U postgres -d topup -XAtqc 'SELECT NOT pg_is_in_recovery()' | grep -qx t
       timeout: 5s
-    image: ghcr.io/phala-network/postgres-walg@sha256:ef0513eef0b01745be7cbf8e136e6eeac205ccd00d29fd456378493c1388afc3
+    image: ghcr.io/phala-network/postgres-walg@sha256:51e69a3fbad34dead19604b51a1736bf263f9727bd8bd8e66db470b9aea2fac5
     networks:
       default: null
     restart: unless-stopped
@@ -550,7 +558,7 @@ services:
       - --deny-range=192.0.0.0/24
       - --deny-range=198.18.0.0/15
       - --deny-range=240.0.0.0/4
-    image: ghcr.io/phala-network/phala-pay@sha256:5151d9a98069688b265334ac181a7aacb2ae761c58e005e01644e8621399ba41
+    image: ghcr.io/phala-network/phala-pay@sha256:1960807ecb8235bbca168e4d49ecd78e36d02ad532b6e257356109f4ab32bd54
     mem_limit: 256m
     networks:
       default: null
@@ -576,7 +584,7 @@ services:
       - --admin-public-key-env
       - TOPUP_ADMIN_PUBLIC_KEY
     configs:
-      - source: topup_57d769deaaa9
+      - source: topup_b6b827e155a3
         target: /etc/topup/topup.yaml
     depends_on:
       migrate:
@@ -599,7 +607,7 @@ services:
         - topup
         - healthcheck
       timeout: 10s
-    image: ghcr.io/phala-network/phala-pay@sha256:5151d9a98069688b265334ac181a7aacb2ae761c58e005e01644e8621399ba41
+    image: ghcr.io/phala-network/phala-pay@sha256:1960807ecb8235bbca168e4d49ecd78e36d02ad532b6e257356109f4ab32bd54
     mem_limit: 1g
     networks:
       default: null

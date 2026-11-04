@@ -1,8 +1,9 @@
 # Phala Pay
 
-[Phala Pay](https://github.com/Phala-Network/phala-pay) v0.13.1 is non-custodial payment software with price-locking quotes on each customer's fixed deposit address per chain.
+[Phala Pay](https://github.com/Phala-Network/phala-pay) v0.13.6 is non-custodial payment software with price-locking quotes on each customer's fixed deposit address per chain.
 This **testnet quick start** accepts PHA, USDC and USDT on Sepolia, and USDC on Base Sepolia.
 Its `docker-compose.yml` is the release's `phala-cloud-template.yml` byte for byte, with immutable image digests.
+Extra discovery and on-demand passes default off (`discovery.fresh_quote_rounds_per_day` and `discovery.quote_checks_per_day`, both `0`); to enable them, edit the kit's template `topup.yaml` and re-render with `render.sh --template` ([configuration](https://github.com/Phala-Network/phala-pay/blob/v0.13.6/docs/configuration.md)).
 For production, follow the [self-hosting guide][self-hosting].
 
 [![Deploy on Phala Cloud](https://cloud.phala.com/deploy-button.svg)](https://cloud.phala.com/templates/phala-pay)
@@ -25,11 +26,11 @@ Values go into Phala Cloud's encrypted environment.
 
 ## Deploy
 
-1. [Verify v0.13.1 and prepare its deploy kit][verify-release], including the locked Phala Cloud CLI, at `kit/`. Authenticate with `kit/deploy/phala login` or `PHALA_CLOUD_API_KEY`.
+1. [Verify v0.13.6 and prepare its deploy kit][verify-release], including the locked Phala Cloud CLI, at `kit/`. Authenticate with `kit/deploy/phala login` or `PHALA_CLOUD_API_KEY`.
 2. Generate the admin key on your own machine (Python 3.12+ and uv); use the printed `public_key` for `TOPUP_ADMIN_PUBLIC_KEY`. Never upload `admin.seed`:
 
    ```sh
-   uvx --from phala-pay==0.13.1 topup-sdk keygen --keyid admin/v1 --seed-out ~/phala-pay/admin.seed
+   uvx --from phala-pay==0.13.6 topup-sdk keygen --keyid admin/v1 --seed-out ~/phala-pay/admin.seed
    ```
 
 3. Create the backup bucket/prefix and obtain both RPC keys. Put the required fields above in `phala-pay.env` and keep that file private.
@@ -47,7 +48,7 @@ Values go into Phala Cloud's encrypted environment.
    ```sh
    ORIGIN='https://<app-id>.<gateway-domain>'
    curl -fsS -o /dev/null -w '%{http_code}\n' "$ORIGIN/healthz"  # 200
-   curl -fsS "$ORIGIN/openapi.json" | jq -r .info.version       # 0.13.1
+   curl -fsS "$ORIGIN/openapi.json" | jq -r .info.version       # 0.13.6
    ```
 
 For the interactive one-command alternative and its prerequisites, see [One-command deploy][one-command].
@@ -70,11 +71,11 @@ The verifier checks the TDX quote, TCB, OS image, app id, compose and template p
 The admin public key, public origin and backup location come from runtime environment values and are **not attested**; the template also has **no restore-check path**.
 See the [template's trust limits][template] before using it beyond testnets.
 
-For account onboarding, backups, upgrades and production deployment, use the [v0.13.1 self-hosting guide][self-hosting].
-For merchant keys, treasury setup, payment settings, checkout and verified webhooks, use the [v0.13.1 integration guide][integration].
+For account onboarding, backups, upgrades and production deployment, use the [v0.13.6 self-hosting guide][self-hosting].
+For merchant keys, treasury setup, payment settings, checkout and verified webhooks, use the [v0.13.6 integration guide][integration].
 
-[self-hosting]: https://github.com/Phala-Network/phala-pay/blob/v0.13.1/docs/self-hosting.md
-[integration]: https://github.com/Phala-Network/phala-pay/blob/v0.13.1/docs/integration.md
-[verify-release]: https://github.com/Phala-Network/phala-pay/blob/v0.13.1/docs/self-hosting.md#2-your-environment-repository
-[one-command]: https://github.com/Phala-Network/phala-pay/blob/v0.13.1/docs/self-hosting.md#one-command-deploy
-[template]: https://github.com/Phala-Network/phala-pay/blob/v0.13.1/docs/self-hosting.md#the-phala-cloud-template
+[self-hosting]: https://github.com/Phala-Network/phala-pay/blob/v0.13.6/docs/self-hosting.md
+[integration]: https://github.com/Phala-Network/phala-pay/blob/v0.13.6/docs/integration.md
+[verify-release]: https://github.com/Phala-Network/phala-pay/blob/v0.13.6/docs/self-hosting.md#2-your-environment-repository
+[one-command]: https://github.com/Phala-Network/phala-pay/blob/v0.13.6/docs/self-hosting.md#one-command-deploy
+[template]: https://github.com/Phala-Network/phala-pay/blob/v0.13.6/docs/self-hosting.md#the-phala-cloud-template
