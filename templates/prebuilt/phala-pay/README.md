@@ -2,8 +2,8 @@
 
 [Phala Pay](https://github.com/Phala-Network/phala-pay) v0.13.6 is non-custodial payment software with price-locking quotes on each customer's fixed deposit address per chain.
 This **testnet quick start** accepts PHA, USDC and USDT on Sepolia, and USDC on Base Sepolia.
-Its `docker-compose.yml` is the release's `phala-cloud-template.yml` byte for byte, with immutable image digests.
-Extra discovery and on-demand passes default off (`discovery.fresh_quote_rounds_per_day` and `discovery.quote_checks_per_day`, both `0`); to enable them, edit the kit's template `topup.yaml` and re-render with `render.sh --template` ([configuration](https://github.com/Phala-Network/phala-pay/blob/v0.13.6/docs/configuration.md)).
+Its `docker-compose.yml` uses the v0.13.6 release with immutable image digests; only the two discovery budgets below differ from its template.
+Extra discovery and on-demand passes are enabled at Phala's testnet limits (`discovery.fresh_quote_rounds_per_day: 30`, `discovery.quote_checks_per_day: 10` per chain/UTC day); to tune or disable them (`0`), set these keys in the kit's template `topup.yaml` and re-render with `render.sh --template` ([configuration](https://github.com/Phala-Network/phala-pay/blob/v0.13.6/docs/configuration.md)).
 For production, follow the [self-hosting guide][self-hosting].
 
 [![Deploy on Phala Cloud](https://cloud.phala.com/deploy-button.svg)](https://cloud.phala.com/templates/phala-pay)

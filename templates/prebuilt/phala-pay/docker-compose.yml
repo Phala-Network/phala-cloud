@@ -71,7 +71,7 @@ configs:
       \gexec
       SQL
     name: dstack_postgres_init_101a877e6d70
-  topup_b6b827e155a3:
+  topup_6f0c0736c890:
     content: |
       # The Phala Cloud template's topup configuration (docs/configuration.md): the four test routes and
       # the read/verify endpoints of Phala's staging instance. It leaves out the public origin (the app's
@@ -84,6 +84,8 @@ configs:
       discovery:
         quote_window_hours: 24
         deposit_window_days: 7
+        fresh_quote_rounds_per_day: 30
+        quote_checks_per_day: 10
       admin_key:
         id: admin/v1
       # Independent Ankr read and Infura verify endpoints, with both sealed keys.
@@ -278,7 +280,7 @@ configs:
             max_deposit_atomic: { default: "10000000000" } # 10,000 USDT, as on the USDC route
             min_refund_atomic: { default: "1000000" } # 1 USDT, as on the USDC route
             quote_spread_bps: { default: 0 } # valued at a fixed 1.00 USD: no price move within the quote window for a spread to cover
-    name: dstack_topup_b6b827e155a3
+    name: dstack_topup_6f0c0736c890
 name: dstack
 networks:
   default:
@@ -584,7 +586,7 @@ services:
       - --admin-public-key-env
       - TOPUP_ADMIN_PUBLIC_KEY
     configs:
-      - source: topup_b6b827e155a3
+      - source: topup_6f0c0736c890
         target: /etc/topup/topup.yaml
     depends_on:
       migrate:
