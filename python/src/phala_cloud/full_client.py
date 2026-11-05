@@ -5,7 +5,7 @@ import ssl
 import time
 from collections.abc import AsyncIterator, Iterator, Mapping
 from contextlib import asynccontextmanager, contextmanager
-from typing import Any, TypedDict, cast
+from typing import Any, Literal, TypedDict, cast
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
@@ -153,9 +153,30 @@ class CvmIdRequest(BaseModel):
 
 
 class CvmCreationRequest(NodeSelectionRequest):
-    """Creation payload; node identifies the physical node by name."""
+    """Creation payload; node identifies the physical node by name.
+
+    Fields not declared here (``name``, ``compose_file``, ...) are sent as given.
+    ``compose_file.runner`` is ``docker-compose`` (default), or, with the
+    ``compose_advanced`` feature flag, ``nerdctl-compose`` or ``bash``.
+    """
 
     model_config = ConfigDict(extra="allow")
+
+    # A whole app-compose JSON file, sent instead of compose_file. Needs the
+    # compose_advanced feature flag.
+    compose_file_raw: str | None = None
+    # Platform init scripts to run on every boot. The {"env_merge": bool}
+    # object form is deprecated; send slugs.
+    init_scripts: list[InitScriptSlug] | dict[Literal["env_merge"], bool] | None = None
+    # Deprecated: send init_scripts=["docker_cleanup"].
+    enabled_init_scripts_docker_cleanup: bool | None = None
+    # Launch token (at least 32 bytes) the guest requires on every boot.
+    launch_token: str | None = None
+    # Gate the CVM with a token Phala Cloud generates (returned once by the commit).
+    generate_launch_token: bool | None = None
+    # Host-side key/value metadata stored by the VMM. Needs the cvm_annotations
+    # feature flag.
+    annotations: dict[str, str] | None = None
 
 
 def _cvm_creation_body(request: CvmCreationRequest | Mapping[str, Any]) -> dict[str, Any]:

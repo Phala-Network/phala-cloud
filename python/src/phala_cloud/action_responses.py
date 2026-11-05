@@ -102,6 +102,9 @@ class PreLaunchScriptUpgradeStatus(CloudModel):
 class CommitCvmProvisionResponseBase(CloudModel):
     name: str
     status: str
+    # Launch token this create stored on a new app (launch_token or
+    # generate_launch_token). Returned only here, once.
+    launch_token: str | None = None
 
 
 class CommitCvmProvisionResponseV20260121(CommitCvmProvisionResponseBase):
