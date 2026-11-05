@@ -330,7 +330,25 @@ class WatchCvmStateRequest(CvmIdRequest):
     retry_delay: float = Field(default=5.0, ge=0, alias="retryDelay")
 
 
+class GpuSpec(BaseModel):
+    slot: str
+    product_id: str | None = None
+
+
+class GpuConfig(BaseModel):
+    """GPU assignment for a CVM update.
+
+    ``gpus`` lists the device slots to attach; ``attach_mode="all"`` attaches
+    every GPU on the node instead.
+    """
+
+    gpus: list[GpuSpec]
+    attach_mode: str | None = None
+
+
 class PatchCvmRequest(CvmIdRequest):
+    model_config = ConfigDict(populate_by_name=True)
+
     docker_compose_file: str | None = None
     pre_launch_script: str | None = None
     allowed_envs: list[str] | None = None
@@ -339,13 +357,26 @@ class PatchCvmRequest(CvmIdRequest):
     public_tcbinfo: bool | None = None
     encrypted_env: str | None = None
     user_config: str | None = None
-    gpus: dict[str, Any] | None = None
+    gpus: GpuConfig | None = None
     vcpu: int | None = None
     memory: int | None = None
     disk_size: int | None = None
+    instance_type: str | None = None
     image: str | None = None
     shutdown_timeout: int | None = None
     allow_force_stop: bool | None = None
+    # Sent as the X-Prepare-Only header: on contract-owned KMS, a 465 response
+    # then carries a commit token for multisig approval.
+    prepare_only: bool = Field(default=False, alias="prepareOnly", exclude=True)
+
+    def body(self) -> dict[str, Any]:
+        return self.model_dump(
+            exclude={"id", "uuid", "app_id", "instance_id", "cvm_id", "cvmId"},
+            exclude_none=True,
+        )
+
+    def headers(self) -> dict[str, str] | None:
+        return {"X-Prepare-Only": "true"} if self.prepare_only else None
 
 
 class ConfirmCvmPatchRequest(CvmIdRequest):
@@ -412,6 +443,26 @@ class _ExtMixin:
             }
 
         return None
+
+    @staticmethod
+    def _patch_cvm_hash_required(exc: ApiError) -> dict[str, Any] | None:
+        if exc.status_code != 465 or not isinstance(exc.detail, dict):
+            return None
+        details: dict[str, Any] = {}
+        for item in exc.detail.get("details") or []:
+            if isinstance(item, dict) and "field" in item and "value" in item:
+                details[item["field"]] = item["value"]
+        return {
+            "requires_on_chain_hash": True,
+            "compose_hash": details.get("compose_hash", ""),
+            "app_id": str(details.get("app_id", "")),
+            "device_id": details.get("device_id", ""),
+            "kms_info": details.get("kms_info"),
+            "commit_token": details.get("commit_token"),
+            "commit_url": details.get("commit_url"),
+            "api_commit_url": details.get("api_commit_url"),
+            "onchain_status": details.get("onchain_status"),
+        }
 
     def _model_for_response(self, method: str, path: str, version: str | None = None) -> Any | None:
         m = method.upper()
@@ -1058,12 +1109,10 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     def patch_cvm(self, request: PatchCvmRequest | Mapping[str, Any]) -> dict[str, Any]:
         req = PatchCvmRequest.model_validate(request)
         cvm_id = req.resolved
-        body = req.model_dump(
-            exclude={"id", "uuid", "app_id", "instance_id", "cvm_id", "cvmId"},
-            exclude_none=True,
-        )
         try:
-            data = self._loose_validate(self.request("PATCH", f"/cvms/{cvm_id}", json=body))
+            data = self._loose_validate(
+                self.request("PATCH", f"/cvms/{cvm_id}", json=req.body(), headers=req.headers())
+            )
             correlation_id = ""
             if isinstance(data, dict):
                 correlation_id = data.get("correlation_id", "")
@@ -1071,18 +1120,9 @@ class PhalaCloud(_SyncBase, _ExtMixin):
                 correlation_id = str(getattr(data, "correlation_id", ""))
             return {"requires_on_chain_hash": False, "correlation_id": correlation_id}
         except ApiError as exc:
-            if exc.status_code == 465 and isinstance(exc.detail, dict):
-                details: dict[str, Any] = {}
-                for item in exc.detail.get("details") or []:
-                    if isinstance(item, dict) and "field" in item and "value" in item:
-                        details[item["field"]] = item["value"]
-                return {
-                    "requires_on_chain_hash": True,
-                    "compose_hash": details.get("compose_hash", ""),
-                    "app_id": str(details.get("app_id", "")),
-                    "device_id": details.get("device_id", ""),
-                    "kms_info": details.get("kms_info"),
-                }
+            hash_required = self._patch_cvm_hash_required(exc)
+            if hash_required is not None:
+                return hash_required
             raise
 
     def safe_patch_cvm(
@@ -2015,12 +2055,12 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
     async def patch_cvm(self, request: PatchCvmRequest | Mapping[str, Any]) -> dict[str, Any]:
         req = PatchCvmRequest.model_validate(request)
         cvm_id = req.resolved
-        body = req.model_dump(
-            exclude={"id", "uuid", "app_id", "instance_id", "cvm_id", "cvmId"},
-            exclude_none=True,
-        )
         try:
-            data = self._loose_validate(await self.request("PATCH", f"/cvms/{cvm_id}", json=body))
+            data = self._loose_validate(
+                await self.request(
+                    "PATCH", f"/cvms/{cvm_id}", json=req.body(), headers=req.headers()
+                )
+            )
             correlation_id = ""
             if isinstance(data, dict):
                 correlation_id = data.get("correlation_id", "")
@@ -2028,18 +2068,9 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
                 correlation_id = str(getattr(data, "correlation_id", ""))
             return {"requires_on_chain_hash": False, "correlation_id": correlation_id}
         except ApiError as exc:
-            if exc.status_code == 465 and isinstance(exc.detail, dict):
-                details: dict[str, Any] = {}
-                for item in exc.detail.get("details") or []:
-                    if isinstance(item, dict) and "field" in item and "value" in item:
-                        details[item["field"]] = item["value"]
-                return {
-                    "requires_on_chain_hash": True,
-                    "compose_hash": details.get("compose_hash", ""),
-                    "app_id": str(details.get("app_id", "")),
-                    "device_id": details.get("device_id", ""),
-                    "kms_info": details.get("kms_info"),
-                }
+            hash_required = self._patch_cvm_hash_required(exc)
+            if hash_required is not None:
+                return hash_required
             raise
 
     async def safe_patch_cvm(
