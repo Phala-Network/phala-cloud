@@ -57,7 +57,7 @@ const { action: updateCvmVisibility, safeAction: safeUpdateCvmVisibility } = def
   return await client.patch(`/cvms/${cvmId}`, {
     public_sysinfo,
     public_logs,
-    ...(public_tcbinfo === undefined ? {} : { public_tcbinfo }),
+    public_tcbinfo,
   });
 });
 
