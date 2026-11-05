@@ -35,6 +35,7 @@ afterAll(() => {
 	mock.module("@/src/lib/client", () => previousClient);
 });
 const { cvmsResizeCommand } = await import("./resize/index");
+const { cvmsUpgradeCommand } = await import("./upgrade/index");
 
 type Recorded = {
 	method: string;
@@ -154,6 +155,27 @@ describe("phala cvms resize", () => {
 				method: "PATCH",
 				path: `/api/v1/cvms/app_${APP_ID}`,
 				body: { vcpu: 4, memory: 4096, disk_size: 20 },
+			},
+		]);
+	});
+});
+
+describe("phala cvms upgrade", () => {
+	test("sends the compose file through the unified PATCH endpoint", async () => {
+		const { context, failure } = makeContext();
+		const exitCode = await cvmsUpgradeCommand.run(
+			{ compose: composePath } as Parameters<typeof cvmsUpgradeCommand.run>[0],
+			context,
+		);
+
+		expect(failure()).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(requests.some((r) => r.method === "PUT")).toBe(false);
+		expect(patches()).toEqual([
+			{
+				method: "PATCH",
+				path: `/api/v1/cvms/${CVM_ID}`,
+				body: { docker_compose_file: COMPOSE },
 			},
 		]);
 	});

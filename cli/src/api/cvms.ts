@@ -15,7 +15,6 @@ import type {
 	CvmAttestationResponse,
 	CvmCreateResourcesResponse,
 	GetCvmNetworkResponse,
-	UpgradeResponse,
 } from "./types";
 
 /**
@@ -174,30 +173,6 @@ export async function resizeCvm(
 
 	await client.patch(`cvms/app_${cleanAppId}`, resizePayload);
 	return true;
-}
-
-/**
- * VM configuration type
- */
-export interface VMConfig {
-	[key: string]: unknown;
-}
-
-/**
- * Upgrade a CVM (Legacy)
- * @deprecated This is a legacy function, consider using SDK's provisionCvmComposeFileUpdate
- * @param appId App ID (with or without app_ prefix)
- * @param vmConfig VM configuration
- * @returns Upgrade response
- */
-export async function upgradeCvm(
-	appId: string,
-	vmConfig: VMConfig,
-): Promise<UpgradeResponse> {
-	const client = await getClient();
-	const cleanAppId = appId.replace(/^app_/, "");
-	const response = await client.put(`cvms/app_${cleanAppId}/compose`, vmConfig);
-	return response as UpgradeResponse;
 }
 
 /**

@@ -307,12 +307,6 @@ export interface CvmCreateResourcesResponse {
 	gpu_availability: GpuAvailability;
 }
 
-// Upgrade Response
-export interface UpgradeResponse {
-	detail?: string;
-	[key: string]: unknown;
-}
-
 // User Info Response
 export interface UserInfoResponse {
 	username: string;

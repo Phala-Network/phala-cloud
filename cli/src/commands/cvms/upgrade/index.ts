@@ -1,8 +1,12 @@
 import fs from "node:fs";
-import { encryptEnvVars, safeGetCvmInfo, type EnvVar } from "@phala/cloud";
+import {
+	encryptEnvVars,
+	safeGetCvmInfo,
+	safePatchCvm,
+	type EnvVar,
+} from "@phala/cloud";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
-import { upgradeCvm } from "@/src/api/cvms";
 import { CLOUD_URL } from "@/src/utils/constants";
 import { detectFileInCurrentDir, promptForFile } from "@/src/utils/prompts";
 import { parseEnv } from "@/src/utils/secrets";
@@ -110,7 +114,7 @@ async function runCvmsUpgradeCommand(
 		}
 
 		let encryptedEnv: string | undefined;
-		let envKeys: string[] = [];
+		let envKeys: string[] | undefined;
 
 		if (input.envFile) {
 			try {
@@ -130,37 +134,31 @@ async function runCvmsUpgradeCommand(
 			}
 		}
 
-		const vmConfig = {
-			compose_manifest: {
-				docker_compose_file: composeString,
-				manifest_version: 1,
-				runner: "docker-compose",
-				version: "1.0.0",
-				features: ["kms", "tproxy-net"],
-				name: `app_${resolvedAppId}`,
-				allowed_envs: envKeys,
-			},
-			encrypted_env: encryptedEnv,
-			allow_restart: true,
-			env_keys: envKeys,
-		} as const;
-
 		const upgradeSpinner = logger.startSpinner(
 			`Upgrading CVM app_${resolvedAppId}`,
 		);
-		const response = await upgradeCvm(resolvedAppId, vmConfig);
+		// The unified PATCH replaces only the fields it is sent: the compose
+		// file and, with --env-file, the allowed env keys and encrypted env.
+		const result = await safePatchCvm(client, {
+			...context.cvmId,
+			docker_compose_file: composeString,
+			allowed_envs: envKeys,
+			encrypted_env: encryptedEnv,
+		});
 
-		if (!response) {
+		if (!result.success) {
 			upgradeSpinner.stop(false);
-			logger.error("Failed to upgrade CVM");
+			throw result.error;
+		}
+		if (result.data.requiresOnChainHash) {
+			upgradeSpinner.stop(false);
+			logger.error(
+				`This CVM uses on-chain KMS: compose hash ${result.data.composeHash} must be registered on-chain first. Use "phala deploy --cvm-id app_${resolvedAppId}" instead.`,
+			);
 			return 1;
 		}
 
 		upgradeSpinner.stop(true);
-
-		if (response.detail) {
-			logger.info(`Details: ${response.detail}`);
-		}
 
 		logger.break();
 		logger.success(
