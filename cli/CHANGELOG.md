@@ -1,3 +1,24 @@
+## [](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.22...cli-v) (2026-11-03)
+
+### feat
+
+* **cli:** add deploy --no-pre-launch-script ([58e3447](https://github.com/Phala-Network/phala-cloud/commit/58e344772e2134bc0be734eb1749d8f133da7335))
+* **cli:** add PHALA_CLOUD_PROFILE env to override the active profile ([77ab911](https://github.com/Phala-Network/phala-cloud/commit/77ab9116e7e36e883d04e9c549bb42a0dc0be054))
+* **cli:** commit deploys with the provision token ([f54783b](https://github.com/Phala-Network/phala-cloud/commit/f54783b81679cf76c19c29676107d832cc7a7144))
+* **cli:** mark the overridden profile in `phala profiles` ([9e72c55](https://github.com/Phala-Network/phala-cloud/commit/9e72c55764668dff320c0aa2b20f34cabeaf8da9))
+* **sdk:** add max_placeable_count to ProductGpuAvailability (R2-1) ([78d9c7d](https://github.com/Phala-Network/phala-cloud/commit/78d9c7d048bbddcff5ee27b0f4caf66b5a2c145c))
+* **sdk:** carry GPU product requirement and product-scoped availability ([100dd56](https://github.com/Phala-Network/phala-cloud/commit/100dd5617ac70ba22f91e375752896e40946cac5))
+* select creation nodes by physical name ([51be05b](https://github.com/Phala-Network/phala-cloud/commit/51be05b12d18cb3205ea5801d17f530f3f9f2df9))
+* use node names for replicas and allowance checks ([a8009eb](https://github.com/Phala-Network/phala-cloud/commit/a8009ebafbc1c75ac57ce9bf972fb637d00432e6))
+
+### fix
+
+* **cli:** accept global options before the command path ([3a089c6](https://github.com/Phala-Network/phala-cloud/commit/3a089c698e7e7907980357fb82845653d607b44c))
+* **cli:** detect missing arguments without relying on zod messages ([7d8cb25](https://github.com/Phala-Network/phala-cloud/commit/7d8cb25fc9eee1893c7f27cee43d2b599eab6111))
+* **cli:** pass opaque placement identifiers to non-admin APIs ([5ab528d](https://github.com/Phala-Network/phala-cloud/commit/5ab528d9ace4e4a868325b2f0fe6b8d59e6dd391))
+* **cli:** remove unused handlebars dependency ([6e02448](https://github.com/Phala-Network/phala-cloud/commit/6e0244883026edc50f472569c82b9eff9a582bf8))
+* **cli:** verify SSH gateway TLS certificates ([e9390f3](https://github.com/Phala-Network/phala-cloud/commit/e9390f33f968f8bcc12674736143b79f09013d64))
+* **sdk:** accept manifest_version as numeric string from dstack 0.6.0+ ([bb15292](https://github.com/Phala-Network/phala-cloud/commit/bb152921c7228fc1f99dbd82c32708deb326448e))
 ## [](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.22-beta.1...cli-v) (2026-09-06)
 
 ### feat
