@@ -245,3 +245,13 @@ func TestUpdateCVMVisibilityUsesTheUnifiedPatchEndpoint(t *testing.T) {
 		t.Fatalf("resp = %+v", resp)
 	}
 }
+
+func TestPatchCVMAttachAllSendsAnEmptyGPUsArray(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusAccepted, acceptedUpdate)
+	if _, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{
+		GPUs: &GPUConfig{AttachMode: String("all")},
+	}); err != nil {
+		t.Fatalf("PatchCVM: %v", err)
+	}
+	assertBody(t, (*seen)[0].body, `{"gpus": {"gpus": [], "attach_mode": "all"}}`)
+}

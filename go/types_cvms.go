@@ -579,6 +579,16 @@ type GPUConfig struct {
 	AttachMode *string   `json:"attach_mode,omitempty"`
 }
 
+// MarshalJSON sends a nil GPUs slice as [] because the API requires the
+// gpus array even when AttachMode is "all".
+func (g GPUConfig) MarshalJSON() ([]byte, error) {
+	type plain GPUConfig
+	if g.GPUs == nil {
+		g.GPUs = []GPUSpec{}
+	}
+	return json.Marshal(plain(g))
+}
+
 // PatchCVMRequest is the request for patching a CVM (multi-field update) via
 // PATCH /cvms/{id}. Only set fields are sent.
 type PatchCVMRequest struct {
