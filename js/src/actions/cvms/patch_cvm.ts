@@ -15,6 +15,11 @@ import { PhalaCloudError } from "../../utils/errors";
  * with the compose hash to register on-chain. After registration, call
  * `confirmCvmPatch` with the compose hash and transaction hash.
  *
+ * GPU assignment goes in `gpus` as a `GpuConfig` object, not a bare array:
+ * `{ gpus: [{ slot, product_id? }], attach_mode? }`. `slot` identifies the
+ * device, `product_id` is optional, and `attach_mode: "all"` attaches every
+ * GPU on the node instead of the listed slots.
+ *
  * @example
  * ```typescript
  * import { createClient, patchCvm, confirmCvmPatch, addComposeHash } from '@phala/cloud'
@@ -29,6 +34,12 @@ import { PhalaCloudError } from "../../utils/errors";
  * })
  * // result.requiresOnChainHash === false
  * console.log(result.correlationId)
+ *
+ * // Attach GPUs
+ * await patchCvm(client, {
+ *   id: 'my-cvm',
+ *   gpus: { gpus: [{ slot: '0000:3b:00.0' }] },
+ * })
  *
  * // On-chain KMS compose update (two-phase)
  * const result = await patchCvm(client, {
