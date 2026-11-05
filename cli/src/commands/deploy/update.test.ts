@@ -273,6 +273,7 @@ describe("phala deploy --cvm-id", () => {
 		[{ keyProviderMode: "local" }, "--key-provider-mode"],
 		[{ devOs: true }, "--dev-os"],
 		[{ devOs: false }, "--dev-os"],
+		[{ sshPubkey: "~/.ssh/id_ed25519.pub" }, "--ssh-pubkey"],
 		[{ secureTime: true }, "--secure-time"],
 		[{ fs: "ext4" }, "--fs"],
 		[{ skipGateway: true }, "--skip-gateway"],

@@ -68,7 +68,7 @@ With `--cvm-id` (or a CVM ID in `phala.toml`), deploy sends the compose file and
 
 `--listed` / `--no-listed` changes the Trust Center listing through its own request, sent only after the update is accepted (or, for on-chain KMS, after it is confirmed or committed with `--commit`). It is not sent with `--prepare-only`. The listing applies to the whole app, and its endpoint needs an API key or a login session: GitHub Actions OIDC tokens are not accepted for it.
 
-These flags set how a CVM is created and cannot be changed afterwards: `--name`, `--region`, `--node`, `--custom-app-id`, `--nonce`, `--key-provider-mode`, `--dev-os` / `--no-dev-os`, `--secure-time`, `--fs`, `--skip-gateway`, `--kms`, `--kms-id`, `--kms-contract`, `--kms-contract-id` and `--experimental-key-provider-type`. An update that passes any of them fails before any request is sent.
+These flags set how a CVM is created and cannot be changed afterwards: `--name`, `--region`, `--node`, `--custom-app-id`, `--nonce`, `--key-provider-mode`, `--dev-os` / `--no-dev-os`, `--ssh-pubkey`, `--secure-time`, `--fs`, `--skip-gateway`, `--kms`, `--kms-id`, `--kms-contract`, `--kms-contract-id` and `--experimental-key-provider-type`. An update that passes any of them fails before any request is sent.
 
 ## Pre-launch script behavior
 

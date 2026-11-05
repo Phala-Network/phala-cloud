@@ -143,6 +143,7 @@ const CREATE_ONLY_FLAGS: ReadonlyArray<readonly [keyof Options, string]> = [
 	["nonce", "--nonce"],
 	["keyProviderMode", "--key-provider-mode"],
 	["devOs", "--dev-os"],
+	["sshPubkey", "--ssh-pubkey"],
 	["secureTime", "--secure-time"],
 	["fs", "--fs"],
 	["skipGateway", "--skip-gateway"],
