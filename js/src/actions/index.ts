@@ -621,6 +621,17 @@ export {
 } from "./cvms/cvm_annotations";
 
 export {
+  getCvmInitScripts,
+  safeGetCvmInitScripts,
+  CvmInitScriptSchema,
+  CvmInitScriptsSchema,
+  GetCvmInitScriptsRequestSchema,
+  type CvmInitScript,
+  type CvmInitScripts,
+  type GetCvmInitScriptsRequest,
+} from "./cvms/get_cvm_init_scripts";
+
+export {
   listSshKeys,
   safeListSshKeys,
   SshKeySchema,

@@ -281,6 +281,8 @@ const additionalActions = {
   safeGetCvmAnnotations: actions.safeGetCvmAnnotations,
   updateCvmAnnotations: actions.updateCvmAnnotations,
   safeUpdateCvmAnnotations: actions.safeUpdateCvmAnnotations,
+  getCvmInitScripts: actions.getCvmInitScripts,
+  safeGetCvmInitScripts: actions.safeGetCvmInitScripts,
   getCvmSshKeys: actions.getCvmSshKeys,
   safeGetCvmSshKeys: actions.safeGetCvmSshKeys,
   updateCvmSshKeys: actions.updateCvmSshKeys,
@@ -366,6 +368,8 @@ type SchemaAction =
   | "safeGetCvmAnnotations"
   | "updateCvmAnnotations"
   | "safeUpdateCvmAnnotations"
+  | "getCvmInitScripts"
+  | "safeGetCvmInitScripts"
   | "getCvmSshKeys"
   | "safeGetCvmSshKeys"
   | "updateCvmSshKeys"
