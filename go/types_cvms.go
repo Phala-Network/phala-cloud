@@ -565,34 +565,85 @@ type CommitCVMUpdateResponse struct {
 	Status        string `json:"status"`
 }
 
-// PatchCVMRequest is the request for patching a CVM (multi-field update).
+// GPUSpec selects one GPU device by its PCI slot.
+type GPUSpec struct {
+	Slot      string  `json:"slot"`
+	ProductID *string `json:"product_id,omitempty"`
+}
+
+// GPUConfig is the GPU assignment for a CVM update. GPUs lists the slots to
+// attach; AttachMode "all" attaches every GPU on the node instead. The API
+// default for AttachMode is "listed".
+type GPUConfig struct {
+	GPUs       []GPUSpec `json:"gpus"`
+	AttachMode *string   `json:"attach_mode,omitempty"`
+}
+
+// PatchCVMRequest is the request for patching a CVM (multi-field update) via
+// PATCH /cvms/{id}. Only set fields are sent.
 type PatchCVMRequest struct {
+	// Compose-hash-affecting fields.
 	DockerComposeFile *string  `json:"docker_compose_file,omitempty"`
 	PreLaunchScript   *string  `json:"pre_launch_script,omitempty"`
-	EncryptedEnv      *string  `json:"encrypted_env,omitempty"`
 	AllowedEnvs       []string `json:"allowed_envs,omitzero"`
 	PublicSysinfo     *bool    `json:"public_sysinfo,omitempty"`
 	PublicLogs        *bool    `json:"public_logs,omitempty"`
 	PublicTcbinfo     *bool    `json:"public_tcbinfo,omitempty"`
-	GatewayEnabled    *bool    `json:"gateway_enabled,omitempty"`
-	SecureTime        *bool    `json:"secure_time,omitempty"`
-	Listed            *bool    `json:"listed,omitempty"`
-	VCPU              *int     `json:"vcpu,omitempty"`
-	Memory            *int     `json:"memory,omitempty"`
-	DiskSize          *int     `json:"disk_size,omitempty"`
-	InstanceType      *string  `json:"instance_type,omitempty"`
-	OSImageName       *string  `json:"os_image_name,omitempty"`
-	AllowRestart      *bool    `json:"allow_restart,omitempty"`
+
+	EncryptedEnv *string    `json:"encrypted_env,omitempty"`
+	UserConfig   *string    `json:"user_config,omitempty"`
+	GPUs         *GPUConfig `json:"gpus,omitempty"`
+
+	VCPU         *int    `json:"vcpu,omitempty"`
+	Memory       *int    `json:"memory,omitempty"`
+	DiskSize     *int    `json:"disk_size,omitempty"`
+	InstanceType *string `json:"instance_type,omitempty"`
+
+	// Image is the OS image name or slug, as listed by GetAvailableOSImages.
+	Image *string `json:"image,omitempty"`
+
+	// ShutdownTimeout is the graceful shutdown timeout in seconds (10-1200).
+	ShutdownTimeout *int  `json:"shutdown_timeout,omitempty"`
+	AllowForceStop  *bool `json:"allow_force_stop,omitempty"`
+
+	// Deprecated: use Image. PatchCVM sends OSImageName as image.
+	OSImageName *string `json:"-"`
+
+	// Listed toggles the Trust Center listing. It is not part of the unified
+	// update: PatchCVM applies it through PATCH /cvms/{id}/listed (see
+	// UpdateCVMListed) before sending the other fields.
+	Listed *bool `json:"-"`
+
+	// PrepareOnly sends X-Prepare-Only: true. For contract-owned KMS, the
+	// hash-required response then carries a commit token for multisig
+	// approval (see CommitCVMUpdate).
+	PrepareOnly bool `json:"-"`
 }
 
-// PatchCVMResponse is the response from patching a CVM.
+// OnchainStatus reports whether the compose hash and device are already
+// allowed on-chain. The API includes it in prepare-only responses.
+type OnchainStatus struct {
+	ComposeHashAllowed bool `json:"compose_hash_allowed"`
+	DeviceIDAllowed    bool `json:"device_id_allowed"`
+	IsAllowed          bool `json:"is_allowed"`
+}
+
+// PatchCVMResponse is the response from patching a CVM. When
+// RequiresOnChainHash is true the API answered 465: register ComposeHash
+// on-chain, then call ConfirmCVMPatch, or CommitCVMUpdate with CommitToken
+// for a prepare-only request.
 type PatchCVMResponse struct {
-	RequiresOnChainHash bool        `json:"requires_on_chain_hash"`
-	CorrelationID       string      `json:"correlation_id,omitempty"`
-	ComposeHash         string      `json:"compose_hash,omitempty"`
-	AppID               string      `json:"app_id,omitempty"`
-	DeviceID            string      `json:"device_id,omitempty"`
-	KMSInfo             *CvmKmsInfo `json:"kms_info,omitempty"`
+	RequiresOnChainHash bool           `json:"requires_on_chain_hash"`
+	CorrelationID       string         `json:"correlation_id,omitempty"`
+	Status              string         `json:"status,omitempty"`
+	ComposeHash         string         `json:"compose_hash,omitempty"`
+	AppID               string         `json:"app_id,omitempty"`
+	DeviceID            string         `json:"device_id,omitempty"`
+	KMSInfo             *CvmKmsInfo    `json:"kms_info,omitempty"`
+	CommitToken         string         `json:"commit_token,omitempty"`
+	CommitURL           string         `json:"commit_url,omitempty"`
+	APICommitURL        string         `json:"api_commit_url,omitempty"`
+	OnchainStatus       *OnchainStatus `json:"onchain_status,omitempty"`
 }
 
 // ConfirmCVMPatchRequest is the request for confirming a CVM patch with on-chain hash.

@@ -2,8 +2,11 @@ package phala
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
+	"reflect"
 )
 
 // cvmPath returns the API path for a CVM, resolving the ID format.
@@ -378,16 +381,95 @@ func (c *Client) CommitCVMUpdate(ctx context.Context, cvmID string, req *CommitC
 	return &result, nil
 }
 
-// PatchCVM applies a multi-field patch to a CVM.
+// PatchCVM applies a multi-field patch to a CVM via PATCH /cvms/{id}.
+//
+// A 465 response (compose hash registration required, contract-owned KMS) is
+// not an error: it returns RequiresOnChainHash with the hash to register.
+// Listed is applied first through PATCH /cvms/{id}/listed; when it is the
+// only field set, the unified PATCH is skipped.
 func (c *Client) PatchCVM(ctx context.Context, cvmID string, req *PatchCVMRequest) (*PatchCVMResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("phala: patch request is required")
+	}
+	body := *req
+	if body.OSImageName != nil {
+		if body.Image != nil && *body.Image != *body.OSImageName {
+			return nil, fmt.Errorf("phala: Image %q and deprecated OSImageName %q conflict; set Image only", *body.Image, *body.OSImageName)
+		}
+		body.Image = body.OSImageName
+	}
+
+	if body.Listed != nil {
+		if err := c.UpdateCVMListed(ctx, cvmID, *body.Listed); err != nil {
+			return nil, err
+		}
+		if isZeroPatch(body) {
+			return &PatchCVMResponse{}, nil
+		}
+	}
+
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("phala: marshal request: %w", err)
+	}
+	var headers map[string]string
+	if body.PrepareOnly {
+		headers = map[string]string{"X-Prepare-Only": "true"}
+	}
+
 	var result PatchCVMResponse
-	err := c.doWithRetry(ctx, func() error {
-		return c.doJSON(ctx, "PATCH", cvmPath(cvmID), req, &result)
+	err = c.doWithRetry(ctx, func() error {
+		return c.doText(ctx, "PATCH", cvmPath(cvmID), "application/json", string(payload), headers, &result)
 	})
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && apiErr.IsComposePrecondition() {
+		return patchCVMHashRequired(apiErr), nil
+	}
 	if err != nil {
 		return nil, err
 	}
 	return &result, nil
+}
+
+// isZeroPatch reports whether req has no field that PATCH /cvms/{id} accepts.
+func isZeroPatch(req PatchCVMRequest) bool {
+	req.Listed = nil
+	req.OSImageName = nil
+	req.PrepareOnly = false
+	return reflect.ValueOf(req).IsZero()
+}
+
+func patchCVMHashRequired(apiErr *APIError) *PatchCVMResponse {
+	fields := make(map[string]any, len(apiErr.Details))
+	for _, d := range apiErr.Details {
+		if d.Field != "" {
+			fields[d.Field] = d.Value
+		}
+	}
+	resp := &PatchCVMResponse{RequiresOnChainHash: true}
+	resp.ComposeHash, _ = fields["compose_hash"].(string)
+	resp.DeviceID, _ = fields["device_id"].(string)
+	resp.CommitToken, _ = fields["commit_token"].(string)
+	resp.CommitURL, _ = fields["commit_url"].(string)
+	resp.APICommitURL, _ = fields["api_commit_url"].(string)
+	if v, ok := fields["app_id"]; ok && v != nil {
+		resp.AppID = fmt.Sprint(v)
+	}
+	decodeDetail(fields["kms_info"], &resp.KMSInfo)
+	decodeDetail(fields["onchain_status"], &resp.OnchainStatus)
+	return resp
+}
+
+// decodeDetail re-decodes a JSON value from an error detail into target.
+func decodeDetail(value, target any) {
+	if value == nil {
+		return
+	}
+	b, err := json.Marshal(value)
+	if err != nil {
+		return
+	}
+	_ = json.Unmarshal(b, target)
 }
 
 // ConfirmCVMPatch confirms a CVM patch with on-chain transaction hash.
