@@ -222,3 +222,84 @@ describe("phala cvms upgrade with an unchanged compose", () => {
 		expect(success).not.toHaveBeenCalled();
 	});
 });
+
+describe("phala cvms upgrade edge cases", () => {
+	test("stops with an error on contract-owned KMS (465)", async () => {
+		respond = (method) =>
+			method === "PATCH"
+				? Response.json(
+						{
+							error_code: "ERR-01-005",
+							message: "Compose hash registration required",
+							details: [
+								{ field: "compose_hash", value: "abc123" },
+								{ field: "app_id", value: APP_ID },
+								{ field: "device_id", value: "dev-1" },
+								{
+									field: "kms_info",
+									value: {
+										id: "1",
+										slug: "base",
+										url: "https://kms.example.com",
+										version: "1.0.0",
+										chain_id: 8453,
+										kms_contract_address: "0xkms",
+										gateway_app_id: "0xgateway",
+									},
+								},
+							],
+						},
+						{ status: 465 },
+					)
+				: undefined;
+		const error = spyLogger("error");
+		const success = spyLogger("success");
+		const { context } = makeContext();
+		const exitCode = await cvmsUpgradeCommand.run(
+			{ compose: composePath } as Parameters<typeof cvmsUpgradeCommand.run>[0],
+			context,
+		);
+
+		expect(exitCode).toBe(1);
+		expect(error).toHaveBeenCalledWith(
+			`This CVM uses on-chain KMS: compose hash abc123 must be registered on-chain first. Use "phala deploy --cvm-id app_${APP_ID}" instead.`,
+		);
+		expect(success).not.toHaveBeenCalled();
+	});
+
+	test("sends allowed_envs and encrypted_env with --env-file", async () => {
+		respond = (method) =>
+			method === "GET"
+				? Response.json({
+						id: CVM_ID,
+						name: "my-app",
+						app_id: APP_ID,
+						status: "running",
+						resource: { vcpu: 2, memory_in_gb: 4, disk_in_gb: 20 },
+						gateway: {},
+						kms_info: { encrypted_env_pubkey: "11".repeat(32) },
+					})
+				: undefined;
+		const envFile = path.join(tmpDir, ".env");
+		await fs.writeFile(envFile, "FOO=bar\nBAZ=qux\n");
+		const { context, failure } = makeContext();
+		const exitCode = await cvmsUpgradeCommand.run(
+			{ compose: composePath, envFile } as Parameters<
+				typeof cvmsUpgradeCommand.run
+			>[0],
+			context,
+		);
+
+		expect(failure()).toBeUndefined();
+		expect(exitCode).toBe(0);
+		const body = patches()[0]?.body ?? {};
+		expect(Object.keys(body).sort()).toEqual([
+			"allowed_envs",
+			"docker_compose_file",
+			"encrypted_env",
+		]);
+		expect(body.allowed_envs).toEqual(["FOO", "BAZ"]);
+		expect(body.docker_compose_file).toBe(COMPOSE);
+		expect(body.encrypted_env).toMatch(/^[0-9a-f]+$/);
+	});
+});
