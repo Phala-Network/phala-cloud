@@ -117,6 +117,7 @@ interface Options {
 	runner?: "docker-compose" | "nerdctl-compose" | "bash";
 	appCompose?: string;
 	initScript?: Array<"docker_cleanup" | "env_merge">;
+	clearInitScripts?: boolean;
 	launchToken?: string;
 	launchTokenHash?: string;
 	generateLaunchToken?: boolean;
@@ -180,6 +181,11 @@ export function assertUpdatableOptions(options: Options): void {
 			`${flags.join(", ")} cannot be changed on an existing CVM. Remove ${flags.length === 1 ? "it" : "them"} to update the CVM, or deploy a new CVM.`,
 		);
 	}
+	if (options.clearInitScripts && options.initScript !== undefined) {
+		throw new Error(
+			"--clear-init-scripts cannot be combined with --init-script.",
+		);
+	}
 }
 
 /**
@@ -206,6 +212,7 @@ export function assertCreateOptions(options: Options): void {
 	for (const [key, flag] of [
 		["confirmDataWipe", "--confirm-data-wipe"],
 		["launchTokenHash", "--launch-token-hash"],
+		["clearInitScripts", "--clear-init-scripts"],
 	] as const) {
 		if (options[key] !== undefined) {
 			throw new Error(
@@ -304,7 +311,9 @@ export function buildUpdatePatchBody(
 	if (Object.keys(compose).length > 0) {
 		patchBody.compose = compose;
 	}
-	if (options.initScript !== undefined) {
+	if (options.clearInitScripts) {
+		patchBody.init_scripts = [];
+	} else if (options.initScript !== undefined) {
 		patchBody.init_scripts = options.initScript;
 	}
 	if (options.confirmDataWipe) {

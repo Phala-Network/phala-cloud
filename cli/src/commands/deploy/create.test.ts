@@ -237,6 +237,7 @@ describe("phala deploy (create)", () => {
 	test.each([
 		[{ confirmDataWipe: true }, "--confirm-data-wipe"],
 		[{ launchTokenHash: "a".repeat(64) }, "--launch-token-hash"],
+		[{ clearInitScripts: true }, "--clear-init-scripts"],
 	])("rejects update-only flag %p on create", async (flags, flag) => {
 		const { exitCode, failure } = await deploy({
 			compose: composePath,

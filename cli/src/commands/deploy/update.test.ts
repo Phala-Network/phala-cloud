@@ -33,6 +33,9 @@ afterAll(() => {
 	mock.module("@/src/lib/client", () => previousClient);
 });
 const { runDeploy } = await import("./handler");
+const { deployCommand } = await import("./index");
+const { dispatchCommand } = await import("@/src/core/dispatcher");
+const { CommandRegistry } = await import("@/src/core/registry");
 
 type Recorded = {
 	method: string;
@@ -166,6 +169,82 @@ function updateRequest(): Recorded {
 	expect(patches).toHaveLength(1);
 	return patches[0] as Recorded;
 }
+
+/** Run `phala <argv>` through the real argument parser and dispatcher. */
+async function runCli(argv: string[]) {
+	const registry = new CommandRegistry();
+	registry.registerCommand(deployCommand);
+	let stderr = "";
+	const output = (append: (chunk: string) => void) =>
+		({
+			write: (chunk: string) => {
+				append(chunk);
+				return true;
+			},
+			isTTY: false,
+		}) as unknown as NodeJS.WriteStream;
+	const code = await dispatchCommand({
+		registry,
+		argv,
+		executableName: "phala",
+		version: "0.0.0",
+		packageName: "phala",
+		packageVersion: "0.0.0",
+		runtime: "bun",
+		cwd: tmpDir,
+		env: {
+			...process.env,
+			PHALA_DISABLE_UPDATE_CHECK: "1",
+			PHALA_CLOUD_API_KEY: "test-key",
+			PHALA_CLOUD_API_PREFIX: `http://127.0.0.1:${server.port}/api/v1`,
+			PHALA_CLOUD_DIR: tmpDir,
+		},
+		stdout: output(() => {}),
+		stderr: output((chunk) => {
+			stderr += chunk;
+		}),
+		stdin: process.stdin,
+	});
+	return { code, stderr };
+}
+
+describe("phala deploy --cvm-id --clear-init-scripts (parsed argv)", () => {
+	test("sends an empty init_scripts set", async () => {
+		const { code } = await runCli([
+			"deploy",
+			"--cvm-id",
+			CVM_ID,
+			"-c",
+			composePath,
+			"--clear-init-scripts",
+		]);
+
+		expect(code).toBe(0);
+		expect(updateRequest().body).toEqual({
+			docker_compose_file: COMPOSE,
+			init_scripts: [],
+		});
+	});
+
+	test("rejects --clear-init-scripts with --init-script before any request", async () => {
+		const { code, stderr } = await runCli([
+			"deploy",
+			"--cvm-id",
+			CVM_ID,
+			"-c",
+			composePath,
+			"--clear-init-scripts",
+			"--init-script",
+			"docker_cleanup",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain(
+			"--clear-init-scripts cannot be combined with --init-script",
+		);
+		expect(requests).toEqual([]);
+	});
+});
 
 describe("phala deploy --cvm-id", () => {
 	test("sends resource, image and tcbinfo flags in the update", async () => {

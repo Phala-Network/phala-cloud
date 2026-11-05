@@ -232,6 +232,14 @@ export const deployCommandMeta: CommandMeta = {
 			group: "advanced",
 		},
 		{
+			name: "clear-init-scripts",
+			description:
+				"Remove every platform init script from an existing CVM. Cannot be combined with --init-script. Update only.",
+			type: "boolean",
+			target: "clearInitScripts",
+			group: "advanced",
+		},
+		{
 			name: "launch-token",
 			description:
 				"Launch token (at least 32 bytes) the CVM must boot with. Create only.",
@@ -532,6 +540,7 @@ export const deployCommandSchema = z
 		runner: z.enum(["docker-compose", "nerdctl-compose", "bash"]).optional(),
 		appCompose: z.string().optional(),
 		initScript: z.array(z.enum(["docker_cleanup", "env_merge"])).optional(),
+		clearInitScripts: z.boolean().optional(),
 		launchToken: z.string().optional(),
 		launchTokenHash: z.string().optional(),
 		generateLaunchToken: z.boolean().optional(),
