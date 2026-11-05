@@ -215,3 +215,14 @@ func TestPatchCVMReturnsOtherErrors(t *testing.T) {
 		t.Fatal("PatchCVM: want error for 409")
 	}
 }
+
+func TestUpdateCVMResourcesDoesNotSendAllowRestart(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusAccepted, acceptedUpdate)
+	if _, err := client.UpdateCVMResources(context.Background(), "cvm-1", &UpdateResourcesRequest{
+		VCPU:         Int(4),
+		AllowRestart: Bool(true),
+	}); err != nil {
+		t.Fatalf("UpdateCVMResources: %v", err)
+	}
+	assertBody(t, (*seen)[0].body, `{"vcpu": 4}`)
+}

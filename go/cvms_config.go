@@ -51,7 +51,10 @@ type UpdateResourcesRequest struct {
 	Memory       *int    `json:"memory,omitempty"`
 	DiskSize     *int    `json:"disk_size,omitempty"`
 	InstanceType *string `json:"instance_type,omitempty"`
-	AllowRestart *bool   `json:"allow_restart,omitempty"`
+
+	// Deprecated: the API restarts the CVM whenever a resize needs it and
+	// ignores this flag, so it is no longer sent.
+	AllowRestart *bool `json:"-"`
 }
 
 // UpdateResourcesResponse is the response from the unified CVM update endpoint.
