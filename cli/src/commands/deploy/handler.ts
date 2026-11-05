@@ -114,6 +114,15 @@ interface Options {
 	token?: string;
 	composeHash?: string;
 	transactionHash?: string;
+	runner?: "docker-compose" | "nerdctl-compose" | "bash";
+	appCompose?: string;
+	initScript?: Array<"docker_cleanup" | "env_merge">;
+	launchToken?: string;
+	generateLaunchToken?: boolean;
+	eventLogVersion?: "1" | "2";
+	ephemeralDataDisk?: boolean;
+	gateway?: boolean;
+	confirmDataWipe?: boolean;
 	[key: string]: unknown;
 }
 
@@ -148,7 +157,6 @@ const CREATE_ONLY_FLAGS: ReadonlyArray<readonly [keyof Options, string]> = [
 	["keyProviderMode", "--key-provider-mode"],
 	["devOs", "--dev-os"],
 	["sshPubkey", "--ssh-pubkey"],
-	["secureTime", "--secure-time"],
 	["fs", "--fs"],
 	["skipGateway", "--skip-gateway"],
 	["kms", "--kms"],
@@ -156,6 +164,10 @@ const CREATE_ONLY_FLAGS: ReadonlyArray<readonly [keyof Options, string]> = [
 	["kmsContract", "--kms-contract"],
 	["kmsContractId", "--kms-contract-id"],
 	["experimentalKeyProviderType", "--experimental-key-provider-type"],
+	["runner", "--runner"],
+	["appCompose", "--app-compose"],
+	["launchToken", "--launch-token"],
+	["generateLaunchToken", "--generate-launch-token"],
 ];
 
 export function assertUpdatableOptions(options: Options): void {
@@ -167,6 +179,59 @@ export function assertUpdatableOptions(options: Options): void {
 			`${flags.join(", ")} cannot be changed on an existing CVM. Remove ${flags.length === 1 ? "it" : "them"} to update the CVM, or deploy a new CVM.`,
 		);
 	}
+}
+
+/**
+ * Flags that shape the compose. --app-compose sends a whole app compose, so
+ * they would be ignored; reject them instead.
+ */
+const COMPOSE_SHAPING_FLAGS: ReadonlyArray<readonly [keyof Options, string]> = [
+	["compose", "--compose"],
+	["runner", "--runner"],
+	["preLaunchScript", "--pre-launch-script"],
+	["fs", "--fs"],
+	["secureTime", "--secure-time"],
+	["publicLogs", "--public-logs"],
+	["publicSysinfo", "--public-sysinfo"],
+	["publicTcbinfo", "--public-tcbinfo"],
+	["eventLogVersion", "--event-log-version"],
+	["ephemeralDataDisk", "--ephemeral-data-disk"],
+	["gateway", "--gateway"],
+	["experimentalKeyProviderType", "--experimental-key-provider-type"],
+];
+
+/** Reject flag combinations a new deployment cannot honor. */
+export function assertCreateOptions(options: Options): void {
+	if (options.confirmDataWipe !== undefined) {
+		throw new Error(
+			"--confirm-data-wipe only applies to an update of an existing CVM (--cvm-id).",
+		);
+	}
+	if (options.appCompose === undefined) return;
+	const flags = COMPOSE_SHAPING_FLAGS.filter(
+		([key]) => options[key] !== undefined,
+	).map(([, flag]) => flag);
+	if (options.noPreLaunchScript) flags.push("--no-pre-launch-script");
+	if (flags.length > 0) {
+		throw new Error(
+			`${flags.join(", ")} cannot be used with --app-compose. Set ${flags.length === 1 ? "it" : "them"} in the app-compose file.`,
+		);
+	}
+}
+
+/** Compose fields set by flags; a create puts them in compose_file, an update in compose. */
+function composeFieldsFromOptions(options: Options): Record<string, unknown> {
+	const fields: Record<string, unknown> = {};
+	if (options.gateway !== undefined) {
+		fields.gateway_enabled = options.gateway;
+	}
+	if (options.eventLogVersion !== undefined) {
+		fields.event_log_version = Number(options.eventLogVersion);
+	}
+	if (options.ephemeralDataDisk !== undefined) {
+		fields.requirements = { ephemeral_data_disk: options.ephemeralDataDisk };
+	}
+	return fields;
 }
 
 function parseVcpuInput(input: string): number {
@@ -218,6 +283,19 @@ export function buildUpdatePatchBody(
 	}
 	if (options.image) {
 		patchBody.image = options.image;
+	}
+	const compose = composeFieldsFromOptions(options);
+	if (options.secureTime !== undefined) {
+		compose.secure_time = options.secureTime;
+	}
+	if (Object.keys(compose).length > 0) {
+		patchBody.compose = compose;
+	}
+	if (options.initScript !== undefined) {
+		patchBody.init_scripts = options.initScript;
+	}
+	if (options.confirmDataWipe) {
+		patchBody.confirm_data_wipe = true;
 	}
 	applyForceStopOption(patchBody, options.forceStop);
 	if (options.prepareOnly) {
@@ -311,6 +389,13 @@ async function readDockerComposeFile({
 
 	// 3. Read and return the file content
 	return fs.readFileSync(dockerComposePath, "utf8");
+}
+
+async function readAppComposeFile(appComposePath: string): Promise<string> {
+	if (!fs.existsSync(appComposePath)) {
+		throw new Error(`App compose file not found: ${appComposePath}`);
+	}
+	return fs.readFileSync(appComposePath, "utf8");
 }
 
 const validatePrivateKey = async (
@@ -652,29 +737,31 @@ const resolvePrivacySettings = (
 	};
 };
 
-/**
- * Build provision payload from options
- * All parameters are optional - backend will auto-match resources
- * @param preResolvedKmsSelection - Optional pre-resolved KMS selection to avoid duplicate calls/warnings
- */
-export const buildProvisionPayload = (
+function buildComposeFile(
 	options: Options,
-	name: string,
-	dockerComposeYml: string,
+	composeContent: string,
 	envs: EnvVar[],
 	privacySettings: PrivacySettings,
-	preResolvedKmsSelection?: ReturnType<typeof resolveKmsSelection>,
 	preLaunchScriptContent?: string,
-) => {
+): Record<string, unknown> {
 	const composeFile: Record<string, unknown> = {
 		name: "", // Required by backend schema, defaults to empty string
-		docker_compose_file: dockerComposeYml,
 		allowed_envs: envs?.map((e) => e.key) || [],
 		public_logs: privacySettings.publicLogs,
 		public_sysinfo: privacySettings.publicSysinfo,
 		public_tcbinfo: privacySettings.publicTcbinfo,
 		secure_time: privacySettings.secureTime,
+		...composeFieldsFromOptions(options),
 	};
+	// The bash runner runs a script instead of Docker Compose YAML.
+	if (options.runner === "bash") {
+		composeFile.bash_script = composeContent;
+	} else {
+		composeFile.docker_compose_file = composeContent;
+	}
+	if (options.runner) {
+		composeFile.runner = options.runner;
+	}
 
 	if (options.noPreLaunchScript) {
 		composeFile.pre_launch_script = "";
@@ -689,12 +776,51 @@ export const buildProvisionPayload = (
 	if (options.experimentalKeyProviderType) {
 		composeFile.key_provider = options.experimentalKeyProviderType;
 	}
+	return composeFile;
+}
 
-	const payload: ProvisionCvmRequest = {
-		name: name,
-		compose_file: composeFile,
-		listed: privacySettings.listed,
-	};
+/**
+ * Build provision payload from options
+ * All parameters are optional - backend will auto-match resources
+ * @param preResolvedKmsSelection - Optional pre-resolved KMS selection to avoid duplicate calls/warnings
+ */
+export const buildProvisionPayload = (
+	options: Options,
+	name: string,
+	dockerComposeYml: string,
+	envs: EnvVar[],
+	privacySettings: PrivacySettings,
+	preResolvedKmsSelection?: ReturnType<typeof resolveKmsSelection>,
+	preLaunchScriptContent?: string,
+) => {
+	const payload: ProvisionCvmRequest = options.appCompose
+		? // The file is the whole app compose; the API parses it.
+			{
+				name,
+				compose_file_raw: dockerComposeYml,
+				listed: privacySettings.listed,
+			}
+		: {
+				name,
+				compose_file: buildComposeFile(
+					options,
+					dockerComposeYml,
+					envs,
+					privacySettings,
+					preLaunchScriptContent,
+				),
+				listed: privacySettings.listed,
+			};
+
+	if (options.initScript !== undefined) {
+		payload.init_scripts = options.initScript;
+	}
+	if (options.launchToken !== undefined) {
+		payload.launch_token = options.launchToken;
+	}
+	if (options.generateLaunchToken !== undefined) {
+		payload.generate_launch_token = options.generateLaunchToken;
+	}
 
 	const { kmsType, deprecatedKmsId } =
 		preResolvedKmsSelection ?? resolveKmsSelection(options);
@@ -989,6 +1115,7 @@ const deployNewCvm = async (
 					name: cvm.name,
 					app_id: cvm.app_id,
 					dashboard_url: `${CLOUD_URL}/dashboard/cvms/${cvm.vm_uuid}`,
+					...(cvm.launch_token ? { launch_token: cvm.launch_token } : {}),
 				},
 				null,
 				2,
@@ -1004,6 +1131,11 @@ const deployNewCvm = async (
       Dashboard URL:  ${CLOUD_URL}/dashboard/cvms/${cvm.vm_uuid}
     `;
 		stdout.write(`${successMessage}\n`);
+		if (cvm.launch_token) {
+			stdout.write(
+				`Launch token:   ${cvm.launch_token}\nThis is the only time the launch token is shown. Store it.\n`,
+			);
+		}
 	}
 };
 
@@ -1424,6 +1556,8 @@ export async function runDeploy(
 		// prompt, so an invalid update fails first.
 		if (context.cvmId) {
 			assertUpdatableOptions(input);
+		} else {
+			assertCreateOptions(input);
 		}
 
 		// Handle --commit mode: skip compose file reading entirely
@@ -1452,10 +1586,12 @@ export async function runDeploy(
 			interactive: input.interactive,
 		});
 
-		const docker_compose_yml = await readDockerComposeFile({
-			dockerComposePath: dockerComposePath,
-			interactive: input.interactive,
-		});
+		const docker_compose_yml = input.appCompose
+			? await readAppComposeFile(input.appCompose)
+			: await readDockerComposeFile({
+					dockerComposePath: dockerComposePath,
+					interactive: input.interactive,
+				});
 
 		// Read pre-launch script file if provided
 		let preLaunchScriptContent: string | undefined;

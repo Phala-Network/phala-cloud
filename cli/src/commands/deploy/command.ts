@@ -207,6 +207,78 @@ export const deployCommandMeta: CommandMeta = {
 			target: "noPreLaunchScript",
 			group: "advanced",
 		},
+		{
+			name: "runner",
+			description:
+				"App runner: docker-compose (default), nerdctl-compose, or bash. With bash, --compose is the script to run. nerdctl-compose and bash need the compose_advanced feature. Create only.",
+			type: "string",
+			target: "runner",
+			group: "advanced",
+		},
+		{
+			name: "app-compose",
+			description:
+				"Path to a whole app-compose JSON file, sent instead of --compose and the compose flags. Needs the compose_advanced feature. Create only.",
+			type: "string",
+			target: "appCompose",
+			group: "advanced",
+		},
+		{
+			name: "init-script",
+			description:
+				"Platform init script to run on every boot: docker_cleanup or env_merge (repeatable). On update, replaces the current set.",
+			type: "string[]",
+			target: "initScript",
+			group: "advanced",
+		},
+		{
+			name: "launch-token",
+			description:
+				"Launch token (at least 32 bytes) the CVM must boot with. Create only.",
+			type: "string",
+			target: "launchToken",
+			group: "advanced",
+		},
+		{
+			name: "generate-launch-token",
+			description:
+				"Gate the CVM with a launch token Phala Cloud generates for a new app (shown once), or with the app's existing token. Create only.",
+			type: "boolean",
+			target: "generateLaunchToken",
+			group: "advanced",
+		},
+		{
+			name: "event-log-version",
+			description: "Event log digest format: 1 or 2 (dstack OS 0.6.0+)",
+			type: "string",
+			target: "eventLogVersion",
+			group: "advanced",
+		},
+		{
+			name: "ephemeral-data-disk",
+			description:
+				"Format the data disk on every boot (dstack OS 0.6.3+). Turning it on for an existing CVM needs --confirm-data-wipe.",
+			type: "boolean",
+			target: "ephemeralDataDisk",
+			negatedName: "no-ephemeral-data-disk",
+			group: "advanced",
+		},
+		{
+			name: "gateway",
+			description: "Route the CVM through the gateway (default: true)",
+			type: "boolean",
+			target: "gateway",
+			negatedName: "no-gateway",
+			group: "advanced",
+		},
+		{
+			name: "confirm-data-wipe",
+			description:
+				"Confirm an update that turns on docker_cleanup or --ephemeral-data-disk, which erase data on every boot. Update only.",
+			type: "boolean",
+			target: "confirmDataWipe",
+			group: "advanced",
+		},
 		privateKeyOption,
 		rpcUrlOption,
 		{
@@ -340,6 +412,14 @@ export const deployCommandMeta: CommandMeta = {
 			value: "phala deploy --no-pre-launch-script",
 		},
 		{
+			name: "Deploy from a whole app-compose file",
+			value: "phala deploy --app-compose app-compose.json",
+		},
+		{
+			name: "Deploy with a generated launch token",
+			value: "phala deploy --generate-launch-token",
+		},
+		{
 			name: "Deploy with Ethereum KMS",
 			value: "phala deploy --kms ethereum --private-key <key> --rpc-url <url>",
 		},
@@ -369,6 +449,11 @@ export const deployCommandMeta: CommandMeta = {
 		{
 			name: "Deploy and list on Trust Center",
 			value: "phala deploy --listed",
+		},
+		{
+			name: "Turn on container cleanup for an existing CVM",
+			value:
+				"phala deploy --cvm-id app_123 --init-script docker_cleanup --confirm-data-wipe",
 		},
 		{
 			name: "Update existing CVM to disable logs",
@@ -436,6 +521,15 @@ export const deployCommandSchema = z
 		token: z.string().optional(),
 		composeHash: z.string().optional(),
 		transactionHash: z.string().optional(),
+		runner: z.enum(["docker-compose", "nerdctl-compose", "bash"]).optional(),
+		appCompose: z.string().optional(),
+		initScript: z.array(z.enum(["docker_cleanup", "env_merge"])).optional(),
+		launchToken: z.string().optional(),
+		generateLaunchToken: z.boolean().optional(),
+		eventLogVersion: z.enum(["1", "2"]).optional(),
+		ephemeralDataDisk: z.boolean().optional(),
+		gateway: z.boolean().optional(),
+		confirmDataWipe: z.boolean().optional(),
 	})
 	.superRefine((input, context) => {
 		if (input.noPreLaunchScript && input.preLaunchScript !== undefined) {

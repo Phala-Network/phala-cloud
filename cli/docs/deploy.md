@@ -43,6 +43,15 @@ Creates a new CVM by default. If `--cvm-id` is provided or `phala.toml` contains
 | `--no-pre-launch-script` | false | Deploy without any pre-launch script (do not use the Phala Cloud default); cannot be combined with `--pre-launch-script` |
 | `--private-key <key>` | | Private key for on-chain KMS (ethereum/base) |
 | `--rpc-url <url>` | | RPC URL for blockchain interaction |
+| `--runner <runner>` | docker-compose | App runner: `docker-compose`, `nerdctl-compose` or `bash`. With `bash`, `--compose` is the script to run. `nerdctl-compose` and `bash` need the `compose_advanced` feature |
+| `--app-compose <path>` | | Whole app-compose JSON file, sent instead of `--compose` and the compose flags. Needs the `compose_advanced` feature |
+| `--init-script <slug>` | | Platform init script to run on every boot: `docker_cleanup` or `env_merge`. Repeatable. On update, replaces the current set |
+| `--launch-token <token>` | | Launch token (at least 32 bytes) the CVM must boot with |
+| `--generate-launch-token` | false | Gate the CVM with a launch token Phala Cloud generates for a new app (printed once), or with the app's existing token |
+| `--event-log-version <1\|2>` | | Event log digest format (dstack OS 0.6.0+) |
+| `--ephemeral-data-disk` | | Format the data disk on every boot (dstack OS 0.6.3+); `--no-ephemeral-data-disk` sets it to false |
+| `--gateway` / `--no-gateway` | true | Route the CVM through the gateway |
+| `--confirm-data-wipe` | false | Confirm an update that turns on `docker_cleanup` or `--ephemeral-data-disk`, which erase data on every boot |
 | `--debug` | false | Enable debug logging |
 
 ## Deprecated Options
@@ -65,12 +74,24 @@ With `--cvm-id` (or a CVM ID in `phala.toml`), deploy sends the compose file and
 - `--instance-type`, `--vcpu`, `--memory`, `--disk-size`, `--image`
 - `--public-logs`, `--public-sysinfo`, `--public-tcbinfo` and their `--no-` forms
 - `--pre-launch-script`, `--no-pre-launch-script`, `-e`, `--force-stop`, `--prepare-only`
+- `--secure-time`, `--gateway` / `--no-gateway`, `--event-log-version`, `--ephemeral-data-disk` / `--no-ephemeral-data-disk` (sent as a compose merge patch)
+- `--init-script` (replaces the CVM's init scripts) and `--confirm-data-wipe`
+
+Turning on `docker_cleanup` or `--ephemeral-data-disk` erases data on every boot, so the update needs `--confirm-data-wipe`. Turning the gateway off removes the CVM from the gateway after the update.
 
 A flag you leave out keeps the CVM's current value. In particular, an update without `--pre-launch-script` or `--no-pre-launch-script` keeps the CVM's current pre-launch script; it does not switch to the Phala Cloud default.
 
 `--listed` / `--no-listed` changes the Trust Center listing through its own request, sent only after the update is accepted (or, for on-chain KMS, after it is confirmed or committed with `--commit`). It is not sent with `--prepare-only`. The listing applies to the whole app, and its endpoint needs an API key or a login session: GitHub Actions OIDC tokens are not accepted for it.
 
-These flags set how a CVM is created and cannot be changed afterwards: `--name`, `--region`, `--node`, `--custom-app-id`, `--nonce`, `--key-provider-mode`, `--dev-os` / `--no-dev-os`, `--ssh-pubkey`, `--secure-time`, `--fs`, `--skip-gateway`, `--kms`, `--kms-id`, `--kms-contract`, `--kms-contract-id` and `--experimental-key-provider-type`. An update that passes any of them fails before any request is sent.
+These flags set how a CVM is created and cannot be changed afterwards: `--name`, `--region`, `--node`, `--custom-app-id`, `--nonce`, `--key-provider-mode`, `--dev-os` / `--no-dev-os`, `--ssh-pubkey`, `--fs`, `--skip-gateway`, `--kms`, `--kms-id`, `--kms-contract`, `--kms-contract-id`, `--experimental-key-provider-type`, `--runner`, `--app-compose`, `--launch-token` and `--generate-launch-token`. An update that passes any of them fails before any request is sent.
+
+## Raw app compose
+
+`--app-compose <path>` sends a whole app-compose JSON file. Phala Cloud parses it with the same rules as a compose built from flags, so the deployed bytes and compose hash follow its canonical form, not the file's bytes. The compose flags (`--compose`, `--runner`, `--pre-launch-script`, `--no-pre-launch-script`, `--fs`, `--secure-time`, `--public-*`, `--event-log-version`, `--ephemeral-data-disk`, `--gateway`, `--experimental-key-provider-type`) cannot be combined with it; set those fields in the file. `-e` still encrypts the env values; their keys must be in the file's `allowed_envs`.
+
+## Launch token
+
+`--launch-token` or `--generate-launch-token` makes the guest check the app's launch token on every boot before it gets its keys. A generated token is printed once, after the CVM is created; store it. Phala Cloud and the node operator can read the token, so it only protects against parties who know the public compose. To rotate or clear an app's token, see `phala apps launch-token`.
 
 ## Pre-launch script behavior
 

@@ -191,6 +191,31 @@ describe("phala deploy --cvm-id", () => {
 		});
 	});
 
+	test("sends compose flags as a merge patch, with init scripts and the data-wipe confirmation", async () => {
+		const { exitCode, failure } = await deploy({
+			secureTime: true,
+			gateway: false,
+			eventLogVersion: "2",
+			ephemeralDataDisk: true,
+			initScript: ["docker_cleanup"],
+			confirmDataWipe: true,
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(updateRequest().body).toEqual({
+			docker_compose_file: COMPOSE,
+			compose: {
+				secure_time: true,
+				gateway_enabled: false,
+				event_log_version: 2,
+				requirements: { ephemeral_data_disk: true },
+			},
+			init_scripts: ["docker_cleanup"],
+			confirm_data_wipe: true,
+		});
+	});
+
 	test.each(["1536", "1.5G"])(
 		"sends --memory %p as 1536 MB and leaves the spec to the backend",
 		async (memory) => {
@@ -284,7 +309,6 @@ describe("phala deploy --cvm-id", () => {
 		[{ devOs: true }, "--dev-os"],
 		[{ devOs: false }, "--dev-os"],
 		[{ sshPubkey: "~/.ssh/id_ed25519.pub" }, "--ssh-pubkey"],
-		[{ secureTime: true }, "--secure-time"],
 		[{ fs: "ext4" }, "--fs"],
 		[{ skipGateway: true }, "--skip-gateway"],
 		[{ kms: "base" }, "--kms"],
@@ -295,6 +319,10 @@ describe("phala deploy --cvm-id", () => {
 			{ experimentalKeyProviderType: "tpm" },
 			"--experimental-key-provider-type",
 		],
+		[{ runner: "bash" }, "--runner"],
+		[{ appCompose: "app-compose.json" }, "--app-compose"],
+		[{ launchToken: "t".repeat(32) }, "--launch-token"],
+		[{ generateLaunchToken: true }, "--generate-launch-token"],
 	])("rejects create-only flag %p before any request", async (flags, flag) => {
 		const { exitCode, failure } = await deploy(flags);
 
