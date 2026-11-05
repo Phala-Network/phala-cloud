@@ -177,3 +177,20 @@ async def test_update_cvm_visibility_uses_the_unified_patch_endpoint_async() -> 
     method, path, body, _ = recorder.last
     assert (method, path) == ("PATCH", "/api/v1/cvms/cvm-1")
     assert body == {"public_sysinfo": True, "public_logs": False, "public_tcbinfo": True}
+
+
+def test_patch_cvm_hash_required_returns_empty_app_id_when_payload_has_none() -> None:
+    payload = {
+        **_HASH_REQUIRED,
+        "details": [
+            {"field": "compose_hash", "value": "abc123"},
+            {"field": "app_id", "value": None},
+        ],
+    }
+    result = _sync_client(_Recorder(status=465, payload=payload)).patch_cvm(
+        {"id": "cvm-1", "public_logs": True, "prepare_only": True}
+    )
+
+    assert result["requires_on_chain_hash"] is True
+    assert result["compose_hash"] == "abc123"
+    assert result["app_id"] == ""

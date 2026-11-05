@@ -443,7 +443,7 @@ class _ExtMixin:
                 return {
                     "message": message,
                     "compose_hash": field_map.get("compose_hash", ""),
-                    "app_id": str(field_map.get("app_id", "")),
+                    "app_id": str(field_map.get("app_id") or ""),
                     "device_id": field_map.get("device_id", ""),
                     "kms_info": field_map.get("kms_info"),
                     "commit_token": field_map.get("commit_token"),
