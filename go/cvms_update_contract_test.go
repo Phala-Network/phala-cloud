@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -120,129 +119,6 @@ func TestPatchCVMRejectsConflictingImageNames(t *testing.T) {
 	}
 	if len(*seen) != 0 {
 		t.Fatalf("requests = %d, want 0", len(*seen))
-	}
-}
-
-func TestPatchCVMSendsListedThroughTheListedEndpointAfterThePatch(t *testing.T) {
-	client, seen := recordingServer(t, http.StatusAccepted, acceptedUpdate)
-	if _, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{
-		Listed: Bool(true),
-		VCPU:   Int(4),
-	}); err != nil {
-		t.Fatalf("PatchCVM: %v", err)
-	}
-	if len(*seen) != 2 {
-		t.Fatalf("requests = %d, want 2", len(*seen))
-	}
-	patch, listed := (*seen)[0], (*seen)[1]
-	if patch.path != "/cvms/cvm-1" {
-		t.Fatalf("first request path = %s, want /cvms/cvm-1", patch.path)
-	}
-	assertBody(t, patch.body, `{"vcpu": 4}`)
-	if listed.method != "PATCH" || listed.path != "/cvms/cvm-1/listed" {
-		t.Fatalf("second request = %s %s, want PATCH /cvms/cvm-1/listed", listed.method, listed.path)
-	}
-	assertBody(t, listed.body, `{"listed": true}`)
-}
-
-func TestPatchCVMDoesNotTouchListedWhenThePatchFails(t *testing.T) {
-	client, seen := recordingServer(t, http.StatusBadRequest, `{"detail":"bad request"}`)
-	if _, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{
-		Listed: Bool(true),
-		VCPU:   Int(4),
-	}); err == nil {
-		t.Fatal("PatchCVM: want error for 400")
-	}
-	if len(*seen) != 1 || (*seen)[0].path != "/cvms/cvm-1" {
-		t.Fatalf("requests = %+v, want only PATCH /cvms/cvm-1", *seen)
-	}
-}
-
-func TestPatchCVMAppliesListedAfterA465Result(t *testing.T) {
-	var paths []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		paths = append(paths, r.URL.Path)
-		w.Header().Set("Content-Type", "application/json")
-		if r.URL.Path == "/cvms/cvm-1" {
-			w.WriteHeader(465)
-			_, _ = w.Write([]byte(hashRequired))
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{}`))
-	}))
-	t.Cleanup(srv.Close)
-	client, err := NewClient(WithAPIKey("k"), WithBaseURL(srv.URL), WithMaxRetries(0))
-	if err != nil {
-		t.Fatalf("NewClient: %v", err)
-	}
-	resp, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{Listed: Bool(true), PublicLogs: Bool(true)})
-	if err != nil {
-		t.Fatalf("PatchCVM: %v", err)
-	}
-	if !resp.RequiresOnChainHash {
-		t.Fatal("RequiresOnChainHash = false, want true")
-	}
-	if !reflect.DeepEqual(paths, []string{"/cvms/cvm-1", "/cvms/cvm-1/listed"}) {
-		t.Fatalf("paths = %v", paths)
-	}
-}
-
-func TestPatchCVMWrapsAListedFailureAfterTheAcceptedPatch(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if r.URL.Path == "/cvms/cvm-1/listed" {
-			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = w.Write([]byte(`{"detail":"boom"}`))
-			return
-		}
-		w.WriteHeader(http.StatusAccepted)
-		_, _ = w.Write([]byte(acceptedUpdate))
-	}))
-	t.Cleanup(srv.Close)
-	client, err := NewClient(WithAPIKey("k"), WithBaseURL(srv.URL), WithMaxRetries(0))
-	if err != nil {
-		t.Fatalf("NewClient: %v", err)
-	}
-	_, err = client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{Listed: Bool(true), VCPU: Int(4)})
-	if err == nil {
-		t.Fatal("PatchCVM: want error when listed fails")
-	}
-	if !strings.Contains(err.Error(), "already accepted") {
-		t.Fatalf("err = %v, want it to state the patch was already accepted", err)
-	}
-	var apiErr *APIError
-	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("err = %v, want wrapped *APIError 500", err)
-	}
-}
-
-func TestPatchCVMListedWithBehaviorFieldsOnlySkipsTheUnifiedPatch(t *testing.T) {
-	client, seen := recordingServer(t, http.StatusOK, `{}`)
-	if _, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{
-		Listed:          Bool(true),
-		ShutdownTimeout: Int(60),
-		AllowForceStop:  Bool(true),
-	}); err != nil {
-		t.Fatalf("PatchCVM: %v", err)
-	}
-	if len(*seen) != 1 || (*seen)[0].path != "/cvms/cvm-1/listed" {
-		t.Fatalf("requests = %+v, want only PATCH /cvms/cvm-1/listed", *seen)
-	}
-}
-
-func TestPatchCVMWithOnlyListedSkipsTheUnifiedPatch(t *testing.T) {
-	client, seen := recordingServer(t, http.StatusOK, `{}`)
-	resp, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{Listed: Bool(false)})
-	if err != nil {
-		t.Fatalf("PatchCVM: %v", err)
-	}
-	if len(*seen) != 1 || (*seen)[0].path != "/cvms/cvm-1/listed" {
-		t.Fatalf("requests = %+v, want only PATCH /cvms/cvm-1/listed", *seen)
-	}
-	assertBody(t, (*seen)[0].body, `{"listed": false}`)
-	if resp.RequiresOnChainHash || resp.CorrelationID != "" {
-		t.Fatalf("resp = %+v", resp)
 	}
 }
 

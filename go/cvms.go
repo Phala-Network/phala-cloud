@@ -386,12 +386,6 @@ func (c *Client) CommitCVMUpdate(ctx context.Context, cvmID string, req *CommitC
 //
 // A 465 response (compose hash registration required, contract-owned KMS) is
 // not an error: it returns RequiresOnChainHash with the hash to register.
-//
-// Listed is not part of the unified PATCH. PatchCVM sends the unified PATCH
-// first (skipped when no other field is set) and applies Listed through
-// PATCH /cvms/{id}/listed only after the CVM patch was accepted or answered
-// with 465. The two calls are not atomic: when the listing call fails, the
-// returned error states that the CVM patch was already accepted.
 func (c *Client) PatchCVM(ctx context.Context, cvmID string, req *PatchCVMRequest) (*PatchCVMResponse, error) {
 	if req == nil {
 		return nil, fmt.Errorf("phala: patch request is required")
@@ -404,26 +398,10 @@ func (c *Client) PatchCVM(ctx context.Context, cvmID string, req *PatchCVMReques
 		body.Image = body.OSImageName
 	}
 
-	result := &PatchCVMResponse{}
-	patched := false
-	if !isZeroPatch(body) {
-		var err error
-		result, err = c.sendCVMPatch(ctx, cvmID, body)
-		if err != nil {
-			return nil, err
-		}
-		patched = true
+	if isZeroPatch(body) {
+		return &PatchCVMResponse{}, nil
 	}
-
-	if body.Listed != nil {
-		if err := c.UpdateCVMListed(ctx, cvmID, *body.Listed); err != nil {
-			if patched {
-				return nil, fmt.Errorf("phala: CVM patch was already accepted but updating listed failed: %w", err)
-			}
-			return nil, err
-		}
-	}
-	return result, nil
+	return c.sendCVMPatch(ctx, cvmID, body)
 }
 
 // sendCVMPatch sends the unified PATCH /cvms/{id} and maps a 465 answer to a
@@ -456,7 +434,6 @@ func (c *Client) sendCVMPatch(ctx context.Context, cvmID string, body PatchCVMRe
 // ShutdownTimeout and AllowForceStop only tune how a change is applied, so
 // they do not make a request worth sending on their own.
 func isZeroPatch(req PatchCVMRequest) bool {
-	req.Listed = nil
 	req.OSImageName = nil
 	req.ShutdownTimeout = nil
 	req.AllowForceStop = nil
