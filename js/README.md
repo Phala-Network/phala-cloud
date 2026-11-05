@@ -123,6 +123,9 @@ The SDK enforces `redirect: "manual"` at the fetch boundary, even if configurati
 
 - `watchCvmState` with `maxRetries: N` now makes up to N+1 attempts, and `MaxRetriesExceededError.attempts` is N+1.
 - The `extend()` factory now receives a `Client<ApiVersion>`. Its result type is derived from the client without `withVersion` and `extend`, which are re-typed on the result. Extension methods on a client returned by `withVersion` return `unknown`; narrow the result before using it.
+- `patchCvm` now takes `gpus` in the backend shape, `{ gpus: [{ slot, product_id? }], attach_mode? }`, instead of `{ count, product_name }`. The old shape was never accepted by the API. `patchCvm` also accepts `instance_type`.
+- `updateCvmVisibility` now calls `PATCH /cvms/{id}` instead of the deprecated `PATCH /cvms/{id}/visibility`. It returns `{ message, correlation_id, status }` instead of the CVM record; read the CVM with `getCvmInfo` if you need it. HTTP 465 is still thrown for contract-owned KMS until the compose hash is registered on-chain.
+- `updateCvmResources` no longer sends `allow_restart`, which the API ignores. The field is deprecated.
 
 ## License
 
