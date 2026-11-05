@@ -252,7 +252,11 @@ class UpdateResourcesRequest(CvmIdRequest):
     memory: float | None = None
     disk_size: float | None = None
     instance_type: str | None = None
-    allow_restart: bool | None = None
+    allow_restart: bool | None = Field(
+        default=None,
+        deprecated="The API ignores allow_restart and restarts the CVM when a resize needs it.",
+        exclude=True,
+    )
 
 
 class UpdateVisibilityRequest(CvmIdRequest):

@@ -131,3 +131,25 @@ async def test_patch_cvm_prepare_only_sends_header_and_returns_commit_token_asyn
     assert headers["x-prepare-only"] == "true"
     assert body == {"public_logs": True}
     assert result["commit_token"] == "token-1"
+
+
+def test_update_cvm_resources_does_not_send_allow_restart_sync() -> None:
+    recorder = _Recorder()
+    _sync_client(recorder).update_cvm_resources(
+        {"id": "cvm-1", "vcpu": 4, "instance_type": "tdx.medium", "allow_restart": True}
+    )
+
+    method, path, body, _ = recorder.last
+    assert (method, path) == ("PATCH", "/api/v1/cvms/cvm-1")
+    assert body == {"vcpu": 4, "instance_type": "tdx.medium"}
+
+
+@pytest.mark.asyncio
+async def test_update_cvm_resources_does_not_send_allow_restart_async() -> None:
+    recorder = _Recorder()
+    await _async_client(recorder).update_cvm_resources(
+        {"id": "cvm-1", "vcpu": 4, "allow_restart": True}
+    )
+
+    _, _, body, _ = recorder.last
+    assert body == {"vcpu": 4}
