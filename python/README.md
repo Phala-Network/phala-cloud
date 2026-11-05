@@ -123,6 +123,9 @@ This changes the previous `encrypt_env_vars` behavior: code that awaited it must
 - Use the JavaScript SDK for `add_compose_hash` and `deploy_app_auth`. Their Python wrappers have been removed.
 - Catch `RequestError` instead of `TimeoutError` when watch retries are exhausted. Watch HTTP errors now use SDK exceptions instead of `httpx.HTTPStatusError`.
 - Do not rely on a raw state event followed by a closed stream as a successful watch result. Only a complete event finishes the watch. Timeouts, incomplete streams, and transient network failures use the reconnect budget.
+- `patch_cvm` validates `gpus` as `{"gpus": [{"slot": ..., "product_id": ...}], "attach_mode": ...}`, the shape the API accepts. Other shapes now fail validation instead of being sent and ignored. `patch_cvm` also accepts `instance_type`, and `prepare_only=True` sends `X-Prepare-Only: true`; the 465 result then includes `commit_token`, `commit_url`, `api_commit_url` and `onchain_status`.
+- `update_cvm_visibility` now calls `PATCH /cvms/{id}` instead of the deprecated `PATCH /cvms/{id}/visibility`. It returns `message`, `correlation_id` and `status` instead of the CVM record; call `get_cvm_info` if you need the record.
+- `update_cvm_resources` no longer sends `allow_restart`, which the API ignores. The field is deprecated.
 
 ## Development
 
