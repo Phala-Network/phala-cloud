@@ -128,6 +128,7 @@ The SDK enforces `redirect: "manual"` at the fetch boundary, even if configurati
 - `updateCvmResources` no longer sends `allow_restart`, which the API ignores. The field is deprecated.
 - `LooseAppCompose.docker_compose_file` is optional, because a `bash`-runner compose has none. Check for `undefined` before using it.
 - `getComposeHash` and `preprocessAppCompose` now drop null `storage_discard`, `event_log_version`, `snapshotter` and `verity_volumes`, and emit `tproxy_enabled` when it is absent (falling back to `gateway_enabled`, then `true`), as the backend does. Pass the OS image version as the second argument when you hash a compose you built yourself: it sets `manifest_version` and the `init_script` wire format for that OS.
+- `provisionCvm` takes `init_scripts` only as a list of slugs, such as `["env_merge"]`. The old object form `{ env_merge: true }` is no longer accepted by the JS SDK (the API still accepts it for now); send `["env_merge"]` instead.
 - New: `patchCvm` takes `compose` (a JSON Merge Patch of the app compose; `null` removes a key), `init_scripts` and `confirm_data_wipe`. `provisionCvm` takes `compose_file_raw`, `init_scripts`, `launch_token`, `generate_launch_token` and `annotations`. New actions: `getCvmAnnotations`, `updateCvmAnnotations`, `getCvmInitScripts`, `setAppLaunchToken`, `clearAppLaunchToken`.
 
 ## License
