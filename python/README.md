@@ -145,6 +145,7 @@ This changes the previous `encrypt_env_vars` behavior: code that awaited it must
 - `patch_cvm` validates `gpus` as `{"gpus": [{"slot": ..., "product_id": ...}], "attach_mode": ...}`, the shape the API accepts. Other shapes now fail validation instead of being sent and ignored. `patch_cvm` also accepts `instance_type`, and `prepare_only=True` sends `X-Prepare-Only: true`; the 465 result then includes `commit_token`, `commit_url`, `api_commit_url` and `onchain_status`.
 - `update_cvm_visibility` now calls `PATCH /cvms/{id}` instead of the deprecated `PATCH /cvms/{id}/visibility`. It returns `message`, `correlation_id` and `status` instead of the CVM record; call `get_cvm_info` if you need the record.
 - `update_cvm_resources` no longer sends `allow_restart`, which the API ignores. The field is deprecated.
+- `get_compose_hash` now drops null `storage_discard`, `event_log_version`, `snapshotter` and `verity_volumes` and always emits `tproxy_enabled` (defaulting to `gateway_enabled`), as the API does. A compose without `tproxy_enabled` hashes differently than before.
 
 ## Development
 
