@@ -5,7 +5,7 @@ import ssl
 import time
 from collections.abc import AsyncIterator, Iterator, Mapping
 from contextlib import asynccontextmanager, contextmanager
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
@@ -103,6 +103,20 @@ def _is_certificate_error(error: BaseException) -> bool:
         seen.add(id(current))
         current = current.__cause__ or current.__context__
     return False
+
+
+class _Hash465Details(TypedDict):
+    """Fields of a 465 (hash registration required) error, from either wire format."""
+
+    message: str
+    compose_hash: Any
+    app_id: Any
+    device_id: Any
+    kms_info: Any
+    commit_token: Any
+    commit_url: Any
+    api_commit_url: Any
+    onchain_status: Any
 
 
 class _AliasModel(BaseModel):
@@ -408,64 +422,58 @@ class _ExtMixin:
         return data
 
     @staticmethod
-    def _extract_465_fields(exc: Exception) -> dict[str, Any] | None:
-        status = getattr(exc, "status_code", None)
-        if status != 465:
+    def _extract_465_fields(exc: Exception) -> _Hash465Details | None:
+        """Parse a 465 (hash registration required) error; the single owner of its fields."""
+        if getattr(exc, "status_code", None) != 465:
             return None
         detail = getattr(exc, "detail", None)
         if not isinstance(detail, dict):
             return None
+        message = detail.get("message", "Compose hash verification required")
 
-        # New StructuredError format: fields live inside a `details` array.
+        # StructuredError format: fields live inside a `details` array.
         details_array = detail.get("details")
         if isinstance(details_array, list):
             field_map: dict[str, Any] = {
-                item["field"]: item.get("value")
+                item["field"]: item["value"]
                 for item in details_array
-                if isinstance(item, dict) and "field" in item
+                if isinstance(item, dict) and "field" in item and "value" in item
             }
-            compose_hash = field_map.get("compose_hash")
-            app_id = field_map.get("app_id")
-            if compose_hash is not None and app_id is not None:
+            if field_map.get("compose_hash") is not None or field_map.get("app_id") is not None:
                 return {
-                    "message": detail.get("message", "Compose hash verification required"),
-                    "compose_hash": compose_hash,
-                    "app_id": app_id,
+                    "message": message,
+                    "compose_hash": field_map.get("compose_hash", ""),
+                    "app_id": str(field_map.get("app_id", "")),
                     "device_id": field_map.get("device_id", ""),
                     "kms_info": field_map.get("kms_info"),
+                    "commit_token": field_map.get("commit_token"),
+                    "commit_url": field_map.get("commit_url"),
+                    "api_commit_url": field_map.get("api_commit_url"),
+                    "onchain_status": field_map.get("onchain_status"),
                 }
 
         # Legacy flat format: fields are top-level in `detail`.
         if detail.get("compose_hash") is not None or detail.get("app_id") is not None:
             return {
-                "message": detail.get("message", "Compose hash verification required"),
+                "message": message,
                 "compose_hash": detail.get("compose_hash"),
                 "app_id": detail.get("app_id"),
                 "device_id": detail.get("device_id"),
                 "kms_info": detail.get("kms_info"),
+                "commit_token": None,
+                "commit_url": None,
+                "api_commit_url": None,
+                "onchain_status": None,
             }
 
         return None
 
-    @staticmethod
-    def _patch_cvm_hash_required(exc: ApiError) -> dict[str, Any] | None:
-        if exc.status_code != 465 or not isinstance(exc.detail, dict):
+    @classmethod
+    def _patch_cvm_hash_required(cls, exc: ApiError) -> dict[str, Any] | None:
+        fields = cls._extract_465_fields(exc)
+        if fields is None:
             return None
-        details: dict[str, Any] = {}
-        for item in exc.detail.get("details") or []:
-            if isinstance(item, dict) and "field" in item and "value" in item:
-                details[item["field"]] = item["value"]
-        return {
-            "requires_on_chain_hash": True,
-            "compose_hash": details.get("compose_hash", ""),
-            "app_id": str(details.get("app_id", "")),
-            "device_id": details.get("device_id", ""),
-            "kms_info": details.get("kms_info"),
-            "commit_token": details.get("commit_token"),
-            "commit_url": details.get("commit_url"),
-            "api_commit_url": details.get("api_commit_url"),
-            "onchain_status": details.get("onchain_status"),
-        }
+        return {"requires_on_chain_hash": True, **fields}
 
     def _model_for_response(self, method: str, path: str, version: str | None = None) -> Any | None:
         m = method.upper()
