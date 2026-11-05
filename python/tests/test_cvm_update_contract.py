@@ -153,3 +153,27 @@ async def test_update_cvm_resources_does_not_send_allow_restart_async() -> None:
 
     _, _, body, _ = recorder.last
     assert body == {"vcpu": 4}
+
+
+def test_update_cvm_visibility_uses_the_unified_patch_endpoint_sync() -> None:
+    recorder = _Recorder()
+    result = _sync_client(recorder).update_cvm_visibility(
+        {"id": "cvm-1", "public_sysinfo": True, "public_logs": False}
+    )
+
+    method, path, body, _ = recorder.last
+    assert (method, path) == ("PATCH", "/api/v1/cvms/cvm-1")
+    assert body == {"public_sysinfo": True, "public_logs": False}
+    assert result.correlation_id == "corr-1"
+
+
+@pytest.mark.asyncio
+async def test_update_cvm_visibility_uses_the_unified_patch_endpoint_async() -> None:
+    recorder = _Recorder()
+    await _async_client(recorder).update_cvm_visibility(
+        {"id": "cvm-1", "public_sysinfo": True, "public_logs": False, "public_tcbinfo": True}
+    )
+
+    method, path, body, _ = recorder.last
+    assert (method, path) == ("PATCH", "/api/v1/cvms/cvm-1")
+    assert body == {"public_sysinfo": True, "public_logs": False, "public_tcbinfo": True}

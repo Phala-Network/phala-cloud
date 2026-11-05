@@ -31,7 +31,6 @@ from .action_responses import (
     CvmNetworkResponse,
     CvmStatsResponse,
     CvmUserConfigResponse,
-    CvmVisibilityResponse,
     GenericObject,
     ImportGithubProfileResponse,
     InProgressResponse,
@@ -583,8 +582,6 @@ class _ExtMixin:
             r"/cvms/[^/]+/(start|stop|shutdown|restart|replicas)", path
         ):
             return self._v20260121_model(CvmActionResponseV20260121, CvmActionResponseV20260522)
-        if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/visibility", path):
-            return CvmVisibilityResponse
         if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/instance-id", path):
             return self._v20260121_model(
                 RefreshInstanceIdResponseV20260121,
@@ -1073,14 +1070,10 @@ class PhalaCloud(_SyncBase, _ExtMixin):
 
     def update_cvm_visibility(self, request: UpdateVisibilityRequest | Mapping[str, Any]) -> Any:
         req = UpdateVisibilityRequest.model_validate(request)
-        body = {
-            "public_sysinfo": req.public_sysinfo,
-            "public_logs": req.public_logs,
-            "public_tcbinfo": req.public_tcbinfo,
-        }
-        return self._loose_validate(
-            self.request("PATCH", f"/cvms/{req.resolved}/visibility", json=body)
+        body = req.model_dump(
+            include={"public_sysinfo", "public_logs", "public_tcbinfo"}, exclude_none=True
         )
+        return self._loose_validate(self.request("PATCH", f"/cvms/{req.resolved}", json=body))
 
     def safe_update_cvm_visibility(
         self, request: UpdateVisibilityRequest | Mapping[str, Any]
@@ -2019,14 +2012,10 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         self, request: UpdateVisibilityRequest | Mapping[str, Any]
     ) -> Any:
         req = UpdateVisibilityRequest.model_validate(request)
-        body = {
-            "public_sysinfo": req.public_sysinfo,
-            "public_logs": req.public_logs,
-            "public_tcbinfo": req.public_tcbinfo,
-        }
-        return self._loose_validate(
-            await self.request("PATCH", f"/cvms/{req.resolved}/visibility", json=body)
+        body = req.model_dump(
+            include={"public_sysinfo", "public_logs", "public_tcbinfo"}, exclude_none=True
         )
+        return self._loose_validate(await self.request("PATCH", f"/cvms/{req.resolved}", json=body))
 
     async def safe_update_cvm_visibility(
         self, request: UpdateVisibilityRequest | Mapping[str, Any]
