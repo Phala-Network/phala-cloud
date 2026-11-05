@@ -302,7 +302,7 @@ List available worker nodes in the workspace.
 The following commands are deprecated and have been replaced:
 
 - **`cvms create`** — Use `phala deploy` instead
-- **`cvms upgrade`** — Use `phala deploy --cvm-id <id>` instead
+- **`cvms upgrade`** — Use `phala deploy --cvm-id <id>` instead. It now replaces only the Docker Compose file (and, with `--env-file`, the allowed env keys and encrypted env). The stored pre-launch script, visibility settings and allowed env keys are kept, and an unchanged compose does nothing. Before, it reset the pre-launch script to the platform default, reset visibility and cleared the allowed env keys. CVMs on on-chain KMS are rejected; use `phala deploy --cvm-id` for them.
 - **`cvms logs`** — Use `phala logs` instead
 - **`cvms serial-logs`** — Use `phala logs --serial` instead
 
