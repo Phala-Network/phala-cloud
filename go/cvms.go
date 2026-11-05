@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"reflect"
 	"strconv"
 )
 
@@ -398,9 +397,6 @@ func (c *Client) PatchCVM(ctx context.Context, cvmID string, req *PatchCVMReques
 		body.Image = body.OSImageName
 	}
 
-	if isZeroPatch(body) {
-		return &PatchCVMResponse{}, nil
-	}
 	return c.sendCVMPatch(ctx, cvmID, body)
 }
 
@@ -428,17 +424,6 @@ func (c *Client) sendCVMPatch(ctx context.Context, cvmID string, body PatchCVMRe
 		return nil, err
 	}
 	return &result, nil
-}
-
-// isZeroPatch reports whether req has no field that PATCH /cvms/{id} accepts.
-// ShutdownTimeout and AllowForceStop only tune how a change is applied, so
-// they do not make a request worth sending on their own.
-func isZeroPatch(req PatchCVMRequest) bool {
-	req.OSImageName = nil
-	req.ShutdownTimeout = nil
-	req.AllowForceStop = nil
-	req.PrepareOnly = false
-	return reflect.ValueOf(req).IsZero()
 }
 
 // patchCVMHashRequired maps a 465 error to a hash-required response. A 465

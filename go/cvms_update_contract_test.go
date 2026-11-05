@@ -122,6 +122,19 @@ func TestPatchCVMRejectsConflictingImageNames(t *testing.T) {
 	}
 }
 
+func TestPatchCVMSendsAnEmptyPatchAndSurfacesTheBackendError(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusBadRequest, `{"detail":"No update fields provided"}`)
+	_, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{})
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusBadRequest {
+		t.Fatalf("err = %v, want *APIError 400", err)
+	}
+	if len(*seen) != 1 || (*seen)[0].method != "PATCH" || (*seen)[0].path != "/cvms/cvm-1" {
+		t.Fatalf("requests = %+v, want one PATCH /cvms/cvm-1", *seen)
+	}
+	assertBody(t, (*seen)[0].body, `{}`)
+}
+
 const hashRequired = `{
 	"error_code": "ERR-01-005",
 	"message": "Compose hash registration required",
