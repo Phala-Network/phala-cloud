@@ -58,6 +58,18 @@ The following options are deprecated and will be removed in future versions:
 
 `--ssh-pubkey` still injects `DSTACK_AUTHORIZED_KEYS` into the encrypted env. That path only works when the CVM compose includes the platform pre-launch script, and it has no effect on images that do not ship an SSH server.
 
+## Updating an existing CVM
+
+With `--cvm-id` (or a CVM ID in `phala.toml`), deploy sends the compose file and these flags to the CVM update:
+
+- `--instance-type`, `--vcpu`, `--memory`, `--disk-size`, `--image`
+- `--public-logs`, `--public-sysinfo`, `--public-tcbinfo` and their `--no-` forms
+- `--pre-launch-script`, `--no-pre-launch-script`, `-e`, `--force-stop`, `--prepare-only`
+
+`--listed` / `--no-listed` changes the Trust Center listing through its own request before the update is sent.
+
+These flags set how a CVM is created and cannot be changed afterwards: `--secure-time`, `--fs`, `--skip-gateway`, `--kms`, `--kms-id`, `--kms-contract`, `--kms-contract-id` and `--experimental-key-provider-type`. An update that passes any of them fails before any request is sent.
+
 ## Pre-launch script behavior
 
 By default, deploy leaves the pre-launch script field out of the request, so Phala Cloud uses its official default script. Use `--pre-launch-script <path>` to supply a script. If that file is empty, the field is still omitted and the default script is used. To explicitly deploy with no pre-launch script, use `--no-pre-launch-script`; it cannot be combined with `--pre-launch-script`.

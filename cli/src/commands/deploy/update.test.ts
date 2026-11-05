@@ -1,0 +1,203 @@
+/**
+ * Wire contract of `phala deploy --cvm-id` against PATCH /cvms/{id}.
+ *
+ * Runs the real deploy handler and SDK client against a local HTTP server
+ * and asserts the requests that reach it.
+ */
+
+import {
+	afterAll,
+	afterEach,
+	beforeAll,
+	describe,
+	expect,
+	mock,
+	test,
+} from "bun:test";
+import os from "node:os";
+import path from "node:path";
+import fs from "fs-extra";
+import type { CommandContext } from "@/src/core/types";
+
+// Other test files replace @phala/cloud and @/src/lib/client with
+// mock.module, and bun keeps module mocks for the rest of the process. Load
+// fresh real instances for this file so it talks to the local server through
+// the real SDK client. @phala/cloud stays real afterwards; the CLI client
+// module is put back as it was.
+const realCloud = await import(`${require.resolve("@phala/cloud")}?real`);
+mock.module("@phala/cloud", () => ({ ...realCloud }));
+const previousClient = { ...(await import("@/src/lib/client")) };
+const realClient = await import(`${require.resolve("@/src/lib/client")}?real`);
+mock.module("@/src/lib/client", () => ({ ...realClient }));
+afterAll(() => {
+	mock.module("@/src/lib/client", () => previousClient);
+});
+const { runDeploy } = await import("./handler");
+
+type Recorded = {
+	method: string;
+	path: string;
+	body: Record<string, unknown> | undefined;
+};
+
+const CVM_ID = "0123456789abcdef0123456789abcdef";
+const COMPOSE = "services:\n  app:\n    image: nginx\n";
+
+let server: ReturnType<typeof Bun.serve>;
+let requests: Recorded[] = [];
+let tmpDir: string;
+let composePath: string;
+
+beforeAll(async () => {
+	server = Bun.serve({
+		port: 0,
+		async fetch(req) {
+			const url = new URL(req.url);
+			const text = await req.text();
+			requests.push({
+				method: req.method,
+				path: url.pathname,
+				body: text ? JSON.parse(text) : undefined,
+			});
+			if (req.method === "GET") {
+				return Response.json({
+					id: CVM_ID,
+					name: "my-app",
+					app_id: "abc",
+					status: "running",
+					resource: {},
+					gateway: {},
+				});
+			}
+			if (url.pathname.endsWith("/listed")) {
+				return Response.json({ id: CVM_ID, name: "my-app" });
+			}
+			return Response.json(
+				{
+					message: "CVM update initiated",
+					correlation_id: "corr-1",
+					status: "in_progress",
+				},
+				{ status: 202 },
+			);
+		},
+	});
+	tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "phala-deploy-update-"));
+	composePath = path.join(tmpDir, "docker-compose.yml");
+	await fs.writeFile(composePath, COMPOSE);
+});
+
+afterAll(async () => {
+	server.stop(true);
+	await fs.remove(tmpDir);
+});
+
+afterEach(() => {
+	requests = [];
+});
+
+function makeContext(): {
+	context: CommandContext;
+	failure: () => unknown;
+} {
+	let failure: unknown;
+	const context = {
+		env: {
+			PHALA_CLOUD_API_KEY: "test-key",
+			PHALA_CLOUD_API_PREFIX: `http://127.0.0.1:${server.port}/api/v1`,
+			PHALA_CLOUD_DIR: tmpDir,
+		},
+		projectConfig: {},
+		cvmId: { id: CVM_ID },
+		stdout: { write: () => true },
+		stderr: { write: () => true },
+		failWithError: (error: unknown) => {
+			failure = error;
+		},
+	} as unknown as CommandContext;
+	return { context, failure: () => failure };
+}
+
+async function deploy(input: Record<string, unknown>) {
+	const { context, failure } = makeContext();
+	const exitCode = await runDeploy(
+		{ compose: composePath, json: true, ...input } as Parameters<
+			typeof runDeploy
+		>[0],
+		context,
+	);
+	return { exitCode, failure: failure() };
+}
+
+function updateRequest(): Recorded {
+	const patches = requests.filter(
+		(r) => r.method === "PATCH" && r.path === `/api/v1/cvms/${CVM_ID}`,
+	);
+	expect(patches).toHaveLength(1);
+	return patches[0] as Recorded;
+}
+
+describe("phala deploy --cvm-id", () => {
+	test("sends resource, image and tcbinfo flags in the update", async () => {
+		const { exitCode, failure } = await deploy({
+			instanceType: "tdx.medium",
+			vcpu: "4",
+			memory: "8G",
+			diskSize: "100G",
+			image: "dstack-0.5.5",
+			publicTcbinfo: false,
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(updateRequest().body).toEqual({
+			docker_compose_file: COMPOSE,
+			public_tcbinfo: false,
+			instance_type: "tdx.medium",
+			vcpu: 4,
+			memory: 8192,
+			disk_size: 100,
+			image: "dstack-0.5.5",
+		});
+	});
+
+	test("sets the Trust Center listing through PATCH /cvms/{id}/listed", async () => {
+		const { exitCode, failure } = await deploy({ listed: true });
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(
+			requests.filter((r) => r.path === `/api/v1/cvms/${CVM_ID}/listed`),
+		).toEqual([
+			{
+				method: "PATCH",
+				path: `/api/v1/cvms/${CVM_ID}/listed`,
+				body: { listed: true },
+			},
+		]);
+		expect(updateRequest().body).toEqual({ docker_compose_file: COMPOSE });
+	});
+
+	test.each([
+		[{ secureTime: true }, "--secure-time"],
+		[{ fs: "ext4" }, "--fs"],
+		[{ skipGateway: true }, "--skip-gateway"],
+		[{ kms: "base" }, "--kms"],
+		[{ kmsId: "kms-1" }, "--kms-id"],
+		[{ kmsContract: "0xabc" }, "--kms-contract"],
+		[{ kmsContractId: "contract_1" }, "--kms-contract-id"],
+		[
+			{ experimentalKeyProviderType: "tpm" },
+			"--experimental-key-provider-type",
+		],
+	])("rejects create-only flag %p before any request", async (flags, flag) => {
+		const { exitCode, failure } = await deploy(flags);
+
+		expect(exitCode).toBe(1);
+		expect(failure).toBeInstanceOf(Error);
+		expect((failure as Error).message).toContain(
+			`${flag} cannot be changed on an existing CVM`,
+		);
+		expect(requests).toEqual([]);
+	});
+});

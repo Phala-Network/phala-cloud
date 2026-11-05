@@ -131,6 +131,40 @@ export function validatePreLaunchScriptOptions(
 	}
 }
 
+/**
+ * Flags that set create-time CVM configuration. PATCH /cvms/{id} cannot
+ * change them, so an update rejects them instead of ignoring them.
+ */
+const CREATE_ONLY_FLAGS: ReadonlyArray<readonly [keyof Options, string]> = [
+	["secureTime", "--secure-time"],
+	["fs", "--fs"],
+	["skipGateway", "--skip-gateway"],
+	["kms", "--kms"],
+	["kmsId", "--kms-id"],
+	["kmsContract", "--kms-contract"],
+	["kmsContractId", "--kms-contract-id"],
+	["experimentalKeyProviderType", "--experimental-key-provider-type"],
+];
+
+export function assertUpdatableOptions(options: Options): void {
+	const flags = CREATE_ONLY_FLAGS.filter(
+		([key]) => options[key] !== undefined,
+	).map(([, flag]) => flag);
+	if (flags.length > 0) {
+		throw new Error(
+			`${flags.join(", ")} cannot be changed on an existing CVM. Remove ${flags.length === 1 ? "it" : "them"} to update the CVM, or deploy a new CVM.`,
+		);
+	}
+}
+
+function parseVcpuInput(input: string): number {
+	const vcpu = Number(input);
+	if (!Number.isInteger(vcpu) || vcpu <= 0) {
+		throw new Error(`Invalid vCPU count '${input}'. Use a positive integer.`);
+	}
+	return vcpu;
+}
+
 export function buildUpdatePatchBody(
 	options: Options,
 	dockerComposeYml: string,
@@ -151,6 +185,24 @@ export function buildUpdatePatchBody(
 	}
 	if (options.publicSysinfo !== undefined) {
 		patchBody.public_sysinfo = options.publicSysinfo;
+	}
+	if (options.publicTcbinfo !== undefined) {
+		patchBody.public_tcbinfo = options.publicTcbinfo;
+	}
+	if (options.instanceType) {
+		patchBody.instance_type = options.instanceType;
+	}
+	if (options.vcpu) {
+		patchBody.vcpu = parseVcpuInput(options.vcpu);
+	}
+	if (options.memory) {
+		patchBody.memory = parseMemoryInput(options.memory);
+	}
+	if (options.diskSize) {
+		patchBody.disk_size = parseDiskSizeInput(options.diskSize);
+	}
+	if (options.image) {
+		patchBody.image = options.image;
 	}
 	applyForceStopOption(patchBody, options.forceStop);
 	if (options.prepareOnly) {
@@ -949,6 +1001,8 @@ const updateCvm = async (
 	context?: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
 	preLaunchScriptContent?: string,
 ) => {
+	assertUpdatableOptions(validatedOptions);
+
 	const cvm_result = await safeGetCvmInfo(client, {
 		id: validatedOptions.uuid,
 	});
@@ -978,6 +1032,18 @@ const updateCvm = async (
 	if (encrypted_env) {
 		patchBody.encrypted_env = encrypted_env;
 	}
+
+	// The Trust Center listing is app metadata with its own endpoint, not part
+	// of the CVM configuration update.
+	if (validatedOptions.listed !== undefined) {
+		await client.patch(`/cvms/${validatedOptions.uuid}/listed`, {
+			listed: validatedOptions.listed,
+		});
+		logger.info(
+			`Trust Center listing ${validatedOptions.listed ? "enabled" : "disabled"}.`,
+		);
+	}
+
 	logger.info(`Updating CVM ${validatedOptions.uuid}...`);
 	// biome-ignore lint/suspicious/noExplicitAny: dynamic patch body
 	const patchResult = await safePatchCvm(client, patchBody as any);
