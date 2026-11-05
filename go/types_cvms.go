@@ -591,6 +591,62 @@ func (g GPUConfig) MarshalJSON() ([]byte, error) {
 	return json.Marshal(plain(g))
 }
 
+// InitScriptSlug names a platform init script. Phala Cloud fixes the run
+// order: docker_cleanup, then env_merge.
+type InitScriptSlug string
+
+const (
+	// InitScriptDockerCleanup erases all local container-runtime stores on
+	// every boot.
+	InitScriptDockerCleanup InitScriptSlug = "docker_cleanup"
+	// InitScriptEnvMerge merges encrypted env on boot.
+	InitScriptEnvMerge InitScriptSlug = "env_merge"
+)
+
+// ComposeRequirementsPatch is the requirements part of a ComposePatch; it
+// merges per key. gpu_policy is not patchable: the stored value is kept.
+type ComposeRequirementsPatch struct {
+	// EphemeralDataDisk formats the data disk on every boot (OS 0.6.3+).
+	// Turning it on requires ConfirmDataWipe.
+	EphemeralDataDisk Patch[bool]   `json:"ephemeral_data_disk,omitzero"`
+	HealthCheck       Patch[bool]   `json:"health_check,omitzero"`
+	HealthStatusFile  Patch[string] `json:"health_status_file,omitzero"`
+	// LaunchTokenHash must be the hash of the app's launch token (see
+	// SetAppLaunchToken).
+	LaunchTokenHash      Patch[string]   `json:"launch_token_hash,omitzero"`
+	Platforms            Patch[[]string] `json:"platforms,omitzero"`
+	TDXMeasureACPITables Patch[bool]     `json:"tdx_measure_acpi_tables,omitzero"`
+}
+
+// ComposePatch is a JSON Merge Patch of a CVM's app compose, sent as
+// PatchCVMRequest.Compose. Only keys set with PatchValue or PatchNull are
+// sent, so an explicit default and an unset key stay distinct (they hash
+// differently).
+type ComposePatch struct {
+	SecureTime     Patch[bool]   `json:"secure_time,omitzero"`
+	SwapSize       Patch[string] `json:"swap_size,omitzero"`
+	StorageDiscard Patch[bool]   `json:"storage_discard,omitzero"`
+	// Snapshotter is "overlayfs" or "stargz", only with the nerdctl-compose runner.
+	Snapshotter     Patch[string]                   `json:"snapshotter,omitzero"`
+	GatewayEnabled  Patch[bool]                     `json:"gateway_enabled,omitzero"`
+	PortPolicy      Patch[ComposePortPolicy]        `json:"port_policy,omitzero"`
+	EventLogVersion Patch[int]                      `json:"event_log_version,omitzero"`
+	Requirements    Patch[ComposeRequirementsPatch] `json:"requirements,omitzero"`
+
+	// Fixed when the CVM is created: the current value passes, any other is rejected.
+	KMSEnabled              Patch[bool]            `json:"kms_enabled,omitzero"`
+	KeyProvider             Patch[string]          `json:"key_provider,omitzero"`
+	KeyProviderID           Patch[string]          `json:"key_provider_id,omitzero"`
+	LocalKeyProviderEnabled Patch[bool]            `json:"local_key_provider_enabled,omitzero"`
+	ManifestVersion         Patch[json.RawMessage] `json:"manifest_version,omitzero"`
+	NoInstanceID            Patch[bool]            `json:"no_instance_id,omitzero"`
+	Runner                  Patch[string]          `json:"runner,omitzero"`
+	StorageFS               Patch[string]          `json:"storage_fs,omitzero"`
+	VerityVolumes           Patch[[]VerityVolume]  `json:"verity_volumes,omitzero"`
+	TproxyEnabled           Patch[bool]            `json:"tproxy_enabled,omitzero"`
+	Features                Patch[[]string]        `json:"features,omitzero"`
+}
+
 // PatchCVMRequest is the request for patching a CVM (multi-field update) via
 // PATCH /cvms/{id}. Only set fields are sent.
 type PatchCVMRequest struct {
@@ -601,6 +657,15 @@ type PatchCVMRequest struct {
 	PublicSysinfo     *bool    `json:"public_sysinfo,omitempty"`
 	PublicLogs        *bool    `json:"public_logs,omitempty"`
 	PublicTcbinfo     *bool    `json:"public_tcbinfo,omitempty"`
+
+	// Compose is a JSON Merge Patch of the app compose.
+	Compose *ComposePatch `json:"compose,omitempty"`
+	// InitScripts replaces the CVM's platform init scripts. nil leaves them
+	// unchanged; an empty non-nil slice removes them all.
+	InitScripts []InitScriptSlug `json:"init_scripts,omitzero"`
+	// ConfirmDataWipe confirms turning on docker_cleanup or
+	// requirements.ephemeral_data_disk, which erase data on every boot.
+	ConfirmDataWipe bool `json:"confirm_data_wipe,omitempty"`
 
 	EncryptedEnv *string    `json:"encrypted_env,omitempty"`
 	UserConfig   *string    `json:"user_config,omitempty"`
