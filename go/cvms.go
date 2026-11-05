@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"reflect"
+	"strconv"
 )
 
 // cvmPath returns the API path for a CVM, resolving the ID format.
@@ -443,7 +444,7 @@ func (c *Client) sendCVMPatch(ctx context.Context, cvmID string, body PatchCVMRe
 	})
 	var apiErr *APIError
 	if errors.As(err, &apiErr) && apiErr.IsComposePrecondition() {
-		return patchCVMHashRequired(apiErr), nil
+		return patchCVMHashRequired(apiErr)
 	}
 	if err != nil {
 		return nil, err
@@ -463,25 +464,36 @@ func isZeroPatch(req PatchCVMRequest) bool {
 	return reflect.ValueOf(req).IsZero()
 }
 
-func patchCVMHashRequired(apiErr *APIError) *PatchCVMResponse {
+// patchCVMHashRequired maps a 465 error to a hash-required response. A 465
+// without compose_hash in its details is not that response, so the original
+// *APIError is returned.
+func patchCVMHashRequired(apiErr *APIError) (*PatchCVMResponse, error) {
 	fields := make(map[string]any, len(apiErr.Details))
 	for _, d := range apiErr.Details {
 		if d.Field != "" {
 			fields[d.Field] = d.Value
 		}
 	}
-	resp := &PatchCVMResponse{RequiresOnChainHash: true}
-	resp.ComposeHash, _ = fields["compose_hash"].(string)
+	composeHash, _ := fields["compose_hash"].(string)
+	if composeHash == "" {
+		return nil, apiErr
+	}
+	resp := &PatchCVMResponse{RequiresOnChainHash: true, ComposeHash: composeHash}
 	resp.DeviceID, _ = fields["device_id"].(string)
 	resp.CommitToken, _ = fields["commit_token"].(string)
 	resp.CommitURL, _ = fields["commit_url"].(string)
 	resp.APICommitURL, _ = fields["api_commit_url"].(string)
-	if v, ok := fields["app_id"]; ok && v != nil {
-		resp.AppID = fmt.Sprint(v)
+	switch v := fields["app_id"].(type) {
+	case string:
+		resp.AppID = v
+	case json.Number:
+		resp.AppID = v.String()
+	case float64:
+		resp.AppID = strconv.FormatFloat(v, 'f', -1, 64)
 	}
 	decodeDetail(fields["kms_info"], &resp.KMSInfo)
 	decodeDetail(fields["onchain_status"], &resp.OnchainStatus)
-	return resp
+	return resp, nil
 }
 
 // decodeDetail re-decodes a JSON value from an error detail into target.

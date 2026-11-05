@@ -361,3 +361,47 @@ func TestPatchCVM465DecodesKMSContractAddress(t *testing.T) {
 		t.Fatalf("KMSInfo = %+v, want kms_contract_address 0xabc", resp.KMSInfo)
 	}
 }
+
+func TestPatchCVM465WithoutComposeHashStaysAnAPIError(t *testing.T) {
+	client, _ := recordingServer(t, 465, `{
+		"error_code": "ERR-01-005",
+		"message": "Compose hash registration required",
+		"details": [{"field": "app_id", "value": "app-1"}]
+	}`)
+	resp, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{VCPU: Int(2)})
+	if err == nil {
+		t.Fatalf("PatchCVM: want error, got %+v", resp)
+	}
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != 465 {
+		t.Fatalf("err = %v, want *APIError with status 465", err)
+	}
+}
+
+func TestPatchCVM465FormatsAppID(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{"string as is", `"0xabc"`, "0xabc"},
+		{"large number without exponent", `100000000000000000000`, "100000000000000000000"},
+		{"integer number", `42`, "42"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, _ := recordingServer(t, 465, `{
+				"error_code": "ERR-01-005",
+				"message": "Compose hash registration required",
+				"details": [{"field": "compose_hash", "value": "abc123"}, {"field": "app_id", "value": `+tt.value+`}]
+			}`)
+			resp, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{VCPU: Int(2)})
+			if err != nil {
+				t.Fatalf("PatchCVM: %v", err)
+			}
+			if resp.AppID != tt.want {
+				t.Fatalf("AppID = %q, want %q", resp.AppID, tt.want)
+			}
+		})
+	}
+}
