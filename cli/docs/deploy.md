@@ -74,7 +74,7 @@ These flags set how a CVM is created and cannot be changed afterwards: `--name`,
 
 ## Pre-launch script behavior
 
-By default, deploy leaves the pre-launch script field out of the request. When creating a CVM, Phala Cloud then uses its official default script; when updating one, the current script is kept (see [Updating an existing CVM](#updating-an-existing-cvm)). Use `--pre-launch-script <path>` to supply a script. If that file is empty, the field is still omitted and the default script is used. To explicitly deploy with no pre-launch script, use `--no-pre-launch-script`; it cannot be combined with `--pre-launch-script`.
+By default, deploy leaves the pre-launch script field out of the request. When creating a CVM, Phala Cloud then uses its official default script; when updating one, the current script is kept (see [Updating an existing CVM](#updating-an-existing-cvm)). Use `--pre-launch-script <path>` to supply a script. If that file is empty, the field is still omitted: a new CVM gets the default script, and an updated CVM keeps its current script. To explicitly deploy with no pre-launch script, use `--no-pre-launch-script`; it cannot be combined with `--pre-launch-script`.
 
 ```bash
 $ phala deploy --no-pre-launch-script
