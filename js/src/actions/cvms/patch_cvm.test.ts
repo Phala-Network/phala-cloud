@@ -98,6 +98,51 @@ describe("patchCvm", () => {
       });
     });
 
+    it("sends gpus in the backend GpuConfig shape and instance_type", async () => {
+      (mockClient.patch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        correlation_id: "corr-123",
+      });
+
+      await patchCvm(mockClient, {
+        id: "test-cvm-id",
+        instance_type: "h200.small",
+        gpus: {
+          gpus: [{ slot: "0000:18:00.0", product_id: "10de:2335" }, { slot: "0000:2a:00.0" }],
+          attach_mode: "listed",
+        },
+      });
+
+      expect(mockClient.patch).toHaveBeenCalledWith("/cvms/test-cvm-id", {
+        instance_type: "h200.small",
+        gpus: {
+          gpus: [{ slot: "0000:18:00.0", product_id: "10de:2335" }, { slot: "0000:2a:00.0" }],
+          attach_mode: "listed",
+        },
+      });
+    });
+
+    it("rejects the old {count, product_name} gpus shape", () => {
+      const result = PatchCvmRequestSchema.safeParse({
+        id: "test-cvm-id",
+        gpus: { count: 1, product_name: "H200" },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("sends X-Prepare-Only and keeps prepareOnly out of the body", async () => {
+      (mockClient.patch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        correlation_id: "corr-123",
+      });
+
+      await patchCvm(mockClient, { id: "test-cvm-id", public_logs: true, prepareOnly: true });
+
+      expect(mockClient.patch).toHaveBeenCalledWith(
+        "/cvms/test-cvm-id",
+        { public_logs: true },
+        { headers: { "X-Prepare-Only": "true" } },
+      );
+    });
+
     it("should return accepted result on 202", async () => {
       (mockClient.patch as ReturnType<typeof vi.fn>).mockResolvedValue({
         correlation_id: "corr-123",

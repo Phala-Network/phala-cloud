@@ -454,6 +454,8 @@ export {
   safePatchCvm,
   PatchCvmRequestSchema,
   PatchCvmResultSchema,
+  PatchCvmGpuConfigSchema,
+  type PatchCvmGpuConfig,
   type PatchCvmRequest,
   type PatchCvmResult,
   type PatchCvmAccepted,
