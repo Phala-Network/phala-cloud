@@ -238,13 +238,16 @@ export const ProvisionCvmRequestSchema = z
         // compose_advanced feature flag.
         runner: ComposeRunnerSchema.optional(),
         // Script the bash runner runs instead of docker_compose_file.
-        bash_script: z.string().optional(),
-        requirements: ComposeRequirementsSchema.optional(),
-        // dstack >= 0.6.0 fields.
-        storage_discard: z.boolean().optional(),
-        event_log_version: z.union([z.literal(1), z.literal(2)]).optional(),
-        snapshotter: z.enum(["overlayfs", "stargz"]).optional(),
-        verity_volumes: z.array(VerityVolumeSchema).optional(),
+        bash_script: z.string().nullable().optional(),
+        requirements: ComposeRequirementsSchema.nullable().optional(),
+        // dstack >= 0.6.0 fields; null means unset, as when omitted.
+        storage_discard: z.boolean().nullable().optional(),
+        event_log_version: z
+          .union([z.literal(1), z.literal(2)])
+          .nullable()
+          .optional(),
+        snapshotter: z.enum(["overlayfs", "stargz"]).nullable().optional(),
+        verity_volumes: z.array(VerityVolumeSchema).nullable().optional(),
       })
       // Keep compose_file open to newer backend fields. Without passthrough,
       // zod's default strip mode drops every unknown key at parse time and

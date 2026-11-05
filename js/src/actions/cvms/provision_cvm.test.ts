@@ -385,6 +385,27 @@ describe("provisionCvm (wire-level)", () => {
     expect(body.annotations).toEqual({ memory_tier: "fast" });
   });
 
+  it("sends the nullable compose fields as null", async () => {
+    const nulls = {
+      bash_script: null,
+      requirements: null,
+      storage_discard: null,
+      event_log_version: null,
+      snapshotter: null,
+      verity_volumes: null,
+    };
+    await provisionCvm(mockClient, {
+      ...baseRequest,
+      compose_file: { ...baseRequest.compose_file, ...nulls },
+    });
+
+    expect(getRequestBody().compose_file).toEqual({
+      ...baseRequest.compose_file,
+      name: "",
+      ...nulls,
+    });
+  });
+
   it("does not warn when neither id is provided", async () => {
     await provisionCvm(mockClient, baseRequest);
 
