@@ -543,7 +543,9 @@ type CVMNetwork = GenericObject
 // CVMContainersStats represents CVM container statistics.
 type CVMContainersStats = GenericObject
 
-// CVMUserConfig represents CVM user configuration.
+// CVMUserConfig represents CVM user configuration: hostname,
+// ssh_authorized_keys, default_gateway_domain and, when the CVM's compose
+// carries requirements.launch_token_hash, the app's launch_token.
 type CVMUserConfig = GenericObject
 
 // CVMActionResponseFields contains shared lifecycle action response fields.

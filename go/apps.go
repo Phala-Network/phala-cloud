@@ -260,3 +260,42 @@ func (c *Client) CheckAppCvmsIsAllowedV20260121(ctx context.Context, appID strin
 	}
 	return &result, nil
 }
+
+// SetAppLaunchTokenRequest sets an app's launch token.
+type SetAppLaunchTokenRequest struct {
+	// LaunchToken is the token to set (at least 32 bytes). Leave it nil to
+	// have Phala Cloud generate one.
+	LaunchToken *string `json:"launch_token,omitempty"`
+}
+
+// AppLaunchTokenResponse is the app's new launch token, returned only once.
+type AppLaunchTokenResponse struct {
+	LaunchToken string `json:"launch_token"`
+	// LaunchTokenHash is the value for requirements.launch_token_hash in the
+	// compose of every CVM of the app.
+	LaunchTokenHash string `json:"launch_token_hash"`
+}
+
+// SetAppLaunchToken sets or rotates the app's launch token. A nil req lets
+// Phala Cloud generate one. CVMs keep booting with their current compose:
+// update each CVM's requirements.launch_token_hash to the returned hash
+// before its next boot, or it fails closed. Phala Cloud and the node operator
+// can read the token, so it protects only against parties who know the
+// public compose.
+func (c *Client) SetAppLaunchToken(ctx context.Context, appID string, req *SetAppLaunchTokenRequest) (*AppLaunchTokenResponse, error) {
+	if req == nil {
+		req = &SetAppLaunchTokenRequest{}
+	}
+	var result AppLaunchTokenResponse
+	if err := c.doJSON(ctx, "POST", "/apps/"+appID+"/launch-token", req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// ClearAppLaunchToken removes the app's launch token. Remove
+// requirements.launch_token_hash from every CVM of the app first: a CVM whose
+// compose still carries it fails closed at its next boot.
+func (c *Client) ClearAppLaunchToken(ctx context.Context, appID string) error {
+	return c.doEmpty(ctx, "DELETE", "/apps/"+appID+"/launch-token")
+}
