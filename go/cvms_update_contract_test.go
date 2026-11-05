@@ -226,3 +226,22 @@ func TestUpdateCVMResourcesDoesNotSendAllowRestart(t *testing.T) {
 	}
 	assertBody(t, (*seen)[0].body, `{"vcpu": 4}`)
 }
+
+func TestUpdateCVMVisibilityUsesTheUnifiedPatchEndpoint(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusAccepted, acceptedUpdate)
+	resp, err := client.UpdateCVMVisibility(context.Background(), "cvm-1", &UpdateVisibilityRequest{
+		PublicSysinfo: Bool(true),
+		PublicLogs:    Bool(false),
+	})
+	if err != nil {
+		t.Fatalf("UpdateCVMVisibility: %v", err)
+	}
+	got := (*seen)[0]
+	if got.method != "PATCH" || got.path != "/cvms/cvm-1" {
+		t.Fatalf("request = %s %s, want PATCH /cvms/cvm-1", got.method, got.path)
+	}
+	assertBody(t, got.body, `{"public_sysinfo": true, "public_logs": false}`)
+	if resp.CorrelationID != "corr-1" || resp.Status != "in_progress" {
+		t.Fatalf("resp = %+v", resp)
+	}
+}

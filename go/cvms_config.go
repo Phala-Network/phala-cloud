@@ -58,7 +58,11 @@ type UpdateResourcesRequest struct {
 }
 
 // UpdateResourcesResponse is the response from the unified CVM update endpoint.
-type UpdateResourcesResponse struct {
+type UpdateResourcesResponse = CVMUpdateResponse
+
+// CVMUpdateResponse is the 202 response from PATCH /cvms/{id}. Status is
+// "no_change" with an empty CorrelationID when nothing had to change.
+type CVMUpdateResponse struct {
 	Message       string `json:"message"`
 	CorrelationID string `json:"correlation_id"`
 	Status        string `json:"status"`
@@ -83,11 +87,14 @@ type UpdateVisibilityRequest struct {
 	PublicTcbinfo *bool `json:"public_tcbinfo,omitempty"`
 }
 
-// UpdateCVMVisibility updates the visibility settings for a CVM.
-func (c *Client) UpdateCVMVisibility(ctx context.Context, cvmID string, req *UpdateVisibilityRequest) (*CVMVisibility, error) {
-	var result CVMVisibility
+// UpdateCVMVisibility updates the visibility settings for a CVM through
+// PATCH /cvms/{id}. Visibility flags are part of the compose hash: for a CVM
+// on contract-owned KMS the API answers 465 until the new hash is registered
+// on-chain. Use PatchCVM for the two-phase flow.
+func (c *Client) UpdateCVMVisibility(ctx context.Context, cvmID string, req *UpdateVisibilityRequest) (*CVMUpdateResponse, error) {
+	var result CVMUpdateResponse
 	err := c.doWithRetry(ctx, func() error {
-		return c.doJSON(ctx, "PATCH", cvmPath(cvmID, "visibility"), req, &result)
+		return c.doJSON(ctx, "PATCH", cvmPath(cvmID), req, &result)
 	})
 	if err != nil {
 		return nil, err

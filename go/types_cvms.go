@@ -718,13 +718,6 @@ type EventLog struct {
 	EventPayload string `json:"event_payload"`
 }
 
-// CVMVisibility holds CVM visibility settings.
-type CVMVisibility struct {
-	PublicSysinfo *bool `json:"public_sysinfo,omitempty"`
-	PublicLogs    *bool `json:"public_logs,omitempty"`
-	PublicTcbinfo *bool `json:"public_tcbinfo,omitempty"`
-}
-
 // IsAllowedResultFields contains shared allowance check fields.
 type IsAllowedResultFields struct {
 	AppContractAddress string  `json:"app_contract_address"`
