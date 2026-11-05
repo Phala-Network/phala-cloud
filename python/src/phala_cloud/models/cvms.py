@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, computed_field, model_validator
 
 from .base import AliasModel, CloudModel, NodeSelectionRequest
 from .kms import KmsInfo
@@ -99,7 +99,9 @@ class ComposePatch(BaseModel):
     snapshotter: Literal["overlayfs", "stargz"] | None = None
     gateway_enabled: bool | None = None
     port_policy: ComposePortPolicy | None = None
-    event_log_version: Literal[1, 2] | None = None
+    # 1 or 2. StrictInt, not Literal[1, 2]: a Literal accepts True as 1, and the
+    # API rejects a boolean here.
+    event_log_version: Annotated[StrictInt, Field(ge=1, le=2)] | None = None
     requirements: ComposeRequirementsPatch | None = None
 
     # Fixed when the CVM is created: the current value passes, any other is rejected.

@@ -251,3 +251,17 @@ def test_patch_cvm_rejects_gpu_policy_in_the_compose_patch() -> None:
             {"id": "cvm-1", "compose": {"requirements": {"gpu_policy": {}}}}
         )
     assert recorder.requests == []
+
+
+@pytest.mark.parametrize("use_async", [False, True])
+@pytest.mark.asyncio
+async def test_patch_cvm_does_not_coerce_a_bool_event_log_version(use_async: bool) -> None:
+    # True == 1 in Python; the API rejects a boolean, so it must not go out as 1.
+    recorder = _Recorder()
+    request = {"id": "cvm-1", "compose": {"event_log_version": True}}
+    with pytest.raises(ValidationError):
+        if use_async:
+            await _async_client(recorder).patch_cvm(request)
+        else:
+            _sync_client(recorder).patch_cvm(request)
+    assert recorder.requests == []
