@@ -170,13 +170,14 @@ def test_update_cvm_visibility_uses_the_unified_patch_endpoint_sync() -> None:
 @pytest.mark.asyncio
 async def test_update_cvm_visibility_uses_the_unified_patch_endpoint_async() -> None:
     recorder = _Recorder()
-    await _async_client(recorder).update_cvm_visibility(
+    result = await _async_client(recorder).update_cvm_visibility(
         {"id": "cvm-1", "public_sysinfo": True, "public_logs": False, "public_tcbinfo": True}
     )
 
     method, path, body, _ = recorder.last
     assert (method, path) == ("PATCH", "/api/v1/cvms/cvm-1")
     assert body == {"public_sysinfo": True, "public_logs": False, "public_tcbinfo": True}
+    assert result.correlation_id == "corr-1"
 
 
 def test_patch_cvm_hash_required_returns_empty_app_id_when_payload_has_none() -> None:
