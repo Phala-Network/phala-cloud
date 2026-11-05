@@ -37,6 +37,7 @@ import { psCommand } from "./commands/ps";
 import { logsCommand } from "./commands/logs";
 import { selfCommands } from "./commands/self";
 import { appsCommand } from "./commands/apps";
+import { appsLaunchTokenCommands } from "./commands/apps/launch-token";
 import { instancesGroup } from "./commands/instances/command";
 import { instancesLsCommand } from "./commands/instances/ls";
 import { instancesAddCommand } from "./commands/instances/add";
@@ -125,6 +126,11 @@ for (const subgroup of cvmsCommands.subgroups ?? []) {
 	for (const command of subgroup.commands) {
 		registry.registerCommand(command);
 	}
+}
+
+registry.registerGroup(appsLaunchTokenCommands.group);
+for (const command of appsLaunchTokenCommands.commands) {
+	registry.registerCommand(command);
 }
 
 registry.registerGroup(envsCommands.group);

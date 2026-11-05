@@ -185,3 +185,17 @@ $ phala apps --status running \
   --region us-west
 ```
 
+## Launch token
+
+`phala apps launch-token set <app_id> [--token <token>]` sets or rotates the app's launch token. Without `--token` (at least 32 bytes), Phala Cloud generates one. The token and its hash are printed once; store the token.
+
+`phala apps launch-token clear <app_id>` removes the token.
+
+The token gates every boot of a CVM whose compose carries `requirements.launch_token_hash`. Changing the app token does not change any compose, so after `set`, point each CVM at the new hash before its next boot, or it fails to boot:
+
+```bash
+phala apps launch-token set 0123456789abcdef0123456789abcdef01234567
+phala deploy --cvm-id app_123 --launch-token-hash <printed hash>
+```
+
+Before `clear`, remove the hash from every CVM of the app with `phala deploy --cvm-id <id> --launch-token-hash ""`. Phala Cloud and the node operator can read the token, so it only protects against parties who know the public compose.
