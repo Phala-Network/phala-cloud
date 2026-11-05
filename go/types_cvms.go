@@ -620,8 +620,10 @@ type PatchCVMRequest struct {
 	OSImageName *string `json:"-"`
 
 	// Listed toggles the Trust Center listing. It is not part of the unified
-	// update: PatchCVM applies it through PATCH /cvms/{id}/listed (see
-	// UpdateCVMListed) before sending the other fields.
+	// update: after the unified PATCH is accepted, PatchCVM applies it through
+	// PATCH /cvms/{id}/listed (see UpdateCVMListed). The two calls are not
+	// atomic; if the listing call fails the CVM patch stays applied and the
+	// error says so.
 	Listed *bool `json:"-"`
 
 	// PrepareOnly sends X-Prepare-Only: true. For contract-owned KMS, the
