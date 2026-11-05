@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal, TypedDict
 
@@ -46,28 +47,87 @@ async def async_encrypt_env_vars(
 
 
 # Optional app-compose fields the backend drops from the hashed compose when null.
-_OMIT_WHEN_NONE = ("key_provider", "port_policy", "requirements", "swap_size")
+_OMIT_WHEN_NONE = (
+    "event_log_version",
+    "key_provider",
+    "port_policy",
+    "requirements",
+    "snapshotter",
+    "storage_discard",
+    "swap_size",
+    "verity_volumes",
+)
 # Optional app-compose fields the backend drops when null or an empty string.
 _OMIT_WHEN_EMPTY = ("default_gateway_domain", "key_provider_id", "pre_launch_script", "salt")
 
 
-def normalize_app_compose(app_compose: Mapping[str, Any]) -> dict[str, Any]:
-    """Apply the Phala Cloud backend's normalization before hashing.
+def _parse_os_image_version(version: str) -> tuple[int, ...]:
+    """Parse an OS image version like the backend: "0.6.0-rc0" -> (0, 6, 0).
 
-    Drops the script field the runner does not use, and drops optional fields
-    that are null (or empty, for string fields).
+    Unparseable input yields (0, 0, 0).
+    """
+    parts: list[int] = []
+    for raw in version.split("."):
+        match = re.match(r"(\d+)", raw)
+        if match is None:
+            break
+        parts.append(int(match.group(1)))
+        if match.end() != len(raw):
+            break
+    if not parts:
+        return (0, 0, 0)
+    parts.extend([0] * (3 - len(parts)))
+    return tuple(parts)
+
+
+def _init_script_list(value: Any) -> list[Any]:
+    if value is None or value == "":
+        return []
+    if isinstance(value, str):
+        return [value]
+    return list(value)
+
+
+def normalize_app_compose(
+    app_compose: Mapping[str, Any], os_image_version: str | None = None
+) -> dict[str, Any]:
+    """Apply the Phala Cloud backend's normalization (``AppComposeV2.dump_dict``) before hashing.
+
+    Drops the script field the runner does not use, drops optional fields that
+    are null (or empty, for string fields), and always emits ``tproxy_enabled``
+    (defaulting to ``gateway_enabled``).
+
+    ``os_image_version`` selects the wire format of ``manifest_version`` and
+    ``init_script``: below 0.6.0 ``manifest_version`` is 2 and ``init_script``
+    is a single string or absent; from 0.6.0 ``manifest_version`` is "3" and
+    ``init_script`` is a list. Without it both fields are hashed as given.
     """
     compose = dict(app_compose)
     if compose.get("runner") == "bash":
         compose.pop("docker_compose_file", None)
     elif compose.get("runner") == "docker-compose":
         compose.pop("bash_script", None)
+    compose["tproxy_enabled"] = compose.get("tproxy_enabled", compose.get("gateway_enabled", True))
     for key in _OMIT_WHEN_NONE:
         if key in compose and compose[key] is None:
             del compose[key]
     for key in _OMIT_WHEN_EMPTY:
         if key in compose and not compose[key]:
             del compose[key]
+    if os_image_version is None:
+        return compose
+    scripts = _init_script_list(compose.get("init_script"))
+    if _parse_os_image_version(os_image_version) < (0, 6, 0):
+        compose["manifest_version"] = 2
+        if not scripts:
+            compose.pop("init_script", None)
+        elif len(scripts) == 1:
+            compose["init_script"] = scripts[0]
+        else:
+            raise ValueError("OS images below 0.6.0 accept at most one init_script")
+    else:
+        compose["manifest_version"] = "3"
+        compose["init_script"] = scripts
     return compose
 
 
@@ -80,15 +140,22 @@ def dump_app_compose(app_compose: Mapping[str, Any]) -> str:
     return json.dumps(app_compose, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def get_compose_hash(app_compose: Mapping[str, Any], normalize: bool = True) -> str:
+def get_compose_hash(
+    app_compose: Mapping[str, Any],
+    normalize: bool = True,
+    *,
+    os_image_version: str | None = None,
+) -> str:
     """Compute the app-compose hash exactly as the Phala Cloud backend does.
 
     Accepts a dict, or an object with ``to_dict()`` such as ``dstack_sdk.AppCompose``.
+    Pass the target ``os_image_version`` (for example "0.6.0") to get the
+    backend's OS-dependent ``manifest_version`` and ``init_script`` wire format.
     With ``normalize=False`` the compose is hashed as given.
     """
     compose = app_compose.to_dict() if hasattr(app_compose, "to_dict") else app_compose
     if normalize:
-        compose = normalize_app_compose(compose)
+        compose = normalize_app_compose(compose, os_image_version)
     return hashlib.sha256(dump_app_compose(compose).encode("utf-8")).hexdigest()
 
 
