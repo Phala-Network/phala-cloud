@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { type Client } from "../../client";
-import { validateComposePayloadSize } from "../../types/app_compose";
+import {
+  ComposeRequirementsSchema,
+  ComposeRunnerSchema,
+  InitScriptSlugSchema,
+  PortPolicySchema,
+  VerityVolumeSchema,
+  validateComposePayloadSize,
+} from "../../types/app_compose";
 import { KmsInfoSchema } from "../../types/kms_info";
 import { defineAction } from "../../utils/define-action";
 import { isValidHostname } from "../../utils/hostname";
@@ -87,7 +94,9 @@ import { isValidHostname } from "../../utils/hostname";
  * ## Required Parameters
  *
  * - **name**: CVM instance name
- * - **compose_file**: Docker Compose configuration with `docker_compose_file` field
+ * - **compose_file**: App compose with `docker_compose_file` (or `bash_script` for the
+ *   `bash` runner). Alternatively send **compose_file_raw**, a whole app-compose JSON
+ *   string, instead of `compose_file` (never both; needs the `compose_advanced` feature flag).
  *
  * ## Optional Parameters
  *
@@ -132,6 +141,12 @@ import { isValidHostname } from "../../utils/hostname";
  *   - Specify only if you need a different size than the default
  * - **env_keys**: List of allowed environment variable keys
  * - **listed**: Whether the CVM is publicly listed (default: false)
+ * - **init_scripts**: Platform init script slugs (`docker_cleanup`, `env_merge`)
+ * - **launch_token**: Launch token (at least 32 bytes) the guest checks on every boot;
+ *   Phala Cloud writes its hash into `compose_file.requirements.launch_token_hash`
+ * - **generate_launch_token**: Let Phala Cloud generate the token for a new app; it is
+ *   returned once, as `launch_token` in the `commitCvmProvision` response
+ * - **annotations**: Host-side key/value metadata (needs the `cvm_annotations` feature flag)
  *
  * ## Returns
  *
@@ -218,12 +233,18 @@ export const ProvisionCvmRequestSchema = z
         secure_time: z.boolean().optional(),
         storage_fs: z.enum(["ext4", "zfs"]).optional(),
         swap_size: z.string().optional(),
-        port_policy: z
-          .object({
-            ports: z.array(z.object({ port: z.number(), pp: z.boolean() })),
-            restrict_mode: z.boolean(),
-          })
-          .optional(),
+        port_policy: PortPolicySchema.optional(),
+        // docker-compose by default; bash and nerdctl-compose need the
+        // compose_advanced feature flag.
+        runner: ComposeRunnerSchema.optional(),
+        // Script the bash runner runs instead of docker_compose_file.
+        bash_script: z.string().optional(),
+        requirements: ComposeRequirementsSchema.optional(),
+        // dstack >= 0.6.0 fields.
+        storage_discard: z.boolean().optional(),
+        event_log_version: z.union([z.literal(1), z.literal(2)]).optional(),
+        snapshotter: z.enum(["overlayfs", "stargz"]).optional(),
+        verity_volumes: z.array(VerityVolumeSchema).optional(),
       })
       // Keep compose_file open to newer backend fields. Without passthrough,
       // zod's default strip mode drops every unknown key at parse time and
@@ -231,7 +252,20 @@ export const ProvisionCvmRequestSchema = z
       .passthrough()
       .superRefine((data, ctx) => {
         validateComposePayloadSize(data.docker_compose_file, data.pre_launch_script, ctx);
-      }),
+      })
+      .optional(),
+    // A whole app-compose JSON file, sent instead of compose_file (not both).
+    // Needs the compose_advanced feature flag.
+    compose_file_raw: z.string().optional(),
+    // Platform init scripts to run on every boot; Phala Cloud fixes the order.
+    init_scripts: z.array(InitScriptSlugSchema).optional(),
+    // Launch token (at least 32 bytes) the guest requires on every boot.
+    launch_token: z.string().optional(),
+    // Gate the CVM with a generated token (new app) or the app's existing one.
+    // A new token is returned once, in the commit response's launch_token.
+    generate_launch_token: z.boolean().optional(),
+    // Host-side key/value metadata stored by the VMM; needs the cvm_annotations flag.
+    annotations: z.record(z.string(), z.string()).optional(),
     listed: z.boolean().optional(),
     kms_id: z.string().optional(),
     kms: z.enum(["PHALA", "ETHEREUM", "BASE"]).optional(), // KMS type selection (defaults to PHALA)

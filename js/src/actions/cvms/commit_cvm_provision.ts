@@ -177,6 +177,8 @@ const CommitCvmProvisionBaseSchema = z
     encrypted_env_pubkey: z.string().nullable().optional(),
     app_auth_contract_address: z.string().nullable().optional(),
     deployer_address: z.string().nullable().optional(),
+    // Plaintext launch token this create stored on a new app. Returned only here, once.
+    launch_token: z.string().nullable().optional(),
   })
   .passthrough();
 
