@@ -137,11 +137,10 @@ _, err := client.UpdateDockerCompose(ctx, "cvm-id", composeYAML, nil)
 _, err = client.UpdatePreLaunchScript(ctx, "cvm-id", "#!/bin/sh\necho hello", nil)
 
 // Update resources
-err = client.UpdateCVMResources(ctx, "cvm-id", &phala.UpdateResourcesRequest{
-	VCPU:         phala.Int(4),
-	Memory:       phala.Int(8192),
-	DiskSize:     phala.Int(50),
-	AllowRestart: phala.Bool(true),
+_, err = client.UpdateCVMResources(ctx, "cvm-id", &phala.UpdateResourcesRequest{
+	VCPU:     phala.Int(4),
+	Memory:   phala.Int(8192),
+	DiskSize: phala.Int(50),
 })
 
 // Update visibility
@@ -352,6 +351,10 @@ PHALA_CLOUD_E2E_API_KEY=your-key go test -tags e2e -v -timeout 30m ./e2e/
 - `WatchCVMState` reconnects when the stream ends without a `complete` event. `MaxRetries` defaults to nil, which means unlimited reconnects, so pass a cancellable context or set `MaxRetries`.
 - `[]string` request fields now use `omitzero` instead of `omitempty`. A non-nil empty slice is sent as `[]`; only a nil slice is omitted.
 - `ConfirmCVMPatch` now sends `X-Compose-Hash` and `X-Transaction-Hash` headers with an empty JSON object body, and the response includes `correlation_id`.
+- Remove `GatewayEnabled`, `SecureTime` and `AllowRestart` from `PatchCVMRequest`. The API never applied them. Use `Image` instead of the deprecated `OSImageName`. `Listed` is still accepted and is applied through `PATCH /cvms/{id}/listed`.
+- `PatchCVM` no longer returns an `*APIError` for HTTP 465. It returns a `PatchCVMResponse` with `RequiresOnChainHash` set, the compose hash to register and, for `PrepareOnly` requests, `CommitToken`. Check `resp.RequiresOnChainHash` instead of `apiErr.IsComposePrecondition()`.
+- `UpdateCVMVisibility` now calls `PATCH /cvms/{id}` and returns `*CVMUpdateResponse` (`Message`, `CorrelationID`, `Status`). The `CVMVisibility` type is removed.
+- `UpdateResourcesRequest.AllowRestart` is deprecated and no longer sent; the API ignores it.
 
 ## License
 
