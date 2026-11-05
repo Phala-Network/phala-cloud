@@ -15,6 +15,7 @@ from .action_responses import (
     AppEnvPubkeyResponse,
     AppFilterOptionsResponse,
     AppInfoResponse,
+    AppLaunchTokenResponse,
     AppListResponse,
     AppRevisionDetailResponse,
     AppRevisionsResponse,
@@ -24,10 +25,12 @@ from .action_responses import (
     ComposeHashPreconditionResponse,
     CvmActionResponseV20260121,
     CvmActionResponseV20260522,
+    CvmAnnotationsResponse,
     CvmAttestationResponse,
     CvmContainersResponse,
     CvmInfoResponseV20260121,
     CvmInfoResponseV20260522,
+    CvmInitScriptsResponse,
     CvmNetworkResponse,
     CvmStatsResponse,
     CvmUserConfigResponse,
@@ -207,6 +210,12 @@ class AppRevisionsRequest(_AliasModel):
     page_size: int | None = Field(default=None, ge=1)
 
 
+class SetAppLaunchTokenRequest(_AliasModel):
+    app_id: str = Field(alias="appId")
+    # Token to set (at least 32 bytes). Leave unset to have Phala Cloud generate one.
+    launch_token: str | None = None
+
+
 class CreateAppInstanceRequest(NodeSelectionRequest, _AliasModel):
     app_id: str = Field(alias="appId")
     name: str | None = None
@@ -331,6 +340,11 @@ class UpdateCvmSshKeysRequest(CvmIdRequest):
     ssh_key_ids: list[str]
     usernames: list[str] | None = None
     apply_now: bool = False
+
+
+class UpdateCvmAnnotationsRequest(CvmIdRequest):
+    # Replaces every annotation; an empty map clears them.
+    annotations: dict[str, str]
 
 
 class CvmSshKey(BaseModel):
@@ -598,6 +612,12 @@ class _ExtMixin:
             return CvmAttestationResponse
         if m == "GET" and re.fullmatch(r"/cvms/[^/]+/user_config", path):
             return CvmUserConfigResponse
+        if m in {"GET", "PUT"} and re.fullmatch(r"/cvms/[^/]+/annotations", path):
+            return CvmAnnotationsResponse
+        if m == "GET" and re.fullmatch(r"/cvms/[^/]+/init-scripts", path):
+            return CvmInitScriptsResponse
+        if m == "POST" and re.fullmatch(r"/apps/[^/]+/launch-token", path):
+            return AppLaunchTokenResponse
         if m == "GET" and re.fullmatch(r"/cvms/[^/]+", path):
             return self._v20260121_model(CvmInfoResponseV20260121, CvmInfoResponseV20260522)
         if m == "GET" and re.fullmatch(r"/kms/on-chain/[^/]+", path):
@@ -1441,6 +1461,67 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         self, request: CvmIdRequest | Mapping[str, Any]
     ) -> SafeResult[Any]:
         return self.safe(self.get_cvm_user_config, request)
+
+    def get_cvm_annotations(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> CvmAnnotationsResponse:
+        cvm_id = CvmIdRequest.model_validate(request).resolved
+        return cast(CvmAnnotationsResponse, self.get(f"/cvms/{cvm_id}/annotations"))
+
+    def safe_get_cvm_annotations(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmAnnotationsResponse]:
+        return self.safe(self.get_cvm_annotations, request)
+
+    def update_cvm_annotations(
+        self, request: UpdateCvmAnnotationsRequest | Mapping[str, Any]
+    ) -> CvmAnnotationsResponse:
+        req = UpdateCvmAnnotationsRequest.model_validate(request)
+        return cast(
+            CvmAnnotationsResponse,
+            self.request(
+                "PUT", f"/cvms/{req.resolved}/annotations", json={"annotations": req.annotations}
+            ),
+        )
+
+    def safe_update_cvm_annotations(
+        self, request: UpdateCvmAnnotationsRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmAnnotationsResponse]:
+        return self.safe(self.update_cvm_annotations, request)
+
+    def get_cvm_init_scripts(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> CvmInitScriptsResponse:
+        cvm_id = CvmIdRequest.model_validate(request).resolved
+        return cast(CvmInitScriptsResponse, self.get(f"/cvms/{cvm_id}/init-scripts"))
+
+    def safe_get_cvm_init_scripts(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmInitScriptsResponse]:
+        return self.safe(self.get_cvm_init_scripts, request)
+
+    def set_app_launch_token(
+        self, request: SetAppLaunchTokenRequest | Mapping[str, Any]
+    ) -> AppLaunchTokenResponse:
+        req = SetAppLaunchTokenRequest.model_validate(request)
+        body = req.model_dump(include={"launch_token"}, exclude_none=True)
+        return cast(
+            AppLaunchTokenResponse, self.post(f"/apps/{req.app_id}/launch-token", json=body)
+        )
+
+    def safe_set_app_launch_token(
+        self, request: SetAppLaunchTokenRequest | Mapping[str, Any]
+    ) -> SafeResult[AppLaunchTokenResponse]:
+        return self.safe(self.set_app_launch_token, request)
+
+    def clear_app_launch_token(self, request: AppIdRequest | Mapping[str, Any]) -> None:
+        req = AppIdRequest.model_validate(request)
+        self.request("DELETE", f"/apps/{req.app_id}/launch-token")
+
+    def safe_clear_app_launch_token(
+        self, request: AppIdRequest | Mapping[str, Any]
+    ) -> SafeResult[None]:
+        return self.safe(self.clear_app_launch_token, request)
 
     def refresh_cvm_instance_id(
         self, request: RefreshCvmInstanceIdRequest | Mapping[str, Any]
@@ -2402,6 +2483,67 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         self, request: CvmIdRequest | Mapping[str, Any]
     ) -> SafeResult[Any]:
         return await self.safe(self.get_cvm_user_config, request)
+
+    async def get_cvm_annotations(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> CvmAnnotationsResponse:
+        cvm_id = CvmIdRequest.model_validate(request).resolved
+        return cast(CvmAnnotationsResponse, await self.get(f"/cvms/{cvm_id}/annotations"))
+
+    async def safe_get_cvm_annotations(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmAnnotationsResponse]:
+        return await self.safe(self.get_cvm_annotations, request)
+
+    async def update_cvm_annotations(
+        self, request: UpdateCvmAnnotationsRequest | Mapping[str, Any]
+    ) -> CvmAnnotationsResponse:
+        req = UpdateCvmAnnotationsRequest.model_validate(request)
+        return cast(
+            CvmAnnotationsResponse,
+            await self.request(
+                "PUT", f"/cvms/{req.resolved}/annotations", json={"annotations": req.annotations}
+            ),
+        )
+
+    async def safe_update_cvm_annotations(
+        self, request: UpdateCvmAnnotationsRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmAnnotationsResponse]:
+        return await self.safe(self.update_cvm_annotations, request)
+
+    async def get_cvm_init_scripts(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> CvmInitScriptsResponse:
+        cvm_id = CvmIdRequest.model_validate(request).resolved
+        return cast(CvmInitScriptsResponse, await self.get(f"/cvms/{cvm_id}/init-scripts"))
+
+    async def safe_get_cvm_init_scripts(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmInitScriptsResponse]:
+        return await self.safe(self.get_cvm_init_scripts, request)
+
+    async def set_app_launch_token(
+        self, request: SetAppLaunchTokenRequest | Mapping[str, Any]
+    ) -> AppLaunchTokenResponse:
+        req = SetAppLaunchTokenRequest.model_validate(request)
+        body = req.model_dump(include={"launch_token"}, exclude_none=True)
+        return cast(
+            AppLaunchTokenResponse, await self.post(f"/apps/{req.app_id}/launch-token", json=body)
+        )
+
+    async def safe_set_app_launch_token(
+        self, request: SetAppLaunchTokenRequest | Mapping[str, Any]
+    ) -> SafeResult[AppLaunchTokenResponse]:
+        return await self.safe(self.set_app_launch_token, request)
+
+    async def clear_app_launch_token(self, request: AppIdRequest | Mapping[str, Any]) -> None:
+        req = AppIdRequest.model_validate(request)
+        await self.request("DELETE", f"/apps/{req.app_id}/launch-token")
+
+    async def safe_clear_app_launch_token(
+        self, request: AppIdRequest | Mapping[str, Any]
+    ) -> SafeResult[None]:
+        return await self.safe(self.clear_app_launch_token, request)
 
     async def refresh_cvm_instance_id(
         self, request: RefreshCvmInstanceIdRequest | Mapping[str, Any]

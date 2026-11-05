@@ -133,6 +133,16 @@ __all__ = [
     "safe_get_cvm_status_batch",
     "get_cvm_user_config",
     "safe_get_cvm_user_config",
+    "get_cvm_annotations",
+    "safe_get_cvm_annotations",
+    "update_cvm_annotations",
+    "safe_update_cvm_annotations",
+    "get_cvm_init_scripts",
+    "safe_get_cvm_init_scripts",
+    "set_app_launch_token",
+    "safe_set_app_launch_token",
+    "clear_app_launch_token",
+    "safe_clear_app_launch_token",
     "refresh_cvm_instance_id",
     "safe_refresh_cvm_instance_id",
     "refresh_cvm_instance_ids",
@@ -724,6 +734,46 @@ def get_cvm_user_config(client: Any, *args: Any, **kwargs: Any) -> Any:
 
 def safe_get_cvm_user_config(client: Any, *args: Any, **kwargs: Any) -> Any:
     return client.safe_get_cvm_user_config(*args, **kwargs)
+
+
+def get_cvm_annotations(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.get_cvm_annotations(*args, **kwargs)
+
+
+def safe_get_cvm_annotations(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.safe_get_cvm_annotations(*args, **kwargs)
+
+
+def update_cvm_annotations(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.update_cvm_annotations(*args, **kwargs)
+
+
+def safe_update_cvm_annotations(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.safe_update_cvm_annotations(*args, **kwargs)
+
+
+def get_cvm_init_scripts(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.get_cvm_init_scripts(*args, **kwargs)
+
+
+def safe_get_cvm_init_scripts(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.safe_get_cvm_init_scripts(*args, **kwargs)
+
+
+def set_app_launch_token(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.set_app_launch_token(*args, **kwargs)
+
+
+def safe_set_app_launch_token(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.safe_set_app_launch_token(*args, **kwargs)
+
+
+def clear_app_launch_token(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.clear_app_launch_token(*args, **kwargs)
+
+
+def safe_clear_app_launch_token(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.safe_clear_app_launch_token(*args, **kwargs)
 
 
 def refresh_cvm_instance_id(client: Any, *args: Any, **kwargs: Any) -> Any:

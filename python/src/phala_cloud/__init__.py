@@ -1,4 +1,11 @@
 from . import error_codes
+from .action_responses import (
+    AppLaunchTokenResponse,
+    CvmAnnotationsResponse,
+    CvmInitScript,
+    CvmInitScriptsResponse,
+    CvmUserConfigResponse,
+)
 from .actions import *  # noqa: F403
 from .actions import (
     commit_cvm_update,
@@ -37,6 +44,8 @@ from .full_client import (
     CvmSshKeysResponse,
     PhalaCloud,
     ReplicateCvmRequest,
+    SetAppLaunchTokenRequest,
+    UpdateCvmAnnotationsRequest,
     UpdateCvmSshKeysRequest,
     create_async_client,
     create_client,
@@ -83,6 +92,13 @@ __all__ = [
     "CvmSshKey",
     "CvmSshKeysResponse",
     "UpdateCvmSshKeysRequest",
+    "AppLaunchTokenResponse",
+    "CvmAnnotationsResponse",
+    "CvmInitScript",
+    "CvmInitScriptsResponse",
+    "CvmUserConfigResponse",
+    "SetAppLaunchTokenRequest",
+    "UpdateCvmAnnotationsRequest",
     "get_cvm_ssh_keys",
     "safe_get_cvm_ssh_keys",
     "update_cvm_ssh_keys",
