@@ -28,6 +28,8 @@ afterAll(() => {
 	mock.module("@/src/lib/client", () => previousClient);
 });
 const { annotationsCommand } = await import("./index");
+const { dispatchCommand } = await import("@/src/core/dispatcher");
+const { CommandRegistry } = await import("@/src/core/registry");
 
 type Recorded = { method: string; path: string; body: unknown };
 
@@ -92,11 +94,64 @@ async function run(input: Record<string, unknown>) {
 		},
 	} as unknown as CommandContext;
 	const exitCode = await annotationsCommand.run(
-		{ args: [], clear: false, replace: false, ...input },
+		{ args: [], "--": [], clear: false, replace: false, ...input },
 		context,
 	);
 	return { exitCode, failure, stdout };
 }
+
+/** Run `phala <argv>` through the real argument parser and dispatcher. */
+async function runCli(argv: string[]) {
+	const registry = new CommandRegistry();
+	registry.registerCommand(annotationsCommand);
+	const output = {
+		write: () => true,
+		isTTY: false,
+	} as unknown as NodeJS.WriteStream;
+	return dispatchCommand({
+		registry,
+		argv,
+		executableName: "phala",
+		version: "0.0.0",
+		packageName: "phala",
+		packageVersion: "0.0.0",
+		runtime: "bun",
+		cwd: tmpDir,
+		env: {
+			...process.env,
+			PHALA_DISABLE_UPDATE_CHECK: "1",
+			PHALA_CLOUD_API_KEY: "test-key",
+			PHALA_CLOUD_API_PREFIX: `http://127.0.0.1:${server.port}/api/v1`,
+			PHALA_CLOUD_DIR: tmpDir,
+		},
+		stdout: output,
+		stderr: output,
+		stdin: process.stdin,
+	});
+}
+
+describe("phala annotations (parsed argv)", () => {
+	test("treats pairs after -- as pairs and sends the PUT", async () => {
+		stored = { old: "x" };
+		const code = await runCli([
+			"annotations",
+			CVM_ID,
+			"--",
+			"tier=fast",
+			"-host-key=value",
+		]);
+
+		expect(code).toBe(0);
+		expect(requests.map((r) => [r.method, r.path, r.body])).toEqual([
+			["GET", `/api/v1/cvms/${CVM_ID}/annotations`, undefined],
+			[
+				"PUT",
+				`/api/v1/cvms/${CVM_ID}/annotations`,
+				{ annotations: { old: "x", tier: "fast", "-host-key": "value" } },
+			],
+		]);
+	});
+});
 
 describe("phala annotations", () => {
 	test("shows the annotations of the CVM given as the first argument", async () => {

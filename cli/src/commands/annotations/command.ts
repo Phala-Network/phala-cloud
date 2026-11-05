@@ -60,6 +60,8 @@ export const annotationsCommandMeta: CommandMeta = {
 
 export const annotationsCommandSchema = z.object({
 	args: z.array(z.string()).default([]),
+	// Arguments after `--`; the parser keeps them apart from args.
+	"--": z.array(z.string()).default([]),
 	unset: z.array(z.string()).optional(),
 	clear: z.boolean().default(false),
 	replace: z.boolean().default(false),

@@ -53,7 +53,7 @@ async function runAnnotationsCommand(
 	context: CommandContext,
 ): Promise<number> {
 	try {
-		const { cvmId, pairs } = parseArgs(input.args);
+		const { cvmId, pairs } = parseArgs([...input.args, ...input["--"]]);
 		const cvm = cvmId ? { id: cvmId } : context.cvmId;
 		if (!cvm) {
 			context.fail(
