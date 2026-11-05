@@ -45,6 +45,33 @@ const COMPOSE = "services:\n  app:\n    image: nginx\n";
 
 let server: ReturnType<typeof Bun.serve>;
 let requests: Recorded[] = [];
+// Per-test response override; return undefined to fall through to defaults.
+let respond:
+	| ((method: string, path: string) => Response | undefined)
+	| undefined;
+
+const HASH_REQUIRED = {
+	error_code: "ERR-01-005",
+	message: "Compose hash registration required",
+	details: [
+		{ field: "compose_hash", value: "abc123" },
+		{ field: "app_id", value: "abc" },
+		{ field: "device_id", value: "dev-1" },
+		{
+			field: "kms_info",
+			value: {
+				id: "1",
+				slug: "base",
+				url: "https://kms.example.com",
+				version: "1.0.0",
+				chain_id: 8453,
+				kms_contract_address: "0xkms",
+				gateway_app_id: "0xgateway",
+			},
+		},
+		{ field: "commit_token", value: "token-1" },
+	],
+};
 let tmpDir: string;
 let composePath: string;
 
@@ -59,6 +86,8 @@ beforeAll(async () => {
 				path: url.pathname,
 				body: text ? JSON.parse(text) : undefined,
 			});
+			const overridden = respond?.(req.method, url.pathname);
+			if (overridden) return overridden;
 			if (req.method === "GET") {
 				return Response.json({
 					id: CVM_ID,
@@ -94,6 +123,7 @@ afterAll(async () => {
 
 afterEach(() => {
 	requests = [];
+	respond = undefined;
 });
 
 function makeContext(): {
@@ -161,21 +191,77 @@ describe("phala deploy --cvm-id", () => {
 		});
 	});
 
-	test("sets the Trust Center listing through PATCH /cvms/{id}/listed", async () => {
+	test("sets the Trust Center listing after the update is accepted", async () => {
 		const { exitCode, failure } = await deploy({ listed: true });
 
 		expect(failure).toBeUndefined();
 		expect(exitCode).toBe(0);
 		expect(
-			requests.filter((r) => r.path === `/api/v1/cvms/${CVM_ID}/listed`),
+			requests.filter((r) => r.method === "PATCH").map((r) => [r.path, r.body]),
 		).toEqual([
-			{
-				method: "PATCH",
-				path: `/api/v1/cvms/${CVM_ID}/listed`,
-				body: { listed: true },
-			},
+			[`/api/v1/cvms/${CVM_ID}`, { docker_compose_file: COMPOSE }],
+			[`/api/v1/cvms/${CVM_ID}/listed`, { listed: true }],
 		]);
-		expect(updateRequest().body).toEqual({ docker_compose_file: COMPOSE });
+	});
+
+	test("leaves the listing alone when the update is rejected", async () => {
+		respond = (method, p) =>
+			method === "PATCH" && p === `/api/v1/cvms/${CVM_ID}`
+				? Response.json(
+						{ detail: "Another operation is already in progress" },
+						{ status: 409 },
+					)
+				: undefined;
+		const { exitCode } = await deploy({ listed: true });
+
+		expect(exitCode).toBe(1);
+		expect(requests.some((r) => r.path.endsWith("/listed"))).toBe(false);
+	});
+
+	test("says the update was applied when only the listing fails", async () => {
+		respond = (_method, p) =>
+			p.endsWith("/listed")
+				? Response.json({ detail: "Forbidden" }, { status: 403 })
+				: undefined;
+		const { exitCode, failure } = await deploy({ listed: false });
+
+		expect(exitCode).toBe(1);
+		expect((failure as Error).message).toContain(
+			"The CVM update was already applied, but setting the Trust Center listing failed",
+		);
+	});
+
+	test("does not set the listing for --prepare-only", async () => {
+		respond = (method, p) =>
+			method === "PATCH" && p === `/api/v1/cvms/${CVM_ID}`
+				? Response.json(HASH_REQUIRED, { status: 465 })
+				: undefined;
+		const { exitCode, failure } = await deploy({
+			listed: true,
+			prepareOnly: true,
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(requests.some((r) => r.path.endsWith("/listed"))).toBe(false);
+	});
+
+	test("sets the listing after --commit succeeds", async () => {
+		const { exitCode, failure } = await deploy({
+			commit: true,
+			token: "token-1",
+			composeHash: "abc123",
+			transactionHash: "0xtx",
+			listed: true,
+		});
+
+		expect(failure).toBeUndefined();
+		// The --commit branch of runDeploy returns without an exit code.
+		expect(exitCode).toBeUndefined();
+		expect(requests.map((r) => [r.method, r.path])).toEqual([
+			["POST", `/api/v1/cvms/${CVM_ID}/commit-update`],
+			["PATCH", `/api/v1/cvms/${CVM_ID}/listed`],
+		]);
 	});
 
 	test.each([

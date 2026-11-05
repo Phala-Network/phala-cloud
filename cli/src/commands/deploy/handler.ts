@@ -999,6 +999,32 @@ const deployNewCvm = async (
 	}
 };
 
+/**
+ * Set the Trust Center listing once the CVM update has been accepted. The
+ * listing is app-wide metadata on its own endpoint (PATCH /cvms/{id}/listed),
+ * which needs an API key or session; GitHub OIDC tokens are not accepted there.
+ */
+async function applyListedAfterUpdate(
+	client: CliApiClient,
+	options: Options,
+): Promise<void> {
+	if (options.listed === undefined) return;
+	try {
+		await client.patch(`/cvms/${options.uuid}/listed`, {
+			listed: options.listed,
+		});
+	} catch (error) {
+		const reason = error instanceof Error ? error.message : String(error);
+		throw new Error(
+			`The CVM update was already applied, but setting the Trust Center listing failed: ${reason}. Retry with an API key: phala api -X PATCH /cvms/${options.uuid}/listed -F listed:=${options.listed}`,
+			{ cause: error },
+		);
+	}
+	logger.info(
+		`Trust Center listing ${options.listed ? "enabled" : "disabled"}.`,
+	);
+}
+
 const updateCvm = async (
 	validatedOptions: Options,
 	docker_compose_yml: string,
@@ -1040,17 +1066,6 @@ const updateCvm = async (
 		patchBody.encrypted_env = encrypted_env;
 	}
 
-	// The Trust Center listing is app metadata with its own endpoint, not part
-	// of the CVM configuration update.
-	if (validatedOptions.listed !== undefined) {
-		await client.patch(`/cvms/${validatedOptions.uuid}/listed`, {
-			listed: validatedOptions.listed,
-		});
-		logger.info(
-			`Trust Center listing ${validatedOptions.listed ? "enabled" : "disabled"}.`,
-		);
-	}
-
 	logger.info(`Updating CVM ${validatedOptions.uuid}...`);
 	// biome-ignore lint/suspicious/noExplicitAny: dynamic patch body
 	const patchResult = await safePatchCvm(client, patchBody as any);
@@ -1059,6 +1074,12 @@ const updateCvm = async (
 	}
 
 	const result = patchResult.data;
+
+	if (validatedOptions.prepareOnly && validatedOptions.listed !== undefined) {
+		logger.warn(
+			"--listed is not applied with --prepare-only. Pass it again with --commit.",
+		);
+	}
 
 	// --prepare-only on a CVM that doesn't require on-chain hash
 	if (validatedOptions.prepareOnly && !result.requiresOnChainHash) {
@@ -1286,6 +1307,8 @@ const updateCvm = async (
 		}
 	}
 
+	await applyListedAfterUpdate(client, validatedOptions);
+
 	// Wait for update to complete if --wait flag is set
 	if (validatedOptions.wait) {
 		logger.info("Waiting for update to complete...");
@@ -1362,6 +1385,8 @@ const commitCvmUpdate = async (
 			: "";
 		throw new Error(`Failed to commit CVM update: ${errMsg}${hint}`);
 	}
+
+	await applyListedAfterUpdate(client, validatedOptions);
 
 	if (validatedOptions.json !== false) {
 		stdout.write(
