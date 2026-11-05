@@ -118,6 +118,7 @@ interface Options {
 	appCompose?: string;
 	initScript?: Array<"docker_cleanup" | "env_merge">;
 	launchToken?: string;
+	launchTokenHash?: string;
 	generateLaunchToken?: boolean;
 	eventLogVersion?: "1" | "2";
 	ephemeralDataDisk?: boolean;
@@ -202,10 +203,15 @@ const COMPOSE_SHAPING_FLAGS: ReadonlyArray<readonly [keyof Options, string]> = [
 
 /** Reject flag combinations a new deployment cannot honor. */
 export function assertCreateOptions(options: Options): void {
-	if (options.confirmDataWipe !== undefined) {
-		throw new Error(
-			"--confirm-data-wipe only applies to an update of an existing CVM (--cvm-id).",
-		);
+	for (const [key, flag] of [
+		["confirmDataWipe", "--confirm-data-wipe"],
+		["launchTokenHash", "--launch-token-hash"],
+	] as const) {
+		if (options[key] !== undefined) {
+			throw new Error(
+				`${flag} only applies to an update of an existing CVM (--cvm-id).`,
+			);
+		}
 	}
 	if (options.appCompose === undefined) return;
 	const flags = COMPOSE_SHAPING_FLAGS.filter(
@@ -287,6 +293,13 @@ export function buildUpdatePatchBody(
 	const compose = composeFieldsFromOptions(options);
 	if (options.secureTime !== undefined) {
 		compose.secure_time = options.secureTime;
+	}
+	if (options.launchTokenHash !== undefined) {
+		// An empty value removes the key: null in a merge patch.
+		compose.requirements = {
+			...(compose.requirements as Record<string, unknown> | undefined),
+			launch_token_hash: options.launchTokenHash || null,
+		};
 	}
 	if (Object.keys(compose).length > 0) {
 		patchBody.compose = compose;

@@ -48,6 +48,7 @@ Creates a new CVM by default. If `--cvm-id` is provided or `phala.toml` contains
 | `--init-script <slug>` | | Platform init script to run on every boot: `docker_cleanup` or `env_merge`. Repeatable. On update, replaces the current set |
 | `--launch-token <token>` | | Launch token (at least 32 bytes) the CVM must boot with |
 | `--generate-launch-token` | false | Gate the CVM with a launch token Phala Cloud generates for a new app (printed once), or with the app's existing token |
+| `--launch-token-hash <hash>` | | Update only: set `requirements.launch_token_hash` to the hash printed by `phala apps launch-token set`; `""` removes it |
 | `--event-log-version <1\|2>` | | Event log digest format (dstack OS 0.6.0+) |
 | `--ephemeral-data-disk` | | Format the data disk on every boot (dstack OS 0.6.3+); `--no-ephemeral-data-disk` sets it to false |
 | `--gateway` / `--no-gateway` | true | Route the CVM through the gateway |
@@ -76,6 +77,7 @@ With `--cvm-id` (or a CVM ID in `phala.toml`), deploy sends the compose file and
 - `--pre-launch-script`, `--no-pre-launch-script`, `-e`, `--force-stop`, `--prepare-only`
 - `--secure-time`, `--gateway` / `--no-gateway`, `--event-log-version`, `--ephemeral-data-disk` / `--no-ephemeral-data-disk` (sent as a compose merge patch)
 - `--init-script` (replaces the CVM's init scripts) and `--confirm-data-wipe`
+- `--launch-token-hash` (must be the hash of the app's launch token; `""` removes it)
 
 Turning on `docker_cleanup` or `--ephemeral-data-disk` erases data on every boot, so the update needs `--confirm-data-wipe`. Turning the gateway off removes the CVM from the gateway after the update.
 
@@ -91,7 +93,7 @@ These flags set how a CVM is created and cannot be changed afterwards: `--name`,
 
 ## Launch token
 
-`--launch-token` or `--generate-launch-token` makes the guest check the app's launch token on every boot before it gets its keys. A generated token is printed once, after the CVM is created; store it. Phala Cloud and the node operator can read the token, so it only protects against parties who know the public compose. To rotate or clear an app's token, see `phala apps launch-token`.
+`--launch-token` or `--generate-launch-token` makes the guest check the app's launch token on every boot before it gets its keys. A generated token is printed once, after the CVM is created; store it. Phala Cloud and the node operator can read the token, so it only protects against parties who know the public compose. To rotate or clear an app's token, see `phala apps launch-token` in [apps](./apps.md).
 
 ## Pre-launch script behavior
 

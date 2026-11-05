@@ -216,6 +216,24 @@ describe("phala deploy --cvm-id", () => {
 		});
 	});
 
+	test.each([
+		["a".repeat(64), "a".repeat(64)],
+		["", null],
+	])(
+		"sends --launch-token-hash %p as requirements.launch_token_hash",
+		async (value, sent) => {
+			const { exitCode } = await deploy({
+				launchTokenHash: value,
+				ephemeralDataDisk: false,
+			});
+
+			expect(exitCode).toBe(0);
+			expect(updateRequest().body?.compose).toEqual({
+				requirements: { ephemeral_data_disk: false, launch_token_hash: sent },
+			});
+		},
+	);
+
 	test.each(["1536", "1.5G"])(
 		"sends --memory %p as 1536 MB and leaves the spec to the backend",
 		async (memory) => {

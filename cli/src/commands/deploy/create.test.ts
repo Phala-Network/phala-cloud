@@ -234,15 +234,18 @@ describe("phala deploy (create)", () => {
 		},
 	);
 
-	test("rejects --confirm-data-wipe on create", async () => {
+	test.each([
+		[{ confirmDataWipe: true }, "--confirm-data-wipe"],
+		[{ launchTokenHash: "a".repeat(64) }, "--launch-token-hash"],
+	])("rejects update-only flag %p on create", async (flags, flag) => {
 		const { exitCode, failure } = await deploy({
 			compose: composePath,
-			confirmDataWipe: true,
+			...flags,
 		});
 
 		expect(exitCode).toBe(1);
 		expect((failure as Error).message).toContain(
-			"--confirm-data-wipe only applies to an update",
+			`${flag} only applies to an update`,
 		);
 		expect(requests).toEqual([]);
 	});

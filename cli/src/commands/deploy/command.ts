@@ -248,6 +248,14 @@ export const deployCommandMeta: CommandMeta = {
 			group: "advanced",
 		},
 		{
+			name: "launch-token-hash",
+			description:
+				'Set requirements.launch_token_hash of an existing CVM to the hash printed by `phala apps launch-token set`; "" removes it. Update only.',
+			type: "string",
+			target: "launchTokenHash",
+			group: "advanced",
+		},
+		{
 			name: "event-log-version",
 			description: "Event log digest format: 1 or 2 (dstack OS 0.6.0+)",
 			type: "string",
@@ -525,6 +533,7 @@ export const deployCommandSchema = z
 		appCompose: z.string().optional(),
 		initScript: z.array(z.enum(["docker_cleanup", "env_merge"])).optional(),
 		launchToken: z.string().optional(),
+		launchTokenHash: z.string().optional(),
 		generateLaunchToken: z.boolean().optional(),
 		eventLogVersion: z.enum(["1", "2"]).optional(),
 		ephemeralDataDisk: z.boolean().optional(),
