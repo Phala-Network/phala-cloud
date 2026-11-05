@@ -46,9 +46,6 @@ func backendModelDump(fields map[string]any) map[string]any {
 }
 
 func TestGetComposeHashForOSImageMatchesBackendDumpDict(t *testing.T) {
-	withoutTproxy := backendModelDump(map[string]any{"name": "gw", "gateway_enabled": false})
-	delete(withoutTproxy, "tproxy_enabled")
-
 	cases := []struct {
 		name      string
 		osVersion string
@@ -76,8 +73,9 @@ func TestGetComposeHashForOSImageMatchesBackendDumpDict(t *testing.T) {
 		{"os_060_init_script_string", "0.6.0", backendModelDump(map[string]any{
 			"name": "new1", "init_script": "echo hi",
 		}), "7c4e0234412fdc856d851b283c763d748fefbd20bb1f086d74b0d99848dcdb85"},
-		{"tproxy_enabled_follows_gateway_enabled", "0.6.0", withoutTproxy,
-			"4097f4c5d35f1f34741c21d851e50b6030eff17da5bf2862d5a4716c23297693"},
+		{"gateway_disabled_keeps_tproxy_enabled", "0.6.0", backendModelDump(map[string]any{
+			"name": "gw", "gateway_enabled": false,
+		}), "d65292cd5e6616a1acf49b308fc51394441f101b6a52aa3f21f9097ba86f745f"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -111,5 +109,23 @@ func TestGetComposeHashForOSImageLeavesTheInputUnchanged(t *testing.T) {
 	}
 	if _, ok := compose["init_script"]; !ok {
 		t.Fatal("input lost init_script")
+	}
+}
+
+// SDK behavior for a partial compose, not a backend-produced vector.
+func TestMissingTproxyEnabledDefaultsToGatewayEnabled(t *testing.T) {
+	without := backendModelDump(map[string]any{"name": "gw", "gateway_enabled": false})
+	delete(without, "tproxy_enabled")
+	explicit := backendModelDump(map[string]any{"name": "gw", "gateway_enabled": false, "tproxy_enabled": false})
+	got, err := GetComposeHashFromMapForOSImage(without, "0.6.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := GetComposeHashFromMapForOSImage(explicit, "0.6.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("hash = %s, want %s", got, want)
 	}
 }
