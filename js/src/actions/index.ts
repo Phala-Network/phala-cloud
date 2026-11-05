@@ -608,6 +608,19 @@ export {
 } from "./cvms/get_cvm_user_config";
 
 export {
+  getCvmAnnotations,
+  safeGetCvmAnnotations,
+  updateCvmAnnotations,
+  safeUpdateCvmAnnotations,
+  CvmAnnotationsSchema,
+  GetCvmAnnotationsRequestSchema,
+  UpdateCvmAnnotationsRequestSchema,
+  type CvmAnnotations,
+  type GetCvmAnnotationsRequest,
+  type UpdateCvmAnnotationsRequest,
+} from "./cvms/cvm_annotations";
+
+export {
   listSshKeys,
   safeListSshKeys,
   SshKeySchema,

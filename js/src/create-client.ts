@@ -277,6 +277,10 @@ const additionalActions = {
   safeGetCvmStatusBatch: actions.safeGetCvmStatusBatch,
   getCvmUserConfig: actions.getCvmUserConfig,
   safeGetCvmUserConfig: actions.safeGetCvmUserConfig,
+  getCvmAnnotations: actions.getCvmAnnotations,
+  safeGetCvmAnnotations: actions.safeGetCvmAnnotations,
+  updateCvmAnnotations: actions.updateCvmAnnotations,
+  safeUpdateCvmAnnotations: actions.safeUpdateCvmAnnotations,
   getCvmSshKeys: actions.getCvmSshKeys,
   safeGetCvmSshKeys: actions.safeGetCvmSshKeys,
   updateCvmSshKeys: actions.updateCvmSshKeys,
@@ -358,6 +362,10 @@ type SchemaAction =
   | "safeGetCvmStatusBatch"
   | "getCvmUserConfig"
   | "safeGetCvmUserConfig"
+  | "getCvmAnnotations"
+  | "safeGetCvmAnnotations"
+  | "updateCvmAnnotations"
+  | "safeUpdateCvmAnnotations"
   | "getCvmSshKeys"
   | "safeGetCvmSshKeys"
   | "updateCvmSshKeys"
