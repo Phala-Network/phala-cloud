@@ -492,7 +492,9 @@ export {
   updateCvmVisibility,
   safeUpdateCvmVisibility,
   UpdateCvmVisibilityRequestSchema,
+  UpdateCvmVisibilityResponseSchema,
   type UpdateCvmVisibilityRequest,
+  type UpdateCvmVisibilityResponse,
 } from "./cvms/update_cvm_visibility";
 
 export {
