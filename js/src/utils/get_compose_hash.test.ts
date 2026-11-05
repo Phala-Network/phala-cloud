@@ -9,8 +9,9 @@ describe("getComposeHash matches the backend", () => {
   for (const vector of vectors.cases) {
     it(`${vector.name}: canonical bytes and sha256`, () => {
       const compose = vector.input as unknown as AppCompose;
-      expect(dumpAppCompose(preprocessAppCompose(compose))).toBe(vector.canonical);
-      expect(getComposeHash(compose)).toBe(vector.hash);
+      const osImageVersion = "os_image_version" in vector ? vector.os_image_version : undefined;
+      expect(dumpAppCompose(preprocessAppCompose(compose, osImageVersion))).toBe(vector.canonical);
+      expect(getComposeHash(compose, osImageVersion)).toBe(vector.hash);
     });
   }
 
@@ -18,8 +19,17 @@ describe("getComposeHash matches the backend", () => {
     // deployAppAuth and addComposeHash document `import { getComposeHash } from "@phala/cloud"`;
     // the hash registered on-chain must be the one the backend computes.
     for (const vector of vectors.cases) {
-      expect(rootGetComposeHash(vector.input as unknown as AppCompose)).toBe(vector.hash);
+      const osImageVersion = "os_image_version" in vector ? vector.os_image_version : undefined;
+      expect(rootGetComposeHash(vector.input as unknown as AppCompose, osImageVersion)).toBe(
+        vector.hash,
+      );
     }
+  });
+
+  it("rejects more than one init_script below OS 0.6.0", () => {
+    expect(() => getComposeHash({ init_script: ["a", "b"] }, "0.5.5")).toThrow(
+      "OS images below 0.6.0 accept at most one init_script",
+    );
   });
 
   it("does not escape non-ASCII or HTML characters", () => {

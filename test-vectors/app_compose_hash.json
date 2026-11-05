@@ -1,5 +1,5 @@
 {
-  "_comment": "Generated with teehouse.integrations.dstack.types (AppComposeV2.dump_dict + dump_app_compose + sha256_hash), OS image 0.6.0. input = AppComposeV2.model_dump() before dump_dict normalization; canonical = backend bytes; hash = sha256 hex.",
+  "_comment": "Generated with teehouse.integrations.dstack.types (AppComposeV2.dump_dict + dump_app_compose + sha256_hash). input = AppComposeV2.model_dump() before dump_dict normalization; canonical = backend bytes; hash = sha256 hex. Cases with os_image_version were dumped for that OS image, which sets the manifest_version and init_script wire format; cases without it were dumped for OS image 0.6.0 and their input already carries that wire format.",
   "cases": [
     {
       "name": "minimal",
@@ -307,6 +307,317 @@
       },
       "canonical": "{\"allowed_envs\":[],\"docker_compose_file\":\"services:\\n  app:\\n    image: nginx:latest\\n\",\"features\":[\"kms\",\"tproxy-net\"],\"gateway_enabled\":true,\"init_script\":[],\"kms_enabled\":true,\"local_key_provider_enabled\":false,\"manifest_version\":\"3\",\"name\":\"empty\",\"no_instance_id\":false,\"public_logs\":true,\"public_sysinfo\":true,\"public_tcbinfo\":true,\"runner\":\"docker-compose\",\"secure_time\":false,\"storage_fs\":\"zfs\",\"tproxy_enabled\":true}",
       "hash": "23d580b7cb9ec0f3283a3e2546b7a8b6e3ace991ac47ced2a015ce50cb0d6ae2"
+    },
+    {
+      "name": "dstack06_fields_null",
+      "os_image_version": "0.6.0",
+      "input": {
+        "allowed_envs": [],
+        "bash_script": null,
+        "default_gateway_domain": null,
+        "docker_compose_file": "services:\n  app:\n    image: nginx:latest\n",
+        "init_script": [],
+        "key_provider": null,
+        "key_provider_id": null,
+        "kms_enabled": true,
+        "local_key_provider_enabled": false,
+        "manifest_version": 2,
+        "name": "nulls",
+        "no_instance_id": false,
+        "port_policy": null,
+        "pre_launch_script": null,
+        "public_logs": true,
+        "public_sysinfo": true,
+        "public_tcbinfo": true,
+        "runner": "docker-compose",
+        "requirements": null,
+        "storage_discard": null,
+        "event_log_version": null,
+        "snapshotter": null,
+        "verity_volumes": null,
+        "gateway_enabled": true,
+        "features": [
+          "kms",
+          "tproxy-net"
+        ],
+        "salt": null,
+        "secure_time": false,
+        "storage_fs": "zfs",
+        "swap_size": null,
+        "tproxy_enabled": true
+      },
+      "canonical": "{\"allowed_envs\":[],\"docker_compose_file\":\"services:\\n  app:\\n    image: nginx:latest\\n\",\"features\":[\"kms\",\"tproxy-net\"],\"gateway_enabled\":true,\"init_script\":[],\"kms_enabled\":true,\"local_key_provider_enabled\":false,\"manifest_version\":\"3\",\"name\":\"nulls\",\"no_instance_id\":false,\"public_logs\":true,\"public_sysinfo\":true,\"public_tcbinfo\":true,\"runner\":\"docker-compose\",\"secure_time\":false,\"storage_fs\":\"zfs\",\"tproxy_enabled\":true}",
+      "hash": "47d49098844519d60407b95a502ec0c6e8dc540025c301b5c8d426b352513e5b"
+    },
+    {
+      "name": "dstack06_fields_set",
+      "os_image_version": "0.6.3",
+      "input": {
+        "allowed_envs": [],
+        "bash_script": null,
+        "default_gateway_domain": null,
+        "docker_compose_file": "services:\n  app:\n    image: nginx:latest\n",
+        "init_script": [],
+        "key_provider": null,
+        "key_provider_id": null,
+        "kms_enabled": true,
+        "local_key_provider_enabled": false,
+        "manifest_version": 2,
+        "name": "fields-set",
+        "no_instance_id": false,
+        "port_policy": {
+          "ports": [
+            {
+              "port": 8080,
+              "pp": true
+            }
+          ],
+          "restrict_mode": true
+        },
+        "pre_launch_script": null,
+        "public_logs": true,
+        "public_sysinfo": true,
+        "public_tcbinfo": true,
+        "runner": "nerdctl-compose",
+        "requirements": null,
+        "storage_discard": false,
+        "event_log_version": 2,
+        "snapshotter": "stargz",
+        "verity_volumes": [
+          {
+            "source": "data.img",
+            "target": "/data",
+            "verity_root": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ],
+        "gateway_enabled": true,
+        "features": [
+          "kms",
+          "tproxy-net"
+        ],
+        "salt": null,
+        "secure_time": false,
+        "storage_fs": "zfs",
+        "swap_size": null,
+        "tproxy_enabled": true
+      },
+      "canonical": "{\"allowed_envs\":[],\"bash_script\":null,\"docker_compose_file\":\"services:\\n  app:\\n    image: nginx:latest\\n\",\"event_log_version\":2,\"features\":[\"kms\",\"tproxy-net\"],\"gateway_enabled\":true,\"init_script\":[],\"kms_enabled\":true,\"local_key_provider_enabled\":false,\"manifest_version\":\"3\",\"name\":\"fields-set\",\"no_instance_id\":false,\"port_policy\":{\"ports\":[{\"port\":8080,\"pp\":true}],\"restrict_mode\":true},\"public_logs\":true,\"public_sysinfo\":true,\"public_tcbinfo\":true,\"runner\":\"nerdctl-compose\",\"secure_time\":false,\"snapshotter\":\"stargz\",\"storage_discard\":false,\"storage_fs\":\"zfs\",\"tproxy_enabled\":true,\"verity_volumes\":[{\"source\":\"data.img\",\"target\":\"/data\",\"verity_root\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}]}",
+      "hash": "2d7f3926422cadb3e6eaa6da9003e1aa2e5021808f2d45cf579eb41304a92c38"
+    },
+    {
+      "name": "init_script_non_empty",
+      "os_image_version": "0.6.0",
+      "input": {
+        "allowed_envs": [],
+        "bash_script": null,
+        "default_gateway_domain": null,
+        "docker_compose_file": "services:\n  app:\n    image: nginx:latest\n",
+        "init_script": [
+          "#!/bin/sh\necho one\n",
+          "#!/bin/sh\necho two\n"
+        ],
+        "key_provider": null,
+        "key_provider_id": null,
+        "kms_enabled": true,
+        "local_key_provider_enabled": false,
+        "manifest_version": 2,
+        "name": "init-scripts",
+        "no_instance_id": false,
+        "port_policy": null,
+        "pre_launch_script": null,
+        "public_logs": true,
+        "public_sysinfo": true,
+        "public_tcbinfo": true,
+        "runner": "docker-compose",
+        "requirements": null,
+        "storage_discard": null,
+        "event_log_version": null,
+        "snapshotter": null,
+        "verity_volumes": null,
+        "gateway_enabled": true,
+        "features": [
+          "kms",
+          "tproxy-net"
+        ],
+        "salt": null,
+        "secure_time": false,
+        "storage_fs": "zfs",
+        "swap_size": null,
+        "tproxy_enabled": true
+      },
+      "canonical": "{\"allowed_envs\":[],\"docker_compose_file\":\"services:\\n  app:\\n    image: nginx:latest\\n\",\"features\":[\"kms\",\"tproxy-net\"],\"gateway_enabled\":true,\"init_script\":[\"#!/bin/sh\\necho one\\n\",\"#!/bin/sh\\necho two\\n\"],\"kms_enabled\":true,\"local_key_provider_enabled\":false,\"manifest_version\":\"3\",\"name\":\"init-scripts\",\"no_instance_id\":false,\"public_logs\":true,\"public_sysinfo\":true,\"public_tcbinfo\":true,\"runner\":\"docker-compose\",\"secure_time\":false,\"storage_fs\":\"zfs\",\"tproxy_enabled\":true}",
+      "hash": "70ca39bdc98946180826e588afdbad1dd0aef772c93e13bb4f9264fa5ccfeab2"
+    },
+    {
+      "name": "os_below_060_single_init_script",
+      "os_image_version": "0.5.5",
+      "input": {
+        "allowed_envs": [],
+        "bash_script": null,
+        "default_gateway_domain": null,
+        "docker_compose_file": "services:\n  app:\n    image: nginx:latest\n",
+        "init_script": [
+          "#!/bin/sh\necho one\n"
+        ],
+        "key_provider": null,
+        "key_provider_id": null,
+        "kms_enabled": true,
+        "local_key_provider_enabled": false,
+        "manifest_version": "3",
+        "name": "old-os",
+        "no_instance_id": false,
+        "port_policy": null,
+        "pre_launch_script": null,
+        "public_logs": true,
+        "public_sysinfo": true,
+        "public_tcbinfo": true,
+        "runner": "docker-compose",
+        "requirements": null,
+        "storage_discard": null,
+        "event_log_version": null,
+        "snapshotter": null,
+        "verity_volumes": null,
+        "gateway_enabled": true,
+        "features": [
+          "kms",
+          "tproxy-net"
+        ],
+        "salt": null,
+        "secure_time": false,
+        "storage_fs": "zfs",
+        "swap_size": null,
+        "tproxy_enabled": true
+      },
+      "canonical": "{\"allowed_envs\":[],\"docker_compose_file\":\"services:\\n  app:\\n    image: nginx:latest\\n\",\"features\":[\"kms\",\"tproxy-net\"],\"gateway_enabled\":true,\"init_script\":\"#!/bin/sh\\necho one\\n\",\"kms_enabled\":true,\"local_key_provider_enabled\":false,\"manifest_version\":2,\"name\":\"old-os\",\"no_instance_id\":false,\"public_logs\":true,\"public_sysinfo\":true,\"public_tcbinfo\":true,\"runner\":\"docker-compose\",\"secure_time\":false,\"storage_fs\":\"zfs\",\"tproxy_enabled\":true}",
+      "hash": "12baca657c345a7f2d80633023bc78c48a825de91fe34d019cf6e084301409c7"
+    },
+    {
+      "name": "os_below_060_no_init_script",
+      "os_image_version": "0.5.4.1",
+      "input": {
+        "allowed_envs": [],
+        "bash_script": null,
+        "default_gateway_domain": null,
+        "docker_compose_file": "services:\n  app:\n    image: nginx:latest\n",
+        "init_script": [],
+        "key_provider": null,
+        "key_provider_id": null,
+        "kms_enabled": true,
+        "local_key_provider_enabled": false,
+        "manifest_version": 2,
+        "name": "old-os-empty",
+        "no_instance_id": false,
+        "port_policy": null,
+        "pre_launch_script": null,
+        "public_logs": true,
+        "public_sysinfo": true,
+        "public_tcbinfo": true,
+        "runner": "docker-compose",
+        "requirements": null,
+        "storage_discard": null,
+        "event_log_version": null,
+        "snapshotter": null,
+        "verity_volumes": null,
+        "gateway_enabled": true,
+        "features": [
+          "kms",
+          "tproxy-net"
+        ],
+        "salt": null,
+        "secure_time": false,
+        "storage_fs": "zfs",
+        "swap_size": null,
+        "tproxy_enabled": true
+      },
+      "canonical": "{\"allowed_envs\":[],\"docker_compose_file\":\"services:\\n  app:\\n    image: nginx:latest\\n\",\"features\":[\"kms\",\"tproxy-net\"],\"gateway_enabled\":true,\"kms_enabled\":true,\"local_key_provider_enabled\":false,\"manifest_version\":2,\"name\":\"old-os-empty\",\"no_instance_id\":false,\"public_logs\":true,\"public_sysinfo\":true,\"public_tcbinfo\":true,\"runner\":\"docker-compose\",\"secure_time\":false,\"storage_fs\":\"zfs\",\"tproxy_enabled\":true}",
+      "hash": "c56ff07bd8e828ea463edfd527c340d23c296271c0d4a246dbba167e9b5dc7de"
+    },
+    {
+      "name": "requirements_explicit_default",
+      "os_image_version": "0.6.3",
+      "input": {
+        "allowed_envs": [],
+        "bash_script": null,
+        "default_gateway_domain": null,
+        "docker_compose_file": "services:\n  app:\n    image: nginx:latest\n",
+        "init_script": [],
+        "key_provider": null,
+        "key_provider_id": null,
+        "kms_enabled": true,
+        "local_key_provider_enabled": false,
+        "manifest_version": 2,
+        "name": "req-defaults",
+        "no_instance_id": false,
+        "port_policy": null,
+        "pre_launch_script": null,
+        "public_logs": true,
+        "public_sysinfo": true,
+        "public_tcbinfo": true,
+        "runner": "docker-compose",
+        "requirements": {
+          "ephemeral_data_disk": false,
+          "health_check": false,
+          "launch_token_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "platforms": []
+        },
+        "storage_discard": null,
+        "event_log_version": null,
+        "snapshotter": null,
+        "verity_volumes": null,
+        "gateway_enabled": true,
+        "features": [
+          "kms",
+          "tproxy-net"
+        ],
+        "salt": null,
+        "secure_time": false,
+        "storage_fs": "zfs",
+        "swap_size": null,
+        "tproxy_enabled": true
+      },
+      "canonical": "{\"allowed_envs\":[],\"docker_compose_file\":\"services:\\n  app:\\n    image: nginx:latest\\n\",\"features\":[\"kms\",\"tproxy-net\"],\"gateway_enabled\":true,\"init_script\":[],\"kms_enabled\":true,\"local_key_provider_enabled\":false,\"manifest_version\":\"3\",\"name\":\"req-defaults\",\"no_instance_id\":false,\"public_logs\":true,\"public_sysinfo\":true,\"public_tcbinfo\":true,\"requirements\":{\"ephemeral_data_disk\":false,\"health_check\":false,\"launch_token_hash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"platforms\":[]},\"runner\":\"docker-compose\",\"secure_time\":false,\"storage_fs\":\"zfs\",\"tproxy_enabled\":true}",
+      "hash": "db00e0e693997b01de08a7a7f0bb443b94327ba6f9e6fae830cee366c0103a3a"
+    },
+    {
+      "name": "requirements_keys_unset",
+      "os_image_version": "0.6.3",
+      "input": {
+        "allowed_envs": [],
+        "bash_script": null,
+        "default_gateway_domain": null,
+        "docker_compose_file": "services:\n  app:\n    image: nginx:latest\n",
+        "init_script": [],
+        "key_provider": null,
+        "key_provider_id": null,
+        "kms_enabled": true,
+        "local_key_provider_enabled": false,
+        "manifest_version": 2,
+        "name": "req-unset",
+        "no_instance_id": false,
+        "port_policy": null,
+        "pre_launch_script": null,
+        "public_logs": true,
+        "public_sysinfo": true,
+        "public_tcbinfo": true,
+        "runner": "docker-compose",
+        "requirements": {},
+        "storage_discard": null,
+        "event_log_version": null,
+        "snapshotter": null,
+        "verity_volumes": null,
+        "gateway_enabled": true,
+        "features": [
+          "kms",
+          "tproxy-net"
+        ],
+        "salt": null,
+        "secure_time": false,
+        "storage_fs": "zfs",
+        "swap_size": null,
+        "tproxy_enabled": true
+      },
+      "canonical": "{\"allowed_envs\":[],\"docker_compose_file\":\"services:\\n  app:\\n    image: nginx:latest\\n\",\"features\":[\"kms\",\"tproxy-net\"],\"gateway_enabled\":true,\"init_script\":[],\"kms_enabled\":true,\"local_key_provider_enabled\":false,\"manifest_version\":\"3\",\"name\":\"req-unset\",\"no_instance_id\":false,\"public_logs\":true,\"public_sysinfo\":true,\"public_tcbinfo\":true,\"requirements\":{},\"runner\":\"docker-compose\",\"secure_time\":false,\"storage_fs\":\"zfs\",\"tproxy_enabled\":true}",
+      "hash": "d6a156915b068dcdfa1758cb35edafc82d8ed3b09a8f89e134e7c9f44a42622a"
     }
   ]
 }
