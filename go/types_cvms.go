@@ -256,41 +256,56 @@ type ProvisionCVMRequest struct {
 	ComposeFile  *ComposeFile `json:"compose_file,omitempty"`
 
 	// Optional fields.
-	VCPU                            *int                  `json:"vcpu,omitempty"`
-	Memory                          *int                  `json:"memory,omitempty"`
-	DiskSize                        *int                  `json:"disk_size,omitempty"`
-	Node                            *string               `json:"node,omitempty"`
-	Image                           *string               `json:"image,omitempty"`
-	Region                          *string               `json:"region,omitempty"`
-	KMSID                           *string               `json:"kms_id,omitempty"`
-	KMS                             *string               `json:"kms,omitempty"`
-	KMSType                         *string               `json:"kms_type,omitempty"`
-	KMSContract                     *string               `json:"kms_contract,omitempty"`
-	KMSContractID                   *string               `json:"kms_contract_id,omitempty"`
-	KeyProviderMode                 *string               `json:"key_provider_mode,omitempty"`
-	SkipGateway                     *bool                 `json:"skip_gateway,omitempty"`
-	Listed                          *bool                 `json:"listed,omitempty"`
-	Encrypted                       *bool                 `json:"encrypted,omitempty"`
-	SecureTime                      *bool                 `json:"secure_time,omitempty"`
-	SSHAuthorizedKeys               []string              `json:"ssh_authorized_keys,omitzero"`
-	CustomAppID                     *string               `json:"custom_app_id,omitempty"`
-	Nonce                           *int64                `json:"nonce,omitempty"`
-	StorageFS                       *string               `json:"storage_fs,omitempty"`
-	AppID                           *string               `json:"app_id,omitempty"`
-	PreferDev                       *bool                 `json:"prefer_dev,omitempty"`
-	EnvKeys                         []string              `json:"env_keys,omitzero"`
-	SSHKeyIDs                       []string              `json:"ssh_key_ids,omitzero"`
-	Ports                           []ProvisionPort       `json:"ports,omitzero"`
-	EncryptedEnv                    *string               `json:"encrypted_env,omitempty"`
-	UserConfig                      *string               `json:"user_config,omitempty"`
-	Hugepages                       *bool                 `json:"hugepages,omitempty"`
-	PinNUMA                         *bool                 `json:"pin_numa,omitempty"`
-	GPUs                            *ProvisionGPUConfig   `json:"gpus,omitempty"`
-	KMSURLs                         []string              `json:"kms_urls,omitzero"`
-	GatewayURLs                     []string              `json:"gateway_urls,omitzero"`
-	InitScripts                     *ProvisionInitScripts `json:"init_scripts,omitempty"`
-	EnabledInitScriptsDockerCleanup *bool                 `json:"enabled_init_scripts_docker_cleanup,omitempty"`
-	EnabledGuestAgentAccess         *bool                 `json:"enabled_guest_agent_access,omitempty"`
+	VCPU              *int                `json:"vcpu,omitempty"`
+	Memory            *int                `json:"memory,omitempty"`
+	DiskSize          *int                `json:"disk_size,omitempty"`
+	Node              *string             `json:"node,omitempty"`
+	Image             *string             `json:"image,omitempty"`
+	Region            *string             `json:"region,omitempty"`
+	KMSID             *string             `json:"kms_id,omitempty"`
+	KMS               *string             `json:"kms,omitempty"`
+	KMSType           *string             `json:"kms_type,omitempty"`
+	KMSContract       *string             `json:"kms_contract,omitempty"`
+	KMSContractID     *string             `json:"kms_contract_id,omitempty"`
+	KeyProviderMode   *string             `json:"key_provider_mode,omitempty"`
+	SkipGateway       *bool               `json:"skip_gateway,omitempty"`
+	Listed            *bool               `json:"listed,omitempty"`
+	Encrypted         *bool               `json:"encrypted,omitempty"`
+	SecureTime        *bool               `json:"secure_time,omitempty"`
+	SSHAuthorizedKeys []string            `json:"ssh_authorized_keys,omitzero"`
+	CustomAppID       *string             `json:"custom_app_id,omitempty"`
+	Nonce             *int64              `json:"nonce,omitempty"`
+	StorageFS         *string             `json:"storage_fs,omitempty"`
+	AppID             *string             `json:"app_id,omitempty"`
+	PreferDev         *bool               `json:"prefer_dev,omitempty"`
+	EnvKeys           []string            `json:"env_keys,omitzero"`
+	SSHKeyIDs         []string            `json:"ssh_key_ids,omitzero"`
+	Ports             []ProvisionPort     `json:"ports,omitzero"`
+	EncryptedEnv      *string             `json:"encrypted_env,omitempty"`
+	UserConfig        *string             `json:"user_config,omitempty"`
+	Hugepages         *bool               `json:"hugepages,omitempty"`
+	PinNUMA           *bool               `json:"pin_numa,omitempty"`
+	GPUs              *ProvisionGPUConfig `json:"gpus,omitempty"`
+	KMSURLs           []string            `json:"kms_urls,omitzero"`
+	GatewayURLs       []string            `json:"gateway_urls,omitzero"`
+	// InitScripts selects the platform init scripts to run on every boot.
+	InitScripts []InitScriptSlug `json:"init_scripts,omitzero"`
+	// Deprecated: use InitScripts with InitScriptDockerCleanup.
+	EnabledInitScriptsDockerCleanup *bool `json:"enabled_init_scripts_docker_cleanup,omitempty"`
+	EnabledGuestAgentAccess         *bool `json:"enabled_guest_agent_access,omitempty"`
+
+	// ComposeFileRaw is a whole app-compose JSON file, sent instead of
+	// ComposeFile. Needs the compose_advanced feature flag.
+	ComposeFileRaw *string `json:"compose_file_raw,omitempty"`
+	// LaunchToken (at least 32 bytes) is required by the guest on every boot.
+	LaunchToken *string `json:"launch_token,omitempty"`
+	// GenerateLaunchToken gates the CVM with a token Phala Cloud generates for
+	// a new app (returned once in the commit response), or with the app's
+	// existing token.
+	GenerateLaunchToken *bool `json:"generate_launch_token,omitempty"`
+	// Annotations is host-side key/value metadata stored by the dstack VMM.
+	// Needs the cvm_annotations feature flag.
+	Annotations map[string]string `json:"annotations,omitzero"`
 }
 
 type ProvisionPort struct {
@@ -306,9 +321,6 @@ type ProvisionGPUSpec struct {
 type ProvisionGPUConfig struct {
 	GPUs       []ProvisionGPUSpec `json:"gpus"`
 	AttachMode string             `json:"attach_mode,omitempty"`
-}
-type ProvisionInitScripts struct {
-	EnvMerge bool `json:"env_merge"`
 }
 
 // ComposeInitScripts decodes both historical single-string and current array forms.
@@ -333,6 +345,14 @@ func (scripts *ComposeInitScripts) UnmarshalJSON(data []byte) error {
 	*scripts = values
 	return nil
 }
+
+// Runner values for ComposeFile.Runner. Runners other than
+// ComposeRunnerDockerCompose need the compose_advanced feature flag.
+const (
+	ComposeRunnerDockerCompose  = "docker-compose"
+	ComposeRunnerNerdctlCompose = "nerdctl-compose"
+	ComposeRunnerBash           = "bash"
+)
 
 // ComposeFile represents a compose file configuration.
 type ComposeFile struct {
@@ -442,6 +462,9 @@ type CommitCVMProvisionRequest struct {
 type CommitCVMProvisionResponseFields struct {
 	Name   string `json:"name"`
 	Status string `json:"status"`
+	// LaunchToken is the launch token this create stored on a new app
+	// (LaunchToken or GenerateLaunchToken). Returned only here, once.
+	LaunchToken string `json:"launch_token,omitempty"`
 }
 
 // CommitCVMProvisionResponseV20260121 is the commit response before hashed CVM IDs.
