@@ -101,6 +101,25 @@ else:
 
 Pass the CVM ID and the one-time token to `commit_cvm_update`. `compose_hash` and `transaction_hash` are optional. If you omit the compose hash, the server reads it from the token. If you omit the transaction hash, the server checks whether the compose hash is already allowed on-chain. The server still validates the token and the update.
 
+## How do I change a CVM's app compose settings?
+
+Send `compose` to `patch_cvm` as a JSON Merge Patch: a set field sets the value, a field set to `None` removes the key, and a field you leave out is unchanged. `requirements` merges per key and cannot change `gpu_policy`. `init_scripts` replaces the CVM's platform init scripts with the given slugs (`docker_cleanup`, `env_merge`); `get_cvm_init_scripts` shows which ones the CVM runs and which it can select. Turning on `docker_cleanup` or `requirements.ephemeral_data_disk` erases data on every boot, so it also needs `confirm_data_wipe=True`.
+
+```python
+client.patch_cvm({
+    "id": "my-cvm",
+    "compose": {"secure_time": True, "swap_size": None, "requirements": {"health_check": True}},
+})
+```
+
+## How do I gate a CVM with a launch token?
+
+On create, send `launch_token` (at least 32 bytes) or `generate_launch_token=True`; the commit response carries a newly issued token once. To rotate, call `set_app_launch_token` (omit `launch_token` to have Phala Cloud generate one), then set each CVM's `compose.requirements.launch_token_hash` to the returned hash before it restarts. `clear_app_launch_token` removes the token after every CVM has dropped the hash. `get_cvm_user_config` returns the token to members who can read the CVM. Phala Cloud and the node operator can read the token, so it protects only against parties who know the public compose.
+
+## How do I compute a compose hash locally?
+
+`get_compose_hash(compose, os_image_version="0.6.0")` hashes the compose the way Phala Cloud does for that OS image: below 0.6.0 `manifest_version` is 2 and `init_script` is a single string, from 0.6.0 they are `"3"` and a list. Without `os_image_version` both fields are hashed as given.
+
 ## How does watching a CVM retry?
 
 `watch_cvm_state` reconnects after a server timeout event, an incomplete stream, or a transient network failure. Set `max_retries` to limit reconnects; the default is unlimited. Set `retry_delay` in seconds (default 5). The aliases `maxRetries` and `retryDelay` also work. The stream read timeout is the requested `timeout` plus `interval` plus 5 seconds.
