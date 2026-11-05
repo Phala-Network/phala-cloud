@@ -283,6 +283,10 @@ const additionalActions = {
   safeUpdateCvmAnnotations: actions.safeUpdateCvmAnnotations,
   getCvmInitScripts: actions.getCvmInitScripts,
   safeGetCvmInitScripts: actions.safeGetCvmInitScripts,
+  setAppLaunchToken: actions.setAppLaunchToken,
+  safeSetAppLaunchToken: actions.safeSetAppLaunchToken,
+  clearAppLaunchToken: actions.clearAppLaunchToken,
+  safeClearAppLaunchToken: actions.safeClearAppLaunchToken,
   getCvmSshKeys: actions.getCvmSshKeys,
   safeGetCvmSshKeys: actions.safeGetCvmSshKeys,
   updateCvmSshKeys: actions.updateCvmSshKeys,
@@ -370,6 +374,10 @@ type SchemaAction =
   | "safeUpdateCvmAnnotations"
   | "getCvmInitScripts"
   | "safeGetCvmInitScripts"
+  | "setAppLaunchToken"
+  | "safeSetAppLaunchToken"
+  | "clearAppLaunchToken"
+  | "safeClearAppLaunchToken"
   | "getCvmSshKeys"
   | "safeGetCvmSshKeys"
   | "updateCvmSshKeys"

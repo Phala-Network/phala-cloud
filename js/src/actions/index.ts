@@ -789,6 +789,19 @@ export {
   type GetAppAttestationRequest,
 } from "./apps/get_app_attestation";
 
+export {
+  setAppLaunchToken,
+  safeSetAppLaunchToken,
+  clearAppLaunchToken,
+  safeClearAppLaunchToken,
+  AppLaunchTokenSchema,
+  SetAppLaunchTokenRequestSchema,
+  ClearAppLaunchTokenRequestSchema,
+  type AppLaunchToken,
+  type SetAppLaunchTokenRequest,
+  type ClearAppLaunchTokenRequest,
+} from "./apps/app_launch_token";
+
 // OS Images
 export {
   getOsImages,
