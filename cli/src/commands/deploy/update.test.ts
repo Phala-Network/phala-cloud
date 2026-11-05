@@ -191,6 +191,17 @@ describe("phala deploy --cvm-id", () => {
 		});
 	});
 
+	test.each(["1536", "1.5G"])(
+		"sends --memory %p as 1536 MB and leaves the spec to the backend",
+		async (memory) => {
+			const { exitCode, failure } = await deploy({ memory });
+
+			expect(failure).toBeUndefined();
+			expect(exitCode).toBe(0);
+			expect(updateRequest().body?.memory).toBe(1536);
+		},
+	);
+
 	test("sets the Trust Center listing after the update is accepted", async () => {
 		const { exitCode, failure } = await deploy({ listed: true });
 

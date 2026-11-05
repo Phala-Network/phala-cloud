@@ -23,7 +23,11 @@ import {
 import { dedupeEnvVars, parseEnvInputs } from "@/src/utils/env-parsing";
 import type { RuntimeProjectConfig } from "@/src/utils/project-config";
 import { detectFileInCurrentDir, promptForFile } from "@/src/utils/prompts";
-import { parseDiskSizeInput, parseMemoryInput } from "@/src/utils/units";
+import {
+	parseDiskSizeInput,
+	parseMemoryInput,
+	parseSizeWithUnit,
+} from "@/src/utils/units";
 import {
 	CvmIdSchema,
 	type EnvVar,
@@ -204,7 +208,10 @@ export function buildUpdatePatchBody(
 		patchBody.vcpu = parseVcpuInput(options.vcpu);
 	}
 	if (options.memory) {
-		patchBody.memory = parseMemoryInput(options.memory);
+		// Unit conversion only: the backend matches the nearest instance spec.
+		patchBody.memory = Math.round(
+			parseSizeWithUnit(options.memory, "MB") / (1024 * 1024),
+		);
 	}
 	if (options.diskSize) {
 		patchBody.disk_size = parseDiskSizeInput(options.diskSize);
