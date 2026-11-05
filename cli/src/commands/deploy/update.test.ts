@@ -256,8 +256,7 @@ describe("phala deploy --cvm-id", () => {
 		});
 
 		expect(failure).toBeUndefined();
-		// The --commit branch of runDeploy returns without an exit code.
-		expect(exitCode).toBeUndefined();
+		expect(exitCode).toBe(0);
 		expect(requests.map((r) => [r.method, r.path])).toEqual([
 			["POST", `/api/v1/cvms/${CVM_ID}/commit-update`],
 			["PATCH", `/api/v1/cvms/${CVM_ID}/listed`],

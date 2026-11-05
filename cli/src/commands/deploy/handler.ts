@@ -1431,7 +1431,7 @@ export async function runDeploy(
 				: undefined;
 
 			await commitCvmUpdate({ ...input, uuid }, client, context.stdout);
-			return;
+			return 0;
 		}
 
 		// Use positional argument if provided, otherwise use the --compose option
