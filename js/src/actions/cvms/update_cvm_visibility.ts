@@ -15,6 +15,11 @@ import { defineAction } from "../../utils/define-action";
  * on-chain; register it and call this action again, or use `patchCvm` and
  * `confirmCvmPatch` for the two-phase flow.
  *
+ * On a 465 the compose hash to register is in `error.detail.details` (the entry
+ * with field `compose_hash`). Register it on-chain, then call this action
+ * again. Alternatively use `patchCvm`, which parses the 465 payload for you and
+ * supports `prepareOnly`.
+ *
  * @example
  * ```typescript
  * import { createClient, updateCvmVisibility } from '@phala/cloud'
