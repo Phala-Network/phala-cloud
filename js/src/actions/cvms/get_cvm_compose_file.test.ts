@@ -31,6 +31,26 @@ describe("getCvmComposeFile", () => {
     pre_launch_script: "#!/bin/bash\necho 'Starting app'",
   };
 
+  it("parses a deployed compose whose gpu_policy has rego: null", async () => {
+    const compose = {
+      ...mockComposeFileResponse,
+      requirements: {
+        gpu_policy: {
+          allow_debug: false,
+          allow_devtools: false,
+          allow_insecure_boot: false,
+          attest_gpu: true,
+          rego: null,
+        },
+      },
+    };
+    (mockClient.get as jest.Mock).mockResolvedValue(compose);
+
+    const result = await getCvmComposeFile(mockClient as Client, { id: "cvm-123" });
+
+    expect(result.requirements).toEqual(compose.requirements);
+  });
+
   describe("API routing & basic success", () => {
     it("should call correct endpoint with id", async () => {
       (mockClient.get as jest.Mock).mockResolvedValue(mockComposeFileResponse);

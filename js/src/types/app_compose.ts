@@ -53,7 +53,7 @@ export const GpuPolicySchema = z
     allow_devtools: z.boolean().optional(),
     allow_insecure_boot: z.boolean().optional(),
     attest_gpu: z.boolean().optional(),
-    rego: z.string().optional(),
+    rego: z.string().nullable().optional(),
   })
   .passthrough();
 
