@@ -68,7 +68,7 @@ With `--cvm-id` (or a CVM ID in `phala.toml`), deploy sends the compose file and
 
 `--listed` / `--no-listed` changes the Trust Center listing through its own request before the update is sent.
 
-These flags set how a CVM is created and cannot be changed afterwards: `--secure-time`, `--fs`, `--skip-gateway`, `--kms`, `--kms-id`, `--kms-contract`, `--kms-contract-id` and `--experimental-key-provider-type`. An update that passes any of them fails before any request is sent.
+These flags set how a CVM is created and cannot be changed afterwards: `--name`, `--region`, `--node`, `--custom-app-id`, `--nonce`, `--key-provider-mode`, `--dev-os` / `--no-dev-os`, `--secure-time`, `--fs`, `--skip-gateway`, `--kms`, `--kms-id`, `--kms-contract`, `--kms-contract-id` and `--experimental-key-provider-type`. An update that passes any of them fails before any request is sent.
 
 ## Pre-launch script behavior
 

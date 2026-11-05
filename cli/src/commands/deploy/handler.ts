@@ -136,6 +136,13 @@ export function validatePreLaunchScriptOptions(
  * change them, so an update rejects them instead of ignoring them.
  */
 const CREATE_ONLY_FLAGS: ReadonlyArray<readonly [keyof Options, string]> = [
+	["name", "--name"],
+	["region", "--region"],
+	["node", "--node"],
+	["customAppId", "--custom-app-id"],
+	["nonce", "--nonce"],
+	["keyProviderMode", "--key-provider-mode"],
+	["devOs", "--dev-os"],
 	["secureTime", "--secure-time"],
 	["fs", "--fs"],
 	["skipGateway", "--skip-gateway"],

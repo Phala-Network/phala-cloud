@@ -179,6 +179,14 @@ describe("phala deploy --cvm-id", () => {
 	});
 
 	test.each([
+		[{ name: "my-app" }, "--name"],
+		[{ region: "us-west" }, "--region"],
+		[{ node: "usw5" }, "--node"],
+		[{ customAppId: "abc" }, "--custom-app-id"],
+		[{ nonce: "1" }, "--nonce"],
+		[{ keyProviderMode: "local" }, "--key-provider-mode"],
+		[{ devOs: true }, "--dev-os"],
+		[{ devOs: false }, "--dev-os"],
 		[{ secureTime: true }, "--secure-time"],
 		[{ fs: "ext4" }, "--fs"],
 		[{ skipGateway: true }, "--skip-gateway"],
