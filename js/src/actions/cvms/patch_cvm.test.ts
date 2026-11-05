@@ -154,6 +154,21 @@ describe("patchCvm", () => {
       });
     });
 
+    it.each([{ restrict_mode: true }, { ports: [{ port: 443 }] }])(
+      "sends compose.port_policy %j without the defaulted fields",
+      async (port_policy) => {
+        (mockClient.patch as ReturnType<typeof vi.fn>).mockResolvedValue({
+          correlation_id: "corr-123",
+        });
+
+        await patchCvm(mockClient, { id: "test-cvm-id", compose: { port_policy } });
+
+        expect(mockClient.patch).toHaveBeenCalledWith("/cvms/test-cvm-id", {
+          compose: { port_policy },
+        });
+      },
+    );
+
     it("rejects the old {count, product_name} gpus shape", () => {
       const result = PatchCvmRequestSchema.safeParse({
         id: "test-cvm-id",

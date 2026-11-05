@@ -169,13 +169,14 @@ describe("LooseAppComposeSchema", () => {
     expect(result).toEqual(compose);
   });
 
-  it("should reject port_policy missing restrict_mode", () => {
-    const result = LooseAppComposeSchema.safeParse({
-      docker_compose_file: "version: '3'",
-      port_policy: {
-        ports: [{ port: 80, pp: true }],
-      },
-    });
-    expect(result.success).toBe(false);
-  });
+  it.each([{ restrict_mode: true }, { ports: [{ port: 443 }] }])(
+    "accepts port_policy %j with the backend defaults left out",
+    (port_policy) => {
+      const result = LooseAppComposeSchema.safeParse({
+        docker_compose_file: "version: '3'",
+        port_policy,
+      });
+      expect(result.success).toBe(true);
+    },
+  );
 });
