@@ -1035,8 +1035,6 @@ const updateCvm = async (
 	context?: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
 	preLaunchScriptContent?: string,
 ) => {
-	assertUpdatableOptions(validatedOptions);
-
 	const cvm_result = await safeGetCvmInfo(client, {
 		id: validatedOptions.uuid,
 	});
@@ -1415,6 +1413,11 @@ export async function runDeploy(
 ): Promise<number> {
 	try {
 		validatePreLaunchScriptOptions(input);
+		// Reject create-only flags before --commit handling, file reads or any
+		// prompt, so an invalid update fails first.
+		if (context.cvmId) {
+			assertUpdatableOptions(input);
+		}
 
 		// Handle --commit mode: skip compose file reading entirely
 		// commit-update endpoint is token-based (no API key required),

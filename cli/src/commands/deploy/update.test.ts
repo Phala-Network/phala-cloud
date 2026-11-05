@@ -295,4 +295,30 @@ describe("phala deploy --cvm-id", () => {
 		);
 		expect(requests).toEqual([]);
 	});
+
+	test("rejects create-only flags before reading the compose file", async () => {
+		const { exitCode, failure } = await deploy({
+			compose: path.join(tmpDir, "missing.yml"),
+			name: "my-app",
+		});
+
+		expect(exitCode).toBe(1);
+		expect((failure as Error).message).toContain(
+			"--name cannot be changed on an existing CVM",
+		);
+	});
+
+	test("rejects create-only flags in --commit mode", async () => {
+		const { exitCode, failure } = await deploy({
+			commit: true,
+			token: "token-1",
+			fs: "ext4",
+		});
+
+		expect(exitCode).toBe(1);
+		expect((failure as Error).message).toContain(
+			"--fs cannot be changed on an existing CVM",
+		);
+		expect(requests).toEqual([]);
+	});
 });
