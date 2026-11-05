@@ -141,16 +141,15 @@ export interface ResizeCvmPayload {
 	vcpu?: number;
 	memory?: number;
 	disk_size?: number;
-	allow_restart?: number;
 }
 
 /**
- * Resize a CVM's resources
+ * Resize a CVM's resources through PATCH /cvms/{id}. The CVM restarts when
+ * the resize needs it.
  * @param appId App ID (with or without app_ prefix)
  * @param vcpu Number of virtual CPUs (optional)
  * @param memory Memory size in MB (optional)
  * @param diskSize Disk size in GB (optional)
- * @param allowRestart Whether to allow restart (1) or not (0) for the resize operation (optional)
  * @returns Success status
  */
 export async function resizeCvm(
@@ -158,7 +157,6 @@ export async function resizeCvm(
 	vcpu?: number,
 	memory?: number,
 	diskSize?: number,
-	allowRestart?: number,
 ): Promise<boolean> {
 	const client = await getClient();
 	const cleanAppId = appId.replace(/^app_/, "");
@@ -168,7 +166,6 @@ export async function resizeCvm(
 	if (vcpu !== undefined) resizePayload.vcpu = vcpu;
 	if (memory !== undefined) resizePayload.memory = memory;
 	if (diskSize !== undefined) resizePayload.disk_size = diskSize;
-	if (allowRestart !== undefined) resizePayload.allow_restart = allowRestart;
 
 	// Check if any parameters were provided
 	if (Object.keys(resizePayload).length === 0) {

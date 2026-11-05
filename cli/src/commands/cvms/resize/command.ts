@@ -33,9 +33,11 @@ export const cvmsResizeCommandMeta: CommandMeta = {
 		{
 			name: "allow-restart",
 			shorthand: "r",
-			description: "Allow CVM restart",
+			description:
+				"Deprecated and ignored: the CVM restarts when the resize needs it",
 			type: "string",
 			target: "allowRestart",
+			deprecated: true,
 		},
 		{
 			name: "yes",

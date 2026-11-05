@@ -209,14 +209,14 @@ Resize CVM resources (vCPU, memory, disk).
 | `--vcpu <cores>` / `-v` | | Number of vCPU cores |
 | `--memory <mb>` / `-m` | | Memory in MB |
 | `--disk-size <gb>` / `-d` | | Disk size in GB |
-| `--allow-restart` / `-r` | false | Allow CVM restart if required |
+| `--allow-restart` / `-r` | | Deprecated and ignored. The CVM restarts when the resize needs it |
 | `--yes` / `-y` | false | Skip confirmation prompt |
 | `--json` | false | JSON output |
 
 #### Examples
 
     $ phala cvms resize --vcpu 4 --memory 8192
-    $ phala cvms resize app_abc123 --disk-size 100 --allow-restart
+    $ phala cvms resize app_abc123 --disk-size 100
     $ phala cvms resize -v 2 -m 4096 -y
     $ phala cvms resize --interactive
 
