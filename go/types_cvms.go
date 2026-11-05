@@ -384,6 +384,8 @@ type ComposeGPUPolicy struct {
 	Rego              *string `json:"rego,omitempty"`
 }
 type ComposeRequirements struct {
+	// EphemeralDataDisk formats the data disk on every boot (dstack OS 0.6.3+).
+	EphemeralDataDisk    *bool             `json:"ephemeral_data_disk,omitempty"`
 	GPUPolicy            *ComposeGPUPolicy `json:"gpu_policy,omitempty"`
 	HealthCheck          *bool             `json:"health_check,omitempty"`
 	HealthStatusFile     *string           `json:"health_status_file,omitempty"`
