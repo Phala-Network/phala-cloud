@@ -63,10 +63,12 @@ from .models.cvms import (
     CheckAppCvmsIsAllowedRequest,
     CheckAppIsAllowedRequest,
     CheckCvmIsAllowedRequest,
+    ComposePatch,
     CvmAvailableOSImage,
     CvmInfoV20260121,
     CvmInfoV20260522,
     CvmStatus,
+    InitScriptSlug,
     IsAllowedResultV20260121,
     IsAllowedResultV20260522,
     PaginatedCvmInfosV20251028,
@@ -382,15 +384,26 @@ class PatchCvmRequest(CvmIdRequest):
     image: str | None = None
     shutdown_timeout: int | None = None
     allow_force_stop: bool | None = None
+    # JSON Merge Patch of the app compose; only the fields set on it are sent.
+    compose: ComposePatch | None = None
+    # Platform init scripts this CVM runs, replacing the current set.
+    init_scripts: list[InitScriptSlug] | None = None
+    # Confirms turning on docker_cleanup or requirements.ephemeral_data_disk,
+    # which erase data on every boot.
+    confirm_data_wipe: bool | None = None
     # Sent as the X-Prepare-Only header: on contract-owned KMS, a 465 response
     # then carries a commit token for multisig approval.
     prepare_only: bool = Field(default=False, alias="prepareOnly", exclude=True)
 
     def body(self) -> dict[str, Any]:
-        return self.model_dump(
-            exclude={"id", "uuid", "app_id", "instance_id", "cvm_id", "cvmId"},
+        body = self.model_dump(
+            exclude={"id", "uuid", "app_id", "instance_id", "cvm_id", "cvmId", "compose"},
             exclude_none=True,
         )
+        if self.compose is not None:
+            # A None the caller set is a merge-patch removal and must be sent.
+            body["compose"] = self.compose.model_dump(exclude_unset=True)
+        return body
 
     def headers(self) -> dict[str, str] | None:
         return {"X-Prepare-Only": "true"} if self.prepare_only else None

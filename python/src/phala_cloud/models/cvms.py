@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Literal
 
-from pydantic import Field, computed_field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from .base import AliasModel, CloudModel, NodeSelectionRequest
 from .kms import KmsInfo
@@ -35,6 +35,85 @@ class GetCvmListRequest(CloudModel):
                 names = ", ".join(sorted(provided_filters))
                 raise ValueError(f"Unsupported CVM list filters: {names}")
         return value
+
+
+InitScriptSlug = Literal["docker_cleanup", "env_merge"]
+"""Platform init script slug. Phala Cloud fixes the run order: docker_cleanup, then env_merge."""
+
+
+class ComposePortAttrs(BaseModel):
+    """One guest port the gateway forwards; ``pp`` enables the PROXY protocol."""
+
+    port: int
+    pp: bool = False
+
+
+class ComposePortPolicy(BaseModel):
+    """Which guest ports the gateway forwards. ``restrict_mode`` with no ports locks all down."""
+
+    ports: list[ComposePortAttrs] = Field(default_factory=list)
+    restrict_mode: bool = False
+
+
+class ComposeVerityVolume(BaseModel):
+    """Read-only dm-verity volume pre-seeded into the CVM."""
+
+    source: str
+    target: str
+    verity_root: str
+
+
+class ComposeRequirementsPatch(BaseModel):
+    """``requirements`` keys a PATCH may set; a sent None removes the key.
+
+    ``gpu_policy`` is not patchable: the stored value is kept.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Formats the data disk on every boot (OS 0.6.3+). Turning it on needs confirm_data_wipe.
+    ephemeral_data_disk: bool | None = None
+    health_check: bool | None = None
+    health_status_file: str | None = None
+    # Must be the hash of the app's launch token (see set_app_launch_token).
+    launch_token_hash: str | None = None
+    platforms: list[str] | None = None
+    tdx_measure_acpi_tables: bool | None = None
+
+
+class ComposePatch(BaseModel):
+    """JSON Merge Patch of a CVM's app compose, sent as ``compose`` on PATCH /cvms/{id}.
+
+    A set field sets the value, a field set to None removes the key, a field
+    left unset is unchanged. ``requirements`` merges per key. Only set fields
+    are sent, so an explicit default and an unset key stay distinct (they hash
+    differently).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    secure_time: bool | None = None
+    swap_size: str | None = None
+    storage_discard: bool | None = None
+    # Only with the nerdctl-compose runner.
+    snapshotter: Literal["overlayfs", "stargz"] | None = None
+    gateway_enabled: bool | None = None
+    port_policy: ComposePortPolicy | None = None
+    event_log_version: Literal[1, 2] | None = None
+    requirements: ComposeRequirementsPatch | None = None
+
+    # Fixed when the CVM is created: the current value passes, any other is rejected.
+    kms_enabled: bool | None = None
+    key_provider: Literal["none", "kms", "local", "tpm"] | None = None
+    key_provider_id: str | None = None
+    local_key_provider_enabled: bool | None = None
+    manifest_version: int | str | None = None
+    no_instance_id: bool | None = None
+    runner: str | None = None
+    storage_fs: Literal["ext4", "zfs"] | None = None
+    verity_volumes: list[ComposeVerityVolume] | None = None
+    tproxy_enabled: bool | None = None
+    features: list[str] | None = None
 
 
 # 2026-01-21
