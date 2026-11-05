@@ -150,15 +150,22 @@ async function runCvmsUpgradeCommand(
 			upgradeSpinner.stop(false);
 			throw result.error;
 		}
-		if (result.data.requiresOnChainHash) {
+		const patched = result.data;
+		if (patched.requiresOnChainHash) {
 			upgradeSpinner.stop(false);
 			logger.error(
-				`This CVM uses on-chain KMS: compose hash ${result.data.composeHash} must be registered on-chain first. Use "phala deploy --cvm-id app_${resolvedAppId}" instead.`,
+				`This CVM uses on-chain KMS: compose hash ${patched.composeHash} must be registered on-chain first. Use "phala deploy --cvm-id app_${resolvedAppId}" instead.`,
 			);
 			return 1;
 		}
 
 		upgradeSpinner.stop(true);
+
+		// no_change: the stored compose already matches, so nothing restarts.
+		if ("correlationId" in patched && !patched.correlationId) {
+			logger.info("Compose unchanged; nothing to do");
+			return 0;
+		}
 
 		logger.break();
 		logger.success(

@@ -13,6 +13,7 @@ import {
 	describe,
 	expect,
 	mock,
+	spyOn,
 	test,
 } from "bun:test";
 import os from "node:os";
@@ -20,6 +21,7 @@ import path from "node:path";
 import fs from "fs-extra";
 import { setJsonMode } from "@/src/core/json-mode";
 import type { CommandContext } from "@/src/core/types";
+import { logger } from "@/src/utils/logger";
 
 // Other test files replace @phala/cloud and @/src/lib/client with
 // mock.module, and bun keeps module mocks for the rest of the process. Load
@@ -54,6 +56,10 @@ const ENV_KEYS = [
 
 let server: ReturnType<typeof Bun.serve>;
 let requests: Recorded[] = [];
+// Per-test response override; return undefined to fall through to defaults.
+let respond:
+	| ((method: string, path: string) => Response | undefined)
+	| undefined;
 let tmpDir: string;
 let composePath: string;
 const savedEnv: Partial<Record<(typeof ENV_KEYS)[number], string>> = {};
@@ -69,6 +75,8 @@ beforeAll(async () => {
 				path: url.pathname,
 				body: text ? JSON.parse(text) : undefined,
 			});
+			const overridden = respond?.(req.method, url.pathname);
+			if (overridden) return overridden;
 			if (req.method === "GET") {
 				return Response.json({
 					id: CVM_ID,
@@ -113,7 +121,17 @@ afterAll(async () => {
 
 afterEach(() => {
 	requests = [];
+	respond = undefined;
+	for (const spy of spies) spy.mockRestore();
+	spies.length = 0;
 });
+
+const spies: Array<ReturnType<typeof spyOn>> = [];
+function spyLogger(method: "info" | "success" | "error") {
+	const spy = spyOn(logger, method).mockImplementation(() => {});
+	spies.push(spy);
+	return spy;
+}
 
 function makeContext(): { context: CommandContext; failure: () => unknown } {
 	let failure: unknown;
@@ -178,5 +196,29 @@ describe("phala cvms upgrade", () => {
 				body: { docker_compose_file: COMPOSE },
 			},
 		]);
+	});
+});
+
+describe("phala cvms upgrade with an unchanged compose", () => {
+	test("reports that there is nothing to do", async () => {
+		respond = (method) =>
+			method === "PATCH"
+				? Response.json({
+						status: "no_change",
+						message: "Compose configuration unchanged",
+						correlation_id: "",
+					})
+				: undefined;
+		const info = spyLogger("info");
+		const success = spyLogger("success");
+		const { context } = makeContext();
+		const exitCode = await cvmsUpgradeCommand.run(
+			{ compose: composePath } as Parameters<typeof cvmsUpgradeCommand.run>[0],
+			context,
+		);
+
+		expect(exitCode).toBe(0);
+		expect(info).toHaveBeenCalledWith("Compose unchanged; nothing to do");
+		expect(success).not.toHaveBeenCalled();
 	});
 });
