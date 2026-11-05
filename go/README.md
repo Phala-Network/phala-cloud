@@ -353,6 +353,7 @@ PHALA_CLOUD_E2E_API_KEY=your-key go test -tags e2e -v -timeout 30m ./e2e/
 - `ConfirmCVMPatch` now sends `X-Compose-Hash` and `X-Transaction-Hash` headers with an empty JSON object body, and the response includes `correlation_id`.
 - Remove `GatewayEnabled`, `SecureTime` and `AllowRestart` from `PatchCVMRequest`. The API never applied them. Use `Image` instead of the deprecated `OSImageName`. `Listed` is still accepted and is applied through `PATCH /cvms/{id}/listed`.
 - `PatchCVM` no longer returns an `*APIError` for HTTP 465. It returns a `PatchCVMResponse` with `RequiresOnChainHash` set, the compose hash to register and, for `PrepareOnly` requests, `CommitToken`. Check `resp.RequiresOnChainHash` instead of `apiErr.IsComposePrecondition()`.
+- `PatchCVMResponse.KMSInfo` is now `*KMSInfo` instead of `*CvmKmsInfo`, so it carries `KMSContractAddress` from the 465 response.
 - `UpdateCVMVisibility` now calls `PATCH /cvms/{id}` and returns `*CVMUpdateResponse` (`Message`, `CorrelationID`, `Status`). The `CVMVisibility` type is removed.
 - `UpdateResourcesRequest.AllowRestart` is deprecated and no longer sent; the API ignores it.
 

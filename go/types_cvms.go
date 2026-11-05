@@ -649,7 +649,7 @@ type PatchCVMResponse struct {
 	ComposeHash         string         `json:"compose_hash,omitempty"`
 	AppID               string         `json:"app_id,omitempty"`
 	DeviceID            string         `json:"device_id,omitempty"`
-	KMSInfo             *CvmKmsInfo    `json:"kms_info,omitempty"`
+	KMSInfo             *KMSInfo       `json:"kms_info,omitempty"`
 	CommitToken         string         `json:"commit_token,omitempty"`
 	CommitURL           string         `json:"commit_url,omitempty"`
 	APICommitURL        string         `json:"api_commit_url,omitempty"`

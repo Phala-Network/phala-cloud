@@ -255,3 +255,21 @@ func TestPatchCVMAttachAllSendsAnEmptyGPUsArray(t *testing.T) {
 	}
 	assertBody(t, (*seen)[0].body, `{"gpus": {"gpus": [], "attach_mode": "all"}}`)
 }
+
+func TestPatchCVM465DecodesKMSContractAddress(t *testing.T) {
+	client, _ := recordingServer(t, 465, `{
+		"error_code": "ERR-01-005",
+		"message": "Compose hash registration required",
+		"details": [
+			{"field": "compose_hash", "value": "abc123"},
+			{"field": "kms_info", "value": {"id": "kms-1", "url": "https://kms", "version": "0.5.5", "chain_id": 8453, "kms_contract_address": "0xabc"}}
+		]
+	}`)
+	resp, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{VCPU: Int(2)})
+	if err != nil {
+		t.Fatalf("PatchCVM: %v", err)
+	}
+	if resp.KMSInfo == nil || resp.KMSInfo.KMSContractAddress == nil || *resp.KMSInfo.KMSContractAddress != "0xabc" {
+		t.Fatalf("KMSInfo = %+v, want kms_contract_address 0xabc", resp.KMSInfo)
+	}
+}
