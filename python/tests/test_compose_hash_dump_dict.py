@@ -94,14 +94,10 @@ _CASES = [
         "7c4e0234412fdc856d851b283c763d748fefbd20bb1f086d74b0d99848dcdb85",
     ),
     (
-        "tproxy_enabled_follows_gateway_enabled",
+        "gateway_disabled_keeps_tproxy_enabled",
         "0.6.0",
-        {
-            key: value
-            for key, value in _compose(name="gw", gateway_enabled=False).items()
-            if key != "tproxy_enabled"
-        },
-        "4097f4c5d35f1f34741c21d851e50b6030eff17da5bf2862d5a4716c23297693",
+        _compose(name="gw", gateway_enabled=False),
+        "d65292cd5e6616a1acf49b308fc51394441f101b6a52aa3f21f9097ba86f745f",
     ),
 ]
 
@@ -120,3 +116,14 @@ def test_get_compose_hash_matches_backend_dump_dict(
 def test_pre_06_wire_format_rejects_several_init_scripts() -> None:
     with pytest.raises(ValueError, match="at most one init_script"):
         get_compose_hash(_compose(name="old2", init_script=["a", "b"]), os_image_version="0.5.9")
+
+
+def test_missing_tproxy_enabled_defaults_to_gateway_enabled() -> None:
+    """SDK behavior for a partial compose, not a backend-produced vector."""
+    without = {
+        k: v for k, v in _compose(name="gw", gateway_enabled=False).items() if k != "tproxy_enabled"
+    }
+    explicit = _compose(name="gw", gateway_enabled=False, tproxy_enabled=False)
+    assert get_compose_hash(without, os_image_version="0.6.0") == get_compose_hash(
+        explicit, os_image_version="0.6.0"
+    )
