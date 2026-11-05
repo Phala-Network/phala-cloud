@@ -47,6 +47,7 @@ import { sshKeysCommands } from "./commands/ssh-keys";
 import { whoamiCommand } from "./commands/whoami";
 import { allowDevicesCommands } from "./commands/allow-devices";
 import { keccak256sumCommand } from "./commands/keccak256sum";
+import { annotationsCommand } from "./commands/annotations";
 import { detectRuntimeFromProcess } from "./core/package-manager";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -91,6 +92,7 @@ registry.registerCommand(whoamiCommand);
 registry.registerCommand(completionCommand);
 registry.registerCommand(osImagesCommand);
 registry.registerCommand(keccak256sumCommand);
+registry.registerCommand(annotationsCommand);
 registry.registerCommand(helpCommand);
 
 // Command groups + subcommands
