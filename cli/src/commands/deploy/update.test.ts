@@ -200,6 +200,7 @@ function updateRequest(): Recorded {
 async function runCli(argv: string[]) {
 	const registry = new CommandRegistry();
 	registry.registerCommand(deployCommand);
+	let stdout = "";
 	let stderr = "";
 	const output = (append: (chunk: string) => void) =>
 		({
@@ -225,14 +226,29 @@ async function runCli(argv: string[]) {
 			PHALA_CLOUD_API_PREFIX: `http://127.0.0.1:${server.port}/api/v1`,
 			PHALA_CLOUD_DIR: tmpDir,
 		},
-		stdout: output(() => {}),
+		stdout: output((chunk) => {
+			stdout += chunk;
+		}),
 		stderr: output((chunk) => {
 			stderr += chunk;
 		}),
 		stdin: process.stdin,
 	});
-	return { code, stderr };
+	return { code, stdout, stderr };
 }
+
+describe("phala deploy --help", () => {
+	test("says what --wait does on an update", async () => {
+		const { code, stdout } = await runCli(["deploy", "--help"]);
+
+		expect(code).toBe(0);
+		const wait = stdout.split("\n").find((line) => line.includes("--wait "));
+		expect(wait).toContain(
+			"On update (--cvm-id): wait until the CVM is back in its pre-update state",
+		);
+		expect(wait).toContain("check the update's result and fail if it failed");
+	});
+});
 
 describe("phala deploy --cvm-id --clear-init-scripts (parsed argv)", () => {
 	test("sends an empty init_scripts set", async () => {
