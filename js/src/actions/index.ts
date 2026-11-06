@@ -455,6 +455,9 @@ export {
   PatchCvmRequestSchema,
   PatchCvmResultSchema,
   PatchCvmGpuConfigSchema,
+  ComposePatchSchema,
+  ComposeRequirementsPatchSchema,
+  type ComposePatch,
   type PatchCvmGpuConfig,
   type PatchCvmRequest,
   type PatchCvmResult,
@@ -603,6 +606,30 @@ export {
   type CvmUserConfig,
   type GetCvmUserConfigRequest,
 } from "./cvms/get_cvm_user_config";
+
+export {
+  getCvmAnnotations,
+  safeGetCvmAnnotations,
+  updateCvmAnnotations,
+  safeUpdateCvmAnnotations,
+  CvmAnnotationsSchema,
+  GetCvmAnnotationsRequestSchema,
+  UpdateCvmAnnotationsRequestSchema,
+  type CvmAnnotations,
+  type GetCvmAnnotationsRequest,
+  type UpdateCvmAnnotationsRequest,
+} from "./cvms/cvm_annotations";
+
+export {
+  getCvmInitScripts,
+  safeGetCvmInitScripts,
+  CvmInitScriptSchema,
+  CvmInitScriptsSchema,
+  GetCvmInitScriptsRequestSchema,
+  type CvmInitScript,
+  type CvmInitScripts,
+  type GetCvmInitScriptsRequest,
+} from "./cvms/get_cvm_init_scripts";
 
 export {
   listSshKeys,
@@ -761,6 +788,19 @@ export {
   type AppAttestationResponse,
   type GetAppAttestationRequest,
 } from "./apps/get_app_attestation";
+
+export {
+  setAppLaunchToken,
+  safeSetAppLaunchToken,
+  clearAppLaunchToken,
+  safeClearAppLaunchToken,
+  AppLaunchTokenSchema,
+  SetAppLaunchTokenRequestSchema,
+  ClearAppLaunchTokenRequestSchema,
+  type AppLaunchToken,
+  type SetAppLaunchTokenRequest,
+  type ClearAppLaunchTokenRequest,
+} from "./apps/app_launch_token";
 
 // OS Images
 export {

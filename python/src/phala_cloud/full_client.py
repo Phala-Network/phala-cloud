@@ -5,7 +5,7 @@ import ssl
 import time
 from collections.abc import AsyncIterator, Iterator, Mapping
 from contextlib import asynccontextmanager, contextmanager
-from typing import Any, TypedDict, cast
+from typing import Any, Literal, TypedDict, cast
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
@@ -15,6 +15,7 @@ from .action_responses import (
     AppEnvPubkeyResponse,
     AppFilterOptionsResponse,
     AppInfoResponse,
+    AppLaunchTokenResponse,
     AppListResponse,
     AppRevisionDetailResponse,
     AppRevisionsResponse,
@@ -24,10 +25,12 @@ from .action_responses import (
     ComposeHashPreconditionResponse,
     CvmActionResponseV20260121,
     CvmActionResponseV20260522,
+    CvmAnnotationsResponse,
     CvmAttestationResponse,
     CvmContainersResponse,
     CvmInfoResponseV20260121,
     CvmInfoResponseV20260522,
+    CvmInitScriptsResponse,
     CvmNetworkResponse,
     CvmStatsResponse,
     CvmUserConfigResponse,
@@ -63,10 +66,12 @@ from .models.cvms import (
     CheckAppCvmsIsAllowedRequest,
     CheckAppIsAllowedRequest,
     CheckCvmIsAllowedRequest,
+    ComposePatch,
     CvmAvailableOSImage,
     CvmInfoV20260121,
     CvmInfoV20260522,
     CvmStatus,
+    InitScriptSlug,
     IsAllowedResultV20260121,
     IsAllowedResultV20260522,
     PaginatedCvmInfosV20251028,
@@ -151,9 +156,30 @@ class CvmIdRequest(BaseModel):
 
 
 class CvmCreationRequest(NodeSelectionRequest):
-    """Creation payload; node identifies the physical node by name."""
+    """Creation payload; node identifies the physical node by name.
+
+    Fields not declared here (``name``, ``compose_file``, ...) are sent as given.
+    ``compose_file.runner`` is ``docker-compose`` (default), or, with the
+    ``compose_advanced`` feature flag, ``nerdctl-compose`` or ``bash``.
+    """
 
     model_config = ConfigDict(extra="allow")
+
+    # A whole app-compose JSON file, sent instead of compose_file. Needs the
+    # compose_advanced feature flag.
+    compose_file_raw: str | None = None
+    # Platform init scripts to run on every boot. The {"env_merge": bool}
+    # object form is deprecated; send slugs.
+    init_scripts: list[InitScriptSlug] | dict[Literal["env_merge"], bool] | None = None
+    # Deprecated: send init_scripts=["docker_cleanup"].
+    enabled_init_scripts_docker_cleanup: bool | None = None
+    # Launch token (at least 32 bytes) the guest requires on every boot.
+    launch_token: str | None = None
+    # Gate the CVM with a token Phala Cloud generates (returned once by the commit).
+    generate_launch_token: bool | None = None
+    # Host-side key/value metadata stored by the VMM. Needs the cvm_annotations
+    # feature flag.
+    annotations: dict[str, str] | None = None
 
 
 def _cvm_creation_body(request: CvmCreationRequest | Mapping[str, Any]) -> dict[str, Any]:
@@ -182,6 +208,12 @@ class AppRevisionsRequest(_AliasModel):
     app_id: str = Field(alias="appId")
     page: int | None = Field(default=None, ge=1)
     page_size: int | None = Field(default=None, ge=1)
+
+
+class SetAppLaunchTokenRequest(_AliasModel):
+    app_id: str = Field(alias="appId")
+    # Token to set (at least 32 bytes). Leave unset to have Phala Cloud generate one.
+    launch_token: str | None = None
 
 
 class CreateAppInstanceRequest(NodeSelectionRequest, _AliasModel):
@@ -310,6 +342,11 @@ class UpdateCvmSshKeysRequest(CvmIdRequest):
     apply_now: bool = False
 
 
+class UpdateCvmAnnotationsRequest(CvmIdRequest):
+    # Replaces every annotation; an empty map clears them.
+    annotations: dict[str, str]
+
+
 class CvmSshKey(BaseModel):
     id: str
     owner_user_id: str
@@ -382,15 +419,26 @@ class PatchCvmRequest(CvmIdRequest):
     image: str | None = None
     shutdown_timeout: int | None = None
     allow_force_stop: bool | None = None
+    # JSON Merge Patch of the app compose; only the fields set on it are sent.
+    compose: ComposePatch | None = None
+    # Platform init scripts this CVM runs, replacing the current set.
+    init_scripts: list[InitScriptSlug] | None = None
+    # Confirms turning on docker_cleanup or requirements.ephemeral_data_disk,
+    # which erase data on every boot.
+    confirm_data_wipe: bool | None = None
     # Sent as the X-Prepare-Only header: on contract-owned KMS, a 465 response
     # then carries a commit token for multisig approval.
     prepare_only: bool = Field(default=False, alias="prepareOnly", exclude=True)
 
     def body(self) -> dict[str, Any]:
-        return self.model_dump(
-            exclude={"id", "uuid", "app_id", "instance_id", "cvm_id", "cvmId"},
+        body = self.model_dump(
+            exclude={"id", "uuid", "app_id", "instance_id", "cvm_id", "cvmId", "compose"},
             exclude_none=True,
         )
+        if self.compose is not None:
+            # A None the caller set is a merge-patch removal and must be sent.
+            body["compose"] = self.compose.model_dump(exclude_unset=True)
+        return body
 
     def headers(self) -> dict[str, str] | None:
         return {"X-Prepare-Only": "true"} if self.prepare_only else None
@@ -564,6 +612,12 @@ class _ExtMixin:
             return CvmAttestationResponse
         if m == "GET" and re.fullmatch(r"/cvms/[^/]+/user_config", path):
             return CvmUserConfigResponse
+        if m in {"GET", "PUT"} and re.fullmatch(r"/cvms/[^/]+/annotations", path):
+            return CvmAnnotationsResponse
+        if m == "GET" and re.fullmatch(r"/cvms/[^/]+/init-scripts", path):
+            return CvmInitScriptsResponse
+        if m == "POST" and re.fullmatch(r"/apps/[^/]+/launch-token", path):
+            return AppLaunchTokenResponse
         if m == "GET" and re.fullmatch(r"/cvms/[^/]+", path):
             return self._v20260121_model(CvmInfoResponseV20260121, CvmInfoResponseV20260522)
         if m == "GET" and re.fullmatch(r"/kms/on-chain/[^/]+", path):
@@ -1407,6 +1461,67 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         self, request: CvmIdRequest | Mapping[str, Any]
     ) -> SafeResult[Any]:
         return self.safe(self.get_cvm_user_config, request)
+
+    def get_cvm_annotations(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> CvmAnnotationsResponse:
+        cvm_id = CvmIdRequest.model_validate(request).resolved
+        return cast(CvmAnnotationsResponse, self.get(f"/cvms/{cvm_id}/annotations"))
+
+    def safe_get_cvm_annotations(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmAnnotationsResponse]:
+        return self.safe(self.get_cvm_annotations, request)
+
+    def update_cvm_annotations(
+        self, request: UpdateCvmAnnotationsRequest | Mapping[str, Any]
+    ) -> CvmAnnotationsResponse:
+        req = UpdateCvmAnnotationsRequest.model_validate(request)
+        return cast(
+            CvmAnnotationsResponse,
+            self.request(
+                "PUT", f"/cvms/{req.resolved}/annotations", json={"annotations": req.annotations}
+            ),
+        )
+
+    def safe_update_cvm_annotations(
+        self, request: UpdateCvmAnnotationsRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmAnnotationsResponse]:
+        return self.safe(self.update_cvm_annotations, request)
+
+    def get_cvm_init_scripts(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> CvmInitScriptsResponse:
+        cvm_id = CvmIdRequest.model_validate(request).resolved
+        return cast(CvmInitScriptsResponse, self.get(f"/cvms/{cvm_id}/init-scripts"))
+
+    def safe_get_cvm_init_scripts(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmInitScriptsResponse]:
+        return self.safe(self.get_cvm_init_scripts, request)
+
+    def set_app_launch_token(
+        self, request: SetAppLaunchTokenRequest | Mapping[str, Any]
+    ) -> AppLaunchTokenResponse:
+        req = SetAppLaunchTokenRequest.model_validate(request)
+        body = req.model_dump(include={"launch_token"}, exclude_none=True)
+        return cast(
+            AppLaunchTokenResponse, self.post(f"/apps/{req.app_id}/launch-token", json=body)
+        )
+
+    def safe_set_app_launch_token(
+        self, request: SetAppLaunchTokenRequest | Mapping[str, Any]
+    ) -> SafeResult[AppLaunchTokenResponse]:
+        return self.safe(self.set_app_launch_token, request)
+
+    def clear_app_launch_token(self, request: AppIdRequest | Mapping[str, Any]) -> None:
+        req = AppIdRequest.model_validate(request)
+        self.request("DELETE", f"/apps/{req.app_id}/launch-token")
+
+    def safe_clear_app_launch_token(
+        self, request: AppIdRequest | Mapping[str, Any]
+    ) -> SafeResult[None]:
+        return self.safe(self.clear_app_launch_token, request)
 
     def refresh_cvm_instance_id(
         self, request: RefreshCvmInstanceIdRequest | Mapping[str, Any]
@@ -2368,6 +2483,67 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         self, request: CvmIdRequest | Mapping[str, Any]
     ) -> SafeResult[Any]:
         return await self.safe(self.get_cvm_user_config, request)
+
+    async def get_cvm_annotations(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> CvmAnnotationsResponse:
+        cvm_id = CvmIdRequest.model_validate(request).resolved
+        return cast(CvmAnnotationsResponse, await self.get(f"/cvms/{cvm_id}/annotations"))
+
+    async def safe_get_cvm_annotations(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmAnnotationsResponse]:
+        return await self.safe(self.get_cvm_annotations, request)
+
+    async def update_cvm_annotations(
+        self, request: UpdateCvmAnnotationsRequest | Mapping[str, Any]
+    ) -> CvmAnnotationsResponse:
+        req = UpdateCvmAnnotationsRequest.model_validate(request)
+        return cast(
+            CvmAnnotationsResponse,
+            await self.request(
+                "PUT", f"/cvms/{req.resolved}/annotations", json={"annotations": req.annotations}
+            ),
+        )
+
+    async def safe_update_cvm_annotations(
+        self, request: UpdateCvmAnnotationsRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmAnnotationsResponse]:
+        return await self.safe(self.update_cvm_annotations, request)
+
+    async def get_cvm_init_scripts(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> CvmInitScriptsResponse:
+        cvm_id = CvmIdRequest.model_validate(request).resolved
+        return cast(CvmInitScriptsResponse, await self.get(f"/cvms/{cvm_id}/init-scripts"))
+
+    async def safe_get_cvm_init_scripts(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmInitScriptsResponse]:
+        return await self.safe(self.get_cvm_init_scripts, request)
+
+    async def set_app_launch_token(
+        self, request: SetAppLaunchTokenRequest | Mapping[str, Any]
+    ) -> AppLaunchTokenResponse:
+        req = SetAppLaunchTokenRequest.model_validate(request)
+        body = req.model_dump(include={"launch_token"}, exclude_none=True)
+        return cast(
+            AppLaunchTokenResponse, await self.post(f"/apps/{req.app_id}/launch-token", json=body)
+        )
+
+    async def safe_set_app_launch_token(
+        self, request: SetAppLaunchTokenRequest | Mapping[str, Any]
+    ) -> SafeResult[AppLaunchTokenResponse]:
+        return await self.safe(self.set_app_launch_token, request)
+
+    async def clear_app_launch_token(self, request: AppIdRequest | Mapping[str, Any]) -> None:
+        req = AppIdRequest.model_validate(request)
+        await self.request("DELETE", f"/apps/{req.app_id}/launch-token")
+
+    async def safe_clear_app_launch_token(
+        self, request: AppIdRequest | Mapping[str, Any]
+    ) -> SafeResult[None]:
+        return await self.safe(self.clear_app_launch_token, request)
 
     async def refresh_cvm_instance_id(
         self, request: RefreshCvmInstanceIdRequest | Mapping[str, Any]

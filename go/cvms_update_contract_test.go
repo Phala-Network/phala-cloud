@@ -294,3 +294,53 @@ func TestPatchCVM465FormatsAppID(t *testing.T) {
 		})
 	}
 }
+
+func TestPatchCVMSendsTheComposeMergePatch(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusAccepted, acceptedUpdate)
+	_, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{
+		Compose: &ComposePatch{
+			SecureTime:     PatchValue(true),
+			SwapSize:       PatchNull[string](),
+			GatewayEnabled: PatchValue(false),
+			PortPolicy: PatchValue(ComposePortPolicy{
+				Ports:        []ComposePortAttr{{Port: 443, PP: true}},
+				RestrictMode: Bool(true),
+			}),
+			EventLogVersion: PatchValue(2),
+			Requirements: PatchValue(ComposeRequirementsPatch{
+				EphemeralDataDisk: PatchValue(true),
+				HealthCheck:       PatchValue(false),
+				Platforms:         PatchNull[[]string](),
+			}),
+		},
+		InitScripts:     []InitScriptSlug{InitScriptDockerCleanup},
+		ConfirmDataWipe: true,
+	})
+	if err != nil {
+		t.Fatalf("PatchCVM: %v", err)
+	}
+	// Null removes a key, unset keys stay absent, explicit defaults are sent.
+	assertBody(t, (*seen)[0].body, `{
+		"compose": {
+			"secure_time": true,
+			"swap_size": null,
+			"gateway_enabled": false,
+			"port_policy": {"ports": [{"port": 443, "pp": true}], "restrict_mode": true},
+			"event_log_version": 2,
+			"requirements": {"ephemeral_data_disk": true, "health_check": false, "platforms": null}
+		},
+		"init_scripts": ["docker_cleanup"],
+		"confirm_data_wipe": true
+	}`)
+}
+
+func TestPatchCVMSendsAnEmptyInitScriptSet(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusAccepted, acceptedUpdate)
+	if _, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{
+		InitScripts: []InitScriptSlug{},
+		Compose:     &ComposePatch{Requirements: PatchNull[ComposeRequirementsPatch]()},
+	}); err != nil {
+		t.Fatalf("PatchCVM: %v", err)
+	}
+	assertBody(t, (*seen)[0].body, `{"init_scripts": [], "compose": {"requirements": null}}`)
+}

@@ -175,6 +175,26 @@ if resp.RequiresOnChainHash {
 }
 ```
 
+`Compose` is a JSON Merge Patch of the app compose. Each key is a `phala.Patch[T]`: leave it zero to keep the value, `phala.PatchValue(v)` to set it, `phala.PatchNull[T]()` to remove the key. `Requirements` merges per key and cannot change `gpu_policy`. `InitScripts` replaces the CVM's platform init scripts (`GetCVMInitScripts` shows which it runs and can select). Turning on `docker_cleanup` or `ephemeral_data_disk` erases data on every boot and needs `ConfirmDataWipe: true`.
+
+```go
+resp, err := client.PatchCVM(ctx, "cvm-id", &phala.PatchCVMRequest{
+	Compose: &phala.ComposePatch{
+		SecureTime: phala.PatchValue(true),
+		SwapSize:   phala.PatchNull[string](),
+		Requirements: phala.PatchValue(phala.ComposeRequirementsPatch{
+			HealthCheck: phala.PatchValue(true),
+		}),
+	},
+	InitScripts: []phala.InitScriptSlug{phala.InitScriptDockerCleanup},
+	ConfirmDataWipe: true,
+})
+```
+
+To gate CVMs with a launch token, set `LaunchToken` or `GenerateLaunchToken` on create (the commit response carries a newly issued token once). To rotate, call `SetAppLaunchToken`, then set each CVM's `Requirements.LaunchTokenHash` to the returned hash before it restarts; `ClearAppLaunchToken` removes the token after every CVM dropped the hash. Phala Cloud and the node operator can read the token, so it protects only against parties who know the public compose.
+
+`GetComposeHashFromMapForOSImage(compose, "0.6.0")` hashes a compose the way Phala Cloud does for that OS image, including the OS-dependent `manifest_version` and `init_script` format.
+
 ### Watch CVM State (SSE)
 
 ```go
@@ -357,6 +377,8 @@ PHALA_CLOUD_E2E_API_KEY=your-key go test -tags e2e -v -timeout 30m ./e2e/
 - HTTP 465 (compose hash registration required) is handled per call. `PatchCVM` returns a `PatchCVMResponse` with `RequiresOnChainHash` set. `UpdateDockerCompose`, `UpdatePreLaunchScript`, `UpgradePreLaunchScript` and `UpdateCVMVisibility` still return it as an `*APIError`; read it with `IsComposePrecondition` and `ComposePrecondition`. A 465 without a compose hash in its details is also returned by `PatchCVM` as an `*APIError`.
 - `UpdateCVMVisibility` now calls `PATCH /cvms/{id}` and returns `*CVMUpdateResponse` (`Message`, `CorrelationID`, `Status`). The `CVMVisibility` type is removed. All three visibility fields are optional; a request with none of them set is rejected by the API with HTTP 400.
 - `UpdateResourcesRequest.AllowRestart` is deprecated and no longer sent; the API ignores it.
+- `ProvisionCVMRequest.InitScripts` is now `[]InitScriptSlug`. Replace `&ProvisionInitScripts{EnvMerge: true}` with `[]phala.InitScriptSlug{phala.InitScriptEnvMerge}`.
+- `GetComposeHash` and `GetComposeHashFromMap` now drop null `storage_discard`, `event_log_version`, `snapshotter` and `verity_volumes` and always emit `tproxy_enabled` (defaulting to `gateway_enabled`), as the API does. A compose without `tproxy_enabled` hashes differently than before.
 
 ## License
 

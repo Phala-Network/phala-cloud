@@ -195,3 +195,73 @@ def test_patch_cvm_hash_required_returns_empty_app_id_when_payload_has_none() ->
     assert result["requires_on_chain_hash"] is True
     assert result["compose_hash"] == "abc123"
     assert result["app_id"] == ""
+
+
+_COMPOSE_PATCH = {
+    "secure_time": True,
+    "swap_size": None,
+    "gateway_enabled": False,
+    "port_policy": {"ports": [{"port": 443, "pp": True}], "restrict_mode": True},
+    "event_log_version": 2,
+    "requirements": {
+        "ephemeral_data_disk": True,
+        "health_check": False,
+        "platforms": None,
+    },
+}
+
+
+@pytest.mark.parametrize("use_async", [False, True])
+@pytest.mark.asyncio
+async def test_patch_cvm_sends_compose_merge_patch_with_nulls(use_async: bool) -> None:
+    recorder = _Recorder()
+    request = {
+        "id": "cvm-1",
+        "compose": _COMPOSE_PATCH,
+        "init_scripts": ["docker_cleanup"],
+        "confirm_data_wipe": True,
+    }
+    if use_async:
+        await _async_client(recorder).patch_cvm(request)
+    else:
+        _sync_client(recorder).patch_cvm(request)
+
+    method, path, body, _ = recorder.last
+    assert (method, path) == ("PATCH", "/api/v1/cvms/cvm-1")
+    # Sent nulls remove keys; unsent keys stay absent; explicit defaults are kept.
+    assert body == {
+        "compose": _COMPOSE_PATCH,
+        "init_scripts": ["docker_cleanup"],
+        "confirm_data_wipe": True,
+    }
+
+
+def test_patch_cvm_sends_an_empty_init_script_set() -> None:
+    recorder = _Recorder()
+    _sync_client(recorder).patch_cvm({"id": "cvm-1", "init_scripts": []})
+
+    _, _, body, _ = recorder.last
+    assert body == {"init_scripts": []}
+
+
+def test_patch_cvm_rejects_gpu_policy_in_the_compose_patch() -> None:
+    recorder = _Recorder()
+    with pytest.raises(ValidationError):
+        _sync_client(recorder).patch_cvm(
+            {"id": "cvm-1", "compose": {"requirements": {"gpu_policy": {}}}}
+        )
+    assert recorder.requests == []
+
+
+@pytest.mark.parametrize("use_async", [False, True])
+@pytest.mark.asyncio
+async def test_patch_cvm_does_not_coerce_a_bool_event_log_version(use_async: bool) -> None:
+    # True == 1 in Python; the API rejects a boolean, so it must not go out as 1.
+    recorder = _Recorder()
+    request = {"id": "cvm-1", "compose": {"event_log_version": True}}
+    with pytest.raises(ValidationError):
+        if use_async:
+            await _async_client(recorder).patch_cvm(request)
+        else:
+            _sync_client(recorder).patch_cvm(request)
+    assert recorder.requests == []

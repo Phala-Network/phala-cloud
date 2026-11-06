@@ -37,6 +37,7 @@ import { psCommand } from "./commands/ps";
 import { logsCommand } from "./commands/logs";
 import { selfCommands } from "./commands/self";
 import { appsCommand } from "./commands/apps";
+import { appsLaunchTokenCommands } from "./commands/apps/launch-token";
 import { instancesGroup } from "./commands/instances/command";
 import { instancesLsCommand } from "./commands/instances/ls";
 import { instancesAddCommand } from "./commands/instances/add";
@@ -47,6 +48,7 @@ import { sshKeysCommands } from "./commands/ssh-keys";
 import { whoamiCommand } from "./commands/whoami";
 import { allowDevicesCommands } from "./commands/allow-devices";
 import { keccak256sumCommand } from "./commands/keccak256sum";
+import { annotationsCommand } from "./commands/annotations";
 import { detectRuntimeFromProcess } from "./core/package-manager";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -91,6 +93,7 @@ registry.registerCommand(whoamiCommand);
 registry.registerCommand(completionCommand);
 registry.registerCommand(osImagesCommand);
 registry.registerCommand(keccak256sumCommand);
+registry.registerCommand(annotationsCommand);
 registry.registerCommand(helpCommand);
 
 // Command groups + subcommands
@@ -123,6 +126,11 @@ for (const subgroup of cvmsCommands.subgroups ?? []) {
 	for (const command of subgroup.commands) {
 		registry.registerCommand(command);
 	}
+}
+
+registry.registerGroup(appsLaunchTokenCommands.group);
+for (const command of appsLaunchTokenCommands.commands) {
+	registry.registerCommand(command);
 }
 
 registry.registerGroup(envsCommands.group);

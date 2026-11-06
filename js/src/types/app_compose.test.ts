@@ -141,13 +141,42 @@ describe("LooseAppComposeSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("should reject port_policy missing restrict_mode", () => {
+  it("reads a bash-runner compose, which has no docker_compose_file", () => {
     const result = LooseAppComposeSchema.safeParse({
-      docker_compose_file: "version: '3'",
-      port_policy: {
-        ports: [{ port: 80, pp: true }],
-      },
+      runner: "bash",
+      bash_script: "echo hi",
+      init_script: "#!/bin/sh\necho one\n",
     });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
+
+  it("keeps the dstack 0.6 fields and the exact requirements key set", () => {
+    const compose = {
+      docker_compose_file: "services: {}",
+      runner: "nerdctl-compose",
+      snapshotter: "stargz",
+      storage_discard: false,
+      event_log_version: 2,
+      verity_volumes: [{ source: "data.img", target: "/data", verity_root: "b".repeat(64) }],
+      init_script: ["#!/bin/sh\necho one\n"],
+      requirements: {
+        health_check: false,
+        launch_token_hash: "a".repeat(64),
+        gpu_policy: { attest_gpu: true },
+      },
+    };
+    const result = LooseAppComposeSchema.parse(compose);
+    expect(result).toEqual(compose);
+  });
+
+  it.each([{ restrict_mode: true }, { ports: [{ port: 443 }] }])(
+    "accepts port_policy %j with the backend defaults left out",
+    (port_policy) => {
+      const result = LooseAppComposeSchema.safeParse({
+        docker_compose_file: "version: '3'",
+        port_policy,
+      });
+      expect(result.success).toBe(true);
+    },
+  );
 });

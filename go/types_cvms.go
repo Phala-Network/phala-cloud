@@ -256,41 +256,56 @@ type ProvisionCVMRequest struct {
 	ComposeFile  *ComposeFile `json:"compose_file,omitempty"`
 
 	// Optional fields.
-	VCPU                            *int                  `json:"vcpu,omitempty"`
-	Memory                          *int                  `json:"memory,omitempty"`
-	DiskSize                        *int                  `json:"disk_size,omitempty"`
-	Node                            *string               `json:"node,omitempty"`
-	Image                           *string               `json:"image,omitempty"`
-	Region                          *string               `json:"region,omitempty"`
-	KMSID                           *string               `json:"kms_id,omitempty"`
-	KMS                             *string               `json:"kms,omitempty"`
-	KMSType                         *string               `json:"kms_type,omitempty"`
-	KMSContract                     *string               `json:"kms_contract,omitempty"`
-	KMSContractID                   *string               `json:"kms_contract_id,omitempty"`
-	KeyProviderMode                 *string               `json:"key_provider_mode,omitempty"`
-	SkipGateway                     *bool                 `json:"skip_gateway,omitempty"`
-	Listed                          *bool                 `json:"listed,omitempty"`
-	Encrypted                       *bool                 `json:"encrypted,omitempty"`
-	SecureTime                      *bool                 `json:"secure_time,omitempty"`
-	SSHAuthorizedKeys               []string              `json:"ssh_authorized_keys,omitzero"`
-	CustomAppID                     *string               `json:"custom_app_id,omitempty"`
-	Nonce                           *int64                `json:"nonce,omitempty"`
-	StorageFS                       *string               `json:"storage_fs,omitempty"`
-	AppID                           *string               `json:"app_id,omitempty"`
-	PreferDev                       *bool                 `json:"prefer_dev,omitempty"`
-	EnvKeys                         []string              `json:"env_keys,omitzero"`
-	SSHKeyIDs                       []string              `json:"ssh_key_ids,omitzero"`
-	Ports                           []ProvisionPort       `json:"ports,omitzero"`
-	EncryptedEnv                    *string               `json:"encrypted_env,omitempty"`
-	UserConfig                      *string               `json:"user_config,omitempty"`
-	Hugepages                       *bool                 `json:"hugepages,omitempty"`
-	PinNUMA                         *bool                 `json:"pin_numa,omitempty"`
-	GPUs                            *ProvisionGPUConfig   `json:"gpus,omitempty"`
-	KMSURLs                         []string              `json:"kms_urls,omitzero"`
-	GatewayURLs                     []string              `json:"gateway_urls,omitzero"`
-	InitScripts                     *ProvisionInitScripts `json:"init_scripts,omitempty"`
-	EnabledInitScriptsDockerCleanup *bool                 `json:"enabled_init_scripts_docker_cleanup,omitempty"`
-	EnabledGuestAgentAccess         *bool                 `json:"enabled_guest_agent_access,omitempty"`
+	VCPU              *int                `json:"vcpu,omitempty"`
+	Memory            *int                `json:"memory,omitempty"`
+	DiskSize          *int                `json:"disk_size,omitempty"`
+	Node              *string             `json:"node,omitempty"`
+	Image             *string             `json:"image,omitempty"`
+	Region            *string             `json:"region,omitempty"`
+	KMSID             *string             `json:"kms_id,omitempty"`
+	KMS               *string             `json:"kms,omitempty"`
+	KMSType           *string             `json:"kms_type,omitempty"`
+	KMSContract       *string             `json:"kms_contract,omitempty"`
+	KMSContractID     *string             `json:"kms_contract_id,omitempty"`
+	KeyProviderMode   *string             `json:"key_provider_mode,omitempty"`
+	SkipGateway       *bool               `json:"skip_gateway,omitempty"`
+	Listed            *bool               `json:"listed,omitempty"`
+	Encrypted         *bool               `json:"encrypted,omitempty"`
+	SecureTime        *bool               `json:"secure_time,omitempty"`
+	SSHAuthorizedKeys []string            `json:"ssh_authorized_keys,omitzero"`
+	CustomAppID       *string             `json:"custom_app_id,omitempty"`
+	Nonce             *int64              `json:"nonce,omitempty"`
+	StorageFS         *string             `json:"storage_fs,omitempty"`
+	AppID             *string             `json:"app_id,omitempty"`
+	PreferDev         *bool               `json:"prefer_dev,omitempty"`
+	EnvKeys           []string            `json:"env_keys,omitzero"`
+	SSHKeyIDs         []string            `json:"ssh_key_ids,omitzero"`
+	Ports             []ProvisionPort     `json:"ports,omitzero"`
+	EncryptedEnv      *string             `json:"encrypted_env,omitempty"`
+	UserConfig        *string             `json:"user_config,omitempty"`
+	Hugepages         *bool               `json:"hugepages,omitempty"`
+	PinNUMA           *bool               `json:"pin_numa,omitempty"`
+	GPUs              *ProvisionGPUConfig `json:"gpus,omitempty"`
+	KMSURLs           []string            `json:"kms_urls,omitzero"`
+	GatewayURLs       []string            `json:"gateway_urls,omitzero"`
+	// InitScripts selects the platform init scripts to run on every boot.
+	InitScripts []InitScriptSlug `json:"init_scripts,omitzero"`
+	// Deprecated: use InitScripts with InitScriptDockerCleanup.
+	EnabledInitScriptsDockerCleanup *bool `json:"enabled_init_scripts_docker_cleanup,omitempty"`
+	EnabledGuestAgentAccess         *bool `json:"enabled_guest_agent_access,omitempty"`
+
+	// ComposeFileRaw is a whole app-compose JSON file, sent instead of
+	// ComposeFile. Needs the compose_advanced feature flag.
+	ComposeFileRaw *string `json:"compose_file_raw,omitempty"`
+	// LaunchToken (at least 32 bytes) is required by the guest on every boot.
+	LaunchToken *string `json:"launch_token,omitempty"`
+	// GenerateLaunchToken gates the CVM with a token Phala Cloud generates for
+	// a new app (returned once in the commit response), or with the app's
+	// existing token.
+	GenerateLaunchToken *bool `json:"generate_launch_token,omitempty"`
+	// Annotations is host-side key/value metadata stored by the dstack VMM.
+	// Needs the cvm_annotations feature flag.
+	Annotations map[string]string `json:"annotations,omitzero"`
 }
 
 type ProvisionPort struct {
@@ -306,9 +321,6 @@ type ProvisionGPUSpec struct {
 type ProvisionGPUConfig struct {
 	GPUs       []ProvisionGPUSpec `json:"gpus"`
 	AttachMode string             `json:"attach_mode,omitempty"`
-}
-type ProvisionInitScripts struct {
-	EnvMerge bool `json:"env_merge"`
 }
 
 // ComposeInitScripts decodes both historical single-string and current array forms.
@@ -333,6 +345,14 @@ func (scripts *ComposeInitScripts) UnmarshalJSON(data []byte) error {
 	*scripts = values
 	return nil
 }
+
+// Runner values for ComposeFile.Runner. Runners other than
+// ComposeRunnerDockerCompose need the compose_advanced feature flag.
+const (
+	ComposeRunnerDockerCompose  = "docker-compose"
+	ComposeRunnerNerdctlCompose = "nerdctl-compose"
+	ComposeRunnerBash           = "bash"
+)
 
 // ComposeFile represents a compose file configuration.
 type ComposeFile struct {
@@ -384,6 +404,8 @@ type ComposeGPUPolicy struct {
 	Rego              *string `json:"rego,omitempty"`
 }
 type ComposeRequirements struct {
+	// EphemeralDataDisk formats the data disk on every boot (dstack OS 0.6.3+).
+	EphemeralDataDisk    *bool             `json:"ephemeral_data_disk,omitempty"`
 	GPUPolicy            *ComposeGPUPolicy `json:"gpu_policy,omitempty"`
 	HealthCheck          *bool             `json:"health_check,omitempty"`
 	HealthStatusFile     *string           `json:"health_status_file,omitempty"`
@@ -440,6 +462,9 @@ type CommitCVMProvisionRequest struct {
 type CommitCVMProvisionResponseFields struct {
 	Name   string `json:"name"`
 	Status string `json:"status"`
+	// LaunchToken is the launch token this create stored on a new app
+	// (LaunchToken or GenerateLaunchToken). Returned only here, once.
+	LaunchToken string `json:"launch_token,omitempty"`
 }
 
 // CommitCVMProvisionResponseV20260121 is the commit response before hashed CVM IDs.
@@ -518,7 +543,9 @@ type CVMNetwork = GenericObject
 // CVMContainersStats represents CVM container statistics.
 type CVMContainersStats = GenericObject
 
-// CVMUserConfig represents CVM user configuration.
+// CVMUserConfig represents CVM user configuration: hostname,
+// ssh_authorized_keys, default_gateway_domain and, when the CVM's compose
+// carries requirements.launch_token_hash, the app's launch_token.
 type CVMUserConfig = GenericObject
 
 // CVMActionResponseFields contains shared lifecycle action response fields.
@@ -589,6 +616,62 @@ func (g GPUConfig) MarshalJSON() ([]byte, error) {
 	return json.Marshal(plain(g))
 }
 
+// InitScriptSlug names a platform init script. Phala Cloud fixes the run
+// order: docker_cleanup, then env_merge.
+type InitScriptSlug string
+
+const (
+	// InitScriptDockerCleanup erases all local container-runtime stores on
+	// every boot.
+	InitScriptDockerCleanup InitScriptSlug = "docker_cleanup"
+	// InitScriptEnvMerge merges encrypted env on boot.
+	InitScriptEnvMerge InitScriptSlug = "env_merge"
+)
+
+// ComposeRequirementsPatch is the requirements part of a ComposePatch; it
+// merges per key. gpu_policy is not patchable: the stored value is kept.
+type ComposeRequirementsPatch struct {
+	// EphemeralDataDisk formats the data disk on every boot (OS 0.6.3+).
+	// Turning it on requires ConfirmDataWipe.
+	EphemeralDataDisk Patch[bool]   `json:"ephemeral_data_disk,omitzero"`
+	HealthCheck       Patch[bool]   `json:"health_check,omitzero"`
+	HealthStatusFile  Patch[string] `json:"health_status_file,omitzero"`
+	// LaunchTokenHash must be the hash of the app's launch token (see
+	// SetAppLaunchToken).
+	LaunchTokenHash      Patch[string]   `json:"launch_token_hash,omitzero"`
+	Platforms            Patch[[]string] `json:"platforms,omitzero"`
+	TDXMeasureACPITables Patch[bool]     `json:"tdx_measure_acpi_tables,omitzero"`
+}
+
+// ComposePatch is a JSON Merge Patch of a CVM's app compose, sent as
+// PatchCVMRequest.Compose. Only keys set with PatchValue or PatchNull are
+// sent, so an explicit default and an unset key stay distinct (they hash
+// differently).
+type ComposePatch struct {
+	SecureTime     Patch[bool]   `json:"secure_time,omitzero"`
+	SwapSize       Patch[string] `json:"swap_size,omitzero"`
+	StorageDiscard Patch[bool]   `json:"storage_discard,omitzero"`
+	// Snapshotter is "overlayfs" or "stargz", only with the nerdctl-compose runner.
+	Snapshotter     Patch[string]                   `json:"snapshotter,omitzero"`
+	GatewayEnabled  Patch[bool]                     `json:"gateway_enabled,omitzero"`
+	PortPolicy      Patch[ComposePortPolicy]        `json:"port_policy,omitzero"`
+	EventLogVersion Patch[int]                      `json:"event_log_version,omitzero"`
+	Requirements    Patch[ComposeRequirementsPatch] `json:"requirements,omitzero"`
+
+	// Fixed when the CVM is created: the current value passes, any other is rejected.
+	KMSEnabled              Patch[bool]            `json:"kms_enabled,omitzero"`
+	KeyProvider             Patch[string]          `json:"key_provider,omitzero"`
+	KeyProviderID           Patch[string]          `json:"key_provider_id,omitzero"`
+	LocalKeyProviderEnabled Patch[bool]            `json:"local_key_provider_enabled,omitzero"`
+	ManifestVersion         Patch[json.RawMessage] `json:"manifest_version,omitzero"`
+	NoInstanceID            Patch[bool]            `json:"no_instance_id,omitzero"`
+	Runner                  Patch[string]          `json:"runner,omitzero"`
+	StorageFS               Patch[string]          `json:"storage_fs,omitzero"`
+	VerityVolumes           Patch[[]VerityVolume]  `json:"verity_volumes,omitzero"`
+	TproxyEnabled           Patch[bool]            `json:"tproxy_enabled,omitzero"`
+	Features                Patch[[]string]        `json:"features,omitzero"`
+}
+
 // PatchCVMRequest is the request for patching a CVM (multi-field update) via
 // PATCH /cvms/{id}. Only set fields are sent.
 type PatchCVMRequest struct {
@@ -599,6 +682,15 @@ type PatchCVMRequest struct {
 	PublicSysinfo     *bool    `json:"public_sysinfo,omitempty"`
 	PublicLogs        *bool    `json:"public_logs,omitempty"`
 	PublicTcbinfo     *bool    `json:"public_tcbinfo,omitempty"`
+
+	// Compose is a JSON Merge Patch of the app compose.
+	Compose *ComposePatch `json:"compose,omitempty"`
+	// InitScripts replaces the CVM's platform init scripts. nil leaves them
+	// unchanged; an empty non-nil slice removes them all.
+	InitScripts []InitScriptSlug `json:"init_scripts,omitzero"`
+	// ConfirmDataWipe confirms turning on docker_cleanup or
+	// requirements.ephemeral_data_disk, which erase data on every boot.
+	ConfirmDataWipe bool `json:"confirm_data_wipe,omitempty"`
 
 	EncryptedEnv *string    `json:"encrypted_env,omitempty"`
 	UserConfig   *string    `json:"user_config,omitempty"`

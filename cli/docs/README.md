@@ -41,6 +41,7 @@ For installation and quick start, see the [README](../README.md).
 | [ssh](./ssh.md) | Connect to a CVM via SSH |
 | [cp](./cp.md) | Copy files to/from a CVM via SCP |
 | [runtime-config](./runtime-config.md) | Show CVM runtime configuration |
+| [annotations](./annotations.md) | Show or set CVM annotations for host-side tools |
 
 ## Advanced
 

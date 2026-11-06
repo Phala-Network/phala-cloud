@@ -16,4 +16,7 @@ VECTORS = json.loads(
 
 @pytest.mark.parametrize("vector", VECTORS, ids=[v["name"] for v in VECTORS])
 def test_get_compose_hash_matches_backend(vector: dict) -> None:
-    assert get_compose_hash(vector["input"]) == vector["hash"]
+    assert (
+        get_compose_hash(vector["input"], os_image_version=vector.get("os_image_version"))
+        == vector["hash"]
+    )

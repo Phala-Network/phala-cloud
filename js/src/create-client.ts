@@ -277,6 +277,16 @@ const additionalActions = {
   safeGetCvmStatusBatch: actions.safeGetCvmStatusBatch,
   getCvmUserConfig: actions.getCvmUserConfig,
   safeGetCvmUserConfig: actions.safeGetCvmUserConfig,
+  getCvmAnnotations: actions.getCvmAnnotations,
+  safeGetCvmAnnotations: actions.safeGetCvmAnnotations,
+  updateCvmAnnotations: actions.updateCvmAnnotations,
+  safeUpdateCvmAnnotations: actions.safeUpdateCvmAnnotations,
+  getCvmInitScripts: actions.getCvmInitScripts,
+  safeGetCvmInitScripts: actions.safeGetCvmInitScripts,
+  setAppLaunchToken: actions.setAppLaunchToken,
+  safeSetAppLaunchToken: actions.safeSetAppLaunchToken,
+  clearAppLaunchToken: actions.clearAppLaunchToken,
+  safeClearAppLaunchToken: actions.safeClearAppLaunchToken,
   getCvmSshKeys: actions.getCvmSshKeys,
   safeGetCvmSshKeys: actions.safeGetCvmSshKeys,
   updateCvmSshKeys: actions.updateCvmSshKeys,
@@ -358,6 +368,16 @@ type SchemaAction =
   | "safeGetCvmStatusBatch"
   | "getCvmUserConfig"
   | "safeGetCvmUserConfig"
+  | "getCvmAnnotations"
+  | "safeGetCvmAnnotations"
+  | "updateCvmAnnotations"
+  | "safeUpdateCvmAnnotations"
+  | "getCvmInitScripts"
+  | "safeGetCvmInitScripts"
+  | "setAppLaunchToken"
+  | "safeSetAppLaunchToken"
+  | "clearAppLaunchToken"
+  | "safeClearAppLaunchToken"
   | "getCvmSshKeys"
   | "safeGetCvmSshKeys"
   | "updateCvmSshKeys"

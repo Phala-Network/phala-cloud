@@ -6,6 +6,9 @@ export const CvmUserConfigSchema = z.object({
   hostname: z.string().nullable().optional(),
   ssh_authorized_keys: z.array(z.string()).default([]),
   default_gateway_domain: z.string().nullable().optional(),
+  // The app's launch token; set only when the CVM's compose carries
+  // requirements.launch_token_hash.
+  launch_token: z.string().nullable().optional(),
 });
 
 export type CvmUserConfig = z.infer<typeof CvmUserConfigSchema>;

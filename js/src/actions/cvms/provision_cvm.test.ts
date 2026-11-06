@@ -342,6 +342,70 @@ describe("provisionCvm (wire-level)", () => {
     await expect(provisionCvm(mockClient, baseRequest)).rejects.toThrow();
   });
 
+  it("sends compose_file_raw instead of compose_file", async () => {
+    const raw = JSON.stringify({ name: "raw", runner: "bash", bash_script: "echo hi" });
+    await provisionCvm(mockClient, {
+      name: "test-app",
+      instance_type: "tdx.small",
+      compose_file_raw: raw,
+    });
+
+    const body = getRequestBody();
+    expect(body.compose_file_raw).toBe(raw);
+    expect("compose_file" in body).toBe(false);
+  });
+
+  it("sends the create-time compose and app fields", async () => {
+    await provisionCvm(mockClient, {
+      name: "test-app",
+      instance_type: "tdx.small",
+      compose_file: {
+        docker_compose_file: "services: {}",
+        runner: "nerdctl-compose",
+        snapshotter: "stargz",
+        event_log_version: 2,
+        requirements: { ephemeral_data_disk: true, health_check: false },
+      },
+      init_scripts: ["docker_cleanup", "env_merge"],
+      generate_launch_token: true,
+      annotations: { memory_tier: "fast" },
+    });
+
+    const body = getRequestBody();
+    expect(body.compose_file).toEqual({
+      name: "",
+      docker_compose_file: "services: {}",
+      runner: "nerdctl-compose",
+      snapshotter: "stargz",
+      event_log_version: 2,
+      requirements: { ephemeral_data_disk: true, health_check: false },
+    });
+    expect(body.init_scripts).toEqual(["docker_cleanup", "env_merge"]);
+    expect(body.generate_launch_token).toBe(true);
+    expect(body.annotations).toEqual({ memory_tier: "fast" });
+  });
+
+  it("sends the nullable compose fields as null", async () => {
+    const nulls = {
+      bash_script: null,
+      requirements: null,
+      storage_discard: null,
+      event_log_version: null,
+      snapshotter: null,
+      verity_volumes: null,
+    };
+    await provisionCvm(mockClient, {
+      ...baseRequest,
+      compose_file: { ...baseRequest.compose_file, ...nulls },
+    });
+
+    expect(getRequestBody().compose_file).toEqual({
+      ...baseRequest.compose_file,
+      name: "",
+      ...nulls,
+    });
+  });
+
   it("does not warn when neither id is provided", async () => {
     await provisionCvm(mockClient, baseRequest);
 

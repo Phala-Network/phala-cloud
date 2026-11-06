@@ -286,3 +286,64 @@ func (c *Client) UpdateCVMEnvs(ctx context.Context, cvmID string, req *UpdateEnv
 	}
 	return &result, nil
 }
+
+// CVMAnnotationsResponse holds the host-side key/value metadata the node's
+// dstack VMM stores for a CVM. It is not passed to the guest, not measured
+// and not part of the compose hash, so attestation does not cover it.
+type CVMAnnotationsResponse struct {
+	Annotations map[string]string `json:"annotations"`
+}
+
+type updateCVMAnnotationsRequest struct {
+	Annotations map[string]string `json:"annotations"`
+}
+
+// GetCVMAnnotations returns the annotations the node's VMM stores for the CVM.
+// Needs the cvm_annotations feature flag.
+func (c *Client) GetCVMAnnotations(ctx context.Context, cvmID string) (*CVMAnnotationsResponse, error) {
+	var result CVMAnnotationsResponse
+	if err := c.doJSON(ctx, "GET", cvmPath(cvmID, "annotations"), nil, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// UpdateCVMAnnotations replaces every annotation of the CVM; an empty map
+// clears them. It needs no restart, but host tools that read annotations only
+// when QEMU launches see the change after the next restart. Needs the
+// cvm_annotations feature flag.
+func (c *Client) UpdateCVMAnnotations(ctx context.Context, cvmID string, annotations map[string]string) (*CVMAnnotationsResponse, error) {
+	var result CVMAnnotationsResponse
+	req := updateCVMAnnotationsRequest{Annotations: annotations}
+	if err := c.doJSON(ctx, "PUT", cvmPath(cvmID, "annotations"), req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// CVMInitScript describes one platform init script for a CVM.
+type CVMInitScript struct {
+	Slug InitScriptSlug `json:"slug"`
+	// Selected reports whether the CVM's current compose runs the script.
+	Selected bool `json:"selected"`
+	// Selectable reports whether the caller may select the script for this
+	// CVM's compose and OS image.
+	Selectable bool `json:"selectable"`
+	// Reason says why the script is not selectable; nil when it is.
+	Reason *string `json:"reason"`
+}
+
+// CVMInitScriptsResponse lists every platform init script, in run order.
+type CVMInitScriptsResponse struct {
+	Items []CVMInitScript `json:"items"`
+}
+
+// GetCVMInitScripts returns which platform init scripts the CVM runs and which
+// it can select.
+func (c *Client) GetCVMInitScripts(ctx context.Context, cvmID string) (*CVMInitScriptsResponse, error) {
+	var result CVMInitScriptsResponse
+	if err := c.doJSON(ctx, "GET", cvmPath(cvmID, "init-scripts"), nil, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}

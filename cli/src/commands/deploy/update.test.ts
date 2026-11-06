@@ -33,6 +33,9 @@ afterAll(() => {
 	mock.module("@/src/lib/client", () => previousClient);
 });
 const { runDeploy } = await import("./handler");
+const { deployCommand } = await import("./index");
+const { dispatchCommand } = await import("@/src/core/dispatcher");
+const { CommandRegistry } = await import("@/src/core/registry");
 
 type Recorded = {
 	method: string;
@@ -167,6 +170,82 @@ function updateRequest(): Recorded {
 	return patches[0] as Recorded;
 }
 
+/** Run `phala <argv>` through the real argument parser and dispatcher. */
+async function runCli(argv: string[]) {
+	const registry = new CommandRegistry();
+	registry.registerCommand(deployCommand);
+	let stderr = "";
+	const output = (append: (chunk: string) => void) =>
+		({
+			write: (chunk: string) => {
+				append(chunk);
+				return true;
+			},
+			isTTY: false,
+		}) as unknown as NodeJS.WriteStream;
+	const code = await dispatchCommand({
+		registry,
+		argv,
+		executableName: "phala",
+		version: "0.0.0",
+		packageName: "phala",
+		packageVersion: "0.0.0",
+		runtime: "bun",
+		cwd: tmpDir,
+		env: {
+			...process.env,
+			PHALA_DISABLE_UPDATE_CHECK: "1",
+			PHALA_CLOUD_API_KEY: "test-key",
+			PHALA_CLOUD_API_PREFIX: `http://127.0.0.1:${server.port}/api/v1`,
+			PHALA_CLOUD_DIR: tmpDir,
+		},
+		stdout: output(() => {}),
+		stderr: output((chunk) => {
+			stderr += chunk;
+		}),
+		stdin: process.stdin,
+	});
+	return { code, stderr };
+}
+
+describe("phala deploy --cvm-id --clear-init-scripts (parsed argv)", () => {
+	test("sends an empty init_scripts set", async () => {
+		const { code } = await runCli([
+			"deploy",
+			"--cvm-id",
+			CVM_ID,
+			"-c",
+			composePath,
+			"--clear-init-scripts",
+		]);
+
+		expect(code).toBe(0);
+		expect(updateRequest().body).toEqual({
+			docker_compose_file: COMPOSE,
+			init_scripts: [],
+		});
+	});
+
+	test("rejects --clear-init-scripts with --init-script before any request", async () => {
+		const { code, stderr } = await runCli([
+			"deploy",
+			"--cvm-id",
+			CVM_ID,
+			"-c",
+			composePath,
+			"--clear-init-scripts",
+			"--init-script",
+			"docker_cleanup",
+		]);
+
+		expect(code).toBe(1);
+		expect(stderr).toContain(
+			"--clear-init-scripts cannot be combined with --init-script",
+		);
+		expect(requests).toEqual([]);
+	});
+});
+
 describe("phala deploy --cvm-id", () => {
 	test("sends resource, image and tcbinfo flags in the update", async () => {
 		const { exitCode, failure } = await deploy({
@@ -190,6 +269,49 @@ describe("phala deploy --cvm-id", () => {
 			image: "dstack-0.5.5",
 		});
 	});
+
+	test("sends compose flags as a merge patch, with init scripts and the data-wipe confirmation", async () => {
+		const { exitCode, failure } = await deploy({
+			secureTime: true,
+			gateway: false,
+			eventLogVersion: "2",
+			ephemeralDataDisk: true,
+			initScript: ["docker_cleanup"],
+			confirmDataWipe: true,
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(updateRequest().body).toEqual({
+			docker_compose_file: COMPOSE,
+			compose: {
+				secure_time: true,
+				gateway_enabled: false,
+				event_log_version: 2,
+				requirements: { ephemeral_data_disk: true },
+			},
+			init_scripts: ["docker_cleanup"],
+			confirm_data_wipe: true,
+		});
+	});
+
+	test.each([
+		["a".repeat(64), "a".repeat(64)],
+		["", null],
+	])(
+		"sends --launch-token-hash %p as requirements.launch_token_hash",
+		async (value, sent) => {
+			const { exitCode } = await deploy({
+				launchTokenHash: value,
+				ephemeralDataDisk: false,
+			});
+
+			expect(exitCode).toBe(0);
+			expect(updateRequest().body?.compose).toEqual({
+				requirements: { ephemeral_data_disk: false, launch_token_hash: sent },
+			});
+		},
+	);
 
 	test.each(["1536", "1.5G"])(
 		"sends --memory %p as 1536 MB and leaves the spec to the backend",
@@ -284,7 +406,6 @@ describe("phala deploy --cvm-id", () => {
 		[{ devOs: true }, "--dev-os"],
 		[{ devOs: false }, "--dev-os"],
 		[{ sshPubkey: "~/.ssh/id_ed25519.pub" }, "--ssh-pubkey"],
-		[{ secureTime: true }, "--secure-time"],
 		[{ fs: "ext4" }, "--fs"],
 		[{ skipGateway: true }, "--skip-gateway"],
 		[{ kms: "base" }, "--kms"],
@@ -295,6 +416,10 @@ describe("phala deploy --cvm-id", () => {
 			{ experimentalKeyProviderType: "tpm" },
 			"--experimental-key-provider-type",
 		],
+		[{ runner: "bash" }, "--runner"],
+		[{ appCompose: "app-compose.json" }, "--app-compose"],
+		[{ launchToken: "t".repeat(32) }, "--launch-token"],
+		[{ generateLaunchToken: true }, "--generate-launch-token"],
 	])("rejects create-only flag %p before any request", async (flags, flag) => {
 		const { exitCode, failure } = await deploy(flags);
 

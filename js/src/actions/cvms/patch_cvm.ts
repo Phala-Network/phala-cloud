@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  InitScriptSlugSchema,
+  PortPolicySchema,
+  VerityVolumeSchema,
+} from "../../types/app_compose";
 import { CvmIdObjectSchema, CvmIdSchema, refineCvmId } from "../../types/cvm_id";
 import { KmsInfoSchema } from "../../types/kms_info";
 import { defineAction } from "../../utils/define-action";
@@ -41,6 +46,14 @@ import { PhalaCloudError } from "../../utils/errors";
  *   gpus: { gpus: [{ slot: '0000:3b:00.0' }] },
  * })
  *
+ * // Compose fields go in `compose` as a JSON Merge Patch; null removes a key
+ * await patchCvm(client, {
+ *   id: 'my-cvm',
+ *   compose: { secure_time: true, requirements: { health_check: null } },
+ *   init_scripts: ['docker_cleanup'],
+ *   confirm_data_wipe: true, // docker_cleanup wipes container stores on every boot
+ * })
+ *
  * // On-chain KMS compose update (two-phase)
  * const result = await patchCvm(client, {
  *   id: 'my-cvm',
@@ -79,6 +92,60 @@ export const PatchCvmGpuConfigSchema = z.object({
 
 export type PatchCvmGpuConfig = z.input<typeof PatchCvmGpuConfigSchema>;
 
+/**
+ * `requirements` keys a PATCH may set; `null` removes the key. `gpu_policy` is
+ * not patchable: the stored value is kept.
+ */
+export const ComposeRequirementsPatchSchema = z
+  .object({
+    /** Format the data disk on every boot (OS >= 0.6.3). Turning it on needs `confirm_data_wipe`. */
+    ephemeral_data_disk: z.boolean().nullable().optional(),
+    health_check: z.boolean().nullable().optional(),
+    health_status_file: z.string().nullable().optional(),
+    /** Must be the hash of the app's launch token. */
+    launch_token_hash: z.string().nullable().optional(),
+    platforms: z.array(z.string()).nullable().optional(),
+    tdx_measure_acpi_tables: z.boolean().nullable().optional(),
+  })
+  .passthrough();
+
+/**
+ * JSON Merge Patch of the CVM's app compose: a sent key sets the value, a sent
+ * `null` removes the key, an absent key is unchanged. `requirements` merges per key.
+ */
+export const ComposePatchSchema = z
+  .object({
+    secure_time: z.boolean().nullable().optional(),
+    swap_size: z.string().nullable().optional(),
+    storage_discard: z.boolean().nullable().optional(),
+    /** Only with the nerdctl-compose runner. */
+    snapshotter: z.enum(["overlayfs", "stargz"]).nullable().optional(),
+    /** Disabling removes the instance from the gateway after the update. */
+    gateway_enabled: z.boolean().nullable().optional(),
+    port_policy: PortPolicySchema.nullable().optional(),
+    event_log_version: z
+      .union([z.literal(1), z.literal(2)])
+      .nullable()
+      .optional(),
+    requirements: ComposeRequirementsPatchSchema.nullable().optional(),
+
+    // Fixed when the CVM is created: the current value passes, any other is rejected.
+    kms_enabled: z.boolean().nullable().optional(),
+    key_provider: z.enum(["none", "kms", "local", "tpm"]).nullable().optional(),
+    key_provider_id: z.string().nullable().optional(),
+    local_key_provider_enabled: z.boolean().nullable().optional(),
+    manifest_version: z.union([z.number(), z.string()]).nullable().optional(),
+    no_instance_id: z.boolean().nullable().optional(),
+    runner: z.string().nullable().optional(),
+    storage_fs: z.enum(["ext4", "zfs"]).nullable().optional(),
+    verity_volumes: z.array(VerityVolumeSchema).nullable().optional(),
+    tproxy_enabled: z.boolean().nullable().optional(),
+    features: z.array(z.string()).nullable().optional(),
+  })
+  .passthrough();
+
+export type ComposePatch = z.input<typeof ComposePatchSchema>;
+
 export const PatchCvmRequestSchema = refineCvmId(
   CvmIdObjectSchema.extend({
     // Compose-hash-affecting fields
@@ -90,6 +157,14 @@ export const PatchCvmRequestSchema = refineCvmId(
     public_logs: z.boolean().optional(),
     public_sysinfo: z.boolean().optional(),
     public_tcbinfo: z.boolean().optional(),
+
+    // JSON Merge Patch of the app compose (see ComposePatchSchema)
+    compose: ComposePatchSchema.optional(),
+    // Platform init scripts this CVM runs, replacing the current set
+    init_scripts: z.array(InitScriptSlugSchema).optional(),
+    // Confirms turning on docker_cleanup or requirements.ephemeral_data_disk,
+    // which erase data on every boot
+    confirm_data_wipe: z.boolean().optional(),
 
     // Non-compose-hash config
     encrypted_env: z.string().optional(),

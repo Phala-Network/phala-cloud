@@ -10,6 +10,7 @@ from .models.auth import CurrentUserV20251028, CurrentUserV20260121
 from .models.base import CloudModel
 from .models.cvms import (
     Certificate,
+    InitScriptSlug,
     PaginatedCvmInfosV20251028,
     PaginatedCvmInfosV20260121,
     PaginatedCvmInfosV20260522,
@@ -102,6 +103,9 @@ class PreLaunchScriptUpgradeStatus(CloudModel):
 class CommitCvmProvisionResponseBase(CloudModel):
     name: str
     status: str
+    # Launch token this create stored on a new app (launch_token or
+    # generate_launch_token). Returned only here, once.
+    launch_token: str | None = None
 
 
 class CommitCvmProvisionResponseV20260121(CommitCvmProvisionResponseBase):
@@ -250,6 +254,42 @@ class CvmAttestationResponse(CloudModel):
 class CvmUserConfigResponse(CloudModel):
     hostname: str | None = None
     ssh_authorized_keys: list[str] = Field(default_factory=list)
+    default_gateway_domain: str | None = None
+    # The app's launch token, set only when the CVM's compose carries
+    # requirements.launch_token_hash.
+    launch_token: str | None = None
+
+
+class CvmAnnotationsResponse(CloudModel):
+    """Host-side key/value metadata the node's VMM stores for a CVM.
+
+    Not passed to the guest, not measured and not part of the compose hash, so
+    attestation does not cover it.
+    """
+
+    annotations: dict[str, str]
+
+
+class AppLaunchTokenResponse(CloudModel):
+    # The app's new launch token. Returned only here, once.
+    launch_token: str
+    # Value for compose requirements.launch_token_hash of every CVM of the app.
+    launch_token_hash: str
+
+
+class CvmInitScript(CloudModel):
+    slug: InitScriptSlug
+    # The CVM's current compose runs this script.
+    selected: bool
+    # The caller may select this script for this CVM's compose and OS image.
+    selectable: bool
+    # Why the script is not selectable; None when it is.
+    reason: str | None = None
+
+
+class CvmInitScriptsResponse(CloudModel):
+    # Every platform init script, in run order.
+    items: list[CvmInitScript]
 
 
 class RefreshInstanceIdResponseBase(CloudModel):
