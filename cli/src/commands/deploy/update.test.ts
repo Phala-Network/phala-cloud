@@ -344,6 +344,29 @@ describe("phala deploy --cvm-id", () => {
 		expect(exitCode).toBe(0);
 	}, 10000);
 
+	test("sends the file as compose.bash_script for a bash-runner app", async () => {
+		respond = (method) =>
+			method === "GET"
+				? Response.json({
+						id: CVM_ID,
+						name: "my-app",
+						app_id: "abc",
+						status: "running",
+						resource: {},
+						gateway: {},
+						compose_file: { runner: "bash", bash_script: "echo old" },
+					})
+				: undefined;
+
+		const { exitCode, failure } = await deploy({ secureTime: true });
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(updateRequest().body).toEqual({
+			compose: { secure_time: true, bash_script: COMPOSE },
+		});
+	});
+
 	test("sets the Trust Center listing after the update is accepted", async () => {
 		const { exitCode, failure } = await deploy({ listed: true });
 

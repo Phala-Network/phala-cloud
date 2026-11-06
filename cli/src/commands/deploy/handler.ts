@@ -257,13 +257,11 @@ function parseVcpuInput(input: string): number {
 
 export function buildUpdatePatchBody(
 	options: Options,
-	dockerComposeYml: string,
+	composeContent: string,
 	preLaunchScriptContent?: string,
+	currentRunner?: string,
 ): Record<string, unknown> {
-	const patchBody: Record<string, unknown> = {
-		id: options.uuid,
-		docker_compose_file: dockerComposeYml,
-	};
+	const patchBody: Record<string, unknown> = { id: options.uuid };
 
 	if (options.noPreLaunchScript) {
 		patchBody.pre_launch_script = "";
@@ -298,6 +296,12 @@ export function buildUpdatePatchBody(
 		patchBody.image = options.image;
 	}
 	const compose = composeFieldsFromOptions(options);
+	// The bash runner runs a script instead of Docker Compose YAML.
+	if (currentRunner === "bash") {
+		compose.bash_script = composeContent;
+	} else {
+		patchBody.docker_compose_file = composeContent;
+	}
 	if (options.secureTime !== undefined) {
 		compose.secure_time = options.secureTime;
 	}
@@ -1218,6 +1222,7 @@ const updateCvm = async (
 		validatedOptions,
 		docker_compose_yml,
 		preLaunchScriptContent,
+		cvm.compose_file?.runner,
 	);
 	if (envs && envs.length > 0) {
 		patchBody.allowed_envs = envs.map((env) => env.key);
