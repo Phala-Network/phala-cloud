@@ -77,6 +77,7 @@ const HASH_REQUIRED = {
 };
 let tmpDir: string;
 let composePath: string;
+let previousCloudDir: string | undefined;
 
 beforeAll(async () => {
 	server = Bun.serve({
@@ -91,6 +92,13 @@ beforeAll(async () => {
 			});
 			const overridden = respond?.(req.method, url.pathname);
 			if (overridden) return overridden;
+			if (url.pathname.endsWith("/operations")) {
+				return Response.json({
+					items: [{ correlation_id: "corr-1", status: "completed" }],
+					next_cursor: null,
+					total: 1,
+				});
+			}
 			if (req.method === "GET") {
 				return Response.json({
 					id: CVM_ID,
@@ -117,9 +125,16 @@ beforeAll(async () => {
 	tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "phala-deploy-update-"));
 	composePath = path.join(tmpDir, "docker-compose.yml");
 	await fs.writeFile(composePath, COMPOSE);
+	// The credentials file is read from process.env, so keep the developer's
+	// stored profile token out of these tests.
+	previousCloudDir = process.env.PHALA_CLOUD_DIR;
+	process.env.PHALA_CLOUD_DIR = tmpDir;
 });
 
 afterAll(async () => {
+	if (previousCloudDir === undefined)
+		Reflect.deleteProperty(process.env, "PHALA_CLOUD_DIR");
+	else process.env.PHALA_CLOUD_DIR = previousCloudDir;
 	server.stop(true);
 	await fs.remove(tmpDir);
 });
@@ -129,14 +144,14 @@ afterEach(() => {
 	respond = undefined;
 });
 
-function makeContext(): {
+function makeContext(auth: Record<string, string>): {
 	context: CommandContext;
 	failure: () => unknown;
 } {
 	let failure: unknown;
 	const context = {
 		env: {
-			PHALA_CLOUD_API_KEY: "test-key",
+			...auth,
 			PHALA_CLOUD_API_PREFIX: `http://127.0.0.1:${server.port}/api/v1`,
 			PHALA_CLOUD_DIR: tmpDir,
 		},
@@ -151,8 +166,11 @@ function makeContext(): {
 	return { context, failure: () => failure };
 }
 
-async function deploy(input: Record<string, unknown>) {
-	const { context, failure } = makeContext();
+async function deploy(
+	input: Record<string, unknown>,
+	auth: Record<string, string> = { PHALA_CLOUD_API_KEY: "test-key" },
+) {
+	const { context, failure } = makeContext(auth);
 	const exitCode = await runDeploy(
 		{ compose: composePath, json: true, ...input } as Parameters<
 			typeof runDeploy
@@ -323,6 +341,109 @@ describe("phala deploy --cvm-id", () => {
 			expect(updateRequest().body?.memory).toBe(1536);
 		},
 	);
+
+	test("--wait succeeds when a stopped CVM stays stopped after the update", async () => {
+		respond = (method, path) =>
+			method === "GET" && !path.endsWith("/operations")
+				? Response.json({
+						id: CVM_ID,
+						name: "my-app",
+						app_id: "abc",
+						status: "stopped",
+						in_progress: false,
+						resource: {},
+						gateway: {},
+					})
+				: undefined;
+
+		const { exitCode, failure } = await deploy({ wait: true });
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+	}, 10000);
+
+	test("--wait under GitHub OIDC waits for the state only", async () => {
+		// Deploy OIDC tokens cannot read the operations route.
+		respond = (_method, path) =>
+			path.endsWith("/operations")
+				? Response.json({ detail: "Not authenticated" }, { status: 401 })
+				: undefined;
+
+		const { exitCode, failure } = await deploy(
+			{ wait: true },
+			{ PHALA_OIDC_TOKEN: "oidc-jwt" },
+		);
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(requests.some((r) => r.path.endsWith("/operations"))).toBe(false);
+	});
+
+	test("--wait fails when the update of a stopped CVM fails", async () => {
+		// The failure cleanup also leaves the CVM stopped and not in progress.
+		const states = [
+			["stopped", false],
+			["stopped", true],
+			["updating", true],
+			["stopped", false],
+		] as const;
+		let reads = 0;
+		respond = (method, path) => {
+			if (path.endsWith("/operations")) {
+				return Response.json({
+					items: [
+						{
+							correlation_id: "corr-1",
+							status: "failed",
+							error_message: "Compose update failed: image not found",
+						},
+					],
+					next_cursor: null,
+					total: 1,
+				});
+			}
+			if (method !== "GET") return undefined;
+			const [status, inProgress] =
+				states[Math.min(reads++, states.length - 1)] ?? states[0];
+			return Response.json({
+				id: CVM_ID,
+				name: "my-app",
+				app_id: "abc",
+				status,
+				in_progress: inProgress,
+				resource: {},
+				gateway: {},
+			});
+		};
+
+		const { exitCode, failure } = await deploy({ wait: true });
+
+		expect(exitCode).not.toBe(0);
+		expect(String(failure)).toContain("Compose update failed: image not found");
+	}, 15000);
+
+	test("sends the file as compose.bash_script for a bash-runner app", async () => {
+		respond = (method) =>
+			method === "GET"
+				? Response.json({
+						id: CVM_ID,
+						name: "my-app",
+						app_id: "abc",
+						status: "running",
+						resource: {},
+						gateway: {},
+						compose_file: { runner: "bash", bash_script: "echo old" },
+					})
+				: undefined;
+
+		const { exitCode, failure } = await deploy({ secureTime: true });
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(updateRequest().body).toEqual({
+			compose: { secure_time: true, bash_script: COMPOSE },
+		});
+	});
 
 	test("sets the Trust Center listing after the update is accepted", async () => {
 		const { exitCode, failure } = await deploy({ listed: true });

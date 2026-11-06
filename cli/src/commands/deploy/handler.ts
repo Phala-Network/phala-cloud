@@ -13,7 +13,7 @@ import {
 	DEFAULT_MEMORY,
 	DEFAULT_VCPU,
 } from "@/src/utils/constants";
-import { waitForCvmReady } from "@/src/utils/cvms";
+import { waitForCvmReady, waitForUpdateOperation } from "@/src/utils/cvms";
 import { logger } from "@/src/utils/logger";
 
 import {
@@ -257,13 +257,11 @@ function parseVcpuInput(input: string): number {
 
 export function buildUpdatePatchBody(
 	options: Options,
-	dockerComposeYml: string,
+	composeContent: string,
 	preLaunchScriptContent?: string,
+	currentRunner?: string,
 ): Record<string, unknown> {
-	const patchBody: Record<string, unknown> = {
-		id: options.uuid,
-		docker_compose_file: dockerComposeYml,
-	};
+	const patchBody: Record<string, unknown> = { id: options.uuid };
 
 	if (options.noPreLaunchScript) {
 		patchBody.pre_launch_script = "";
@@ -298,6 +296,12 @@ export function buildUpdatePatchBody(
 		patchBody.image = options.image;
 	}
 	const compose = composeFieldsFromOptions(options);
+	// The bash runner runs a script instead of Docker Compose YAML.
+	if (currentRunner === "bash") {
+		compose.bash_script = composeContent;
+	} else {
+		patchBody.docker_compose_file = composeContent;
+	}
 	if (options.secureTime !== undefined) {
 		compose.secure_time = options.secureTime;
 	}
@@ -1218,6 +1222,7 @@ const updateCvm = async (
 		validatedOptions,
 		docker_compose_yml,
 		preLaunchScriptContent,
+		cvm.compose_file?.runner,
 	);
 	if (envs && envs.length > 0) {
 		patchBody.allowed_envs = envs.map((env) => env.key);
@@ -1234,6 +1239,8 @@ const updateCvm = async (
 	}
 
 	const result = patchResult.data;
+	// Empty for no_change (no operation to follow); the on-chain path sets it on confirm.
+	let correlationId = "correlationId" in result ? result.correlationId : "";
 
 	if (validatedOptions.prepareOnly && validatedOptions.listed !== undefined) {
 		logger.warn(
@@ -1465,6 +1472,7 @@ const updateCvm = async (
 				`Failed to confirm CVM update after on-chain registration: ${errMsg}`,
 			);
 		}
+		correlationId = confirmResult.data.correlationId;
 	}
 
 	await applyListedAfterUpdate(client, validatedOptions);
@@ -1473,11 +1481,29 @@ const updateCvm = async (
 	if (validatedOptions.wait) {
 		logger.info("Waiting for update to complete...");
 		try {
+			const timeoutMs = 300000; // 5 minutes
+			const startedAt = Date.now();
+			// An update leaves a stopped CVM stopped.
 			await waitForCvmReady(
 				validatedOptions.uuid as string,
-				300000, // 5 minutes timeout
+				timeoutMs,
 				context,
+				cvm.status === "stopped" ? "stopped" : "running",
 			);
+			// GitHub OIDC deploy tokens cannot read the operations route.
+			// deferred: operation outcome check under OIDC | impact: an OIDC deploy whose update fails while the CVM keeps its power state is reported as success (same as before this PR) | trigger: backend lets deploy OIDC read its own operation by correlation_id
+			const usesOidc =
+				resolveAuthForContext(context, {
+					apiToken: validatedOptions.apiToken,
+				}).tokenSource === "oidc_env";
+			if (correlationId && !usesOidc) {
+				await waitForUpdateOperation(
+					client,
+					validatedOptions.uuid as string,
+					correlationId,
+					timeoutMs - (Date.now() - startedAt),
+				);
+			}
 		} catch (error: unknown) {
 			throw new Error(
 				`Wait failed: ${error instanceof Error ? error.message : String(error)}`,

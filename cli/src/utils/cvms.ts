@@ -1,20 +1,22 @@
 import { safeGetCvmInfo } from "@phala/cloud";
 import type { CommandContext } from "@/src/core/types";
-import { getClient } from "@/src/lib/client";
+import { type CliApiClient, getClient } from "@/src/lib/client";
 import { logger } from "./logger";
 
 /**
- * Wait for CVM to complete any in-progress operations and reach running state
+ * Wait for CVM to complete any in-progress operations and reach the expected state
  * Progress messages are automatically suppressed in JSON mode.
  *
  * @param cvmId CVM identifier (UUID, app_id, name, or any format accepted by CvmIdSchema)
  * @param timeoutMs Maximum time to wait in milliseconds (default: 5 minutes)
- * @returns Promise that resolves when CVM is running and not in_progress, or rejects on timeout
+ * @param expectedStatus Status that counts as ready (default: running)
+ * @returns Promise that resolves when CVM is in expectedStatus and not in_progress, or rejects on timeout
  */
 export async function waitForCvmReady(
 	cvmId: string,
 	timeoutMs = 300000, // 5 minutes default
 	context?: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
+	expectedStatus = "running",
 ): Promise<void> {
 	const client = await getClient(context);
 	const startTime = Date.now();
@@ -41,8 +43,7 @@ export async function waitForCvmReady(
 					`  [${elapsed}s] status=${currentStatus}, in_progress=${inProgress}`,
 				);
 
-				// Success condition: running and not in_progress
-				if (currentStatus === "running" && !inProgress) {
+				if (currentStatus === expectedStatus && !inProgress) {
 					const elapsed = Math.floor((Date.now() - startTime) / 1000);
 					logger.success(`CVM is ready (took ${elapsed}s)`);
 					return;
@@ -58,5 +59,37 @@ export async function waitForCvmReady(
 
 	throw new Error(
 		`Timeout waiting for CVM to be ready (${Math.floor(timeoutMs / 1000)}s)`,
+	);
+}
+
+/**
+ * Wait for an update operation to finish, and fail unless it completed.
+ * The CVM state alone cannot tell a finished update from a failed one: the
+ * failure cleanup returns the CVM to the state it had before the update.
+ */
+export async function waitForUpdateOperation(
+	client: CliApiClient,
+	cvmId: string,
+	correlationId: string,
+	timeoutMs: number,
+): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
+	do {
+		const { items } = await client.get<{
+			items: Array<{ status: string; error_message?: string | null }>;
+		}>(`/cvms/${cvmId}/operations`, {
+			params: { correlation_id: correlationId },
+		});
+		const operation = items[0];
+		if (operation?.status === "completed") return;
+		if (operation && operation.status !== "in_progress") {
+			throw new Error(
+				`Update ${operation.status}: ${operation.error_message ?? "no error message"}`,
+			);
+		}
+		await new Promise((resolve) => setTimeout(resolve, 2000));
+	} while (Date.now() < deadline);
+	throw new Error(
+		`Timeout waiting for the update operation to finish (${Math.floor(timeoutMs / 1000)}s)`,
 	);
 }
