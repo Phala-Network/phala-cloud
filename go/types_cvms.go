@@ -648,6 +648,9 @@ type ComposeRequirementsPatch struct {
 // sent, so an explicit default and an unset key stay distinct (they hash
 // differently).
 type ComposePatch struct {
+	// BashScript replaces the script of a bash-runner app. Null is rejected
+	// for a bash app.
+	BashScript     Patch[string] `json:"bash_script,omitzero"`
 	SecureTime     Patch[bool]   `json:"secure_time,omitzero"`
 	SwapSize       Patch[string] `json:"swap_size,omitzero"`
 	StorageDiscard Patch[bool]   `json:"storage_discard,omitzero"`
