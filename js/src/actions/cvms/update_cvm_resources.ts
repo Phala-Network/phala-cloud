@@ -18,7 +18,6 @@ import { defineAction } from "../../utils/define-action";
  *   vcpu: 4,
  *   memory: 8192,
  *   disk_size: 50,
- *   allow_restart: true
  * });
  * console.log('Resource update initiated');
  * ```
@@ -30,6 +29,10 @@ export const UpdateCvmResourcesRequestSchema = refineCvmId(
     memory: z.number().optional(),
     disk_size: z.number().optional(),
     instance_type: z.string().optional(),
+    /**
+     * @deprecated The backend restarts the CVM whenever a resize needs it and
+     * ignores this flag. It is no longer sent.
+     */
     allow_restart: z.boolean().optional(),
   }),
 );
@@ -50,8 +53,8 @@ const { action: updateCvmResources, safeAction: safeUpdateCvmResources } = defin
 >(UpdateCvmResourcesResponseSchema, async (client, request) => {
   const parsed = UpdateCvmResourcesRequestSchema.parse(request);
   const { cvmId } = CvmIdSchema.parse(parsed);
-  const { ...body } = parsed;
-  return await client.patch(`/cvms/${cvmId}`, body);
+  const { vcpu, memory, disk_size, instance_type } = parsed;
+  return await client.patch(`/cvms/${cvmId}`, { vcpu, memory, disk_size, instance_type });
 });
 
 export { updateCvmResources, safeUpdateCvmResources };

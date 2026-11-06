@@ -15,6 +15,11 @@ import { PhalaCloudError } from "../../utils/errors";
  * with the compose hash to register on-chain. After registration, call
  * `confirmCvmPatch` with the compose hash and transaction hash.
  *
+ * GPU assignment goes in `gpus` as a `GpuConfig` object, not a bare array:
+ * `{ gpus: [{ slot, product_id? }], attach_mode? }`. `slot` identifies the
+ * device, `product_id` is optional, and `attach_mode: "all"` attaches every
+ * GPU on the node instead of the listed slots.
+ *
  * @example
  * ```typescript
  * import { createClient, patchCvm, confirmCvmPatch, addComposeHash } from '@phala/cloud'
@@ -29,6 +34,12 @@ import { PhalaCloudError } from "../../utils/errors";
  * })
  * // result.requiresOnChainHash === false
  * console.log(result.correlationId)
+ *
+ * // Attach GPUs
+ * await patchCvm(client, {
+ *   id: 'my-cvm',
+ *   gpus: { gpus: [{ slot: '0000:3b:00.0' }] },
+ * })
  *
  * // On-chain KMS compose update (two-phase)
  * const result = await patchCvm(client, {
@@ -51,6 +62,23 @@ import { PhalaCloudError } from "../../utils/errors";
  * ```
  */
 
+/**
+ * GPU assignment for a CVM update. `gpus` lists the device slots to attach
+ * (`product_id` is optional), and `attach_mode: "all"` attaches every GPU on
+ * the node instead of the listed slots.
+ */
+export const PatchCvmGpuConfigSchema = z.object({
+  gpus: z.array(
+    z.object({
+      slot: z.string(),
+      product_id: z.string().optional(),
+    }),
+  ),
+  attach_mode: z.string().optional(),
+});
+
+export type PatchCvmGpuConfig = z.input<typeof PatchCvmGpuConfigSchema>;
+
 export const PatchCvmRequestSchema = refineCvmId(
   CvmIdObjectSchema.extend({
     // Compose-hash-affecting fields
@@ -66,17 +94,13 @@ export const PatchCvmRequestSchema = refineCvmId(
     // Non-compose-hash config
     encrypted_env: z.string().optional(),
     user_config: z.string().optional(),
-    gpus: z
-      .object({
-        count: z.number(),
-        product_name: z.string().optional(),
-      })
-      .optional(),
+    gpus: PatchCvmGpuConfigSchema.optional(),
 
     // Resources
     vcpu: z.number().optional(),
     memory: z.number().optional(),
     disk_size: z.number().optional(),
+    instance_type: z.string().optional(),
 
     // OS image
     image: z.string().optional(),
