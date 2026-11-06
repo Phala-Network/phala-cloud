@@ -406,7 +406,9 @@ export const deployCommandSchema = z
 		env: z.array(z.string()).optional(),
 		envFile: z.string().optional(),
 		interactive: z.boolean().default(false),
-		kms: z.enum(["phala", "ethereum", "eth", "base"]).default("phala"),
+		// No schema default: an update must tell an explicit --kms apart from
+		// the PHALA default that resolveKmsSelection applies on create.
+		kms: z.enum(["phala", "ethereum", "eth", "base"]).optional(),
 		kmsId: z.string().optional(),
 		kmsContract: z.string().optional(),
 		kmsContractId: z.string().optional(),

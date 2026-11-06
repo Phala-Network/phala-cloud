@@ -23,7 +23,11 @@ import {
 import { dedupeEnvVars, parseEnvInputs } from "@/src/utils/env-parsing";
 import type { RuntimeProjectConfig } from "@/src/utils/project-config";
 import { detectFileInCurrentDir, promptForFile } from "@/src/utils/prompts";
-import { parseDiskSizeInput, parseMemoryInput } from "@/src/utils/units";
+import {
+	parseDiskSizeInput,
+	parseMemoryInput,
+	parseSizeWithUnit,
+} from "@/src/utils/units";
 import {
 	CvmIdSchema,
 	type EnvVar,
@@ -131,6 +135,48 @@ export function validatePreLaunchScriptOptions(
 	}
 }
 
+/**
+ * Flags that set create-time CVM configuration. PATCH /cvms/{id} cannot
+ * change them, so an update rejects them instead of ignoring them.
+ */
+const CREATE_ONLY_FLAGS: ReadonlyArray<readonly [keyof Options, string]> = [
+	["name", "--name"],
+	["region", "--region"],
+	["node", "--node"],
+	["customAppId", "--custom-app-id"],
+	["nonce", "--nonce"],
+	["keyProviderMode", "--key-provider-mode"],
+	["devOs", "--dev-os"],
+	["sshPubkey", "--ssh-pubkey"],
+	["secureTime", "--secure-time"],
+	["fs", "--fs"],
+	["skipGateway", "--skip-gateway"],
+	["kms", "--kms"],
+	["kmsId", "--kms-id"],
+	["kmsContract", "--kms-contract"],
+	["kmsContractId", "--kms-contract-id"],
+	["experimentalKeyProviderType", "--experimental-key-provider-type"],
+];
+
+export function assertUpdatableOptions(options: Options): void {
+	const flags = CREATE_ONLY_FLAGS.filter(
+		([key]) => options[key] !== undefined,
+	).map(([, flag]) => flag);
+	if (flags.length > 0) {
+		throw new Error(
+			`${flags.join(", ")} cannot be changed on an existing CVM. Remove ${flags.length === 1 ? "it" : "them"} to update the CVM, or deploy a new CVM.`,
+		);
+	}
+}
+
+function parseVcpuInput(input: string): number {
+	const vcpu = Number(input);
+	if (!Number.isInteger(vcpu) || vcpu <= 0) {
+		throw new Error(`Invalid vCPU count '${input}'. Use a positive integer.`);
+	}
+	return vcpu;
+}
+
 export function buildUpdatePatchBody(
 	options: Options,
 	dockerComposeYml: string,
@@ -151,6 +197,27 @@ export function buildUpdatePatchBody(
 	}
 	if (options.publicSysinfo !== undefined) {
 		patchBody.public_sysinfo = options.publicSysinfo;
+	}
+	if (options.publicTcbinfo !== undefined) {
+		patchBody.public_tcbinfo = options.publicTcbinfo;
+	}
+	if (options.instanceType) {
+		patchBody.instance_type = options.instanceType;
+	}
+	if (options.vcpu) {
+		patchBody.vcpu = parseVcpuInput(options.vcpu);
+	}
+	if (options.memory) {
+		// Unit conversion only: the backend matches the nearest instance spec.
+		patchBody.memory = Math.round(
+			parseSizeWithUnit(options.memory, "MB") / (1024 * 1024),
+		);
+	}
+	if (options.diskSize) {
+		patchBody.disk_size = parseDiskSizeInput(options.diskSize);
+	}
+	if (options.image) {
+		patchBody.image = options.image;
 	}
 	applyForceStopOption(patchBody, options.forceStop);
 	if (options.prepareOnly) {
@@ -940,6 +1007,32 @@ const deployNewCvm = async (
 	}
 };
 
+/**
+ * Set the Trust Center listing once the CVM update has been accepted. The
+ * listing is app-wide metadata on its own endpoint (PATCH /cvms/{id}/listed),
+ * which needs an API key or session; GitHub OIDC tokens are not accepted there.
+ */
+async function applyListedAfterUpdate(
+	client: CliApiClient,
+	options: Options,
+): Promise<void> {
+	if (options.listed === undefined) return;
+	try {
+		await client.patch(`/cvms/${options.uuid}/listed`, {
+			listed: options.listed,
+		});
+	} catch (error) {
+		const reason = error instanceof Error ? error.message : String(error);
+		throw new Error(
+			`The CVM update was already applied, but setting the Trust Center listing failed: ${reason}. Retry with an API key: phala api -X PATCH /cvms/${options.uuid}/listed -F listed:=${options.listed}`,
+			{ cause: error },
+		);
+	}
+	logger.info(
+		`Trust Center listing ${options.listed ? "enabled" : "disabled"}.`,
+	);
+}
+
 const updateCvm = async (
 	validatedOptions: Options,
 	docker_compose_yml: string,
@@ -978,6 +1071,7 @@ const updateCvm = async (
 	if (encrypted_env) {
 		patchBody.encrypted_env = encrypted_env;
 	}
+
 	logger.info(`Updating CVM ${validatedOptions.uuid}...`);
 	// biome-ignore lint/suspicious/noExplicitAny: dynamic patch body
 	const patchResult = await safePatchCvm(client, patchBody as any);
@@ -986,6 +1080,12 @@ const updateCvm = async (
 	}
 
 	const result = patchResult.data;
+
+	if (validatedOptions.prepareOnly && validatedOptions.listed !== undefined) {
+		logger.warn(
+			"--listed is not applied with --prepare-only. Pass it again with --commit.",
+		);
+	}
 
 	// --prepare-only on a CVM that doesn't require on-chain hash
 	if (validatedOptions.prepareOnly && !result.requiresOnChainHash) {
@@ -1213,6 +1313,8 @@ const updateCvm = async (
 		}
 	}
 
+	await applyListedAfterUpdate(client, validatedOptions);
+
 	// Wait for update to complete if --wait flag is set
 	if (validatedOptions.wait) {
 		logger.info("Waiting for update to complete...");
@@ -1290,6 +1392,8 @@ const commitCvmUpdate = async (
 		throw new Error(`Failed to commit CVM update: ${errMsg}${hint}`);
 	}
 
+	await applyListedAfterUpdate(client, validatedOptions);
+
 	if (validatedOptions.json !== false) {
 		stdout.write(
 			`${JSON.stringify(
@@ -1316,6 +1420,11 @@ export async function runDeploy(
 ): Promise<number> {
 	try {
 		validatePreLaunchScriptOptions(input);
+		// Reject create-only flags before --commit handling, file reads or any
+		// prompt, so an invalid update fails first.
+		if (context.cvmId) {
+			assertUpdatableOptions(input);
+		}
 
 		// Handle --commit mode: skip compose file reading entirely
 		// commit-update endpoint is token-based (no API key required),
@@ -1329,7 +1438,7 @@ export async function runDeploy(
 				: undefined;
 
 			await commitCvmUpdate({ ...input, uuid }, client, context.stdout);
-			return;
+			return 0;
 		}
 
 		// Use positional argument if provided, otherwise use the --compose option

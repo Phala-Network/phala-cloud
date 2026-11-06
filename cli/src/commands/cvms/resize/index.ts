@@ -30,20 +30,6 @@ function parseIntegerOption(
 	return parsed;
 }
 
-function parseBooleanOption(value: string | undefined): boolean | undefined {
-	if (value === undefined) {
-		return undefined;
-	}
-	const normalized = value.trim().toLowerCase();
-	if (["true", "1", "yes", "y"].includes(normalized)) {
-		return true;
-	}
-	if (["false", "0", "no", "n"].includes(normalized)) {
-		return false;
-	}
-	throw new Error(`Invalid value for --allow-restart: ${value}`);
-}
-
 async function promptForNumber(
 	message: string,
 	defaultValue: number,
@@ -103,16 +89,19 @@ async function runCvmsResizeCommand(
 		let vcpu: number | undefined;
 		let memory: number | undefined;
 		let diskSize: number | undefined;
-		let allowRestart: boolean | undefined;
 
 		try {
 			vcpu = parseIntegerOption(input.vcpu, "--vcpu");
 			memory = parseIntegerOption(input.memory, "--memory");
 			diskSize = parseIntegerOption(input.diskSize, "--disk-size");
-			allowRestart = parseBooleanOption(input.allowRestart);
 		} catch (error) {
 			logger.error(error instanceof Error ? error.message : String(error));
 			return 1;
+		}
+		if (input.allowRestart !== undefined) {
+			logger.warn(
+				"--allow-restart is deprecated and ignored: the CVM restarts when the resize needs it.",
+			);
 		}
 
 		// Prompt for missing values in interactive mode
@@ -139,18 +128,6 @@ async function runCvmsResizeCommand(
 					cvm.resource.disk_in_gb ?? undefined,
 				);
 			}
-
-			if (allowRestart === undefined) {
-				const response = await inquirer.prompt([
-					{
-						type: "confirm",
-						name: "allowRestart",
-						message: "Allow restart of the CVM if needed for resizing?",
-						default: false,
-					},
-				]);
-				allowRestart = response.allowRestart;
-			}
 		} else {
 			// In non-interactive mode (--json), use current values as defaults if not specified
 			if (vcpu === undefined) vcpu = cvm.resource.vcpu ?? undefined;
@@ -160,9 +137,6 @@ async function runCvmsResizeCommand(
 					: undefined;
 			if (diskSize === undefined)
 				diskSize = cvm.resource.disk_in_gb ?? undefined;
-			// Default to allowing restart in non-interactive mode to ensure resize can complete
-			// (vCPU changes typically require restart)
-			if (allowRestart === undefined) allowRestart = true;
 		}
 
 		// Show preview and confirmation in interactive mode
@@ -186,7 +160,6 @@ async function runCvmsResizeCommand(
 					currentDiskGB !== diskSize
 						? `${chalk.red(currentDiskGB)} GB -> ${chalk.green(diskSize)} GB`
 						: currentDiskGB,
-				"Allow Restart": allowRestart ? chalk.green("Yes") : chalk.red("No"),
 			});
 
 			if (!input.yes) {
@@ -209,14 +182,7 @@ async function runCvmsResizeCommand(
 				`Resizing CVM with App ID app_${resolvedAppId}`,
 			);
 			await retryOnConflict(
-				() =>
-					resizeCvm(
-						resolvedAppId,
-						vcpu,
-						memory,
-						diskSize,
-						allowRestart ? 1 : 0,
-					),
+				() => resizeCvm(resolvedAppId, vcpu, memory, diskSize),
 				{ spinner },
 			);
 			spinner.stop(true);
@@ -228,14 +194,13 @@ ${CLOUD_URL}/dashboard/cvms/app_${resolvedAppId}`,
 			);
 		} else {
 			await retryOnConflict(() =>
-				resizeCvm(resolvedAppId, vcpu, memory, diskSize, allowRestart ? 1 : 0),
+				resizeCvm(resolvedAppId, vcpu, memory, diskSize),
 			);
 			context.success({
 				app_id: resolvedAppId,
 				vcpu,
 				memory,
 				disk_size: diskSize,
-				allow_restart: allowRestart,
 			});
 		}
 		return 0;

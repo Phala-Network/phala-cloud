@@ -209,14 +209,14 @@ Resize CVM resources (vCPU, memory, disk).
 | `--vcpu <cores>` / `-v` | | Number of vCPU cores |
 | `--memory <mb>` / `-m` | | Memory in MB |
 | `--disk-size <gb>` / `-d` | | Disk size in GB |
-| `--allow-restart` / `-r` | false | Allow CVM restart if required |
+| `--allow-restart` / `-r` | | Deprecated and ignored. The CVM restarts when the resize needs it |
 | `--yes` / `-y` | false | Skip confirmation prompt |
 | `--json` | false | JSON output |
 
 #### Examples
 
     $ phala cvms resize --vcpu 4 --memory 8192
-    $ phala cvms resize app_abc123 --disk-size 100 --allow-restart
+    $ phala cvms resize app_abc123 --disk-size 100
     $ phala cvms resize -v 2 -m 4096 -y
     $ phala cvms resize --interactive
 
@@ -302,7 +302,7 @@ List available worker nodes in the workspace.
 The following commands are deprecated and have been replaced:
 
 - **`cvms create`** — Use `phala deploy` instead
-- **`cvms upgrade`** — Use `phala deploy --cvm-id <id>` instead
+- **`cvms upgrade`** — Use `phala deploy --cvm-id <id>` instead. It now replaces only the Docker Compose file (and, with `--env-file`, the allowed env keys and encrypted env). The stored pre-launch script, visibility settings and allowed env keys are kept, and an unchanged compose does nothing. Before, it reset the pre-launch script to the platform default, reset visibility and cleared the allowed env keys. CVMs on on-chain KMS are rejected; use `phala deploy --cvm-id` for them.
 - **`cvms logs`** — Use `phala logs` instead
 - **`cvms serial-logs`** — Use `phala logs --serial` instead
 

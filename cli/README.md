@@ -147,6 +147,12 @@ bun run type-check # TypeScript type checking
 bun run test       # Run tests
 ```
 
+## How do I upgrade to these CLI changes?
+
+- `phala deploy --cvm-id` (or a CVM ID in `phala.toml`) now fails before sending any request when a create-only flag is passed, instead of ignoring it: `--name`, `--region`, `--node`, `--custom-app-id`, `--nonce`, `--key-provider-mode`, `--dev-os` / `--no-dev-os`, `--ssh-pubkey`, `--secure-time`, `--fs`, `--skip-gateway`, `--kms`, `--kms-id`, `--kms-contract`, `--kms-contract-id` and `--experimental-key-provider-type`. Remove them from update invocations; they only apply when a new CVM is created.
+- `phala cvms upgrade` now replaces only the Docker Compose file (and, with `--env-file`, the allowed env keys and encrypted env). It keeps the stored pre-launch script, visibility settings and allowed env keys instead of resetting them, and an unchanged compose does nothing.
+- `phala cvms resize --allow-restart` is ignored and prints a warning (not in `--json` mode, which prints no warnings). The CVM restarts when the resize needs it. `phala cvms resize --json` no longer outputs `allow_restart`.
+
 ## License
 
 [Apache-2.0](LICENSE)

@@ -2,8 +2,11 @@ package phala
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 )
 
 // cvmPath returns the API path for a CVM, resolving the ID format.
@@ -378,16 +381,93 @@ func (c *Client) CommitCVMUpdate(ctx context.Context, cvmID string, req *CommitC
 	return &result, nil
 }
 
-// PatchCVM applies a multi-field patch to a CVM.
+// PatchCVM applies a multi-field patch to a CVM via PATCH /cvms/{id}.
+//
+// A 465 response (compose hash registration required, contract-owned KMS) is
+// not an error: it returns RequiresOnChainHash with the hash to register.
 func (c *Client) PatchCVM(ctx context.Context, cvmID string, req *PatchCVMRequest) (*PatchCVMResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("phala: patch request is required")
+	}
+	body := *req
+	if body.OSImageName != nil {
+		if body.Image != nil && *body.Image != *body.OSImageName {
+			return nil, fmt.Errorf("phala: Image %q and deprecated OSImageName %q conflict; set Image only", *body.Image, *body.OSImageName)
+		}
+		body.Image = body.OSImageName
+	}
+
+	return c.sendCVMPatch(ctx, cvmID, body)
+}
+
+// sendCVMPatch sends the unified PATCH /cvms/{id} and maps a 465 answer to a
+// hash-required response.
+func (c *Client) sendCVMPatch(ctx context.Context, cvmID string, body PatchCVMRequest) (*PatchCVMResponse, error) {
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("phala: marshal request: %w", err)
+	}
+	var headers map[string]string
+	if body.PrepareOnly {
+		headers = map[string]string{"X-Prepare-Only": "true"}
+	}
+
 	var result PatchCVMResponse
-	err := c.doWithRetry(ctx, func() error {
-		return c.doJSON(ctx, "PATCH", cvmPath(cvmID), req, &result)
+	err = c.doWithRetry(ctx, func() error {
+		return c.doText(ctx, "PATCH", cvmPath(cvmID), "application/json", string(payload), headers, &result)
 	})
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && apiErr.IsComposePrecondition() {
+		return patchCVMHashRequired(apiErr)
+	}
 	if err != nil {
 		return nil, err
 	}
 	return &result, nil
+}
+
+// patchCVMHashRequired maps a 465 error to a hash-required response. A 465
+// without compose_hash in its details is not that response, so the original
+// *APIError is returned.
+func patchCVMHashRequired(apiErr *APIError) (*PatchCVMResponse, error) {
+	fields := make(map[string]any, len(apiErr.Details))
+	for _, d := range apiErr.Details {
+		if d.Field != "" {
+			fields[d.Field] = d.Value
+		}
+	}
+	composeHash, _ := fields["compose_hash"].(string)
+	if composeHash == "" {
+		return nil, apiErr
+	}
+	resp := &PatchCVMResponse{RequiresOnChainHash: true, ComposeHash: composeHash}
+	resp.DeviceID, _ = fields["device_id"].(string)
+	resp.CommitToken, _ = fields["commit_token"].(string)
+	resp.CommitURL, _ = fields["commit_url"].(string)
+	resp.APICommitURL, _ = fields["api_commit_url"].(string)
+	switch v := fields["app_id"].(type) {
+	case string:
+		resp.AppID = v
+	case json.Number:
+		resp.AppID = v.String()
+	case float64:
+		resp.AppID = strconv.FormatFloat(v, 'f', -1, 64)
+	}
+	decodeDetail(fields["kms_info"], &resp.KMSInfo)
+	decodeDetail(fields["onchain_status"], &resp.OnchainStatus)
+	return resp, nil
+}
+
+// decodeDetail re-decodes a JSON value from an error detail into target.
+func decodeDetail(value, target any) {
+	if value == nil {
+		return
+	}
+	b, err := json.Marshal(value)
+	if err != nil {
+		return
+	}
+	_ = json.Unmarshal(b, target)
 }
 
 // ConfirmCVMPatch confirms a CVM patch with on-chain transaction hash.
