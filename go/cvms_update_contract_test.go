@@ -334,6 +334,16 @@ func TestPatchCVMSendsTheComposeMergePatch(t *testing.T) {
 	}`)
 }
 
+func TestPatchCVMSendsTheBashScript(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusAccepted, acceptedUpdate)
+	if _, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{
+		Compose: &ComposePatch{BashScript: PatchValue("echo hi")},
+	}); err != nil {
+		t.Fatalf("PatchCVM: %v", err)
+	}
+	assertBody(t, (*seen)[0].body, `{"compose": {"bash_script": "echo hi"}}`)
+}
+
 func TestPatchCVMSendsAnEmptyInitScriptSet(t *testing.T) {
 	client, seen := recordingServer(t, http.StatusAccepted, acceptedUpdate)
 	if _, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{
