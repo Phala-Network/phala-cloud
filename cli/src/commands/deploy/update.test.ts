@@ -91,6 +91,13 @@ beforeAll(async () => {
 			});
 			const overridden = respond?.(req.method, url.pathname);
 			if (overridden) return overridden;
+			if (url.pathname.endsWith("/operations")) {
+				return Response.json({
+					items: [{ correlation_id: "corr-1", status: "completed" }],
+					next_cursor: null,
+					total: 1,
+				});
+			}
 			if (req.method === "GET") {
 				return Response.json({
 					id: CVM_ID,
@@ -325,8 +332,8 @@ describe("phala deploy --cvm-id", () => {
 	);
 
 	test("--wait succeeds when a stopped CVM stays stopped after the update", async () => {
-		respond = (method) =>
-			method === "GET"
+		respond = (method, path) =>
+			method === "GET" && !path.endsWith("/operations")
 				? Response.json({
 						id: CVM_ID,
 						name: "my-app",
@@ -343,6 +350,49 @@ describe("phala deploy --cvm-id", () => {
 		expect(failure).toBeUndefined();
 		expect(exitCode).toBe(0);
 	}, 10000);
+
+	test("--wait fails when the update of a stopped CVM fails", async () => {
+		// The failure cleanup also leaves the CVM stopped and not in progress.
+		const states = [
+			["stopped", false],
+			["stopped", true],
+			["updating", true],
+			["stopped", false],
+		] as const;
+		let reads = 0;
+		respond = (method, path) => {
+			if (path.endsWith("/operations")) {
+				return Response.json({
+					items: [
+						{
+							correlation_id: "corr-1",
+							status: "failed",
+							error_message: "Compose update failed: image not found",
+						},
+					],
+					next_cursor: null,
+					total: 1,
+				});
+			}
+			if (method !== "GET") return undefined;
+			const [status, inProgress] =
+				states[Math.min(reads++, states.length - 1)] ?? states[0];
+			return Response.json({
+				id: CVM_ID,
+				name: "my-app",
+				app_id: "abc",
+				status,
+				in_progress: inProgress,
+				resource: {},
+				gateway: {},
+			});
+		};
+
+		const { exitCode, failure } = await deploy({ wait: true });
+
+		expect(exitCode).not.toBe(0);
+		expect(String(failure)).toContain("Compose update failed: image not found");
+	}, 15000);
 
 	test("sends the file as compose.bash_script for a bash-runner app", async () => {
 		respond = (method) =>

@@ -13,7 +13,7 @@ import {
 	DEFAULT_MEMORY,
 	DEFAULT_VCPU,
 } from "@/src/utils/constants";
-import { waitForCvmReady } from "@/src/utils/cvms";
+import { waitForCvmReady, waitForUpdateOperation } from "@/src/utils/cvms";
 import { logger } from "@/src/utils/logger";
 
 import {
@@ -1239,6 +1239,8 @@ const updateCvm = async (
 	}
 
 	const result = patchResult.data;
+	// Empty for no_change (no operation to follow); the on-chain path sets it on confirm.
+	let correlationId = "correlationId" in result ? result.correlationId : "";
 
 	if (validatedOptions.prepareOnly && validatedOptions.listed !== undefined) {
 		logger.warn(
@@ -1470,6 +1472,7 @@ const updateCvm = async (
 				`Failed to confirm CVM update after on-chain registration: ${errMsg}`,
 			);
 		}
+		correlationId = confirmResult.data.correlationId;
 	}
 
 	await applyListedAfterUpdate(client, validatedOptions);
@@ -1478,13 +1481,23 @@ const updateCvm = async (
 	if (validatedOptions.wait) {
 		logger.info("Waiting for update to complete...");
 		try {
+			const timeoutMs = 300000; // 5 minutes
+			const startedAt = Date.now();
 			// An update leaves a stopped CVM stopped.
 			await waitForCvmReady(
 				validatedOptions.uuid as string,
-				300000, // 5 minutes timeout
+				timeoutMs,
 				context,
 				cvm.status === "stopped" ? "stopped" : "running",
 			);
+			if (correlationId) {
+				await waitForUpdateOperation(
+					client,
+					validatedOptions.uuid as string,
+					correlationId,
+					timeoutMs - (Date.now() - startedAt),
+				);
+			}
 		} catch (error: unknown) {
 			throw new Error(
 				`Wait failed: ${error instanceof Error ? error.message : String(error)}`,

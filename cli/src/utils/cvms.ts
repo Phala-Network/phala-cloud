@@ -1,6 +1,6 @@
 import { safeGetCvmInfo } from "@phala/cloud";
 import type { CommandContext } from "@/src/core/types";
-import { getClient } from "@/src/lib/client";
+import { type CliApiClient, getClient } from "@/src/lib/client";
 import { logger } from "./logger";
 
 /**
@@ -59,5 +59,37 @@ export async function waitForCvmReady(
 
 	throw new Error(
 		`Timeout waiting for CVM to be ready (${Math.floor(timeoutMs / 1000)}s)`,
+	);
+}
+
+/**
+ * Wait for an update operation to finish, and fail unless it completed.
+ * The CVM state alone cannot tell a finished update from a failed one: the
+ * failure cleanup returns the CVM to the state it had before the update.
+ */
+export async function waitForUpdateOperation(
+	client: CliApiClient,
+	cvmId: string,
+	correlationId: string,
+	timeoutMs: number,
+): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
+	do {
+		const { items } = await client.get<{
+			items: Array<{ status: string; error_message?: string | null }>;
+		}>(`/cvms/${cvmId}/operations`, {
+			params: { correlation_id: correlationId },
+		});
+		const operation = items[0];
+		if (operation?.status === "completed") return;
+		if (operation && operation.status !== "in_progress") {
+			throw new Error(
+				`Update ${operation.status}: ${operation.error_message ?? "no error message"}`,
+			);
+		}
+		await new Promise((resolve) => setTimeout(resolve, 2000));
+	} while (Date.now() < deadline);
+	throw new Error(
+		`Timeout waiting for the update operation to finish (${Math.floor(timeoutMs / 1000)}s)`,
 	);
 }
