@@ -244,6 +244,14 @@ def test_patch_cvm_sends_an_empty_init_script_set() -> None:
     assert body == {"init_scripts": []}
 
 
+def test_patch_cvm_sends_the_bash_script() -> None:
+    recorder = _Recorder()
+    _sync_client(recorder).patch_cvm({"id": "cvm-1", "compose": {"bash_script": "echo hi"}})
+
+    _, _, body, _ = recorder.last
+    assert body == {"compose": {"bash_script": "echo hi"}}
+
+
 def test_patch_cvm_rejects_gpu_policy_in_the_compose_patch() -> None:
     recorder = _Recorder()
     with pytest.raises(ValidationError):

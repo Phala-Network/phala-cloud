@@ -92,6 +92,8 @@ class ComposePatch(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    # Replaces the script of a bash-runner app. None is rejected for a bash app.
+    bash_script: str | None = None
     secure_time: bool | None = None
     swap_size: str | None = None
     storage_discard: bool | None = None
