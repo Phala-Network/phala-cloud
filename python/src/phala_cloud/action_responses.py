@@ -247,10 +247,6 @@ class CvmAttestationResponse(CloudModel):
     is_online: bool | None = None
 
 
-class CvmVisibilityResponse(CloudModel):
-    status: str | None = None
-
-
 class CvmUserConfigResponse(CloudModel):
     hostname: str | None = None
     ssh_authorized_keys: list[str] = Field(default_factory=list)
