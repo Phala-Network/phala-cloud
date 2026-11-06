@@ -40,6 +40,8 @@ const { CommandRegistry } = await import("@/src/core/registry");
 type Recorded = {
 	method: string;
 	path: string;
+	search: string;
+	authorization: string | null;
 	body: Record<string, unknown> | undefined;
 };
 
@@ -50,7 +52,11 @@ let server: ReturnType<typeof Bun.serve>;
 let requests: Recorded[] = [];
 // Per-test response override; return undefined to fall through to defaults.
 let respond:
-	| ((method: string, path: string) => Response | undefined)
+	| ((
+			method: string,
+			path: string,
+			query: URLSearchParams,
+	  ) => Response | undefined)
 	| undefined;
 
 const HASH_REQUIRED = {
@@ -88,9 +94,11 @@ beforeAll(async () => {
 			requests.push({
 				method: req.method,
 				path: url.pathname,
+				search: url.search,
+				authorization: req.headers.get("authorization"),
 				body: text ? JSON.parse(text) : undefined,
 			});
-			const overridden = respond?.(req.method, url.pathname);
+			const overridden = respond?.(req.method, url.pathname, url.searchParams);
 			if (overridden) return overridden;
 			if (url.pathname.endsWith("/operations")) {
 				return Response.json({
@@ -362,21 +370,39 @@ describe("phala deploy --cvm-id", () => {
 		expect(exitCode).toBe(0);
 	}, 10000);
 
-	test("--wait under GitHub OIDC waits for the state only", async () => {
-		// Deploy OIDC tokens cannot read the operations route.
-		respond = (_method, path) =>
-			path.endsWith("/operations")
-				? Response.json({ detail: "Not authenticated" }, { status: 401 })
-				: undefined;
+	test("--wait under GitHub OIDC fails when the update operation failed", async () => {
+		// A deploy OIDC token may read one operation, by correlation_id, of its
+		// deploy target; listing operations stays refused.
+		respond = (_method, path, query) => {
+			if (!path.endsWith("/operations")) return undefined;
+			if (query.get("correlation_id") === null) {
+				return Response.json({ detail: "Not authenticated" }, { status: 401 });
+			}
+			return Response.json({
+				items: [
+					{
+						correlation_id: "corr-1",
+						status: "failed",
+						error_message: "Compose update failed: image not found",
+					},
+				],
+				next_cursor: null,
+				total: 1,
+			});
+		};
 
 		const { exitCode, failure } = await deploy(
 			{ wait: true },
 			{ PHALA_OIDC_TOKEN: "oidc-jwt" },
 		);
 
-		expect(failure).toBeUndefined();
-		expect(exitCode).toBe(0);
-		expect(requests.some((r) => r.path.endsWith("/operations"))).toBe(false);
+		expect(exitCode).not.toBe(0);
+		expect(String(failure)).toContain("Compose update failed: image not found");
+		expect(
+			requests
+				.filter((r) => r.path.endsWith("/operations"))
+				.map((r) => [r.search, r.authorization]),
+		).toEqual([["?correlation_id=corr-1", "Bearer oidc-jwt"]]);
 	});
 
 	test("--wait fails when the update of a stopped CVM fails", async () => {
