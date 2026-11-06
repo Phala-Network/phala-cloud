@@ -4,17 +4,19 @@ import { getClient } from "@/src/lib/client";
 import { logger } from "./logger";
 
 /**
- * Wait for CVM to complete any in-progress operations and reach running state
+ * Wait for CVM to complete any in-progress operations and reach the expected state
  * Progress messages are automatically suppressed in JSON mode.
  *
  * @param cvmId CVM identifier (UUID, app_id, name, or any format accepted by CvmIdSchema)
  * @param timeoutMs Maximum time to wait in milliseconds (default: 5 minutes)
- * @returns Promise that resolves when CVM is running and not in_progress, or rejects on timeout
+ * @param expectedStatus Status that counts as ready (default: running)
+ * @returns Promise that resolves when CVM is in expectedStatus and not in_progress, or rejects on timeout
  */
 export async function waitForCvmReady(
 	cvmId: string,
 	timeoutMs = 300000, // 5 minutes default
 	context?: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
+	expectedStatus = "running",
 ): Promise<void> {
 	const client = await getClient(context);
 	const startTime = Date.now();
@@ -41,8 +43,7 @@ export async function waitForCvmReady(
 					`  [${elapsed}s] status=${currentStatus}, in_progress=${inProgress}`,
 				);
 
-				// Success condition: running and not in_progress
-				if (currentStatus === "running" && !inProgress) {
+				if (currentStatus === expectedStatus && !inProgress) {
 					const elapsed = Math.floor((Date.now() - startTime) / 1000);
 					logger.success(`CVM is ready (took ${elapsed}s)`);
 					return;

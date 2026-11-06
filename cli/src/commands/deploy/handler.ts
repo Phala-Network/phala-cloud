@@ -1473,10 +1473,12 @@ const updateCvm = async (
 	if (validatedOptions.wait) {
 		logger.info("Waiting for update to complete...");
 		try {
+			// An update leaves a stopped CVM stopped.
 			await waitForCvmReady(
 				validatedOptions.uuid as string,
 				300000, // 5 minutes timeout
 				context,
+				cvm.status === "stopped" ? "stopped" : "running",
 			);
 		} catch (error: unknown) {
 			throw new Error(

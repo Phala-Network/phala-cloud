@@ -324,6 +324,26 @@ describe("phala deploy --cvm-id", () => {
 		},
 	);
 
+	test("--wait succeeds when a stopped CVM stays stopped after the update", async () => {
+		respond = (method) =>
+			method === "GET"
+				? Response.json({
+						id: CVM_ID,
+						name: "my-app",
+						app_id: "abc",
+						status: "stopped",
+						in_progress: false,
+						resource: {},
+						gateway: {},
+					})
+				: undefined;
+
+		const { exitCode, failure } = await deploy({ wait: true });
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+	}, 10000);
+
 	test("sets the Trust Center listing after the update is accepted", async () => {
 		const { exitCode, failure } = await deploy({ listed: true });
 
