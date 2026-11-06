@@ -77,6 +77,7 @@ const HASH_REQUIRED = {
 };
 let tmpDir: string;
 let composePath: string;
+let previousCloudDir: string | undefined;
 
 beforeAll(async () => {
 	server = Bun.serve({
@@ -124,9 +125,16 @@ beforeAll(async () => {
 	tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "phala-deploy-update-"));
 	composePath = path.join(tmpDir, "docker-compose.yml");
 	await fs.writeFile(composePath, COMPOSE);
+	// The credentials file is read from process.env, so keep the developer's
+	// stored profile token out of these tests.
+	previousCloudDir = process.env.PHALA_CLOUD_DIR;
+	process.env.PHALA_CLOUD_DIR = tmpDir;
 });
 
 afterAll(async () => {
+	if (previousCloudDir === undefined)
+		Reflect.deleteProperty(process.env, "PHALA_CLOUD_DIR");
+	else process.env.PHALA_CLOUD_DIR = previousCloudDir;
 	server.stop(true);
 	await fs.remove(tmpDir);
 });
@@ -136,14 +144,14 @@ afterEach(() => {
 	respond = undefined;
 });
 
-function makeContext(): {
+function makeContext(auth: Record<string, string>): {
 	context: CommandContext;
 	failure: () => unknown;
 } {
 	let failure: unknown;
 	const context = {
 		env: {
-			PHALA_CLOUD_API_KEY: "test-key",
+			...auth,
 			PHALA_CLOUD_API_PREFIX: `http://127.0.0.1:${server.port}/api/v1`,
 			PHALA_CLOUD_DIR: tmpDir,
 		},
@@ -158,8 +166,11 @@ function makeContext(): {
 	return { context, failure: () => failure };
 }
 
-async function deploy(input: Record<string, unknown>) {
-	const { context, failure } = makeContext();
+async function deploy(
+	input: Record<string, unknown>,
+	auth: Record<string, string> = { PHALA_CLOUD_API_KEY: "test-key" },
+) {
+	const { context, failure } = makeContext(auth);
 	const exitCode = await runDeploy(
 		{ compose: composePath, json: true, ...input } as Parameters<
 			typeof runDeploy
@@ -350,6 +361,23 @@ describe("phala deploy --cvm-id", () => {
 		expect(failure).toBeUndefined();
 		expect(exitCode).toBe(0);
 	}, 10000);
+
+	test("--wait under GitHub OIDC waits for the state only", async () => {
+		// Deploy OIDC tokens cannot read the operations route.
+		respond = (_method, path) =>
+			path.endsWith("/operations")
+				? Response.json({ detail: "Not authenticated" }, { status: 401 })
+				: undefined;
+
+		const { exitCode, failure } = await deploy(
+			{ wait: true },
+			{ PHALA_OIDC_TOKEN: "oidc-jwt" },
+		);
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(requests.some((r) => r.path.endsWith("/operations"))).toBe(false);
+	});
 
 	test("--wait fails when the update of a stopped CVM fails", async () => {
 		// The failure cleanup also leaves the CVM stopped and not in progress.
