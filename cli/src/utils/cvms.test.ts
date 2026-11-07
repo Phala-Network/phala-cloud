@@ -86,4 +86,13 @@ describe("waitForCvmReady", () => {
 		).rejects.toThrow("CVM is in error state");
 		expect(reads).toBe(1);
 	});
+
+	test("polls once when the budget is already spent", async () => {
+		// The operation wait can use up the shared deadline before this starts.
+		statuses = ["running"];
+
+		await waitForCvmReady(CVM_ID, -1000, context());
+
+		expect(reads).toBe(1);
+	});
 });

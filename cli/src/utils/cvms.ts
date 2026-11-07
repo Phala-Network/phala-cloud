@@ -31,7 +31,8 @@ export async function waitForCvmReady(
 
 	logger.info("Waiting for CVM to be ready...");
 
-	while (Date.now() - startTime < timeoutMs) {
+	// Poll at least once, even when the caller has no budget left.
+	do {
 		try {
 			const result = await safeGetCvmInfo(client, { id: cvmId });
 
@@ -66,10 +67,10 @@ export async function waitForCvmReady(
 
 		// Wait before next check
 		await new Promise((resolve) => setTimeout(resolve, checkIntervalMs));
-	}
+	} while (Date.now() - startTime < timeoutMs);
 
 	throw new Error(
-		`Timeout waiting for CVM to be ready (${Math.floor(timeoutMs / 1000)}s)`,
+		`Timeout waiting for CVM to be ready (${Math.max(0, Math.floor(timeoutMs / 1000))}s)`,
 	);
 }
 
@@ -123,8 +124,7 @@ export async function waitForCvmCreated(
 	const startedAt = Date.now();
 	const info = await safeGetCvmInfo(client, { id: cvmId });
 	const correlationId = info.success
-		? (info.data as { progress?: { correlation_id?: string | null } | null })
-				.progress?.correlation_id
+		? info.data.progress?.correlation_id
 		: undefined;
 	if (correlationId) {
 		await waitForCvmOperation(

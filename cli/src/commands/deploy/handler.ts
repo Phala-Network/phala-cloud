@@ -979,9 +979,9 @@ const deployNewCvm = async (
 	client: CliApiClient,
 	stdout: NodeJS.WriteStream,
 	stderr: NodeJS.WriteStream,
-	projectConfig?: PrivacyConfig,
-	preLaunchScriptContent?: string,
-	context?: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
+	projectConfig: PrivacyConfig | undefined,
+	preLaunchScriptContent: string | undefined,
+	context: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
 ) => {
 	// Resolve KMS selection once at the start to avoid duplicate calls and warnings
 	const kmsSelection = resolveKmsSelection(validatedOptions);
@@ -1137,7 +1137,7 @@ const deployNewCvm = async (
 		);
 	}
 
-	if (validatedOptions.wait && context) {
+	if (validatedOptions.wait) {
 		logger.info("Waiting for the CVM to start...");
 		try {
 			await waitForCvmCreated(client, cvm.vm_uuid, context, 300000);
