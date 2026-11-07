@@ -178,7 +178,7 @@ me = client.get_current_user()
 Go:
 
 ```bash
-go get github.com/Phala-Network/phala-cloud/sdks/go
+go get github.com/Phala-Network/phala-cloud/go
 ```
 
 ```go

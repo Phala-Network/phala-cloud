@@ -269,7 +269,7 @@ jobs:
       - name: Export version metadata
         run: |
           echo "NEW_VERSION=${{ steps.bump.outputs.version }}" >> "$GITHUB_ENV"
-          echo "TAG_NAME=sdks/go/v${{ steps.bump.outputs.version }}" >> "$GITHUB_ENV"
+          echo "TAG_NAME=go/v${{ steps.bump.outputs.version }}" >> "$GITHUB_ENV"
 
       - name: Run checks
         working-directory: go
@@ -299,13 +299,13 @@ jobs:
             -i "go/CHANGELOG.md" \
             -s \
             -n changelog.config.js \
-            --tag-prefix "sdks/go/v"
+            --tag-prefix "go/v"
 
           conventional-changelog -p conventionalcommits \
             --commit-path "go" \
             -o "go/RELEASE_NOTES.md" \
             -n changelog.config.js \
-            --tag-prefix "sdks/go/v"
+            --tag-prefix "go/v"
 
       - name: Commit version change
         run: |
@@ -350,7 +350,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          MODULE_PATH="github.com/Phala-Network/phala-cloud/sdks/go"
+          MODULE_PATH="github.com/Phala-Network/phala-cloud/go"
           {
             if [ -s "go/RELEASE_NOTES.md" ]; then
               cat "go/RELEASE_NOTES.md"
@@ -388,7 +388,7 @@ jobs:
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const usedReleaseBranch = '${{ steps.push.outputs.used_release_branch }}' === 'true';
             const releasePrUrl = '${{ steps.push.outputs.release_pr_url }}';
-            const modulePath = 'github.com/Phala-Network/phala-cloud/sdks/go';
+            const modulePath = 'github.com/Phala-Network/phala-cloud/go';
 
             const body = [
               `🎉 Release completed: \`go\` v${process.env.NEW_VERSION}`,

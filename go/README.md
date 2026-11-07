@@ -5,7 +5,7 @@ Go client for the [Phala Cloud](https://cloud.phala.network) API.
 ## Installation
 
 ```bash
-go get github.com/Phala-Network/phala-cloud/sdks/go
+go get github.com/Phala-Network/phala-cloud/go
 ```
 
 Requires Go 1.25+.
@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"log"
 
-	phala "github.com/Phala-Network/phala-cloud/sdks/go"
+	phala "github.com/Phala-Network/phala-cloud/go"
 )
 
 func main() {
@@ -365,6 +365,7 @@ PHALA_CLOUD_E2E_API_KEY=your-key go test -tags e2e -v -timeout 30m ./e2e/
 
 ## How do I upgrade to these SDK changes?
 
+- The module path is now `github.com/Phala-Network/phala-cloud/go`. Earlier releases declared `github.com/Phala-Network/phala-cloud/sdks/go`, which `go get` could never resolve. Replace the old path in your imports and `go.mod`, then run `go get github.com/Phala-Network/phala-cloud/go@latest`.
 - Remove `EncryptedEnv` from `ProvisionComposeUpdateRequest`. Send encrypted environment variables through `CommitComposeUpdateRequest`.
 - `GetComposeHash` now normalizes the compose by default. Hashes computed before the upgrade can differ from new ones. Pass `false` as the second argument to keep the old unnormalized value.
 - `NewClient` now returns an error for a negative `WithMaxRetries`, for a base URL that contains userinfo, and when neither an API key nor a bearer token is set.
