@@ -1,3 +1,85 @@
+## [0.3.0](https://github.com/Phala-Network/phala-cloud/compare/python-v0.2.0...python-v0.3.0) (2026-11-07)
+
+### ⚠ BREAKING CHANGE
+
+* **python:** Python: update_cvm_visibility returns {message, correlation_id, status} instead of the CVM record.
+* **python:** SDK requests reject cross-origin URLs. With cookie auth off, combined API-key and Authorization headers are rejected. When SDK API-key or bearer authentication is selected, HTTPX client or request auth and credentials in the request or HTTPX base URL are also rejected. Cookie mode retains caller-supplied authentication.
+* **python:** encrypt_env_vars now returns a string synchronously; use async_encrypt_env_vars for awaited calls. The nonfunctional add_compose_hash and deploy_app_auth wrappers and their safe and functional forms are removed. Watch retry exhaustion raises RequestError instead of TimeoutError, and watch HTTP errors use SDK ApiError subclasses instead of httpx.HTTPStatusError. A raw state followed by EOF is no longer returned as success; only a complete event succeeds. Timeout events, incomplete streams, and transient network failures reconnect within max_retries, while HTTP failures and certificate validation errors are terminal. Cross-origin requests and conflicting authentication are rejected.
+* **sdk:** DeviceIdEntry.os_image_ids (python) and
+DeviceIDEntry.OSImageIDs (go) are removed. No caller in this repo referenced
+either; consumers reading them were reading an empty list.
+
+### docs
+
+* **python:** clarify authentication migration limits ([9bfe358](https://github.com/Phala-Network/phala-cloud/commit/9bfe3586c498d38caf65904b19d8e09474f52077))
+* **python:** clarify credential precedence ([fd0174d](https://github.com/Phala-Network/phala-cloud/commit/fd0174d59fc125204c6fc5e4d90dc8fee4ea39cb))
+* **python:** describe the compose patch, launch token and compose-hash OS version ([0bee5cb](https://github.com/Phala-Network/phala-cloud/commit/0bee5cb31bd87e9d53ce6f72e5b6e1497223cf3d))
+* **python:** document parity migration ([c828281](https://github.com/Phala-Network/phala-cloud/commit/c828281f8a39c309e2461ae633badd743e292bf8))
+* **python:** note the compose-hash normalization change in the upgrade notes ([8da9947](https://github.com/Phala-Network/phala-cloud/commit/8da9947b6b31bb18484252ed7b82b62605692f9d))
+* **python:** record CVM update contract changes in the upgrade notes ([151a57c](https://github.com/Phala-Network/phala-cloud/commit/151a57c9a8f6f5e43c95933ad9aff681d6107ad1))
+* **sdk:** describe the credits fields of the current user ([cbb3501](https://github.com/Phala-Network/phala-cloud/commit/cbb35011c1018fa7856c3f6af0994dc407a31a81))
+* **sdk:** say what a suspended workspace means for its CVMs ([5694677](https://github.com/Phala-Network/phala-cloud/commit/56946773738a50828f29110dbbba880e2072ff08))
+
+### feat
+
+* **python:** accept bash_script in the PATCH compose model ([f5c46f4](https://github.com/Phala-Network/phala-cloud/commit/f5c46f4c37a2d290d72235d9b94661623ebe1174))
+* **python:** add CVM annotations, app launch token and init-scripts actions ([55fc51f](https://github.com/Phala-Network/phala-cloud/commit/55fc51f00b53228fe25f0161fb6f0572ef49ca2c))
+* **python:** commit prepared CVM updates ([8dc78f7](https://github.com/Phala-Network/phala-cloud/commit/8dc78f7ca83c47937eaeaec08050de832083a0eb))
+* **python:** manage CVM authorized SSH keys ([226d9cb](https://github.com/Phala-Network/phala-cloud/commit/226d9cb76b3fee131cf18656fd878315c82a2648))
+* **python:** revoke the current API token ([897d410](https://github.com/Phala-Network/phala-cloud/commit/897d410899f32b60f71f25d59e06d0e3231efaa3))
+* **python:** same-path two-phase CVM create on POST /cvms ([4d83996](https://github.com/Phala-Network/phala-cloud/commit/4d83996bcd79fb6f7aa4b92ebeebe5a0dadddcef))
+* **python:** send the compose merge patch, init_scripts and confirm_data_wipe from patch_cvm ([377dddd](https://github.com/Phala-Network/phala-cloud/commit/377dddd2a785dd777050d7bc16bb123485765ed5))
+* **python:** support OIDC and workspace configuration ([71ef5bb](https://github.com/Phala-Network/phala-cloud/commit/71ef5bb8cd1bc5c0e7d2c76de387ad96261200a7))
+* **python:** type available OS images response with requires_gpu ([10240a9](https://github.com/Phala-Network/phala-cloud/commit/10240a9f6daea72e4befe30bd93f929ccaa7fe94))
+* **python:** type the create fields for init scripts, launch token, annotations, raw compose ([00e6689](https://github.com/Phala-Network/phala-cloud/commit/00e66899048bcf993ca75067d93388d1613a4514))
+* **sdk:** add disk usage fields to CVM resource usage ([7274d17](https://github.com/Phala-Network/phala-cloud/commit/7274d17d22f062e660cc0a669eecd614969deb5b))
+* **sdk:** add managed_env to CVM detail schemas ([17ff65c](https://github.com/Phala-Network/phala-cloud/commit/17ff65c6d4faba2958ef5f211e79fb1d24cea014))
+* **sdk:** add max_placeable_count to ProductGpuAvailability (R2-1) ([78d9c7d](https://github.com/Phala-Network/phala-cloud/commit/78d9c7d048bbddcff5ee27b0f4caf66b5a2c145c))
+* **sdk:** add mr_config_id V3 helpers across JS, Python and Go ([e7d2f3a](https://github.com/Phala-Network/phala-cloud/commit/e7d2f3adc479b6a377d3b4efa405574fc00b58e2))
+* **sdk:** add pre-launch script upgrade actions ([992e13d](https://github.com/Phala-Network/phala-cloud/commit/992e13d27dad1d1fff2f5f411f5f915b1a47d73b))
+* **sdk:** align the default request timeout at 60s ([db83998](https://github.com/Phala-Network/phala-cloud/commit/db8399813df52803c0c36b2d00a204d58436cc37))
+* **sdk:** carry GPU product requirement and product-scoped availability ([100dd56](https://github.com/Phala-Network/phala-cloud/commit/100dd5617ac70ba22f91e375752896e40946cac5))
+* **sdk:** declare the full workspace response schema ([12e5e40](https://github.com/Phala-Network/phala-cloud/commit/12e5e4059a7084dfb19e3c0a103ea04fe1fec60a))
+* **sdk:** expose compose_unchanged on compose file update provisioning ([234dd77](https://github.com/Phala-Network/phala-cloud/commit/234dd773c62a3a06932a90c98d6d9aa4ad4ff682))
+* **sdk:** expose unified OS image hardware support ([8e61cc8](https://github.com/Phala-Network/phala-cloud/commit/8e61cc8938c4eddef15f8abd052d838f3a026779))
+* **sdks:** expose GPU rental renewal state ([b0f474b](https://github.com/Phala-Network/phala-cloud/commit/b0f474b3a742ee19d2d90188a9275385303a5d19))
+* **sdk:** support replica OS image selection ([277bb2b](https://github.com/Phala-Network/phala-cloud/commit/277bb2ba649a2615fc0a0b1ae9de00cbaabe6bf8))
+* select creation nodes by physical name ([51be05b](https://github.com/Phala-Network/phala-cloud/commit/51be05b12d18cb3205ea5801d17f530f3f9f2df9))
+* use node names for replicas and allowance checks ([a8009eb](https://github.com/Phala-Network/phala-cloud/commit/a8009ebafbc1c75ac57ce9bf972fb637d00432e6))
+
+### fix
+
+* prevent API key leaks across SDK redirects ([e3dbb83](https://github.com/Phala-Network/phala-cloud/commit/e3dbb834a7cc85ba031894df663e660b9ec0d815))
+* **python:** accept snake case watch retry options ([8f61974](https://github.com/Phala-Network/phala-cloud/commit/8f61974c69c465969c77807a1ef6afcc701e6757))
+* **python:** align patch_cvm with the PATCH /cvms/{id} request ([59f0183](https://github.com/Phala-Network/phala-cloud/commit/59f018372c8070c8a863d2553ec1ef0fb18d6336))
+* **python:** continue watching after transient SSE errors ([3f2763e](https://github.com/Phala-Network/phala-cloud/commit/3f2763e433f5eb9d910b3e23ab486a232ef23b0c))
+* **python:** drop credential conflict guards ([33c1876](https://github.com/Phala-Network/phala-cloud/commit/33c187655d9d01fea2cf124830406e42446b1541))
+* **python:** hash app-compose like the backend dump_dict ([74b92f4](https://github.com/Phala-Network/phala-cloud/commit/74b92f47771e095ce8207c22e8f11d18fb7c6f39))
+* **python:** hash app-compose with the backend's normalization ([434c9fd](https://github.com/Phala-Network/phala-cloud/commit/434c9fd845aef60641bcd0f0f488d17e35a0be4f))
+* **python:** keep a boolean compose event_log_version from passing as 1 ([fb6c509](https://github.com/Phala-Network/phala-cloud/commit/fb6c509864ca2f80783d904c22be7f5cb097ba12))
+* **python:** make watch errors and retries predictable ([0e09be4](https://github.com/Phala-Network/phala-cloud/commit/0e09be4154509579b3c81f6e028330a2ca9bbc21))
+* **python:** move update_cvm_visibility to the unified PATCH endpoint ([3ae54d4](https://github.com/Phala-Network/phala-cloud/commit/3ae54d494791132ad29694e72594788130695440))
+* **python:** preserve client behavior across versions ([08a83f3](https://github.com/Phala-Network/phala-cloud/commit/08a83f3bbf240311ffe97c5614e4a48baf8806ff))
+* **python:** prevent cross-origin and conflicting credentials ([7586807](https://github.com/Phala-Network/phala-cloud/commit/758680716735e526e7b77065383fc5cbd4fd255a))
+* **python:** provide sync and async env encryption ([6994171](https://github.com/Phala-Network/phala-cloud/commit/69941718535181bb794f9428ed581225e87f2885))
+* **python:** reject conflicting HTTPX authentication ([cc1c094](https://github.com/Phala-Network/phala-cloud/commit/cc1c0941ae2c397eed3e574c0f2c5236027afca8))
+* **python:** reject credentials in injected base URLs ([12f7456](https://github.com/Phala-Network/phala-cloud/commit/12f74560fe37ddbf67acd7f3187b468981ee14f8))
+* **python:** remove unsupported blockchain wrappers ([dec3601](https://github.com/Phala-Network/phala-cloud/commit/dec3601df1d2469e47d77f057b1ece74d3c88436))
+* **python:** replace obsolete Keccak dependency ([c425283](https://github.com/Phala-Network/phala-cloud/commit/c425283c2953796c3bc595ea14fcba0324ad12df))
+* **python:** require certifi 2026.10.19 to drop emSign roots ([06c25c6](https://github.com/Phala-Network/phala-cloud/commit/06c25c6c3768f73f677985c2f8c26cc2c9e03aee))
+* **python:** require complete event to finish watch ([0ac3c2b](https://github.com/Phala-Network/phala-cloud/commit/0ac3c2bbed52902b0bc1fa0abf17a902a4c2edbe))
+* **python:** require the target status on watch complete events ([f8c2a94](https://github.com/Phala-Network/phala-cloud/commit/f8c2a94caf793ea587760eacadefaea8bd0e7677))
+* **python:** retry interrupted watch streams safely ([edeb1fc](https://github.com/Phala-Network/phala-cloud/commit/edeb1fcbfffd9f790205fafca579751919f1ebaf))
+* **python:** return empty app_id when the 465 payload has none ([283a362](https://github.com/Phala-Network/phala-cloud/commit/283a3621f22d8c560578d9bca1dba5871e6f3002))
+* **python:** stop sending allow_restart from update_cvm_resources ([d983378](https://github.com/Phala-Network/phala-cloud/commit/d983378126f6ef9a76d3ba750fcc793e4f6c9547))
+* **python:** unwrap successful empty results ([767c455](https://github.com/Phala-Network/phala-cloud/commit/767c4556202ca72265b9679b0ea4619545cd86da))
+* **sdk:** finish the unified PATCH migration in the async Python client ([2a71dd6](https://github.com/Phala-Network/phala-cloud/commit/2a71dd67a1b604125ff840965ac0a7bc4e2352b9))
+* **sdk:** stop pinning the pubkey request to the node-keyed API ([c29470b](https://github.com/Phala-Network/phala-cloud/commit/c29470b2f7ae46754351f2177a4a5fb6daac5a81))
+
+### refactor
+
+* **python:** parse 465 hash-registration details in one place ([3476723](https://github.com/Phala-Network/phala-cloud/commit/347672382bce1d1cacb46ecfc44610e27aaf53cb))
+* **sdk:** drop os_image_ids from DeviceIdEntry ([fb69cec](https://github.com/Phala-Network/phala-cloud/commit/fb69cec58a9cda10ad1b4bbd24bc39134a27aafc))
 ## [](https://github.com/Phala-Network/phala-cloud/compare/python-v0.1.3...python-v) (2026-07-26)
 
 ### ⚠ BREAKING CHANGE
