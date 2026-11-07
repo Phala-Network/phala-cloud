@@ -1513,10 +1513,10 @@ const updateCvm = async (
 			`${JSON.stringify(
 				{
 					success: true,
-					vm_uuid: validatedOptions.uuid,
+					vm_uuid: cvm.vm_uuid,
 					name: cvm.name,
 					app_id: cvm.app_id,
-					dashboard_url: `${CLOUD_URL}/dashboard/cvms/${validatedOptions.uuid}`,
+					dashboard_url: `${CLOUD_URL}/dashboard/cvms/${cvm.vm_uuid}`,
 				},
 				null,
 				2,

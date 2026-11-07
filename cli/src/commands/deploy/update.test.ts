@@ -705,10 +705,10 @@ describe("phala deploy --cvm-id --json output", () => {
 		expect(code).toBe(0);
 		expect(output).toMatchObject({
 			success: true,
-			vm_uuid: CVM_ID,
+			vm_uuid: VM_UUID,
 			app_id: "abc",
 			name: "my-app",
-			dashboard_url: expect.stringContaining(CVM_ID),
+			dashboard_url: expect.stringContaining(VM_UUID),
 		});
 		expect(requests.some((r) => r.path.endsWith("/operations"))).toBe(true);
 	});
@@ -759,10 +759,10 @@ describe("phala deploy --cvm-id --json output", () => {
 		expect(code).toBe(0);
 		expect(output).toMatchObject({
 			success: true,
-			vm_uuid: CVM_ID,
+			vm_uuid: VM_UUID,
 			app_id: "abc",
 			name: "my-app",
-			dashboard_url: expect.stringContaining(CVM_ID),
+			dashboard_url: expect.stringContaining(VM_UUID),
 		});
 		expect(requests.some((r) => r.path.endsWith("/operations"))).toBe(false);
 	});
