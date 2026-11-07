@@ -1483,21 +1483,24 @@ const updateCvm = async (
 		try {
 			const timeoutMs = 300000; // 5 minutes
 			const startedAt = Date.now();
-			// An update leaves a stopped CVM stopped.
-			await waitForCvmReady(
-				validatedOptions.uuid as string,
-				timeoutMs,
-				context,
-				cvm.status === "stopped" ? "stopped" : "running",
-			);
+			// The operation's outcome comes first: a failed update can leave the
+			// CVM in a state other than the pre-update one, and the state wait
+			// would then only time out without naming the failure.
 			if (correlationId) {
 				await waitForUpdateOperation(
 					client,
 					validatedOptions.uuid as string,
 					correlationId,
-					timeoutMs - (Date.now() - startedAt),
+					timeoutMs,
 				);
 			}
+			// An update leaves a stopped CVM stopped.
+			await waitForCvmReady(
+				validatedOptions.uuid as string,
+				timeoutMs - (Date.now() - startedAt),
+				context,
+				cvm.status === "stopped" ? "stopped" : "running",
+			);
 		} catch (error: unknown) {
 			throw new Error(
 				`Wait failed: ${error instanceof Error ? error.message : String(error)}`,
