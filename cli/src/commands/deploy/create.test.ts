@@ -17,6 +17,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import fs from "fs-extra";
+import { buildJsonCliError, normalizeCliError } from "@/src/utils/logger";
 import type { CommandContext } from "@/src/core/types";
 
 // Other test files replace @phala/cloud and @/src/lib/client with
@@ -345,11 +346,13 @@ describe("phala deploy (create)", () => {
 			});
 
 			expect(exitCode).not.toBe(0);
-			expect(String(failure)).toContain("app-compose.service failed");
-			expect(String(failure)).toContain(CREATED_CVM.vm_uuid);
-			// The token is printed on success only; an error message reaches CI logs.
-			expect(String(failure)).not.toContain(LAUNCH_TOKEN);
-			expect(String(failure)).not.toContain("Timeout");
+			// What the user sees: the JSON error envelope the dispatcher prints.
+			const envelope = buildJsonCliError(normalizeCliError(failure));
+			expect(envelope.error).toBe(
+				`The CVM ${CREATED_CVM.vm_uuid} was created but did not start: Create failed: app-compose.service failed`,
+			);
+			// The token is printed on success only; an error reaches CI logs.
+			expect(JSON.stringify(envelope)).not.toContain(LAUNCH_TOKEN);
 			expect(Date.now() - startedAt).toBeLessThan(5000);
 			expect(stdout).toBe("");
 		}, 15000);

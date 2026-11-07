@@ -1142,10 +1142,10 @@ const deployNewCvm = async (
 		try {
 			await waitForCvmCreated(client, cvm.vm_uuid, context, 300000);
 		} catch (error: unknown) {
-			// Name the CVM: it exists even though the wait failed.
+			// Name the CVM: it exists even though the wait failed. No `cause`:
+			// the error envelope unwraps a cause and would drop this message.
 			throw new Error(
 				`The CVM ${cvm.vm_uuid} was created but did not start: ${error instanceof Error ? error.message : String(error)}`,
-				{ cause: error },
 			);
 		}
 	}
