@@ -1494,12 +1494,14 @@ const updateCvm = async (
 					timeoutMs,
 				);
 			}
-			// An update leaves a stopped CVM stopped.
+			// The backend keeps the power state of the live VM, and only a
+			// running CVM is known to have a running VM. A stopped CVM, or one
+			// in error after a failed boot, stays stopped through the update.
 			await waitForCvmReady(
 				validatedOptions.uuid as string,
 				timeoutMs - (Date.now() - startedAt),
 				context,
-				cvm.status === "stopped" ? "stopped" : "running",
+				cvm.status === "running" ? "running" : "stopped",
 			);
 		} catch (error: unknown) {
 			throw new Error(
