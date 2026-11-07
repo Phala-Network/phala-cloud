@@ -45,7 +45,9 @@ type Recorded = {
 	body: Record<string, unknown> | undefined;
 };
 
+// The identifier the user passes; the API resolves it to the real vm_uuid.
 const CVM_ID = "0123456789abcdef0123456789abcdef";
+const VM_UUID = "fedcba9876543210fedcba9876543210";
 const COMPOSE = "services:\n  app:\n    image: nginx\n";
 
 let server: ReturnType<typeof Bun.serve>;
@@ -110,6 +112,7 @@ beforeAll(async () => {
 			if (req.method === "GET") {
 				return Response.json({
 					id: CVM_ID,
+					vm_uuid: VM_UUID,
 					name: "my-app",
 					app_id: "abc",
 					status: "running",
@@ -464,6 +467,43 @@ describe("phala deploy --cvm-id", () => {
 		expect(String(failure)).toContain("Compose update failed: image not found");
 	}, 15000);
 
+	test("--wait fails fast with the operation error when a failed update leaves a running CVM stopped", async () => {
+		// A boot failure stops the CVM that was running before the update.
+		let reads = 0;
+		respond = (method, path) => {
+			if (path.endsWith("/operations")) {
+				return Response.json({
+					items: [
+						{
+							correlation_id: "corr-1",
+							status: "failed",
+							error_message: "app-compose.service failed",
+						},
+					],
+					next_cursor: null,
+					total: 1,
+				});
+			}
+			if (method !== "GET") return undefined;
+			return Response.json({
+				id: CVM_ID,
+				vm_uuid: VM_UUID,
+				name: "my-app",
+				app_id: "abc",
+				status: reads++ === 0 ? "running" : "stopped",
+				in_progress: false,
+				resource: {},
+				gateway: {},
+			});
+		};
+
+		const { exitCode, failure } = await deploy({ wait: true });
+
+		expect(exitCode).not.toBe(0);
+		expect(String(failure)).toContain("app-compose.service failed");
+		expect(String(failure)).not.toContain("Timeout");
+	}, 15000);
+
 	test("sends the file as compose.bash_script for a bash-runner app", async () => {
 		respond = (method) =>
 			method === "GET"
@@ -665,10 +705,10 @@ describe("phala deploy --cvm-id --json output", () => {
 		expect(code).toBe(0);
 		expect(output).toMatchObject({
 			success: true,
-			vm_uuid: CVM_ID,
+			vm_uuid: VM_UUID,
 			app_id: "abc",
 			name: "my-app",
-			dashboard_url: expect.stringContaining(CVM_ID),
+			dashboard_url: expect.stringContaining(VM_UUID),
 		});
 		expect(requests.some((r) => r.path.endsWith("/operations"))).toBe(true);
 	});
@@ -719,10 +759,10 @@ describe("phala deploy --cvm-id --json output", () => {
 		expect(code).toBe(0);
 		expect(output).toMatchObject({
 			success: true,
-			vm_uuid: CVM_ID,
+			vm_uuid: VM_UUID,
 			app_id: "abc",
 			name: "my-app",
-			dashboard_url: expect.stringContaining(CVM_ID),
+			dashboard_url: expect.stringContaining(VM_UUID),
 		});
 		expect(requests.some((r) => r.path.endsWith("/operations"))).toBe(false);
 	});

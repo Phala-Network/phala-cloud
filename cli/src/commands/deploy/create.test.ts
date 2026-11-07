@@ -182,6 +182,18 @@ describe("phala deploy (create)", () => {
 		expect(body.launch_token).toBe(LAUNCH_TOKEN);
 	});
 
+	test("--json writes exactly one JSON object to stdout", async () => {
+		const { exitCode, failure } = await deploy({ compose: composePath });
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		// Throws unless stdout holds a single JSON value and nothing else.
+		expect(JSON.parse(stdout)).toMatchObject({
+			success: true,
+			vm_uuid: CREATED_CVM.vm_uuid,
+		});
+	});
+
 	test("sends the --compose file as bash_script for the bash runner", async () => {
 		const { exitCode } = await deploy({ compose: composePath, runner: "bash" });
 

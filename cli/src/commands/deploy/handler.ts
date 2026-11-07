@@ -1009,7 +1009,7 @@ const deployNewCvm = async (
 		preLaunchScriptContent,
 	);
 
-	stdout.write(`Provisioning CVM ${name}...\n`);
+	logger.info(`Provisioning CVM ${name}...`);
 
 	// Provision - backend will auto-match resources
 	const provision_result = await safeProvisionCvm(client, payload);
@@ -1483,21 +1483,24 @@ const updateCvm = async (
 		try {
 			const timeoutMs = 300000; // 5 minutes
 			const startedAt = Date.now();
-			// An update leaves a stopped CVM stopped.
-			await waitForCvmReady(
-				validatedOptions.uuid as string,
-				timeoutMs,
-				context,
-				cvm.status === "stopped" ? "stopped" : "running",
-			);
+			// The operation's outcome comes first: a failed update can leave the
+			// CVM in a state other than the pre-update one, and the state wait
+			// would then only time out without naming the failure.
 			if (correlationId) {
 				await waitForUpdateOperation(
 					client,
 					validatedOptions.uuid as string,
 					correlationId,
-					timeoutMs - (Date.now() - startedAt),
+					timeoutMs,
 				);
 			}
+			// An update leaves a stopped CVM stopped.
+			await waitForCvmReady(
+				validatedOptions.uuid as string,
+				timeoutMs - (Date.now() - startedAt),
+				context,
+				cvm.status === "stopped" ? "stopped" : "running",
+			);
 		} catch (error: unknown) {
 			throw new Error(
 				`Wait failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -1510,10 +1513,10 @@ const updateCvm = async (
 			`${JSON.stringify(
 				{
 					success: true,
-					vm_uuid: validatedOptions.uuid,
+					vm_uuid: cvm.vm_uuid,
 					name: cvm.name,
 					app_id: cvm.app_id,
-					dashboard_url: `${CLOUD_URL}/dashboard/cvms/${validatedOptions.uuid}`,
+					dashboard_url: `${CLOUD_URL}/dashboard/cvms/${cvm.vm_uuid}`,
 				},
 				null,
 				2,

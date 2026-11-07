@@ -64,8 +64,9 @@ export async function waitForCvmReady(
 
 /**
  * Wait for an update operation to finish, and fail unless it completed.
- * The CVM state alone cannot tell a finished update from a failed one: the
- * failure cleanup returns the CVM to the state it had before the update.
+ * The CVM state alone cannot tell a finished update from a failed one, and a
+ * failed update may leave the CVM in a different state than before (a boot
+ * failure leaves a running CVM stopped), so wait for the operation first.
  */
 export async function waitForUpdateOperation(
 	client: CliApiClient,
