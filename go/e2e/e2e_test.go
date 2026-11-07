@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	phala "github.com/Phala-Network/phala-cloud/sdks/go"
+	phala "github.com/Phala-Network/phala-cloud/go"
 	"golang.org/x/crypto/ssh"
 )
 
