@@ -320,8 +320,13 @@ jobs:
         run: |
           npm install -g conventional-changelog-cli@5.0.0 conventional-changelog-conventionalcommits@8.0.0 --ignore-scripts
 
+          # The CLI takes the version from the root package.json, which has none
+          # here, so the headings came out empty. Pass the bumped version instead.
+          echo "{\"version\": \"${NEW_VERSION}\"}" > "$RUNNER_TEMP/changelog-context.json"
+
           conventional-changelog -p conventionalcommits \
             --commit-path "python" \
+            --context "$RUNNER_TEMP/changelog-context.json" \
             -i "python/CHANGELOG.md" \
             -s \
             -n changelog.config.js \
@@ -329,6 +334,7 @@ jobs:
 
           conventional-changelog -p conventionalcommits \
             --commit-path "python" \
+            --context "$RUNNER_TEMP/changelog-context.json" \
             -o "python/RELEASE_NOTES.md" \
             -n changelog.config.js \
             --tag-prefix "python-v"
