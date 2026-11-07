@@ -13,7 +13,11 @@ import {
 	DEFAULT_MEMORY,
 	DEFAULT_VCPU,
 } from "@/src/utils/constants";
-import { waitForCvmReady, waitForUpdateOperation } from "@/src/utils/cvms";
+import {
+	waitForCvmCreated,
+	waitForCvmOperation,
+	waitForCvmReady,
+} from "@/src/utils/cvms";
 import { logger } from "@/src/utils/logger";
 
 import {
@@ -977,6 +981,7 @@ const deployNewCvm = async (
 	stderr: NodeJS.WriteStream,
 	projectConfig?: PrivacyConfig,
 	preLaunchScriptContent?: string,
+	context?: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
 ) => {
 	// Resolve KMS selection once at the start to avoid duplicate calls and warnings
 	const kmsSelection = resolveKmsSelection(validatedOptions);
@@ -1130,6 +1135,19 @@ const deployNewCvm = async (
 			},
 			!!validatedOptions.instanceType,
 		);
+	}
+
+	if (validatedOptions.wait && context) {
+		logger.info("Waiting for the CVM to start...");
+		try {
+			await waitForCvmCreated(client, cvm.vm_uuid, context, 300000);
+		} catch (error: unknown) {
+			// Name the CVM: it exists even though the wait failed.
+			throw new Error(
+				`The CVM ${cvm.vm_uuid} was created but did not start: ${error instanceof Error ? error.message : String(error)}`,
+				{ cause: error },
+			);
+		}
 	}
 
 	if (validatedOptions?.json !== false) {
@@ -1487,7 +1505,7 @@ const updateCvm = async (
 			// CVM in a state other than the pre-update one, and the state wait
 			// would then only time out without naming the failure.
 			if (correlationId) {
-				await waitForUpdateOperation(
+				await waitForCvmOperation(
 					client,
 					validatedOptions.uuid as string,
 					correlationId,
@@ -1724,6 +1742,7 @@ export async function runDeploy(
 				context.stderr,
 				context.projectConfig,
 				preLaunchScriptContent,
+				context,
 			);
 		}
 		return 0;
