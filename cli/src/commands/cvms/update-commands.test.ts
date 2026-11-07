@@ -19,17 +19,30 @@ import {
 import os from "node:os";
 import path from "node:path";
 import fs from "fs-extra";
-import { setJsonMode } from "@/src/core/json-mode";
 import type { CommandContext } from "@/src/core/types";
-import { logger } from "@/src/utils/logger";
 
 // Other test files replace @phala/cloud and @/src/lib/client with
 // mock.module, and bun keeps module mocks for the rest of the process. Load
 // fresh real instances for this file so it talks to the local server through
 // the real SDK client. @phala/cloud stays real afterwards; the CLI client
 // module is put back as it was.
+//
+// Files that mock @/src/utils/logger with a no-op setJsonMode also overwrite
+// the setJsonMode of @/src/core/json-mode, which the logger re-exports. Load
+// fresh real instances of both, or setJsonMode(true) below does nothing and
+// resize stops at an interactive prompt.
 const realCloud = await import(`${require.resolve("@phala/cloud")}?real`);
 mock.module("@phala/cloud", () => ({ ...realCloud }));
+const realJsonMode: typeof import("@/src/core/json-mode") = await import(
+	`${require.resolve("@/src/core/json-mode")}?real`
+);
+mock.module("@/src/core/json-mode", () => ({ ...realJsonMode }));
+const realLogger: typeof import("@/src/utils/logger") = await import(
+	`${require.resolve("@/src/utils/logger")}?real`
+);
+mock.module("@/src/utils/logger", () => ({ ...realLogger }));
+const { setJsonMode } = realJsonMode;
+const { logger } = realLogger;
 const previousClient = { ...(await import("@/src/lib/client")) };
 const realClient = await import(`${require.resolve("@/src/lib/client")}?real`);
 mock.module("@/src/lib/client", () => ({ ...realClient }));
