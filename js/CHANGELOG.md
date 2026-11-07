@@ -1,3 +1,77 @@
+## [](https://github.com/Phala-Network/phala-cloud/compare/js-v0.4.0...js-v) (2026-11-07)
+
+### ⚠ BREAKING CHANGE
+
+* **js:** provisionCvm no longer accepts init_scripts as the object
+{env_merge: boolean}; send a slug list such as ["env_merge"].
+* **js:** JavaScript: updateCvmVisibility returns { message, correlation_id, status } instead of the CVM record.
+* **js:** JavaScript: patchCvm takes gpus as { gpus: [{ slot, product_id? }], attach_mode? } instead of { count, product_name }.
+* **sdk:** Go: ProvisionComposeUpdateRequest.EncryptedEnv is removed. GetComposeHash normalizes by default, so callers comparing stored hashes get different values unless they pass false. NewClient returns an error for a negative WithMaxRetries, a base URL with userinfo, and missing credentials. WatchCVMState reconnects when the stream ends without a complete event, and the default MaxRetries of nil means unlimited, so pass a cancellable context or set MaxRetries. []string request fields use omitzero instead of omitempty, so a non-nil empty slice is sent as []. ConfirmCVMPatch sends X-Compose-Hash and X-Transaction-Hash headers with an empty JSON object body and returns correlation_id.
+* **sdk:** JavaScript: watchCvmState with maxRetries N allows N+1 attempts, and MaxRetriesExceededError.attempts is N+1. The extend() factory receives Client<ApiVersion>, its result type omits withVersion and extend and re-types them, and extension methods on a withVersion clone return unknown.
+* **js:** getComposeHash from @phala/cloud now always normalizes like the Phala Cloud backend and takes a single argument.
+* **js:** hashes from getComposeHash and dumpAppCompose in
+@phala/cloud/utils change. Anything that stored or compared the old
+indented-format hash must recompute it.
+
+### docs
+
+* **js:** document GpuConfig shape on patchCvm ([ca738a2](https://github.com/Phala-Network/phala-cloud/commit/ca738a20a9363e0c7a275a5a33754df35e805c02))
+* **js:** explain 465 recovery for updateCvmVisibility ([3e716cc](https://github.com/Phala-Network/phala-cloud/commit/3e716cccd55a3813cd13ec07820b062507750315))
+* **js:** note that init_scripts takes slugs only ([7637765](https://github.com/Phala-Network/phala-cloud/commit/7637765217c53a002d7473b0871b9bf35ccb60f7))
+* **js:** note the compose, create and update additions ([f76e73e](https://github.com/Phala-Network/phala-cloud/commit/f76e73edf28b12174236d8eb3126dc0caf9a5286))
+* **js:** record CVM update contract changes in the upgrade notes ([b3c2370](https://github.com/Phala-Network/phala-cloud/commit/b3c237022015505a2d405dedd221b00f859a9f63))
+* **sdk:** describe the credits fields of the current user ([cbb3501](https://github.com/Phala-Network/phala-cloud/commit/cbb35011c1018fa7856c3f6af0994dc407a31a81))
+* **sdk:** record breaking changes in Go and JavaScript SDKs ([b174cf0](https://github.com/Phala-Network/phala-cloud/commit/b174cf016082397296da4494fedb2e504e0d1271))
+* **sdk:** say what a suspended workspace means for its CVMs ([5694677](https://github.com/Phala-Network/phala-cloud/commit/56946773738a50828f29110dbbba880e2072ff08))
+
+### feat
+
+* **cli,js:** support GitHub Actions OIDC bearer auth ([bfa8db2](https://github.com/Phala-Network/phala-cloud/commit/bfa8db201781b83b03316a6bfc24c45099b479d4))
+* **cli:** add deploy --no-pre-launch-script ([58e3447](https://github.com/Phala-Network/phala-cloud/commit/58e344772e2134bc0be734eb1749d8f133da7335))
+* **js:** accept raw compose, init scripts, launch token and annotations on create ([2de7c4f](https://github.com/Phala-Network/phala-cloud/commit/2de7c4ff7793c79fceb20a825d98231570712759))
+* **js:** add app launch token actions ([d8e2772](https://github.com/Phala-Network/phala-cloud/commit/d8e2772bd38dabd7e6da10d62be03e22f908fc12))
+* **js:** add CVM annotation actions ([a9c3f64](https://github.com/Phala-Network/phala-cloud/commit/a9c3f6471495aa888ebf41d958c04c7457f97d81))
+* **js:** add description to WorkspaceResponseSchema ([79b582b](https://github.com/Phala-Network/phala-cloud/commit/79b582b2052f17f6bf3b66e68a5788443ac00076))
+* **js:** add getCvmInitScripts ([d0263e0](https://github.com/Phala-Network/phala-cloud/commit/d0263e010c73eb80a5a0cb31955631a6bd0029ae))
+* **js:** add managed_env to CVM detail schemas ([5159a7e](https://github.com/Phala-Network/phala-cloud/commit/5159a7e74bd53e0705942e000939e7d80494aac5))
+* **js:** add revokeCurrentApiToken action ([e3b7d17](https://github.com/Phala-Network/phala-cloud/commit/e3b7d17b778fccb996a2aa614c4534e35cb3ab7d))
+* **js:** expose requires_gpu in available OS image variants ([2c2f94d](https://github.com/Phala-Network/phala-cloud/commit/2c2f94d42c213fe05221254e5f1dcdb51e69eaa6))
+* **js:** same-path two-phase CVM create on POST /cvms ([0630966](https://github.com/Phala-Network/phala-cloud/commit/0630966277ea092d577f4db5691f6af1efbb0430))
+* **js:** send compose merge patches and init scripts from patchCvm ([ea89dc7](https://github.com/Phala-Network/phala-cloud/commit/ea89dc7122b5b83a959346dffdc2c75b31ab75ff))
+* **js:** support replica OS image selection ([eae695b](https://github.com/Phala-Network/phala-cloud/commit/eae695b70f5c6bdd986a69a452fa5202ebdb96cc))
+* **js:** type the full app compose ([ad9cfeb](https://github.com/Phala-Network/phala-cloud/commit/ad9cfebe9aae4c27a3d2749d0862fe83c35ea6b7))
+* **sdk:** add CVM SSH key get and update actions ([aec5cc2](https://github.com/Phala-Network/phala-cloud/commit/aec5cc2adf4d478b86462b5799de018839dd4384))
+* **sdk:** add max_placeable_count to ProductGpuAvailability (R2-1) ([78d9c7d](https://github.com/Phala-Network/phala-cloud/commit/78d9c7d048bbddcff5ee27b0f4caf66b5a2c145c))
+* **sdk:** add mr_config_id V3 helpers across JS, Python and Go ([e7d2f3a](https://github.com/Phala-Network/phala-cloud/commit/e7d2f3adc479b6a377d3b4efa405574fc00b58e2))
+* **sdk:** carry GPU product requirement and product-scoped availability ([100dd56](https://github.com/Phala-Network/phala-cloud/commit/100dd5617ac70ba22f91e375752896e40946cac5))
+* **sdk:** expose requires_gpu_count on the public instance type schema ([31adfeb](https://github.com/Phala-Network/phala-cloud/commit/31adfeb45ba884ef964c06aad1924f1a6743b246))
+* **sdk:** expose unified OS image hardware support ([8e61cc8](https://github.com/Phala-Network/phala-cloud/commit/8e61cc8938c4eddef15f8abd052d838f3a026779))
+* **sdks:** expose GPU rental renewal state ([b0f474b](https://github.com/Phala-Network/phala-cloud/commit/b0f474b3a742ee19d2d90188a9275385303a5d19))
+* select creation nodes by physical name ([51be05b](https://github.com/Phala-Network/phala-cloud/commit/51be05b12d18cb3205ea5801d17f530f3f9f2df9))
+* use node names for replicas and allowance checks ([a8009eb](https://github.com/Phala-Network/phala-cloud/commit/a8009ebafbc1c75ac57ce9bf972fb637d00432e6))
+
+### fix
+
+* **cli:** tighten CVM SSH key command output ([f969882](https://github.com/Phala-Network/phala-cloud/commit/f96988275d7d489439d1457d7c90825574912722))
+* **js:** accept and preserve string manifest_version in app_compose ([dbdb704](https://github.com/Phala-Network/phala-cloud/commit/dbdb704579308dcae560cf99f311097f27652b89))
+* **js:** accept null for the optional compose fields on create ([9b0e37c](https://github.com/Phala-Network/phala-cloud/commit/9b0e37c1b90ae8c9072c76e98a4c5cb501348b44))
+* **js:** accept PATCH no_change without correlation_id ([6b41637](https://github.com/Phala-Network/phala-cloud/commit/6b4163737e271d3734503052cab8f1a5c5dc3f62))
+* **js:** accept port_policy with the backend defaults left out ([55dfb85](https://github.com/Phala-Network/phala-cloud/commit/55dfb85d6228d1589c819116eaf94858f55b8c9f))
+* **js:** accept rego: null in requirements.gpu_policy ([22556c4](https://github.com/Phala-Network/phala-cloud/commit/22556c4e328a42a2e57382edcccb6ffcaa27352f))
+* **js:** avoid recursive bound action type inference ([f64fc54](https://github.com/Phala-Network/phala-cloud/commit/f64fc54001c06ab94a78d1a075fa59d6172ca4a8))
+* **js:** bind actions and preserve versioned clients ([272a2be](https://github.com/Phala-Network/phala-cloud/commit/272a2bef4029fa8389fd2d66b8e50eb07b702a7e))
+* **js:** export the backend-matching getComposeHash from the package root ([e6aa875](https://github.com/Phala-Network/phala-cloud/commit/e6aa875dc4ca964f8d86b3c9a8988f208a856726))
+* **js:** hash app composes the way the backend serializes them ([83d644e](https://github.com/Phala-Network/phala-cloud/commit/83d644e28b9585e7ed4e45af6dfc847cf28a4235))
+* **js:** hash app-compose with the backend's compact JSON ([216fe28](https://github.com/Phala-Network/phala-cloud/commit/216fe28a9d4e6ca09b44dc701c404e1c8af21d40))
+* **js:** keep event listeners on withVersion clones ([5292a59](https://github.com/Phala-Network/phala-cloud/commit/5292a5985f53dbe0ea6cc0d89fa4afc2ffb43c96))
+* **js:** move updateCvmVisibility to the unified PATCH endpoint ([31e9722](https://github.com/Phala-Network/phala-cloud/commit/31e97226c79e46d802f74f12ba984c16ba109b35))
+* **js:** preserve watch stream and retry contracts ([77b5ac5](https://github.com/Phala-Network/phala-cloud/commit/77b5ac589749d53bbc88059ee821ba9a6fac96c2))
+* **js:** send only accepted fields from updateCvmResources ([9412cc3](https://github.com/Phala-Network/phala-cloud/commit/9412cc342d86a4bf76127dcc5b0c9c716621f55d))
+* **js:** send patchCvm gpus in the backend GpuConfig shape ([37752ab](https://github.com/Phala-Network/phala-cloud/commit/37752ab050fcab894e63f21e2641e2847bb3aa8a))
+* prevent API key leaks across SDK redirects ([e3dbb83](https://github.com/Phala-Network/phala-cloud/commit/e3dbb834a7cc85ba031894df663e660b9ec0d815))
+* **sdk:** accept manifest_version as numeric string from dstack 0.6.0+ ([bb15292](https://github.com/Phala-Network/phala-cloud/commit/bb152921c7228fc1f99dbd82c32708deb326448e))
+* **sdk:** stop pinning the pubkey request to the node-keyed API ([c29470b](https://github.com/Phala-Network/phala-cloud/commit/c29470b2f7ae46754351f2177a4a5fb6daac5a81))
+* **sdk:** use canonical resource identifiers for non-admin requests ([3f96e25](https://github.com/Phala-Network/phala-cloud/commit/3f96e25d68f47a3b28ccb6197088bb8e61eb40ab))
 ## [](https://github.com/Phala-Network/phala-cloud/compare/js-v0.3.0...js-v) (2026-07-25)
 
 ### ⚠ BREAKING CHANGE
