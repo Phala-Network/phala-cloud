@@ -1,3 +1,44 @@
+## [](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.0...cli-v) (2026-11-07)
+
+### ⚠ BREAKING CHANGE
+
+* **cli:** CLI: phala deploy --commit now also fails when a create-only flag is passed.
+* **cli:** CLI: phala deploy --cvm-id fails when --ssh-pubkey is passed, instead of ignoring it.
+* **cli:** CLI: phala deploy --cvm-id fails when --name, --region, --node, --custom-app-id, --nonce, --key-provider-mode or --dev-os / --no-dev-os is passed, instead of ignoring the flag.
+
+### docs
+
+* **cli:** an empty pre-launch script file on update keeps the current script ([95de2fd](https://github.com/Phala-Network/phala-cloud/commit/95de2fd192cba09e5933da52218f97f1f2030ec0))
+* **cli:** describe what cvms upgrade now keeps ([d37f86a](https://github.com/Phala-Network/phala-cloud/commit/d37f86a3fad648d24a4d6ae1dae2fb5c6c19583d))
+* **cli:** say that deploy updates keep the current pre-launch script ([cf1c7cc](https://github.com/Phala-Network/phala-cloud/commit/cf1c7cc1e058dc5100706c40822f4b6a2772169c))
+* **cli:** say what deploy --wait does on an update ([0a148ba](https://github.com/Phala-Network/phala-cloud/commit/0a148ba64916419b445883814a1671cb1c819127))
+
+### feat
+
+* **cli:** add phala annotations ([3cc17b0](https://github.com/Phala-Network/phala-cloud/commit/3cc17b0551f165e26d52aadf04b09f0c7c116963))
+* **cli:** add phala apps launch-token set and clear ([e21eebb](https://github.com/Phala-Network/phala-cloud/commit/e21eebb60200553c591a281a109c283605f8658c))
+* **cli:** deploy with the new compose, init script and launch token fields ([d2993b6](https://github.com/Phala-Network/phala-cloud/commit/d2993b6d7ecd83c30a6b4bc8f5e22704772dde13))
+* **cli:** remove every init script with deploy --clear-init-scripts ([19df360](https://github.com/Phala-Network/phala-cloud/commit/19df360731dd8902ca19831ec0d74ab4835c115c))
+* **cli:** set a CVM's launch token hash with deploy --launch-token-hash ([89a6470](https://github.com/Phala-Network/phala-cloud/commit/89a647095ac70eeefdc119c7d98ad6efa00c8736))
+
+### fix
+
+* **cli:** apply deploy flags on CVM update and reject create-only ones ([65e07dd](https://github.com/Phala-Network/phala-cloud/commit/65e07ddaa96031ea08cfb69db5f46910c4b017b5))
+* **cli:** check create-only flags before anything else in deploy ([25eb154](https://github.com/Phala-Network/phala-cloud/commit/25eb154de6a3eb51d3fe6083f91c557320899aa0))
+* **cli:** check the update operation under GitHub OIDC too ([9ed5367](https://github.com/Phala-Network/phala-cloud/commit/9ed5367e058d7e49ef90441c876cccbfe9950b3b)), closes [#2755](https://github.com/Phala-Network/phala-cloud/issues/2755)
+* **cli:** exit 0 after a successful deploy --commit ([ede3ffc](https://github.com/Phala-Network/phala-cloud/commit/ede3ffca58c9c51270a7b6f25732ffc06cdbecbf))
+* **cli:** fail deploy --wait when the update operation failed ([08dd2ef](https://github.com/Phala-Network/phala-cloud/commit/08dd2ef2c572f14fb8bf4aafb0dc80de6a7273b1))
+* **cli:** let deploy --wait succeed when a stopped CVM stays stopped ([5e20435](https://github.com/Phala-Network/phala-cloud/commit/5e20435b1c304afd0f1998893bc57004241dd4dd))
+* **cli:** move cvms upgrade to the unified PATCH endpoint ([31aff8c](https://github.com/Phala-Network/phala-cloud/commit/31aff8c9f40f3fa2930559b43345d1349beefec6))
+* **cli:** read annotation pairs given after -- ([7bd2b2d](https://github.com/Phala-Network/phala-cloud/commit/7bd2b2df3f19870dfd0f4fe3239e8e8e1dc62211))
+* **cli:** reject --ssh-pubkey on CVM update ([d9a3275](https://github.com/Phala-Network/phala-cloud/commit/d9a3275868b8acf125aa974c90312bb335a41f21))
+* **cli:** reject the remaining create-only flags on CVM update ([dec708e](https://github.com/Phala-Network/phala-cloud/commit/dec708edaabe6c8790162354be6da160896bf090))
+* **cli:** report an unchanged compose in cvms upgrade ([4493d64](https://github.com/Phala-Network/phala-cloud/commit/4493d641604d3737ca152cc49f1ed9e8dc1e90e9))
+* **cli:** send --memory on update without the whole-GiB check ([0b06872](https://github.com/Phala-Network/phala-cloud/commit/0b06872828d944e5f5b09af45cb0ce0872caf8c9))
+* **cli:** send the script as compose.bash_script when updating a bash app ([1f7ceaf](https://github.com/Phala-Network/phala-cloud/commit/1f7ceaf0b50337be144f501a340bcc1e7ba67755))
+* **cli:** set the Trust Center listing only after the update is accepted ([a39cd1e](https://github.com/Phala-Network/phala-cloud/commit/a39cd1e2328628c3305b2505a2756c0d434f8d3c))
+* **cli:** skip the update operation check under GitHub OIDC ([9483519](https://github.com/Phala-Network/phala-cloud/commit/94835196f7055653b0a870821a88b9fdbaa6ffcc))
+* **cli:** stop sending allow_restart from cvms resize ([5a16f17](https://github.com/Phala-Network/phala-cloud/commit/5a16f17e80407fb525a18954978ace01f9e3ac49))
 ## [](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.1.22...cli-v) (2026-11-03)
 
 ### feat
