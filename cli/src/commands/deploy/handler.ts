@@ -1009,7 +1009,7 @@ const deployNewCvm = async (
 		preLaunchScriptContent,
 	);
 
-	stdout.write(`Provisioning CVM ${name}...\n`);
+	logger.info(`Provisioning CVM ${name}...`);
 
 	// Provision - backend will auto-match resources
 	const provision_result = await safeProvisionCvm(client, payload);
