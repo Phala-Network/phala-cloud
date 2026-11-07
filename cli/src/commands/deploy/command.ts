@@ -300,7 +300,7 @@ export const deployCommandMeta: CommandMeta = {
 		{
 			name: "wait",
 			description:
-				"On update (--cvm-id): wait until the CVM is back in its pre-update state (a stopped CVM stays stopped), then check the update's result and fail if it failed. No effect on a new deployment",
+				"Wait for the deployment to finish and fail if it failed. New CVM: wait until it is running. Update (--cvm-id): wait until the CVM is running again, or stays stopped if it was not running before the update",
 			type: "boolean",
 			target: "wait",
 			group: "basic",

@@ -73,7 +73,7 @@ Deploy new CVM or update existing one.
 | `-r, --region <region>` | auto | Preferred region |
 | `-e, --env <env>` | | Env var KEY=VALUE or file path (repeatable) |
 | `--kms <type>` | phala | KMS type: phala, ethereum/eth, base |
-| `--wait` | false | Wait for completion |
+| `--wait` | false | Wait until a new CVM is running, or until an updated CVM is running again (it stays stopped if it was not running before); fail if the deployment failed |
 | `--ssh-pubkey <path>` | ~/.ssh/id_rsa.pub | SSH public key |
 | `--dev-os` | false | Use dev OS image |
 | `--public-logs` | true | Public container logs |

@@ -241,15 +241,15 @@ async function runCli(argv: string[]) {
 }
 
 describe("phala deploy --help", () => {
-	test("says what --wait does on an update", async () => {
+	test("says what --wait does on a create and on an update", async () => {
 		const { code, stdout } = await runCli(["deploy", "--help"]);
 
 		expect(code).toBe(0);
 		const wait = stdout.split("\n").find((line) => line.includes("--wait "));
+		expect(wait).toContain("New CVM: wait until it is running");
 		expect(wait).toContain(
-			"On update (--cvm-id): wait until the CVM is back in its pre-update state",
+			"stays stopped if it was not running before the update",
 		);
-		expect(wait).toContain("check the update's result and fail if it failed");
 	});
 });
 

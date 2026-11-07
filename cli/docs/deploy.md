@@ -20,7 +20,7 @@ Creates a new CVM by default. If `--cvm-id` is provided or `phala.toml` contains
 | `-r, --region <region>` | auto-selected | Preferred region (e.g., us-west, eu-central) |
 | `-e, --env <value>` | | Environment variable (KEY=VALUE) or path to .env file. Repeatable |
 | `--kms <type>` | phala | KMS type: phala, ethereum/eth, or base |
-| `--wait` | false | On update (`--cvm-id`): wait until the CVM is back in its pre-update state (a stopped CVM stays stopped), then check the update's result and fail if it failed. No effect on a new deployment |
+| `--wait` | false | Wait for the deployment to finish and fail if it failed. New CVM: wait until it is running. Update (`--cvm-id`): wait until the CVM is running again, or stays stopped if it was not running before the update |
 | `--dev-os` | false | Use development OS image (requires SSH key) |
 | `--public-logs` | true | Make CVM logs publicly accessible |
 | `--no-public-logs` | | Disable public log access |
