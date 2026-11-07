@@ -17,10 +17,15 @@ import path from "node:path";
 import fs from "fs-extra";
 import type { CommandContext } from "@/src/core/types";
 
-// Other test files replace @phala/cloud and @/src/lib/client with
-// mock.module; load fresh real instances (see deploy/update.test.ts).
+// Other test files replace @phala/cloud, @/src/lib/client and
+// @/src/utils/logger with mock.module; load fresh real instances (see
+// deploy/update.test.ts).
 const realCloud = await import(`${require.resolve("@phala/cloud")}?real`);
 mock.module("@phala/cloud", () => ({ ...realCloud }));
+const realLogger = await import(
+	`${require.resolve("@/src/utils/logger")}?real`
+);
+mock.module("@/src/utils/logger", () => ({ ...realLogger }));
 const previousClient = { ...(await import("@/src/lib/client")) };
 const realClient = await import(`${require.resolve("@/src/lib/client")}?real`);
 mock.module("@/src/lib/client", () => ({ ...realClient }));
