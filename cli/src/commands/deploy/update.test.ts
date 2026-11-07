@@ -40,6 +40,8 @@ const { CommandRegistry } = await import("@/src/core/registry");
 type Recorded = {
 	method: string;
 	path: string;
+	search: string;
+	authorization: string | null;
 	body: Record<string, unknown> | undefined;
 };
 
@@ -50,7 +52,11 @@ let server: ReturnType<typeof Bun.serve>;
 let requests: Recorded[] = [];
 // Per-test response override; return undefined to fall through to defaults.
 let respond:
-	| ((method: string, path: string) => Response | undefined)
+	| ((
+			method: string,
+			path: string,
+			query: URLSearchParams,
+	  ) => Response | undefined)
 	| undefined;
 
 const HASH_REQUIRED = {
@@ -88,9 +94,11 @@ beforeAll(async () => {
 			requests.push({
 				method: req.method,
 				path: url.pathname,
+				search: url.search,
+				authorization: req.headers.get("authorization"),
 				body: text ? JSON.parse(text) : undefined,
 			});
-			const overridden = respond?.(req.method, url.pathname);
+			const overridden = respond?.(req.method, url.pathname, url.searchParams);
 			if (overridden) return overridden;
 			if (url.pathname.endsWith("/operations")) {
 				return Response.json({
@@ -192,6 +200,7 @@ function updateRequest(): Recorded {
 async function runCli(argv: string[]) {
 	const registry = new CommandRegistry();
 	registry.registerCommand(deployCommand);
+	let stdout = "";
 	let stderr = "";
 	const output = (append: (chunk: string) => void) =>
 		({
@@ -217,14 +226,29 @@ async function runCli(argv: string[]) {
 			PHALA_CLOUD_API_PREFIX: `http://127.0.0.1:${server.port}/api/v1`,
 			PHALA_CLOUD_DIR: tmpDir,
 		},
-		stdout: output(() => {}),
+		stdout: output((chunk) => {
+			stdout += chunk;
+		}),
 		stderr: output((chunk) => {
 			stderr += chunk;
 		}),
 		stdin: process.stdin,
 	});
-	return { code, stderr };
+	return { code, stdout, stderr };
 }
+
+describe("phala deploy --help", () => {
+	test("says what --wait does on an update", async () => {
+		const { code, stdout } = await runCli(["deploy", "--help"]);
+
+		expect(code).toBe(0);
+		const wait = stdout.split("\n").find((line) => line.includes("--wait "));
+		expect(wait).toContain(
+			"On update (--cvm-id): wait until the CVM is back in its pre-update state",
+		);
+		expect(wait).toContain("check the update's result and fail if it failed");
+	});
+});
 
 describe("phala deploy --cvm-id --clear-init-scripts (parsed argv)", () => {
 	test("sends an empty init_scripts set", async () => {
@@ -362,21 +386,39 @@ describe("phala deploy --cvm-id", () => {
 		expect(exitCode).toBe(0);
 	}, 10000);
 
-	test("--wait under GitHub OIDC waits for the state only", async () => {
-		// Deploy OIDC tokens cannot read the operations route.
-		respond = (_method, path) =>
-			path.endsWith("/operations")
-				? Response.json({ detail: "Not authenticated" }, { status: 401 })
-				: undefined;
+	test("--wait under GitHub OIDC fails when the update operation failed", async () => {
+		// A deploy OIDC token may read one operation, by correlation_id, of its
+		// deploy target; listing operations stays refused.
+		respond = (_method, path, query) => {
+			if (!path.endsWith("/operations")) return undefined;
+			if (query.get("correlation_id") === null) {
+				return Response.json({ detail: "Not authenticated" }, { status: 401 });
+			}
+			return Response.json({
+				items: [
+					{
+						correlation_id: "corr-1",
+						status: "failed",
+						error_message: "Compose update failed: image not found",
+					},
+				],
+				next_cursor: null,
+				total: 1,
+			});
+		};
 
 		const { exitCode, failure } = await deploy(
 			{ wait: true },
 			{ PHALA_OIDC_TOKEN: "oidc-jwt" },
 		);
 
-		expect(failure).toBeUndefined();
-		expect(exitCode).toBe(0);
-		expect(requests.some((r) => r.path.endsWith("/operations"))).toBe(false);
+		expect(exitCode).not.toBe(0);
+		expect(String(failure)).toContain("Compose update failed: image not found");
+		expect(
+			requests
+				.filter((r) => r.path.endsWith("/operations"))
+				.map((r) => [r.search, r.authorization]),
+		).toEqual([["?correlation_id=corr-1", "Bearer oidc-jwt"]]);
 	});
 
 	test("--wait fails when the update of a stopped CVM fails", async () => {
@@ -576,5 +618,133 @@ describe("phala deploy --cvm-id", () => {
 			"--fs cannot be changed on an existing CVM",
 		);
 		expect(requests).toEqual([]);
+	});
+});
+
+/**
+ * Run the real `phala` entry point the way phala-deploy-action does: one
+ * process, stdout and stderr read together and parsed as one JSON document.
+ */
+async function runPhalaJson(argv: string[], auth: Record<string, string>) {
+	const child = Bun.spawn(
+		[process.execPath, path.join(import.meta.dir, "../../index.ts"), ...argv],
+		{
+			cwd: tmpDir,
+			env: {
+				PATH: process.env.PATH ?? "",
+				HOME: tmpDir,
+				PHALA_CLOUD_DIR: tmpDir,
+				PHALA_DISABLE_UPDATE_CHECK: "1",
+				PHALA_CLOUD_API_PREFIX: `http://127.0.0.1:${server.port}/api/v1`,
+				...auth,
+			},
+			stdout: "pipe",
+			stderr: "pipe",
+		},
+	);
+	const [stdout, stderr, code] = await Promise.all([
+		new Response(child.stdout).text(),
+		new Response(child.stderr).text(),
+		child.exited,
+	]);
+	// Throws unless the whole output is a single JSON value.
+	const output = JSON.parse(stdout + stderr) as Record<string, unknown>;
+	return { code, output };
+}
+
+const JSON_UPDATE = ["deploy", "--cvm-id", CVM_ID, "--json"];
+const OIDC = { PHALA_OIDC_TOKEN: "oidc-jwt" };
+
+describe("phala deploy --cvm-id --json output", () => {
+	test("--wait writes only the success object", async () => {
+		const { code, output } = await runPhalaJson(
+			[...JSON_UPDATE, "-c", composePath, "--wait"],
+			OIDC,
+		);
+
+		expect(code).toBe(0);
+		expect(output).toMatchObject({
+			success: true,
+			vm_uuid: CVM_ID,
+			app_id: "abc",
+			name: "my-app",
+			dashboard_url: expect.stringContaining(CVM_ID),
+		});
+		expect(requests.some((r) => r.path.endsWith("/operations"))).toBe(true);
+	});
+
+	test("--wait writes only one error object when the update failed", async () => {
+		respond = (_method, path) =>
+			path.endsWith("/operations")
+				? Response.json({
+						items: [
+							{
+								correlation_id: "corr-1",
+								status: "failed",
+								error_message: "Compose update failed: image not found",
+							},
+						],
+						next_cursor: null,
+						total: 1,
+					})
+				: undefined;
+
+		const { code, output } = await runPhalaJson(
+			[...JSON_UPDATE, "-c", composePath, "--wait"],
+			OIDC,
+		);
+
+		expect(code).not.toBe(0);
+		expect(output.success).toBe(false);
+		expect(String(output.error)).toContain(
+			"Compose update failed: image not found",
+		);
+	});
+
+	test("no_change prints the success object and skips the operations read", async () => {
+		respond = (method) =>
+			method === "PATCH"
+				? Response.json({
+						status: "no_change",
+						message: "Compose configuration unchanged",
+						correlation_id: "",
+					})
+				: undefined;
+
+		const { code, output } = await runPhalaJson(
+			[...JSON_UPDATE, "-c", composePath, "--wait"],
+			OIDC,
+		);
+
+		expect(code).toBe(0);
+		expect(output).toMatchObject({
+			success: true,
+			vm_uuid: CVM_ID,
+			app_id: "abc",
+			name: "my-app",
+			dashboard_url: expect.stringContaining(CVM_ID),
+		});
+		expect(requests.some((r) => r.path.endsWith("/operations"))).toBe(false);
+	});
+
+	test("--prepare-only writes only the pending-approval object", async () => {
+		respond = (method) =>
+			method === "PATCH"
+				? Response.json(HASH_REQUIRED, { status: 465 })
+				: undefined;
+
+		const { code, output } = await runPhalaJson(
+			[...JSON_UPDATE, "-c", composePath, "--prepare-only"],
+			{ PHALA_CLOUD_API_KEY: "test-key" },
+		);
+
+		expect(code).toBe(0);
+		expect(output).toMatchObject({
+			success: true,
+			prepare_only: true,
+			compose_hash: "0xabc123",
+			app_id: "abc",
+			commit_token: "token-1",
+		});
 	});
 });

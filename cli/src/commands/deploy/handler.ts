@@ -1490,13 +1490,7 @@ const updateCvm = async (
 				context,
 				cvm.status === "stopped" ? "stopped" : "running",
 			);
-			// GitHub OIDC deploy tokens cannot read the operations route.
-			// deferred: operation outcome check under OIDC | impact: an OIDC deploy whose update fails while the CVM keeps its power state is reported as success (same as before this PR) | trigger: backend lets deploy OIDC read its own operation by correlation_id
-			const usesOidc =
-				resolveAuthForContext(context, {
-					apiToken: validatedOptions.apiToken,
-				}).tokenSource === "oidc_env";
-			if (correlationId && !usesOidc) {
+			if (correlationId) {
 				await waitForUpdateOperation(
 					client,
 					validatedOptions.uuid as string,

@@ -299,7 +299,8 @@ export const deployCommandMeta: CommandMeta = {
 		rpcUrlOption,
 		{
 			name: "wait",
-			description: "Wait for deployment/update completion",
+			description:
+				"On update (--cvm-id): wait until the CVM is back in its pre-update state (a stopped CVM stays stopped), then check the update's result and fail if it failed. No effect on a new deployment",
 			type: "boolean",
 			target: "wait",
 			group: "basic",
