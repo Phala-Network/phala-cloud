@@ -392,22 +392,26 @@ jobs:
         run: |
           npm install -g conventional-changelog-cli@5.0.0 conventional-changelog-conventionalcommits@8.0.0 --ignore-scripts
 
+          # The CLI takes the version from the root package.json, which has none
+          # here, so the headings came out empty. Pass the bumped version instead.
+          echo "{\"version\": \"${NEW_VERSION}\"}" > "$RUNNER_TEMP/changelog-context.json"
+
           # Update CHANGELOG.md (prepends latest release)
           # --commit-path must be relative to the repo root so git log filters
           # to only commits that touched files under that subdirectory.
           conventional-changelog -p conventionalcommits \
             --commit-path "${PACKAGE}" \
+            --context "$RUNNER_TEMP/changelog-context.json" \
             -i "${PACKAGE}/CHANGELOG.md" \
             -s \
-            --pkg-path "${PACKAGE}/package.json" \
             -n changelog.config.js \
             --tag-prefix "${PACKAGE}-v"
 
           # Generate release notes for GitHub Release body
           conventional-changelog -p conventionalcommits \
             --commit-path "${PACKAGE}" \
+            --context "$RUNNER_TEMP/changelog-context.json" \
             -o "${PACKAGE}/RELEASE_NOTES.md" \
-            --pkg-path "${PACKAGE}/package.json" \
             -n changelog.config.js \
             --tag-prefix "${PACKAGE}-v"
 
