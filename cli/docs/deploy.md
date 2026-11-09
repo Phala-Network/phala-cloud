@@ -100,6 +100,8 @@ These flags set how a CVM is created and cannot be changed afterwards: `--name`,
 
 By default, deploy leaves the pre-launch script field out of the request. When creating a CVM, Phala Cloud then uses its official default script; when updating one, the current script is kept (see [Updating an existing CVM](#updating-an-existing-cvm)). Use `--pre-launch-script <path>` to supply a script. If that file is empty, the field is still omitted: a new CVM gets the default script, and an updated CVM keeps its current script. To explicitly deploy with no pre-launch script, use `--no-pre-launch-script`; it cannot be combined with `--pre-launch-script`.
 
+When creating a CVM with `--no-pre-launch-script`, deploy skips automatic local SSH key injection into `DSTACK_AUTHORIZED_KEYS` unless you explicitly pass `--dev-os` or `--ssh-pubkey`. `--no-dev-os` always disables injection. The platform pre-launch script normally installs this key, so without it the variable only adds an unused entry to `allowed_envs`.
+
 ```bash
 $ phala deploy --no-pre-launch-script
 ```

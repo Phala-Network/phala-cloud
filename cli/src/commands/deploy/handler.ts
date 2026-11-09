@@ -615,10 +615,12 @@ const resolveEnvVars = async (
 /**
  * Read SSH public key from file
  * - --dev-os: SSH public key is required
- * - --non-dev-os: SSH public key only if explicitly specified via --ssh-pubkey
- * - Neither flag: Try to read public key, use if available
+ * - --no-dev-os: Never inject an SSH public key
+ * - Neither flag: Try to read public key unless --no-pre-launch-script is set
  */
-const readSshPubkey = async (options: Options): Promise<string | undefined> => {
+export const readSshPubkey = async (
+	options: Options,
+): Promise<string | undefined> => {
 	let sshPubkeyPath = options.sshPubkey;
 
 	if (options.sshPubkey) {
@@ -629,6 +631,14 @@ const readSshPubkey = async (options: Options): Promise<string | undefined> => {
 
 	// --no-dev-os: never inject SSH key
 	if (options.devOs === false) {
+		return undefined;
+	}
+
+	if (
+		options.noPreLaunchScript &&
+		options.devOs !== true &&
+		!options.sshPubkey
+	) {
 		return undefined;
 	}
 
