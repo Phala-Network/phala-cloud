@@ -316,12 +316,18 @@ jobs:
         working-directory: js
         run: bunx playwright install-deps
 
+      # Playwright browser builds link against the system libraries of the image
+      # they were downloaded on, so the cache must not cross runner images.
+      - name: Get runner image
+        id: runner-image
+        run: echo "name=$ImageOS" >> "$GITHUB_OUTPUT"
+
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('js/node_modules/playwright/package.json') }}
+          key: playwright-${{ steps.runner-image.outputs.name }}-${{ hashFiles('js/node_modules/playwright/package.json') }}
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
