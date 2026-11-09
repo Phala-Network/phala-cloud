@@ -1,3 +1,10 @@
+## [1.2.2](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.1...cli-v1.2.2) (2026-11-07)
+
+### fix
+
+* **cli:** keep create progress off stdout in JSON mode ([cb3f220](https://github.com/Phala-Network/phala-cloud/commit/cb3f220e9b41ffab3a4bebbe1ca95398c52ab066))
+* **cli:** report a failed update before waiting for the CVM state ([dcc9032](https://github.com/Phala-Network/phala-cloud/commit/dcc903282671feb4fcce58a081954c8b7562daec))
+* **cli:** report the resolved vm_uuid in the update JSON ([b910384](https://github.com/Phala-Network/phala-cloud/commit/b910384ab4c44fd6d7d3913c826cc212f88b3a6f))
 ## [](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.0...cli-v) (2026-11-07)
 
 ### ⚠ BREAKING CHANGE
