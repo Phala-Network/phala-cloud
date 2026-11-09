@@ -217,7 +217,7 @@ function assertInitScriptFilesExist(paths: string[]): void {
 
 function readInitScriptFiles(paths: string[]): string[] {
 	assertInitScriptFilesExist(paths);
-	return paths.map((filePath) => readScriptFile(filePath, filePath));
+	return paths.map((filePath) => fs.readFileSync(filePath, "utf8"));
 }
 
 export function assertUpdatableOptions(options: Options): void {
