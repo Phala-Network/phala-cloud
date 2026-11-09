@@ -198,7 +198,7 @@ jobs:
 
       - name: Run Go tests (exclude live-API e2e)
         working-directory: go
-        run: go test $(go list ./... | grep -v /e2e) -count=1
+        run: go test -race $(go list ./... | grep -v /e2e) -count=1
 
   compatibility-checks:
     name: Compatibility Checks
@@ -276,7 +276,8 @@ jobs:
 
   browser-compatibility:
     name: Browser Compatibility
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    # Match the Ubuntu 24.04 ABI used by Playwright's WebKit binary.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
