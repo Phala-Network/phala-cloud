@@ -13,7 +13,11 @@ import {
 	DEFAULT_MEMORY,
 	DEFAULT_VCPU,
 } from "@/src/utils/constants";
-import { waitForCvmReady, waitForUpdateOperation } from "@/src/utils/cvms";
+import {
+	waitForCvmCreated,
+	waitForCvmOperation,
+	waitForCvmReady,
+} from "@/src/utils/cvms";
 import { logger } from "@/src/utils/logger";
 
 import {
@@ -985,8 +989,9 @@ const deployNewCvm = async (
 	client: CliApiClient,
 	stdout: NodeJS.WriteStream,
 	stderr: NodeJS.WriteStream,
-	projectConfig?: PrivacyConfig,
-	preLaunchScriptContent?: string,
+	projectConfig: PrivacyConfig | undefined,
+	preLaunchScriptContent: string | undefined,
+	context: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
 ) => {
 	// Resolve KMS selection once at the start to avoid duplicate calls and warnings
 	const kmsSelection = resolveKmsSelection(validatedOptions);
@@ -1140,6 +1145,19 @@ const deployNewCvm = async (
 			},
 			!!validatedOptions.instanceType,
 		);
+	}
+
+	if (validatedOptions.wait) {
+		logger.info("Waiting for the CVM to start...");
+		try {
+			await waitForCvmCreated(client, cvm.vm_uuid, context, 300000);
+		} catch (error: unknown) {
+			// Name the CVM: it exists even though the wait failed. No `cause`:
+			// the error envelope unwraps a cause and would drop this message.
+			throw new Error(
+				`The CVM ${cvm.vm_uuid} was created but did not start: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
 	}
 
 	if (validatedOptions?.json !== false) {
@@ -1497,19 +1515,21 @@ const updateCvm = async (
 			// CVM in a state other than the pre-update one, and the state wait
 			// would then only time out without naming the failure.
 			if (correlationId) {
-				await waitForUpdateOperation(
+				await waitForCvmOperation(
 					client,
 					validatedOptions.uuid as string,
 					correlationId,
 					timeoutMs,
 				);
 			}
-			// An update leaves a stopped CVM stopped.
+			// The backend keeps the power state of the live VM, and only a
+			// running CVM is known to have a running VM. A stopped CVM, or one
+			// in error after a failed boot, stays stopped through the update.
 			await waitForCvmReady(
 				validatedOptions.uuid as string,
 				timeoutMs - (Date.now() - startedAt),
 				context,
-				cvm.status === "stopped" ? "stopped" : "running",
+				cvm.status === "running" ? "running" : "stopped",
 			);
 		} catch (error: unknown) {
 			throw new Error(
@@ -1732,6 +1752,7 @@ export async function runDeploy(
 				context.stderr,
 				context.projectConfig,
 				preLaunchScriptContent,
+				context,
 			);
 		}
 		return 0;

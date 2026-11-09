@@ -241,15 +241,15 @@ async function runCli(argv: string[]) {
 }
 
 describe("phala deploy --help", () => {
-	test("says what --wait does on an update", async () => {
+	test("says what --wait does on a create and on an update", async () => {
 		const { code, stdout } = await runCli(["deploy", "--help"]);
 
 		expect(code).toBe(0);
 		const wait = stdout.split("\n").find((line) => line.includes("--wait "));
+		expect(wait).toContain("New CVM: wait until it is running");
 		expect(wait).toContain(
-			"On update (--cvm-id): wait until the CVM is back in its pre-update state",
+			"stays stopped if it was not running before the update",
 		);
-		expect(wait).toContain("check the update's result and fail if it failed");
 	});
 });
 
@@ -382,6 +382,57 @@ describe("phala deploy --cvm-id", () => {
 						gateway: {},
 					})
 				: undefined;
+
+		const { exitCode, failure } = await deploy({ wait: true });
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+	}, 10000);
+
+	test("--wait succeeds when an update leaves a CVM in error stopped", async () => {
+		// The backend keeps the live VM's power state: an error CVM whose VM
+		// is down ends the update stopped, never running.
+		let reads = 0;
+		respond = (method, path) =>
+			method === "GET" && !path.endsWith("/operations")
+				? Response.json({
+						id: CVM_ID,
+						name: "my-app",
+						app_id: "abc",
+						status: reads++ === 0 ? "error" : "stopped",
+						in_progress: false,
+						resource: {},
+						gateway: {},
+					})
+				: undefined;
+
+		const { exitCode, failure } = await deploy({ wait: true });
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+	}, 10000);
+
+	test("--wait waits for running when the CVM was running before the update", async () => {
+		const states = [
+			["running", false],
+			["updating", true],
+			["running", false],
+		] as const;
+		let reads = 0;
+		respond = (method, path) => {
+			if (method !== "GET" || path.endsWith("/operations")) return undefined;
+			const [status, inProgress] =
+				states[Math.min(reads++, states.length - 1)] ?? states[0];
+			return Response.json({
+				id: CVM_ID,
+				name: "my-app",
+				app_id: "abc",
+				status,
+				in_progress: inProgress,
+				resource: {},
+				gateway: {},
+			});
+		};
 
 		const { exitCode, failure } = await deploy({ wait: true });
 

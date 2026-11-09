@@ -17,6 +17,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import fs from "fs-extra";
+import { buildJsonCliError, normalizeCliError } from "@/src/utils/logger";
 import type { CommandContext } from "@/src/core/types";
 
 // Other test files replace @phala/cloud and @/src/lib/client with
@@ -71,6 +72,8 @@ let tmpDir: string;
 let composePath: string;
 let appComposePath: string;
 let stdout = "";
+// Per-test response for GET requests (CVM info, operations); defaults to 404.
+let respondGet: ((path: string) => Response) | undefined;
 
 beforeAll(async () => {
 	server = Bun.serve({
@@ -91,6 +94,7 @@ beforeAll(async () => {
 							token: "prepare-token",
 						});
 			}
+			if (req.method === "GET" && respondGet) return respondGet(url.pathname);
 			return Response.json({ detail: "unexpected" }, { status: 404 });
 		},
 	});
@@ -109,6 +113,7 @@ afterAll(async () => {
 afterEach(() => {
 	requests = [];
 	stdout = "";
+	respondGet = undefined;
 });
 
 async function deploy(input: Record<string, unknown>) {
@@ -261,5 +266,117 @@ describe("phala deploy (create)", () => {
 			`${flag} only applies to an update`,
 		);
 		expect(requests).toEqual([]);
+	});
+	describe("--wait", () => {
+		const INFO_PATH = `/api/v1/cvms/${CREATED_CVM.vm_uuid}`;
+		const OPERATIONS_PATH = `${INFO_PATH}/operations`;
+
+		const cvmInfo = (
+			status: string,
+			inProgress: boolean,
+			correlationId?: string,
+		) =>
+			Response.json({
+				id: "cvm_1",
+				vm_uuid: CREATED_CVM.vm_uuid,
+				name: "my-app",
+				app_id: "abc",
+				status,
+				in_progress: inProgress,
+				progress: correlationId
+					? { target: "starting", correlation_id: correlationId }
+					: null,
+				resource: {},
+				gateway: {},
+			});
+
+		const operation = (status: string, errorMessage?: string) =>
+			Response.json({
+				items: [
+					{ correlation_id: "corr-1", status, error_message: errorMessage },
+				],
+				next_cursor: null,
+				total: 1,
+			});
+
+		test("waits for the create operation and for the CVM to run", async () => {
+			const states: Array<[string, boolean]> = [
+				["starting", true],
+				["running", false],
+			];
+			let infoReads = 0;
+			respondGet = (path) => {
+				if (path === OPERATIONS_PATH) return operation("completed");
+				const [status, inProgress] =
+					states[Math.min(infoReads++, states.length - 1)] ?? states[0] ?? [];
+				return cvmInfo(status as string, inProgress as boolean, "corr-1");
+			};
+
+			const { exitCode, failure } = await deploy({
+				compose: composePath,
+				wait: true,
+			});
+
+			expect(failure).toBeUndefined();
+			expect(exitCode).toBe(0);
+			const operations = requests.filter((r) => r.path === OPERATIONS_PATH);
+			expect(operations).toHaveLength(1);
+			expect(infoReads).toBeGreaterThanOrEqual(2);
+			// stdout stays one JSON object with the same fields as without --wait.
+			expect(Object.keys(JSON.parse(stdout))).toEqual([
+				"success",
+				"vm_uuid",
+				"name",
+				"app_id",
+				"dashboard_url",
+				"launch_token",
+			]);
+		}, 15000);
+
+		test("fails with the operation error when the create operation fails", async () => {
+			respondGet = (path) =>
+				path === OPERATIONS_PATH
+					? operation("failed", "app-compose.service failed")
+					: cvmInfo("starting", true, "corr-1");
+
+			const startedAt = Date.now();
+			const { exitCode, failure } = await deploy({
+				compose: composePath,
+				wait: true,
+			});
+
+			expect(exitCode).not.toBe(0);
+			// What the user sees: the JSON error envelope the dispatcher prints.
+			const envelope = buildJsonCliError(normalizeCliError(failure));
+			expect(envelope.error).toBe(
+				`The CVM ${CREATED_CVM.vm_uuid} was created but did not start: Create failed: app-compose.service failed`,
+			);
+			// The token is printed on success only; an error reaches CI logs.
+			expect(JSON.stringify(envelope)).not.toContain(LAUNCH_TOKEN);
+			expect(Date.now() - startedAt).toBeLessThan(5000);
+			expect(stdout).toBe("");
+		}, 15000);
+
+		test("fails fast when the CVM ends in error without an operation to follow", async () => {
+			respondGet = () => cvmInfo("error", false);
+
+			const startedAt = Date.now();
+			const { exitCode, failure } = await deploy({
+				compose: composePath,
+				wait: true,
+			});
+
+			expect(exitCode).not.toBe(0);
+			expect(String(failure)).toContain("CVM is in error state");
+			expect(Date.now() - startedAt).toBeLessThan(5000);
+			expect(stdout).toBe("");
+		}, 15000);
+
+		test("without --wait returns without reading the CVM", async () => {
+			const { exitCode } = await deploy({ compose: composePath });
+
+			expect(exitCode).toBe(0);
+			expect(requests.filter((r) => r.method === "GET")).toEqual([]);
+		});
 	});
 });
