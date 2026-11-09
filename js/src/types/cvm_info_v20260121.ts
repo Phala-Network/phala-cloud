@@ -10,172 +10,155 @@ export const KmsTypeSchema = z.enum(["phala", "ethereum", "base", "legacy"]);
 export type KmsType = z.infer<typeof KmsTypeSchema>;
 
 export const UserRefSchema = z.object({
-	object_type: z.literal("user"),
-	id: z.string().nullable().optional(),
-	username: z.string().nullable().optional(),
-	avatar_url: z.string().nullable().optional(),
+  object_type: z.literal("user"),
+  id: z.string().nullable().optional(),
+  username: z.string().nullable().optional(),
+  avatar_url: z.string().nullable().optional(),
 });
 export type UserRef = z.infer<typeof UserRefSchema>;
 
 export const WorkspaceRefSchema = z.object({
-	object_type: z.literal("workspace"),
-	id: z.string(),
-	name: z.string(),
-	slug: z.string().nullable().optional(),
-	avatar_url: z.string().nullable().optional(),
+  object_type: z.literal("workspace"),
+  id: z.string(),
+  name: z.string(),
+  slug: z.string().nullable().optional(),
+  avatar_url: z.string().nullable().optional(),
 });
 export type WorkspaceRef = z.infer<typeof WorkspaceRefSchema>;
 
 export const CvmResourceInfoV20260121Schema = z.object({
-	instance_type: z.string().nullable().optional(),
-	vcpu: z.number().int().nullable().optional(),
-	memory_in_gb: z.number().nullable().optional(),
-	disk_in_gb: z.number().int().nullable().optional(),
-	gpus: z.number().int().nullable().optional(),
-	compute_billing_price: z.string().nullable().optional(),
-	billing_period: BillingPeriodSchema.nullable().optional(),
+  instance_type: z.string().nullable().optional(),
+  vcpu: z.number().int().nullable().optional(),
+  memory_in_gb: z.number().nullable().optional(),
+  disk_in_gb: z.number().int().nullable().optional(),
+  gpus: z.number().int().nullable().optional(),
+  compute_billing_price: z.string().nullable().optional(),
+  billing_period: BillingPeriodSchema.nullable().optional(),
 });
-export type CvmResourceInfoV20260121 = z.infer<
-	typeof CvmResourceInfoV20260121Schema
->;
+export type CvmResourceInfoV20260121 = z.infer<typeof CvmResourceInfoV20260121Schema>;
 
 export const CvmHourlyRateV20260121Schema = z.object({
-	total: z.string().nullable().optional(),
-	compute: z.string().nullable().optional(),
-	disk: z.string().nullable().optional(),
+  total: z.string().nullable().optional(),
+  compute: z.string().nullable().optional(),
+  disk: z.string().nullable().optional(),
 });
-export type CvmHourlyRateV20260121 = z.infer<
-	typeof CvmHourlyRateV20260121Schema
->;
+export type CvmHourlyRateV20260121 = z.infer<typeof CvmHourlyRateV20260121Schema>;
 
 export const CvmGpuRentalOrderInfoV20260121Schema = z.object({
-	order_id: z.string(),
-	status: z.string(),
-	pricing_plan: z.string().nullable().optional(),
-	commitment_days: z.number().int().nullable().optional(),
-	auto_renew: z.boolean().optional().default(false),
-	expires_at: z.string().nullable().optional(),
-	renewal_in_progress: z.boolean().optional().default(false),
-	renewal_next_attempt_at: z.string().nullable().optional(),
-	agreed_hourly_rate: z.string().nullable().optional(),
-	hourly_billing_start_time: z.string().nullable().optional(),
-	activated_at: z.string().nullable().optional(),
-	completed_at: z.string().nullable().optional(),
-	cancelled_at: z.string().nullable().optional(),
-	decoupled_at: z.string().nullable().optional(),
-	sku_code: z.string().nullable().optional(),
-	sku_display_name: z.string().nullable().optional(),
+  order_id: z.string(),
+  status: z.string(),
+  pricing_plan: z.string().nullable().optional(),
+  commitment_days: z.number().int().nullable().optional(),
+  auto_renew: z.boolean().optional().default(false),
+  expires_at: z.string().nullable().optional(),
+  renewal_in_progress: z.boolean().optional().default(false),
+  renewal_next_attempt_at: z.string().nullable().optional(),
+  agreed_hourly_rate: z.string().nullable().optional(),
+  hourly_billing_start_time: z.string().nullable().optional(),
+  activated_at: z.string().nullable().optional(),
+  completed_at: z.string().nullable().optional(),
+  cancelled_at: z.string().nullable().optional(),
+  decoupled_at: z.string().nullable().optional(),
+  sku_code: z.string().nullable().optional(),
+  sku_display_name: z.string().nullable().optional(),
 });
-export type CvmGpuRentalOrderInfoV20260121 = z.infer<
-	typeof CvmGpuRentalOrderInfoV20260121Schema
->;
+export type CvmGpuRentalOrderInfoV20260121 = z.infer<typeof CvmGpuRentalOrderInfoV20260121Schema>;
 
 export const CvmOsInfoV20260121Schema = z.object({
-	name: z.string().nullable().optional(),
-	version: z.string().nullable().optional(),
-	is_dev: z.boolean().nullable().optional(),
-	os_image_hash: z.string().nullable().optional(),
+  name: z.string().nullable().optional(),
+  version: z.string().nullable().optional(),
+  is_dev: z.boolean().nullable().optional(),
+  os_image_hash: z.string().nullable().optional(),
 });
 export type CvmOsInfoV20260121 = z.infer<typeof CvmOsInfoV20260121Schema>;
 
 const CvmKmsInfoV20260121BaseSchema = z.object({
-	chain_id: z.number().int().nullable().optional(),
-	dstack_kms_address: z.string().nullable().optional(),
-	dstack_app_address: z.string().nullable().optional(),
-	deployer_address: z.string().nullable().optional(),
-	rpc_endpoint: z.string().nullable().optional(),
-	encrypted_env_pubkey: z.string().nullable().optional(),
+  chain_id: z.number().int().nullable().optional(),
+  dstack_kms_address: z.string().nullable().optional(),
+  dstack_app_address: z.string().nullable().optional(),
+  deployer_address: z.string().nullable().optional(),
+  rpc_endpoint: z.string().nullable().optional(),
+  encrypted_env_pubkey: z.string().nullable().optional(),
 });
 
-export const CvmKmsInfoV20260121Schema =
-	CvmKmsInfoV20260121BaseSchema.transform((data) => {
-		if (data.chain_id != null) {
-			const chain: Chain | undefined = SUPPORTED_CHAINS[data.chain_id];
-			if (chain) {
-				return { ...data, chain } as typeof data & { chain: Chain };
-			}
-		}
-		return data as typeof data;
-	});
+export const CvmKmsInfoV20260121Schema = CvmKmsInfoV20260121BaseSchema.transform((data) => {
+  if (data.chain_id != null) {
+    const chain: Chain | undefined = SUPPORTED_CHAINS[data.chain_id];
+    if (chain) {
+      return { ...data, chain } as typeof data & { chain: Chain };
+    }
+  }
+  return data as typeof data;
+});
 export type CvmKmsInfoV20260121 = z.infer<typeof CvmKmsInfoV20260121Schema>;
 
 export const CvmProgressInfoV20260121Schema = z.object({
-	target: z.string().nullable().optional(),
-	started_at: z.string().nullable().optional(),
-	correlation_id: z.string().nullable().optional(),
+  target: z.string().nullable().optional(),
+  started_at: z.string().nullable().optional(),
+  correlation_id: z.string().nullable().optional(),
 });
-export type CvmProgressInfoV20260121 = z.infer<
-	typeof CvmProgressInfoV20260121Schema
->;
+export type CvmProgressInfoV20260121 = z.infer<typeof CvmProgressInfoV20260121Schema>;
 
 export const CvmGatewayInfoV20260121Schema = z.object({
-	base_domain: z.string().nullable().optional(),
-	cname: z.string().nullable().optional(),
+  base_domain: z.string().nullable().optional(),
+  cname: z.string().nullable().optional(),
 });
-export type CvmGatewayInfoV20260121 = z.infer<
-	typeof CvmGatewayInfoV20260121Schema
->;
+export type CvmGatewayInfoV20260121 = z.infer<typeof CvmGatewayInfoV20260121Schema>;
 
 export const CvmLogUrlsV20260121Schema = z.object({
-	/** Presigned serial log URL; expires shortly after it is issued. */
-	serial: z
-		.string()
-		.nullable()
-		.optional()
-		.describe(
-			"Optional presigned serial log URL that expires shortly after issuance.",
-		),
-	/** Presigned stdout log URL; expires shortly after it is issued. */
-	stdout: z
-		.string()
-		.nullable()
-		.optional()
-		.describe(
-			"Optional presigned stdout log URL that expires shortly after issuance.",
-		),
-	/** Presigned stderr log URL; expires shortly after it is issued. */
-	stderr: z
-		.string()
-		.nullable()
-		.optional()
-		.describe(
-			"Optional presigned stderr log URL that expires shortly after issuance.",
-		),
-	/** Container URL base without query; present only when public logs and a VM UUID exist. */
-	container_log_base: z
-		.string()
-		.nullable()
-		.optional()
-		.describe("Optional container log URL base without query parameters."),
-	/** Container URL auth query; present only when public logs and a VM UUID exist. */
-	auth_query: z
-		.string()
-		.nullable()
-		.optional()
-		.describe(
-			"Optional container log auth query; null when public logs or VM UUID are unavailable.",
-		),
+  /** Presigned serial log URL; expires shortly after it is issued. */
+  serial: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("Optional presigned serial log URL that expires shortly after issuance."),
+  /** Presigned stdout log URL; expires shortly after it is issued. */
+  stdout: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("Optional presigned stdout log URL that expires shortly after issuance."),
+  /** Presigned stderr log URL; expires shortly after it is issued. */
+  stderr: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("Optional presigned stderr log URL that expires shortly after issuance."),
+  /** Container URL base without query; present only when public logs and a VM UUID exist. */
+  container_log_base: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("Optional container log URL base without query parameters."),
+  /** Container URL auth query; present only when public logs and a VM UUID exist. */
+  auth_query: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      "Optional container log auth query; null when public logs or VM UUID are unavailable.",
+    ),
 });
 export type CvmLogUrlsV20260121 = z.infer<typeof CvmLogUrlsV20260121Schema>;
 
 export const DeviceIdEntrySchema = z.object({
-	device_id: z.string(),
-	algorithm_version: z.string(),
-	enabled: z.boolean(),
+  device_id: z.string(),
+  algorithm_version: z.string(),
+  enabled: z.boolean(),
 });
 export type DeviceIdEntry = z.infer<typeof DeviceIdEntrySchema>;
 
 export const NodeRefSchema = z.object({
-	object_type: z.literal("node"),
-	id: z.number().int().nullable().optional(),
-	name: z.string().nullable().optional(),
-	region: z.string().nullable().optional(),
-	// Deprecated: resolved single device_id. Use device_ids for the full matrix.
-	device_id: z.string().nullable().optional(),
-	device_ids: z.array(DeviceIdEntrySchema).default([]),
-	ppid: z.string().nullable().optional(),
-	status: z.string().nullable().optional(),
-	version: z.string().nullable().optional(),
+  object_type: z.literal("node"),
+  id: z.number().int().nullable().optional(),
+  name: z.string().nullable().optional(),
+  region: z.string().nullable().optional(),
+  // Deprecated: resolved single device_id. Use device_ids for the full matrix.
+  device_id: z.string().nullable().optional(),
+  device_ids: z.array(DeviceIdEntrySchema).default([]),
+  ppid: z.string().nullable().optional(),
+  status: z.string().nullable().optional(),
+  version: z.string().nullable().optional(),
 });
 export type NodeRef = z.infer<typeof NodeRefSchema>;
 
@@ -184,85 +167,76 @@ export const CvmNodeInfoV20260121Schema = NodeRefSchema;
 export type CvmNodeInfoV20260121 = NodeRef;
 
 export const CvmInfoV20260121Schema = z.object({
-	id: z.string(),
-	name: z.string(),
-	app_id: z.string().nullable().optional(),
-	vm_uuid: z.string().nullable().optional(),
-	instance_id: z.string().nullable().optional(),
-	resource: CvmResourceInfoV20260121Schema,
-	node_info: NodeRefSchema.nullable().optional(),
-	os: CvmOsInfoV20260121Schema.nullable().optional(),
-	kms_type: KmsTypeSchema.nullable().optional(),
-	kms_info: CvmKmsInfoV20260121Schema.nullable().optional(),
-	status: z.string(),
-	in_progress: z.boolean().optional().default(false),
-	progress: CvmProgressInfoV20260121Schema.nullable().optional(),
-	compose_hash: z.string().nullable().optional(),
-	docker_compose_hash: z.string().nullable().optional(),
-	pre_launch_script_hash: z.string().nullable().optional(),
-	gateway: CvmGatewayInfoV20260121Schema,
-	logs: CvmLogUrlsV20260121Schema.optional().default({}),
-	services: z.array(z.record(z.string(), z.any())).optional().default([]),
-	endpoints: z.array(CvmNetworkUrlsV20251028Schema).nullable().optional(),
-	public_logs: z.boolean().optional(),
-	public_sysinfo: z.boolean().optional(),
-	public_tcbinfo: z.boolean().optional(),
-	gateway_enabled: z.boolean().optional(),
-	secure_time: z.boolean().optional(),
-	managed_env: z.boolean().optional().default(false),
-	listed: z.boolean().optional().default(false),
-	storage_fs: z.string().optional(),
-	workspace: WorkspaceRefSchema.nullable().optional(),
-	creator: UserRefSchema.nullable().optional(),
-	created_at: z.string().nullable().optional(),
-	deleted_at: z.string().nullable().optional(),
-	project_type: z.string().nullable().optional(),
-	hourly_rate: CvmHourlyRateV20260121Schema.nullable().optional(),
-	billing_interval: z.string().nullable().optional(),
-	gpu_rental_order: CvmGpuRentalOrderInfoV20260121Schema.nullable().optional(),
+  id: z.string(),
+  name: z.string(),
+  app_id: z.string().nullable().optional(),
+  vm_uuid: z.string().nullable().optional(),
+  instance_id: z.string().nullable().optional(),
+  resource: CvmResourceInfoV20260121Schema,
+  node_info: NodeRefSchema.nullable().optional(),
+  os: CvmOsInfoV20260121Schema.nullable().optional(),
+  kms_type: KmsTypeSchema.nullable().optional(),
+  kms_info: CvmKmsInfoV20260121Schema.nullable().optional(),
+  status: z.string(),
+  in_progress: z.boolean().optional().default(false),
+  progress: CvmProgressInfoV20260121Schema.nullable().optional(),
+  compose_hash: z.string().nullable().optional(),
+  docker_compose_hash: z.string().nullable().optional(),
+  pre_launch_script_hash: z.string().nullable().optional(),
+  gateway: CvmGatewayInfoV20260121Schema,
+  logs: CvmLogUrlsV20260121Schema.optional().default({}),
+  services: z.array(z.record(z.string(), z.any())).optional().default([]),
+  endpoints: z.array(CvmNetworkUrlsV20251028Schema).nullable().optional(),
+  public_logs: z.boolean().optional(),
+  public_sysinfo: z.boolean().optional(),
+  public_tcbinfo: z.boolean().optional(),
+  gateway_enabled: z.boolean().optional(),
+  secure_time: z.boolean().optional(),
+  managed_env: z.boolean().optional().default(false),
+  listed: z.boolean().optional().default(false),
+  storage_fs: z.string().optional(),
+  workspace: WorkspaceRefSchema.nullable().optional(),
+  creator: UserRefSchema.nullable().optional(),
+  created_at: z.string().nullable().optional(),
+  deleted_at: z.string().nullable().optional(),
+  project_type: z.string().nullable().optional(),
+  hourly_rate: CvmHourlyRateV20260121Schema.nullable().optional(),
+  billing_interval: z.string().nullable().optional(),
+  gpu_rental_order: CvmGpuRentalOrderInfoV20260121Schema.nullable().optional(),
 });
 export type CvmInfoV20260121 = z.infer<typeof CvmInfoV20260121Schema>;
 
 export const CvmInfoV20260522Schema = CvmInfoV20260121Schema.extend({
-	id: z.string(),
+  id: z.string(),
 });
 export type CvmInfoV20260522 = z.infer<typeof CvmInfoV20260522Schema>;
 
 export const CvmInfoDetailV20260121Schema = CvmInfoV20260121Schema.extend({
-	compose_file: z
-		.union([z.record(z.string(), z.any()), z.string()])
-		.nullable()
-		.optional(),
+  compose_file: z
+    .union([z.record(z.string(), z.any()), z.string()])
+    .nullable()
+    .optional(),
 });
-export type CvmInfoDetailV20260121 = z.infer<
-	typeof CvmInfoDetailV20260121Schema
->;
+export type CvmInfoDetailV20260121 = z.infer<typeof CvmInfoDetailV20260121Schema>;
 
 export const CvmInfoDetailV20260522Schema = CvmInfoV20260522Schema.extend({
-	compose_file: z
-		.union([z.record(z.string(), z.any()), z.string()])
-		.nullable()
-		.optional(),
+  compose_file: z
+    .union([z.record(z.string(), z.any()), z.string()])
+    .nullable()
+    .optional(),
 });
-export type CvmInfoDetailV20260522 = z.infer<
-	typeof CvmInfoDetailV20260522Schema
->;
+export type CvmInfoDetailV20260522 = z.infer<typeof CvmInfoDetailV20260522Schema>;
 
 export const PaginatedCvmInfosV20260121Schema = z.object({
-	items: z.array(CvmInfoV20260121Schema),
-	total: z.number(),
-	page: z.number(),
-	page_size: z.number(),
-	pages: z.number(),
+  items: z.array(CvmInfoV20260121Schema),
+  total: z.number(),
+  page: z.number(),
+  page_size: z.number(),
+  pages: z.number(),
 });
-export type PaginatedCvmInfosV20260121 = z.infer<
-	typeof PaginatedCvmInfosV20260121Schema
->;
+export type PaginatedCvmInfosV20260121 = z.infer<typeof PaginatedCvmInfosV20260121Schema>;
 
-export const PaginatedCvmInfosV20260522Schema =
-	PaginatedCvmInfosV20260121Schema.extend({
-		items: z.array(CvmInfoV20260522Schema),
-	});
-export type PaginatedCvmInfosV20260522 = z.infer<
-	typeof PaginatedCvmInfosV20260522Schema
->;
+export const PaginatedCvmInfosV20260522Schema = PaginatedCvmInfosV20260121Schema.extend({
+  items: z.array(CvmInfoV20260522Schema),
+});
+export type PaginatedCvmInfosV20260522 = z.infer<typeof PaginatedCvmInfosV20260522Schema>;
