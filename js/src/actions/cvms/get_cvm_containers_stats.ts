@@ -32,27 +32,33 @@ import { defineAction } from "../../utils/define-action";
  */
 
 const ContainerInfoSchema = z.object({
-  id: z.string(),
-  names: z.array(z.string()),
-  image: z.string(),
-  image_id: z.string(),
-  command: z.string().nullable().optional(),
-  created: z.number(),
-  state: z.string(),
-  status: z.string(),
-  log_endpoint: z.string().nullable(),
+	id: z.string(),
+	names: z.array(z.string()),
+	image: z.string(),
+	image_id: z.string(),
+	command: z.string().nullable().optional(),
+	created: z.number(),
+	state: z.string(),
+	status: z.string(),
+	/** Presigned container log URL that expires shortly after it is issued. */
+	log_endpoint: z
+		.string()
+		.nullable()
+		.describe(
+			"Presigned container log URL that expires shortly after issuance.",
+		),
 });
 
 export const CvmContainersStatsSchema = z.object({
-  is_online: z.boolean(),
-  is_public: z.boolean().default(true),
-  error: z.string().nullable(),
-  docker_compose_file: z.string().nullable(),
-  manifest_version: z.coerce.number().nullable(),
-  version: z.string().nullable(),
-  runner: z.string().nullable(),
-  features: z.array(z.string()).nullable(),
-  containers: z.array(ContainerInfoSchema).nullable(),
+	is_online: z.boolean(),
+	is_public: z.boolean().default(true),
+	error: z.string().nullable(),
+	docker_compose_file: z.string().nullable(),
+	manifest_version: z.coerce.number().nullable(),
+	version: z.string().nullable(),
+	runner: z.string().nullable(),
+	features: z.array(z.string()).nullable(),
+	containers: z.array(ContainerInfoSchema).nullable(),
 });
 
 export type CvmContainersStats = z.infer<typeof CvmContainersStatsSchema>;
@@ -61,12 +67,13 @@ export const GetCvmContainersStatsRequestSchema = CvmIdSchema;
 
 export type GetCvmContainersStatsRequest = CvmIdInput;
 
-const { action: getCvmContainersStats, safeAction: safeGetCvmContainersStats } = defineAction<
-  GetCvmContainersStatsRequest,
-  typeof CvmContainersStatsSchema
->(CvmContainersStatsSchema, async (client, request) => {
-  const { cvmId } = GetCvmContainersStatsRequestSchema.parse(request);
-  return await client.get(`/cvms/${cvmId}/composition`);
-});
+const { action: getCvmContainersStats, safeAction: safeGetCvmContainersStats } =
+	defineAction<GetCvmContainersStatsRequest, typeof CvmContainersStatsSchema>(
+		CvmContainersStatsSchema,
+		async (client, request) => {
+			const { cvmId } = GetCvmContainersStatsRequestSchema.parse(request);
+			return await client.get(`/cvms/${cvmId}/composition`);
+		},
+	);
 
 export { getCvmContainersStats, safeGetCvmContainersStats };

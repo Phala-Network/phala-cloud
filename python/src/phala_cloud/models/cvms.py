@@ -211,10 +211,38 @@ class CvmGatewayInfoV20260121(CloudModel):
 
 
 class CvmLogUrlsV20260121(CloudModel):
-    serial: str | None = None
-    stdout: str | None = None
-    stderr: str | None = None
-    container_log_base: str | None = None
+    """Log URLs for a CVM.
+
+    Container log URLs are available only when public_logs is true and vm_uuid is present.
+    Build a URL as {container_log_base}/{name}?{display}&{auth_query}.
+    """
+
+    serial: str | None = Field(
+        default=None,
+        description="Short-lived presigned URL for serial logs.",
+    )
+    stdout: str | None = Field(
+        default=None,
+        description="Short-lived presigned URL for stdout logs.",
+    )
+    stderr: str | None = Field(
+        default=None,
+        description="Short-lived presigned URL for stderr logs.",
+    )
+    container_log_base: str | None = Field(
+        default=None,
+        description=(
+            "Container logs base URL without query parameters; available only when "
+            "public_logs is true and vm_uuid is present."
+        ),
+    )
+    auth_query: str | None = Field(
+        default=None,
+        description=(
+            "Short-lived presigned authentication query for container log URLs; available only "
+            "when public_logs is true and vm_uuid is present."
+        ),
+    )
 
 
 class NodeRef(CloudModel):
