@@ -3,11 +3,27 @@ import {
 	test,
 	expect,
 	mock,
+	afterAll,
 	beforeEach,
 	afterEach,
 	spyOn,
 } from "bun:test";
 import type { CommandContext } from "@/src/core/types";
+
+const realCloud = await import(
+	`${require.resolve("@phala/cloud")}?logs-command-test-real`
+);
+mock.module("@phala/cloud", () => ({ ...realCloud }));
+const realLogger = await import(
+	`${require.resolve("@/src/utils/logger")}?logs-command-test-real`
+);
+mock.module("@/src/utils/logger", () => ({ ...realLogger }));
+const realApi = await import(
+	`${require.resolve("@/src/api/cvms")}?logs-command-test-real`
+);
+const realLogsHandler = await import(
+	`${require.resolve("@/src/commands/cvms/logs-handler")}?logs-command-test-real`
+);
 
 type ContainerLogsOptions = {
 	container?: string;
@@ -67,6 +83,7 @@ const mockStreamCvmChannelLogs = mock(
 const mockGetCvmStatus = mock((_appId: string) => Promise.resolve("running"));
 
 mock.module("@/src/api/cvms", () => ({
+	...realApi,
 	fetchContainerLogsEntries: mockFetchContainerLogsEntries,
 	streamContainerLogsEntries: mockStreamContainerLogsEntries,
 	fetchCvmChannelLogs: mockFetchCvmChannelLogs,
@@ -75,6 +92,7 @@ mock.module("@/src/api/cvms", () => ({
 }));
 
 mock.module("@phala/cloud", () => ({
+	...realCloud,
 	CvmIdSchema: {
 		parse: (input: unknown) => {
 			const obj = input as { id?: string; app_id?: string };
@@ -84,11 +102,13 @@ mock.module("@phala/cloud", () => ({
 }));
 
 mock.module("@/src/commands/cvms/logs-handler", () => ({
+	...realLogsHandler,
 	checkAndWarnIfLogsDisabled: mock(() => Promise.resolve(false)),
 }));
 
 const noop = () => {};
 mock.module("@/src/utils/logger", () => ({
+	...realLogger,
 	setJsonMode: noop,
 	logger: {
 		startSpinner: () => ({ stop: noop }),
@@ -105,6 +125,15 @@ mock.module("@/src/utils/logger", () => ({
 
 // Import after mocking
 const { logsCommand } = await import("./index");
+
+afterAll(() => {
+	mock.module("@phala/cloud", () => ({ ...realCloud }));
+	mock.module("@/src/api/cvms", () => ({ ...realApi }));
+	mock.module("@/src/commands/cvms/logs-handler", () => ({
+		...realLogsHandler,
+	}));
+	mock.module("@/src/utils/logger", () => ({ ...realLogger }));
+});
 
 function makeContext(overrides: Partial<CommandContext> = {}): CommandContext {
 	return {
@@ -211,6 +240,24 @@ describe("logs command", () => {
 		expect(stdoutWriteSpy).toHaveBeenCalledWith("hello\n");
 	});
 
+	test("writes an empty container log message as a blank line", async () => {
+		mockFetchContainerLogsEntries.mockResolvedValue([
+			{ channel: "stdout", message: "" },
+		]);
+
+		const code = await logsCommand.run(
+			{ ...defaultInput, containerName: "my-service" },
+			makeContext({
+				cvmId: { id: "app_abc123" },
+				stdout: fakeStdout as unknown as NodeJS.WriteStream,
+				stderr: fakeStderr as unknown as NodeJS.WriteStream,
+			}),
+		);
+
+		expect(code).toBe(0);
+		expect(stdoutWriteSpy).toHaveBeenCalledWith("\n");
+	});
+
 	test("outputs container logs as json", async () => {
 		const successData: unknown[] = [];
 
@@ -278,6 +325,103 @@ describe("logs command", () => {
 	});
 
 	// --- CVM mode tests ---
+
+	test("rejects node-only unsupported filters before any API call", async () => {
+		for (const nodeMode of [
+			{ serial: true },
+			{ cvmStdout: true },
+			{ cvmStderr: true },
+		]) {
+			for (const unsupported of [
+				{ timestamps: true },
+				{ since: "10m" },
+				{ until: "2026-11-09T12:00:00Z" },
+			]) {
+				const failMessages: string[] = [];
+				const code = await logsCommand.run(
+					{ ...defaultInput, ...nodeMode, ...unsupported },
+					makeContext({
+						cvmId: { id: "app_abc123" },
+						stdout: fakeStdout as unknown as NodeJS.WriteStream,
+						stderr: fakeStderr as unknown as NodeJS.WriteStream,
+						fail: (message: string) => failMessages.push(message),
+					}),
+				);
+
+				expect(code).toBe(1);
+				expect(failMessages[0]).toContain(
+					"not supported for serial/stdout/stderr logs",
+				);
+			}
+		}
+
+		expect(mockGetCvmStatus).not.toHaveBeenCalled();
+		expect(mockFetchCvmChannelLogs).not.toHaveBeenCalled();
+		expect(mockStreamCvmChannelLogs).not.toHaveBeenCalled();
+	});
+
+	test("rejects invalid time values before any API call", async () => {
+		const failMessages: string[] = [];
+		const code = await logsCommand.run(
+			{ ...defaultInput, since: "not-a-time" },
+			makeContext({
+				cvmId: { id: "app_abc123" },
+				stdout: fakeStdout as unknown as NodeJS.WriteStream,
+				stderr: fakeStderr as unknown as NodeJS.WriteStream,
+				fail: (message: string) => failMessages.push(message),
+			}),
+		);
+
+		expect(code).toBe(1);
+		expect(failMessages[0]).toContain("Invalid log time");
+		expect(mockGetCvmStatus).not.toHaveBeenCalled();
+		expect(mockFetchContainerLogsEntries).not.toHaveBeenCalled();
+	});
+
+	test("time filters select container mode without a status request", async () => {
+		const code = await logsCommand.run(
+			{ ...defaultInput, since: "10m" },
+			makeContext({
+				cvmId: { id: "app_abc123" },
+				stdout: fakeStdout as unknown as NodeJS.WriteStream,
+				stderr: fakeStderr as unknown as NodeJS.WriteStream,
+			}),
+		);
+
+		expect(code).toBe(0);
+		expect(mockGetCvmStatus).not.toHaveBeenCalled();
+		expect(mockFetchContainerLogsEntries).toHaveBeenCalledTimes(1);
+	});
+
+	test("resolves relative filters once before fetching container logs", async () => {
+		const nowSpy = spyOn(Date, "now").mockReturnValue(
+			Date.parse("2026-11-09T12:00:00.750Z"),
+		);
+		try {
+			const code = await logsCommand.run(
+				{
+					...defaultInput,
+					containerName: "my-service",
+					since: "10m",
+					until: "2m",
+				},
+				makeContext({
+					cvmId: { id: "app_abc123" },
+					stdout: fakeStdout as unknown as NodeJS.WriteStream,
+					stderr: fakeStderr as unknown as NodeJS.WriteStream,
+				}),
+			);
+
+			expect(code).toBe(0);
+			const call = mockFetchContainerLogsEntries.mock.calls[0] as
+				| [string, ContainerLogsOptions]
+				| undefined;
+			expect(call?.[1]).toMatchObject({ since: 1794225000, until: 1794225481 });
+			expect(nowSpy).toHaveBeenCalledTimes(1);
+		} finally {
+			nowSpy.mockRestore();
+		}
+	});
 
 	test("--serial fetches CVM serial logs", async () => {
 		const code = await logsCommand.run(

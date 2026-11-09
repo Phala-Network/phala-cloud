@@ -64,14 +64,14 @@ export const logsCommandMeta: CommandMeta = {
 		},
 		{
 			name: "since",
-			description: "Start time (RFC3339 or relative, e.g. 42m)",
+			description: "Start time (RFC3339, Unix seconds, or relative, e.g. 42m)",
 			type: "string",
 			target: "since",
 			argumentName: "since",
 		},
 		{
 			name: "until",
-			description: "End time (RFC3339 or relative)",
+			description: "End time (RFC3339, Unix seconds, or relative)",
 			type: "string",
 			target: "until",
 			argumentName: "until",

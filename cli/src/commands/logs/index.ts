@@ -13,6 +13,7 @@ import {
 } from "@/src/api/cvms";
 import { logger, setJsonMode } from "@/src/utils/logger";
 import { checkAndWarnIfLogsDisabled } from "@/src/commands/cvms/logs-handler";
+import { resolveLogTimeWindow, type LogTimeWindow } from "./time-window";
 import {
 	logsCommandMeta,
 	logsCommandSchema,
@@ -24,15 +25,16 @@ function writeLogEntry(
 	config: { includeStdout: boolean; includeStderr: boolean },
 	context: Pick<CommandContext, "stdout" | "stderr">,
 ): void {
+	const message = entry.message === "" ? "\n" : entry.message;
 	if (entry.channel === "stdout") {
 		if (config.includeStdout) {
-			context.stdout.write(entry.message);
+			context.stdout.write(message);
 		}
 		return;
 	}
 
 	if (config.includeStderr) {
-		context.stderr.write(entry.message);
+		context.stderr.write(message);
 	}
 }
 
@@ -110,6 +112,34 @@ async function runLogsCommand(
 	// --- Determine mode ---
 
 	let mode = resolveExplicitMode(input);
+	if (mode?.type === "cvm") {
+		const unsupportedOptions = [
+			input.timestamps && "--timestamps",
+			input.since !== undefined && "--since",
+			input.until !== undefined && "--until",
+		].filter((option): option is string => Boolean(option));
+		if (unsupportedOptions.length > 0) {
+			context.fail(
+				`${unsupportedOptions.join(", ")} not supported for serial/stdout/stderr logs`,
+			);
+			return 1;
+		}
+	}
+
+	let timeWindow: LogTimeWindow;
+	try {
+		timeWindow = resolveLogTimeWindow(input.since, input.until, Date.now());
+	} catch (error) {
+		context.fail(error instanceof Error ? error.message : String(error));
+		return 1;
+	}
+
+	if (
+		!mode &&
+		(input.timestamps || input.since !== undefined || input.until !== undefined)
+	) {
+		mode = { type: "container" };
+	}
 
 	if (!mode) {
 		// Auto-detect based on CVM status
@@ -136,7 +166,13 @@ async function runLogsCommand(
 		return runCvmMode(appId, mode.channel, input, context);
 	}
 
-	return runContainerMode(appId, mode.containerName, input, context);
+	return runContainerMode(
+		appId,
+		mode.containerName,
+		input,
+		context,
+		timeWindow,
+	);
 }
 
 async function runCvmMode(
@@ -145,6 +181,18 @@ async function runCvmMode(
 	input: LogsCommandInput,
 	context: CommandContext,
 ): Promise<number> {
+	const unsupportedOptions = [
+		input.timestamps && "--timestamps",
+		input.since !== undefined && "--since",
+		input.until !== undefined && "--until",
+	].filter((option): option is string => Boolean(option));
+	if (unsupportedOptions.length > 0) {
+		context.fail(
+			`${unsupportedOptions.join(", ")} not supported for serial/stdout/stderr logs`,
+		);
+		return 1;
+	}
+
 	try {
 		if (input.follow) {
 			if (input.json) {
@@ -165,9 +213,6 @@ async function runCvmMode(
 					(data) => context.stdout.write(data),
 					{
 						tail: input.tail,
-						timestamps: input.timestamps,
-						since: input.since,
-						until: input.until,
 					},
 					abortController.signal,
 				);
@@ -185,9 +230,6 @@ async function runCvmMode(
 
 		const logs = await fetchCvmChannelLogs(appId, channel, {
 			tail: input.tail,
-			timestamps: input.timestamps,
-			since: input.since,
-			until: input.until,
 		});
 
 		if (input.json) {
@@ -195,7 +237,7 @@ async function runCvmMode(
 			return 0;
 		}
 
-		if (logs.trim()) {
+		if (logs.length > 0) {
 			context.stdout.write(logs);
 		} else {
 			logger.info(`No ${channel} logs available`);
@@ -216,6 +258,7 @@ async function runContainerMode(
 	containerName: string | undefined,
 	input: LogsCommandInput,
 	context: CommandContext,
+	timeWindow: LogTimeWindow,
 ): Promise<number> {
 	const outputConfig = {
 		includeStdout: true,
@@ -224,8 +267,8 @@ async function runContainerMode(
 
 	const options: ContainerLogsOptions = {
 		container: containerName,
-		since: input.since,
-		until: input.until,
+		since: timeWindow.since,
+		until: timeWindow.until,
 		tail: input.tail,
 		timestamps: input.timestamps,
 		matchContainerIdPrefix: false,
@@ -269,14 +312,16 @@ async function runContainerMode(
 				? outputConfig.includeStderr
 				: outputConfig.includeStdout,
 		);
-		const combined = filteredEntries.map((e) => e.message).join("");
+		const combined = filteredEntries
+			.map((entry) => (entry.message === "" ? "\n" : entry.message))
+			.join("");
 
 		if (input.json) {
 			context.success({ logs: combined, cvm_id: appId });
 			return 0;
 		}
 
-		if (combined.trim()) {
+		if (combined.length > 0) {
 			for (const entry of filteredEntries) {
 				writeLogEntry(entry, outputConfig, context);
 			}
