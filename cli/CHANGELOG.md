@@ -1,3 +1,26 @@
+## [1.2.3](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.2...cli-v1.2.3) (2026-11-09)
+
+### docs
+
+* **cli:** describe deploy --wait for create and update ([6c874ea](https://github.com/Phala-Network/phala-cloud/commit/6c874ea65edf4b545f38f4371e45394c40885770))
+
+### feat
+
+* **cli:** accept init-script files on create ([1153e1c](https://github.com/Phala-Network/phala-cloud/commit/1153e1c90771a98038e2af9fefb379309c7b181f))
+* **cli:** add phala cvms init-scripts ([5103158](https://github.com/Phala-Network/phala-cloud/commit/51031582e96da1a680168c626541ed0bae4be146))
+* **cli:** make deploy --wait wait for a new CVM to run ([222b699](https://github.com/Phala-Network/phala-cloud/commit/222b699f2a4f64afd08a13443bd677be4b816f45))
+
+### fix
+
+* **cli:** keep the CVM id in the create wait failure ([ffd10bb](https://github.com/Phala-Network/phala-cloud/commit/ffd10bba630ddf885c51bd6d40b084b5cf29bea8))
+* **cli:** poll the CVM at least once when the wait budget is spent ([ff680e1](https://github.com/Phala-Network/phala-cloud/commit/ff680e1086f5832c81ba165d8b06580c3a7f6e12))
+* **cli:** share on-chain two-phase flow and init-script file reads ([bef58b7](https://github.com/Phala-Network/phala-cloud/commit/bef58b7eba50ec2aac32d689cd2f2b58ca168825))
+* **cli:** skip implicit SSH key without a pre-launch script ([40afeee](https://github.com/Phala-Network/phala-cloud/commit/40afeee333cdbb792bd9cf3283dc62999fb2daa9))
+* **cli:** wait for a stopped CVM when an update leaves it stopped ([67a1bac](https://github.com/Phala-Network/phala-cloud/commit/67a1bac56d85248b56eb40ed6c8955ee59a7f02e))
+
+### refactor
+
+* **cli:** read init-script files after the existence check ([3023762](https://github.com/Phala-Network/phala-cloud/commit/30237621c816258496b4c06d7d3378c0c15eb055))
 ## [1.2.2](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.1...cli-v1.2.2) (2026-11-07)
 
 ### fix
