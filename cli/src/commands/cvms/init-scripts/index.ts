@@ -1,9 +1,10 @@
-import fs from "node:fs";
 import {
+	safeConfirmCvmPatch,
 	safeGetCvmInitScripts,
 	safePatchCvm,
 	safePutCvmInitScripts,
 	type CvmInitScripts,
+	type PatchCvmResult,
 } from "@phala/cloud";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
@@ -13,6 +14,8 @@ import {
 	type InitScriptSlug,
 } from "@/src/commands/deploy/command";
 import { getClient } from "@/src/lib/client";
+import { readInitScriptFiles } from "@/src/lib/init-script-files";
+import { runTwoPhaseComposeUpdate } from "@/src/lib/on-chain-update";
 import { printTable } from "@/src/lib/table";
 import { logger } from "@/src/utils/logger";
 import {
@@ -20,20 +23,6 @@ import {
 	cvmsInitScriptsCommandSchema,
 	type CvmsInitScriptsCommandInput,
 } from "./command";
-
-const MAX_INIT_SCRIPT_FILES = 5;
-
-function readScriptFiles(paths: string[]): string[] {
-	if (paths.length > MAX_INIT_SCRIPT_FILES) {
-		throw new Error(`--file accepts at most ${MAX_INIT_SCRIPT_FILES} scripts.`);
-	}
-	return paths.map((filePath) => {
-		if (!fs.existsSync(filePath)) {
-			throw new Error(`No such file: ${filePath}`);
-		}
-		return fs.readFileSync(filePath, "utf8");
-	});
-}
 
 function selectedSlugs(scripts: CvmInitScripts): InitScriptSlug[] {
 	return scripts.items.filter((item) => item.selected).map((item) => item.slug);
@@ -63,6 +52,17 @@ function requireReplaceCustom(scripts: CvmInitScripts, yes: boolean): void {
 	}
 }
 
+function unwrapPhase(result: {
+	success: boolean;
+	data?: PatchCvmResult;
+	error?: { cause?: unknown } & Error;
+}): PatchCvmResult {
+	if (!result.success || result.data === undefined) {
+		throw result.error?.cause ?? result.error ?? new Error("CVM update failed");
+	}
+	return result.data;
+}
+
 async function runCvmsInitScriptsCommand(
 	input: CvmsInitScriptsCommandInput,
 	context: CommandContext,
@@ -77,6 +77,7 @@ async function runCvmsInitScriptsCommand(
 	const files = input.file ?? [];
 	const hasFiles = files.length > 0;
 	const hasSlug = input.slug !== undefined || input.state !== undefined;
+	const hasHashes = Boolean(input.composeHash && input.transactionHash);
 	if (hasFiles && hasSlug) {
 		context.fail("--file cannot be combined with a slug on/off change.");
 		return 1;
@@ -111,7 +112,7 @@ async function runCvmsInitScriptsCommand(
 		}
 		const scripts = listed.data;
 
-		if (!hasFiles && input.slug === undefined) {
+		if (!hasFiles && input.slug === undefined && !hasHashes) {
 			if (input.json) {
 				context.success(scripts);
 				return 0;
@@ -120,87 +121,118 @@ async function runCvmsInitScriptsCommand(
 			return 0;
 		}
 
-		requireReplaceCustom(scripts, input.yes);
+		if (hasSlug) {
+			requireReplaceCustom(scripts, input.yes);
+		}
+
+		let phase1: () => Promise<PatchCvmResult> = async () => {
+			throw new Error(
+				"On-chain confirmation needs --compose-hash and --transaction-hash from a prepare-only run.",
+			);
+		};
 
 		if (hasFiles) {
-			const result = await safePutCvmInitScripts(client, {
-				...context.cvmId,
-				scripts: readScriptFiles(files),
-			});
-			if (!result.success) {
-				context.failWithError(result.error.cause ?? result.error, {
-					operation: "Replace CVM init scripts",
-				});
-				return 1;
-			}
-			if (result.data.requiresOnChainHash) {
-				context.fail(
-					`This CVM uses on-chain KMS: compose hash ${result.data.composeHash} must be registered on-chain first.`,
+			const contents = readInitScriptFiles(files);
+			phase1 = async () =>
+				unwrapPhase(
+					await safePutCvmInitScripts(client, {
+						...context.cvmId,
+						scripts: contents,
+						prepareOnly: input.prepareOnly,
+					}),
 				);
-				return 1;
-			}
-			if (input.json) {
-				context.success(result.data);
+		} else if (hasSlug) {
+			const slug = input.slug as InitScriptSlug;
+			const current = selectedSlugs(scripts);
+			const enabled = current.includes(slug);
+			if (input.state === "on" && enabled) {
+				logger.info(`${slug} is already on.`);
 				return 0;
 			}
-			logger.success("Init scripts update started.");
-			return 0;
-		}
-
-		const slug = input.slug as InitScriptSlug;
-		const current = selectedSlugs(scripts);
-		const enabled = current.includes(slug);
-		if (input.state === "on" && enabled) {
-			logger.info(`${slug} is already on.`);
-			return 0;
-		}
-		if (input.state === "off" && !enabled) {
-			logger.info(`${slug} is already off.`);
-			return 0;
-		}
-		if (input.state === "on") {
-			const option = scripts.items.find((item) => item.slug === slug);
-			if (option && !option.selectable) {
-				context.fail(
-					option.reason ?? `${slug} cannot be selected for this CVM.`,
+			if (input.state === "off" && !enabled) {
+				logger.info(`${slug} is already off.`);
+				return 0;
+			}
+			if (input.state === "on") {
+				const option = scripts.items.find((item) => item.slug === slug);
+				if (option && !option.selectable) {
+					context.fail(
+						option.reason ?? `${slug} cannot be selected for this CVM.`,
+					);
+					return 1;
+				}
+				if (slug === "docker_cleanup" && !input.confirmDataWipe) {
+					context.fail("Turning on docker_cleanup needs --confirm-data-wipe.");
+					return 1;
+				}
+			}
+			const next =
+				input.state === "on"
+					? INIT_SCRIPT_SLUGS.filter(
+							(name) => current.includes(name) || name === slug,
+						)
+					: current.filter((name) => name !== slug);
+			phase1 = async () =>
+				unwrapPhase(
+					await safePatchCvm(client, {
+						...context.cvmId,
+						init_scripts: next,
+						confirm_data_wipe:
+							slug === "docker_cleanup" && input.state === "on"
+								? true
+								: undefined,
+						prepareOnly: input.prepareOnly,
+					}),
 				);
-				return 1;
-			}
-			if (slug === "docker_cleanup" && !input.confirmDataWipe) {
-				context.fail("Turning on docker_cleanup needs --confirm-data-wipe.");
-				return 1;
-			}
 		}
 
-		const next =
-			input.state === "on"
-				? INIT_SCRIPT_SLUGS.filter(
-						(name) => current.includes(name) || name === slug,
-					)
-				: current.filter((name) => name !== slug);
-		const result = await safePatchCvm(client, {
-			...context.cvmId,
-			init_scripts: next,
-			confirm_data_wipe:
-				slug === "docker_cleanup" && input.state === "on" ? true : undefined,
+		const cvmLabel =
+			input.cvmId ??
+			context.cvmId.id ??
+			context.cvmId.app_id ??
+			context.cvmId.uuid ??
+			"<cvm>";
+		const outcome = await runTwoPhaseComposeUpdate({
+			phase1,
+			phase2: async (composeHash, transactionHash) => {
+				const confirmed = await safeConfirmCvmPatch(client, {
+					...context.cvmId,
+					composeHash,
+					transactionHash,
+				});
+				if (!confirmed.success) {
+					throw confirmed.error.cause ?? confirmed.error;
+				}
+				return confirmed.data;
+			},
+			options: {
+				prepareOnly: input.prepareOnly,
+				privateKey: input.privateKey,
+				rpcUrl: input.rpcUrl,
+				composeHash: input.composeHash,
+				transactionHash: input.transactionHash,
+				json: input.json,
+				debug: Boolean((input as { debug?: boolean }).debug),
+			},
+			appId: "",
+			followUpLines: (composeHashHex) => [
+				`  phala cvms init-scripts ${cvmLabel} \\`,
+				`    --compose-hash ${composeHashHex} \\`,
+				"    --transaction-hash <tx-hash>",
+			],
+			stdout: context.stdout,
 		});
-		if (!result.success) {
-			context.failWithError(result.error.cause ?? result.error, {
-				operation: "Update CVM init scripts",
-			});
-			return 1;
-		}
-		if (result.data.requiresOnChainHash) {
-			context.fail(
-				`This CVM uses on-chain KMS: compose hash ${result.data.composeHash} must be registered on-chain first.`,
-			);
-			return 1;
+		if (!("correlationId" in outcome)) {
+			return 0;
 		}
 		if (input.json) {
-			context.success(result.data);
+			context.success({
+				requiresOnChainHash: false,
+				correlationId: outcome.correlationId,
+			});
 			return 0;
 		}
-		if ("correlationId" in result.data && !result.data.correlationId) {
+		if (!outcome.correlationId) {
 			logger.info("Init scripts unchanged.");
 			return 0;
 		}

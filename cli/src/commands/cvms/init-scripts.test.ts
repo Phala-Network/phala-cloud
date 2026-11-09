@@ -39,6 +39,35 @@ type Recorded = {
 	method: string;
 	path: string;
 	body: Record<string, unknown> | undefined;
+	headers: Record<string, string>;
+};
+
+const NO_ONCHAIN_HEADERS = {
+	"x-compose-hash": "",
+	"x-transaction-hash": "",
+};
+
+const HASH_REQUIRED = {
+	error_code: "ERR-01-005",
+	message: "Compose hash registration required",
+	details: [
+		{ field: "compose_hash", value: "abc123" },
+		{ field: "app_id", value: "abc" },
+		{ field: "device_id", value: "dev-1" },
+		{
+			field: "kms_info",
+			value: {
+				id: "1",
+				slug: "base",
+				url: "https://kms.example.com",
+				version: "1.0.0",
+				chain_id: 8453,
+				kms_contract_address: "0xkms",
+				gateway_app_id: "0xgateway",
+			},
+		},
+		{ field: "commit_token", value: "token-1" },
+	],
 };
 
 const CVM_ID = "my-cvm";
@@ -79,6 +108,10 @@ beforeAll(async () => {
 				method: req.method,
 				path: url.pathname,
 				body: text ? JSON.parse(text) : undefined,
+				headers: {
+					"x-compose-hash": req.headers.get("x-compose-hash") ?? "",
+					"x-transaction-hash": req.headers.get("x-transaction-hash") ?? "",
+				},
 			});
 			const overridden = respond?.(req.method, url.pathname);
 			if (overridden) return overridden;
@@ -118,13 +151,23 @@ afterEach(() => {
 	respond = undefined;
 });
 
-function makeContext(): { context: CommandContext; failure: () => unknown } {
+function makeContext(): {
+	context: CommandContext;
+	failure: () => unknown;
+	stdout: string[];
+} {
 	let failure: unknown;
+	const stdout: string[] = [];
 	const context = {
 		env: process.env,
 		projectConfig: {},
 		cvmId: { id: CVM_ID },
-		stdout: { write: () => true },
+		stdout: {
+			write: (chunk: string) => {
+				stdout.push(chunk);
+				return true;
+			},
+		},
 		stderr: { write: () => true },
 		success: () => {},
 		fail: (message: string) => {
@@ -134,7 +177,7 @@ function makeContext(): { context: CommandContext; failure: () => unknown } {
 			failure = error;
 		},
 	} as unknown as CommandContext;
-	return { context, failure: () => failure };
+	return { context, failure: () => failure, stdout };
 }
 
 describe("phala cvms init-scripts", () => {
@@ -152,6 +195,7 @@ describe("phala cvms init-scripts", () => {
 				method: "GET",
 				path: `/api/v1/cvms/${CVM_ID}/init-scripts`,
 				body: undefined,
+				headers: NO_ONCHAIN_HEADERS,
 			},
 		]);
 	});
@@ -177,6 +221,7 @@ describe("phala cvms init-scripts", () => {
 					init_scripts: ["docker_cleanup", "env_merge"],
 					confirm_data_wipe: true,
 				},
+				headers: NO_ONCHAIN_HEADERS,
 			},
 		]);
 	});
@@ -233,6 +278,7 @@ describe("phala cvms init-scripts", () => {
 				method: "PUT",
 				path: `/api/v1/cvms/${CVM_ID}/init-scripts`,
 				body: { scripts: ["echo custom\n"] },
+				headers: NO_ONCHAIN_HEADERS,
 			},
 		]);
 	});
@@ -251,5 +297,71 @@ describe("phala cvms init-scripts", () => {
 		expect(exitCode).toBe(1);
 		expect(String(failure())).toContain("cannot be combined");
 		expect(requests).toEqual([]);
+	});
+
+	test("hidden --file replaces custom scripts without --yes", async () => {
+		respond = (method, pathname) =>
+			method === "GET" && pathname.endsWith("/init-scripts")
+				? Response.json({ ...PLATFORM, has_custom_scripts: true })
+				: undefined;
+		const scriptPath = path.join(tmpDir, "replace.sh");
+		await fs.writeFile(scriptPath, "echo replace\n");
+		const { context, failure } = makeContext();
+		const exitCode = await cvmsInitScriptsCommand.run(
+			{ file: [scriptPath] } as Parameters<
+				typeof cvmsInitScriptsCommand.run
+			>[0],
+			context,
+		);
+
+		expect(failure()).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(requests.some((r) => r.method === "PUT")).toBe(true);
+	});
+
+	test("--prepare-only prints the compose hash from phase 1", async () => {
+		respond = (method, pathname) =>
+			method === "PUT" && pathname.endsWith("/init-scripts")
+				? Response.json(HASH_REQUIRED, { status: 465 })
+				: undefined;
+		const scriptPath = path.join(tmpDir, "prepare.sh");
+		await fs.writeFile(scriptPath, "echo prepare\n");
+		const { context, failure, stdout } = makeContext();
+		const exitCode = await cvmsInitScriptsCommand.run(
+			{ file: [scriptPath], prepareOnly: true, json: true } as Parameters<
+				typeof cvmsInitScriptsCommand.run
+			>[0],
+			context,
+		);
+
+		expect(failure()).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(stdout.join("")).toContain("abc123");
+		expect(requests.filter((r) => r.method === "PATCH")).toEqual([]);
+	});
+
+	test("--compose-hash and --transaction-hash send phase 2 headers", async () => {
+		const { context, failure } = makeContext();
+		const exitCode = await cvmsInitScriptsCommand.run(
+			{
+				composeHash: "abc123",
+				transactionHash: "0xtx",
+			} as Parameters<typeof cvmsInitScriptsCommand.run>[0],
+			context,
+		);
+
+		expect(failure()).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(requests.filter((r) => r.method === "PATCH")).toEqual([
+			{
+				method: "PATCH",
+				path: `/api/v1/cvms/${CVM_ID}`,
+				body: {},
+				headers: {
+					"x-compose-hash": "abc123",
+					"x-transaction-hash": "0xtx",
+				},
+			},
+		]);
 	});
 });

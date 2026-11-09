@@ -4,6 +4,9 @@ import {
 	cvmIdArgument,
 	interactiveOption,
 	jsonOption,
+	privateKeyOption,
+	rpcUrlOption,
+	transactionHashOption,
 } from "@/src/core/common-flags";
 import { INIT_SCRIPT_SLUGS } from "@/src/commands/deploy/command";
 
@@ -51,6 +54,24 @@ export const cvmsInitScriptsCommandMeta: CommandMeta = {
 			target: "file",
 			hidden: true,
 		},
+		{
+			name: "prepare-only",
+			description:
+				"Prepare the update and print the compose hash. Skips on-chain operations.",
+			type: "boolean",
+			target: "prepareOnly",
+			group: "advanced",
+		},
+		{
+			name: "compose-hash",
+			description: "Compose hash from a prepare-only update",
+			type: "string",
+			target: "composeHash",
+			group: "advanced",
+		},
+		transactionHashOption,
+		privateKeyOption,
+		rpcUrlOption,
 	],
 	examples: [
 		{
@@ -76,6 +97,11 @@ export const cvmsInitScriptsCommandSchema = z.object({
 	file: z.array(z.string()).optional(),
 	yes: z.boolean().default(false),
 	confirmDataWipe: z.boolean().default(false),
+	prepareOnly: z.boolean().default(false),
+	composeHash: z.string().optional(),
+	transactionHash: z.string().optional(),
+	privateKey: z.string().optional(),
+	rpcUrl: z.string().optional(),
 	json: z.boolean().default(false),
 	interactive: z.boolean().default(false),
 });
