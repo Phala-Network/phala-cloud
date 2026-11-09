@@ -14,6 +14,17 @@ import {
 } from "@/src/utils/constants";
 import { z } from "zod";
 
+// Platform slugs accepted by --init-script. A value equal to one of these is
+// always a slug, even if a file of the same name exists; pass ./docker_cleanup
+// to send a file. Other values are script file paths (create only, admin only:
+// Phala Cloud ignores raw scripts for non-admin accounts; at most 5 files).
+export const INIT_SCRIPT_SLUGS = ["docker_cleanup", "env_merge"] as const;
+export type InitScriptSlug = (typeof INIT_SCRIPT_SLUGS)[number];
+
+export function isInitScriptSlug(value: string): value is InitScriptSlug {
+	return (INIT_SCRIPT_SLUGS as readonly string[]).includes(value);
+}
+
 export const deployCommandMeta: CommandMeta = {
 	name: "deploy",
 	category: "deploy",
@@ -540,7 +551,7 @@ export const deployCommandSchema = z
 		transactionHash: z.string().optional(),
 		runner: z.enum(["docker-compose", "nerdctl-compose", "bash"]).optional(),
 		appCompose: z.string().optional(),
-		initScript: z.array(z.enum(["docker_cleanup", "env_merge"])).optional(),
+		initScript: z.array(z.string()).optional(),
 		clearInitScripts: z.boolean().optional(),
 		launchToken: z.string().optional(),
 		launchTokenHash: z.string().optional(),
