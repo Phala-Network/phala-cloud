@@ -5,15 +5,20 @@
  * proper handling of --dev-os / --no-dev-os flags.
  */
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import os from "node:os";
+import path from "node:path";
+import fs from "fs-extra";
 import { buildCommandSchemaInput } from "@/src/core/input-builder";
 import { parseCommandArguments } from "@/src/core/parser";
 import type { CommandContext } from "@/src/core/types";
+import { logger } from "@/src/utils/logger";
 import { deployCommandMeta, deployCommandSchema } from "./command";
 import {
 	applyForceStopOption,
 	buildProvisionPayload,
 	buildUpdatePatchBody,
+	readSshPubkey,
 	runDeploy,
 } from "./handler";
 
@@ -36,6 +41,24 @@ describe("deploy node selection", () => {
 });
 
 describe("deploy --no-pre-launch-script", () => {
+	const sshPubkey = "ssh-rsa test-public-key";
+	test.each([
+		{ options: { noPreLaunchScript: true }, expected: undefined },
+		{ options: {}, expected: sshPubkey },
+	])("implicit SSH key: %j", async ({ options, expected }) => {
+		const tempDir = await fs.mkdtemp(path.join(import.meta.dir, ".ssh-key-"));
+		const homedir = spyOn(os, "homedir").mockReturnValue(tempDir);
+		const info = spyOn(logger, "info").mockImplementation(() => {});
+		try {
+			await fs.outputFile(path.join(tempDir, ".ssh", "id_rsa.pub"), sshPubkey);
+			expect(await readSshPubkey(options)).toBe(expected);
+		} finally {
+			homedir.mockRestore();
+			info.mockRestore();
+			await fs.remove(tempDir);
+		}
+	});
+
 	test("parses the flag as a boolean option", () => {
 		const parsedArguments = parseCommandArguments(
 			["--no-pre-launch-script"],
