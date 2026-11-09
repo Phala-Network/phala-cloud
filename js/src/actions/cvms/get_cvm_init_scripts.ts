@@ -15,6 +15,7 @@ export const CvmInitScriptSchema = z.object({
 
 export const CvmInitScriptsSchema = z.object({
   items: z.array(CvmInitScriptSchema),
+  has_custom_scripts: z.boolean(),
 });
 
 export type CvmInitScript = z.infer<typeof CvmInitScriptSchema>;
@@ -29,7 +30,9 @@ export type GetCvmInitScriptsRequest = CvmIdInput;
  *
  * Returns every platform init script in its fixed run order: whether the CVM's
  * current compose runs it, and whether the caller could select it (with the
- * reason when not). Change the selection with `patchCvm({ init_scripts })`.
+ * reason when not). has_custom_scripts is true when the compose also runs a
+ * script that is not a platform script. Change the selection with
+ * `patchCvm({ init_scripts })` or replace raw scripts with `putCvmInitScripts`.
  *
  * @example
  * ```typescript

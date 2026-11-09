@@ -3,6 +3,7 @@ import { cvmsAttestationCommand } from "./attestation";
 import { cvmsDeleteCommand } from "./delete";
 import { cvmsDeviceAllowlistCommand } from "./device-allowlist";
 import { cvmsGetCommand } from "./get";
+import { cvmsInitScriptsCommand } from "./init-scripts";
 import { cvmsListCommand } from "./list";
 import { cvmsListNodesCommand } from "./list-node";
 import { cvmsLogsCommand } from "./logs";
@@ -21,6 +22,7 @@ export const cvmsCommands = {
 		cvmsDeleteCommand,
 		cvmsDeviceAllowlistCommand,
 		cvmsGetCommand,
+		cvmsInitScriptsCommand,
 		cvmsListCommand,
 		cvmsListNodesCommand,
 		cvmsLogsCommand,
