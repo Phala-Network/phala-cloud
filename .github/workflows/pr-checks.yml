@@ -16,8 +16,34 @@ on:
       - '.github/workflows/pr-checks.yml'
 
 jobs:
+  changes:
+    name: Detect Changed SDKs
+    runs-on: ubuntu-latest
+    outputs:
+      js: ${{ steps.filter.outputs.js }}
+      python: ${{ steps.filter.outputs.python }}
+      go: ${{ steps.filter.outputs.go }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            js:
+              - 'js/**'
+              - '.github/workflows/pr-checks.yml'
+            python:
+              - 'python/**'
+              - '.github/workflows/pr-checks.yml'
+            go:
+              - 'go/**'
+              - '.github/workflows/pr-checks.yml'
+
   js-sdk-checks:
     name: JavaScript SDK Checks
+    needs: changes
+    if: needs.changes.outputs.js == 'true'
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
@@ -143,6 +169,8 @@ jobs:
 
   python-sdk-checks:
     name: Python SDK Checks (non-e2e)
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
@@ -172,6 +200,8 @@ jobs:
 
   go-sdk-checks:
     name: Go SDK Checks (non-e2e)
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
@@ -202,6 +232,8 @@ jobs:
 
   compatibility-checks:
     name: Compatibility Checks
+    needs: changes
+    if: needs.changes.outputs.js == 'true'
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     strategy:
       matrix:
@@ -276,6 +308,8 @@ jobs:
 
   browser-compatibility:
     name: Browser Compatibility
+    needs: changes
+    if: needs.changes.outputs.js == 'true'
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
