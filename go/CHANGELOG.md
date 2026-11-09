@@ -1,3 +1,7 @@
+## Unreleased
+
+- Retry transient failures on bodyless GET/HEAD requests using the existing retry budget, `Retry-After` handling, and context cancellation.
+
 ## [](https://github.com/Phala-Network/phala-cloud/compare/sdks/go/v0.2.0...sdks/go/v) (2026-11-07)
 
 ### ⚠ BREAKING CHANGE

@@ -45,6 +45,19 @@ func (c *Client) newRequest(ctx context.Context, method, path string, body io.Re
 
 // do executes an HTTP request and returns the response. Non-2xx responses return *APIError.
 func (c *Client) do(ctx context.Context, req *http.Request) (*http.Response, error) {
+	if (req.Method != http.MethodGet && req.Method != http.MethodHead) ||
+		(req.Body != nil && req.Body != http.NoBody) {
+		return c.doOnce(req)
+	}
+	var resp *http.Response
+	err := c.doWithRetry(ctx, func() (err error) {
+		resp, err = c.doOnce(req)
+		return err
+	})
+	return resp, err
+}
+
+func (c *Client) doOnce(req *http.Request) (*http.Response, error) {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err
