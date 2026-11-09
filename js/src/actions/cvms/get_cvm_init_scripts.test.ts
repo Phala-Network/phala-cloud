@@ -13,11 +13,14 @@ describe("getCvmInitScripts", () => {
         reason: "Env merge requires dstack OS 0.6.0 or newer",
       },
     ];
-    const mockClient = { get: vi.fn().mockResolvedValue({ items }) } as unknown as Client;
+    const mockClient = {
+      get: vi.fn().mockResolvedValue({ items, has_custom_scripts: false }),
+    } as unknown as Client;
 
     const result = await getCvmInitScripts(mockClient, { id: "my-cvm" });
 
     expect(mockClient.get).toHaveBeenCalledWith("/cvms/my-cvm/init-scripts");
     expect(result.items).toEqual(items);
+    expect(result.has_custom_scripts).toBe(false);
   });
 });

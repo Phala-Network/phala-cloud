@@ -632,6 +632,14 @@ export {
 } from "./cvms/get_cvm_init_scripts";
 
 export {
+  putCvmInitScripts,
+  safePutCvmInitScripts,
+  PutCvmInitScriptsRequestSchema,
+  type PutCvmInitScriptsRequest,
+  type PutCvmInitScriptsResult,
+} from "./cvms/put_cvm_init_scripts";
+
+export {
   listSshKeys,
   safeListSshKeys,
   SshKeySchema,

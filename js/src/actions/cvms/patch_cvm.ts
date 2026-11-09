@@ -162,6 +162,8 @@ export const PatchCvmRequestSchema = refineCvmId(
     compose: ComposePatchSchema.optional(),
     // Platform init scripts this CVM runs, replacing the current set
     init_scripts: z.array(InitScriptSlugSchema).optional(),
+    // Raw guest init scripts, replacing the current set. System admins only.
+    init_script: z.array(z.string()).optional(),
     // Confirms turning on docker_cleanup or requirements.ephemeral_data_disk,
     // which erase data on every boot
     confirm_data_wipe: z.boolean().optional(),

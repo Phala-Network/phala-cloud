@@ -38,7 +38,6 @@ import {
 	MAX_COMPOSE_PAYLOAD_BYTES,
 	type MrConfigV3Input,
 	type ProvisionCvmRequest,
-	SUPPORTED_CHAINS,
 	buildMrConfigV3Document,
 	canonicalizeMrConfigV3Document,
 	convertToHostname,
@@ -46,9 +45,6 @@ import {
 	getMrConfigIdV3,
 	isValidHostname,
 	parseEnvVars,
-	safeAddComposeHash,
-	safeAddDevice,
-	safeCheckOnChainPrerequisites,
 	safeCommitCvmProvision,
 	safeCommitCvmUpdate,
 	safeConfirmCvmPatch,
@@ -66,11 +62,13 @@ import dedent from "dedent";
 import fs from "fs-extra";
 import inquirer from "inquirer";
 import {
-	INIT_SCRIPT_SLUGS,
-	isInitScriptSlug,
-	type DeployCommandInput,
-	type InitScriptSlug,
-} from "./command";
+	assertInitScriptFilesExist,
+	partitionInitScriptValues,
+	readInitScriptFiles,
+	unknownInitScriptSlugMessage,
+} from "@/src/lib/init-script-files";
+import { runTwoPhaseComposeUpdate } from "@/src/lib/on-chain-update";
+import type { DeployCommandInput } from "./command";
 
 type PrivacyConfig = Pick<
 	RuntimeProjectConfig,
@@ -181,43 +179,11 @@ const CREATE_ONLY_FLAGS: ReadonlyArray<readonly [keyof Options, string]> = [
 	["generateLaunchToken", "--generate-launch-token"],
 ];
 
-function partitionInitScriptValues(values: string[] | undefined): {
-	slugs: InitScriptSlug[];
-	files: string[];
-} {
-	const slugs: InitScriptSlug[] = [];
-	const files: string[] = [];
-	for (const value of values ?? []) {
-		if (isInitScriptSlug(value)) slugs.push(value);
-		else files.push(value);
-	}
-	return { slugs, files };
-}
-
 function readScriptFile(filePath: string, missingMessage: string): string {
 	if (!fs.existsSync(filePath)) {
 		throw new Error(missingMessage);
 	}
 	return fs.readFileSync(filePath, "utf8");
-}
-
-function unknownInitScriptSlugMessage(value: string): string {
-	return `${value} is not a known init script slug (${INIT_SCRIPT_SLUGS.join(", ")})`;
-}
-
-function assertInitScriptFilesExist(paths: string[]): void {
-	for (const filePath of paths) {
-		if (!fs.existsSync(filePath)) {
-			throw new Error(
-				`${unknownInitScriptSlugMessage(filePath)}, and no such file was found.`,
-			);
-		}
-	}
-}
-
-function readInitScriptFiles(paths: string[]): string[] {
-	assertInitScriptFilesExist(paths);
-	return paths.map((filePath) => fs.readFileSync(filePath, "utf8"));
 }
 
 export function assertUpdatableOptions(options: Options): void {
@@ -1366,218 +1332,62 @@ const updateCvm = async (
 		return;
 	}
 
-	// Two-phase flow: on-chain KMS requires compose hash registration
-	if (result.requiresOnChainHash) {
-		// --prepare-only mode: output commit info and stop
-		if (validatedOptions.prepareOnly) {
-			// Build explorer link for the contract address
-			const chainId = result.kmsInfo?.chain_id;
-			const chain = result.kmsInfo?.chain as
-				| { name?: string; blockExplorers?: { default?: { url?: string } } }
-				| undefined;
-			const contractAddress = cvm.app_id;
-			const explorerUrl = chain?.blockExplorers?.default?.url;
-			const contractExplorerUrl =
-				explorerUrl && contractAddress
-					? `${explorerUrl}/address/${contractAddress.startsWith("0x") ? contractAddress : `0x${contractAddress}`}`
-					: undefined;
-
-			const composeHashHex = result.composeHash.startsWith("0x")
-				? result.composeHash
-				: `0x${result.composeHash}`;
-
-			const onchain = result.onchainStatus;
-			const output = {
-				success: true,
-				prepare_only: true,
-				compose_hash: composeHashHex,
-				app_id: cvm.app_id,
-				device_id: result.deviceId,
-				kms_info: result.kmsInfo,
-				chain_id: chainId,
-				contract_explorer_url: contractExplorerUrl,
-				onchain_status: onchain,
-				commit_token: result.commitToken,
-				commit_url: result.commitUrl,
-				api_commit_url: result.apiCommitUrl,
-			};
-
-			if (validatedOptions.json !== false) {
-				stdout.write(`${JSON.stringify(output, null, 2)}\n`);
-			} else {
-				const lines = [
-					"CVM update prepared successfully (pending on-chain approval).",
-					"",
-					`Compose Hash:    ${composeHashHex}`,
-					`App ID:          ${cvm.app_id}`,
-					`Device ID:       ${result.deviceId}`,
-				];
-				if (chainId) {
-					lines.push(
-						`Chain:           ${chain?.name || "Unknown"} (ID: ${chainId})`,
-					);
-				}
-				if (contractExplorerUrl) {
-					lines.push(`Contract:        ${contractExplorerUrl}`);
-				}
-				lines.push(
-					`Commit Token:    ${result.commitToken || "N/A"}`,
-					`Commit URL:      ${result.commitUrl || "N/A"}`,
-					`API Commit URL:  ${result.apiCommitUrl || "N/A"} (POST)`,
-				);
-				if (onchain) {
-					const hashStatus = onchain.compose_hash_allowed
-						? "registered"
-						: "NOT registered";
-					const deviceStatus = onchain.device_id_allowed
-						? "registered"
-						: "NOT registered";
-					lines.push(
-						"",
-						"On-chain Status:",
-						`  Compose Hash:  ${hashStatus}`,
-						`  Device ID:     ${deviceStatus}`,
-					);
-					if (onchain.is_allowed) {
-						lines.push(
-							"  All prerequisites met. You can commit with --transaction-hash already-registered.",
-						);
-					}
-				}
-				lines.push(
-					"",
-					"To complete the update after on-chain approval:",
-					`  phala deploy --cvm-id ${validatedOptions.uuid} \\`,
-					"    --commit \\",
-					`    --token ${result.commitToken || "<token>"} \\`,
-					`    --compose-hash ${composeHashHex} \\`,
-					"    --transaction-hash <tx-hash>",
-				);
-				stdout.write(`${lines.join("\n")}\n`);
-			}
-			return;
-		}
-
-		if (!validatedOptions.privateKey) {
-			throw new Error("Private key is required for contract DstackApp");
-		}
-
-		if (validatedOptions.debug) {
-			console.log("[DEBUG] patchCvm.composeHash:", result.composeHash);
-			console.log("[DEBUG] cvm.app_id:", cvm.app_id);
-			console.log("[DEBUG] patchCvm.deviceId:", result.deviceId);
-		}
-
-		// Resolve viem chain from chain_id. The SDK schema only injects `chain`
-		// when chain_id is in SUPPORTED_CHAINS, so resolving from chain_id directly
-		// gives a clearer error for unsupported chains.
-		const cvmChainId = cvm.kms_info?.chain_id;
-		const cvmChain =
-			cvmChainId != null ? SUPPORTED_CHAINS[cvmChainId] : undefined;
-		if (!cvmChain) {
-			throw new Error(
-				cvmChainId != null
-					? `CVM chain id ${cvmChainId} is not supported by this CLI build`
-					: "CVM kms_info is missing chain_id",
-			);
-		}
-
-		// Check on-chain prerequisites (device + compose hash status)
-		const prereqs = await safeCheckOnChainPrerequisites({
-			chain: cvmChain,
-			rpcUrl: validatedOptions.rpcUrl,
-			appAddress: cvm.app_id as `0x${string}`,
-			deviceId: result.deviceId,
-			composeHash: result.composeHash,
-		});
-
-		if (!prereqs.success) {
-			// biome-ignore lint/suspicious/noExplicitAny: type narrowing issue with safe result union
-			const errDetail = (prereqs as any).error;
-			throw new Error(
-				`Failed to check on-chain prerequisites (contract: ${cvm.app_id}): ${errDetail.message}`,
-			);
-		}
-
-		if (validatedOptions.debug) {
-			console.log("[DEBUG] prereqs:", prereqs.data);
-		}
-
-		// Add device if not registered
-		if (!prereqs.data.deviceAllowed) {
-			logger.info("Device not registered on-chain, adding...");
-			const deviceResult = await safeAddDevice({
-				chain: cvmChain,
-				rpcUrl: validatedOptions.rpcUrl,
-				appAddress: cvm.app_id as `0x${string}`,
-				deviceId: result.deviceId,
-				privateKey: validatedOptions.privateKey as `0x${string}`,
+	const outcome = await runTwoPhaseComposeUpdate({
+		phase1: async () => result,
+		phase2: async (composeHash, transactionHash) => {
+			const confirmResult = await safeConfirmCvmPatch(client, {
+				id: validatedOptions.uuid,
+				composeHash,
+				transactionHash,
 			});
-			if (!deviceResult.success) {
-				// biome-ignore lint/suspicious/noExplicitAny: type narrowing issue with safe result union
-				const errDetail = (deviceResult as any).error;
+			if (!confirmResult.success) {
+				const errMsg = confirmResult.error.message;
+				const status =
+					"status" in confirmResult.error
+						? (confirmResult.error as { status: number }).status
+						: undefined;
+				if (status === 466) {
+					throw new Error(
+						"Compose hash expired. Please retry the update from the beginning.",
+					);
+				}
+				if (status === 467) {
+					throw new Error(
+						`Transaction verification failed on backend. Hash: ${transactionHash}`,
+					);
+				}
+				if (status === 468) {
+					throw new Error(
+						`Compose hash not found on-chain. Contract: ${cvm.app_id}`,
+					);
+				}
 				throw new Error(
-					`Failed to register device on-chain (device: ${result.deviceId.slice(0, 10)}...): ${errDetail.message}`,
+					`Failed to confirm CVM update after on-chain registration: ${errMsg}`,
 				);
 			}
-		}
-
-		// Register compose hash on-chain (idempotent — always send to get a real tx hash)
-		const receipt_result = await safeAddComposeHash({
-			chain: cvmChain,
+			return confirmResult.data;
+		},
+		options: {
+			prepareOnly: Boolean(validatedOptions.prepareOnly),
+			privateKey: validatedOptions.privateKey,
 			rpcUrl: validatedOptions.rpcUrl,
-			appId: cvm.app_id as `0x${string}`,
-			composeHash: result.composeHash,
-			privateKey: validatedOptions.privateKey as `0x${string}`,
-		});
-		if (!receipt_result.success) {
-			// biome-ignore lint/suspicious/noExplicitAny: type narrowing issue with safe result union
-			const errDetail = (receipt_result as any).error;
-			throw new Error(
-				`Failed to register compose hash on-chain (hash: ${result.composeHash.slice(0, 10)}...): ${errDetail.message}`,
-			);
-		}
-
-		// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
-		const txResult = receipt_result.data as any;
-		const transactionHash: string = txResult.transactionHash;
-
-		if (validatedOptions.debug) {
-			console.log("[DEBUG] transactionHash:", transactionHash);
-		}
-
-		const confirmResult = await safeConfirmCvmPatch(client, {
-			id: validatedOptions.uuid,
-			composeHash: result.composeHash,
-			transactionHash,
-		});
-		if (!confirmResult.success) {
-			const errMsg = confirmResult.error.message;
-			const status =
-				"status" in confirmResult.error
-					? (confirmResult.error as { status: number }).status
-					: undefined;
-			if (status === 466) {
-				throw new Error(
-					"Compose hash expired. Please retry the update from the beginning.",
-				);
-			}
-			if (status === 467) {
-				throw new Error(
-					`Transaction verification failed on backend. Hash: ${transactionHash}`,
-				);
-			}
-			if (status === 468) {
-				throw new Error(
-					`Compose hash not found on-chain. Contract: ${cvm.app_id}`,
-				);
-			}
-			throw new Error(
-				`Failed to confirm CVM update after on-chain registration: ${errMsg}`,
-			);
-		}
-		correlationId = confirmResult.data.correlationId;
+			json: validatedOptions.json,
+			debug: validatedOptions.debug,
+		},
+		appId: cvm.app_id,
+		followUpLines: (composeHashHex, commitToken) => [
+			`  phala deploy --cvm-id ${validatedOptions.uuid} \\`,
+			"    --commit \\",
+			`    --token ${commitToken || "<token>"} \\`,
+			`    --compose-hash ${composeHashHex} \\`,
+			"    --transaction-hash <tx-hash>",
+		],
+		stdout,
+	});
+	if (!("correlationId" in outcome)) {
+		return;
 	}
+	correlationId = outcome.correlationId;
 
 	await applyListedAfterUpdate(client, validatedOptions);
 
