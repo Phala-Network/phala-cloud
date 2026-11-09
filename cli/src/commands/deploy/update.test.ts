@@ -251,6 +251,21 @@ describe("phala deploy --help", () => {
 			"stays stopped if it was not running before the update",
 		);
 	});
+
+	test("describes --init-script as slugs only", async () => {
+		const { code, stdout } = await runCli(["deploy", "--help"]);
+
+		expect(code).toBe(0);
+		const option = stdout
+			.split("\n")
+			.find(
+				(line) =>
+					line.includes("--init-script") && line.includes("docker_cleanup"),
+			);
+		expect(option).toBeDefined();
+		expect(option).not.toMatch(/file/i);
+		expect(option).not.toMatch(/admin/i);
+	});
 });
 
 describe("phala deploy --cvm-id --clear-init-scripts (parsed argv)", () => {
@@ -313,6 +328,30 @@ describe("phala deploy --cvm-id", () => {
 			disk_size: 100,
 			image: "dstack-0.5.5",
 		});
+	});
+
+	test("rejects --init-script file paths on update before any request", async () => {
+		const { exitCode, failure } = await deploy({
+			initScript: [path.join(tmpDir, "init.sh")],
+		});
+
+		expect(exitCode).toBe(1);
+		expect((failure as Error).message).toContain("creating a CVM");
+		expect(requests).toEqual([]);
+	});
+
+	test("rejects a mistyped init script slug on update as unknown slug, not only as a file", async () => {
+		const { exitCode, failure } = await deploy({
+			initScript: ["docker_clenaup"],
+		});
+
+		expect(exitCode).toBe(1);
+		expect((failure as Error).message).toContain(
+			"not a known init script slug",
+		);
+		expect((failure as Error).message).toContain("docker_cleanup, env_merge");
+		expect((failure as Error).message).toContain("creating a CVM");
+		expect(requests).toEqual([]);
 	});
 
 	test("sends compose flags as a merge patch, with init scripts and the data-wipe confirmation", async () => {

@@ -65,7 +65,12 @@ import {
 import dedent from "dedent";
 import fs from "fs-extra";
 import inquirer from "inquirer";
-import type { DeployCommandInput } from "./command";
+import {
+	INIT_SCRIPT_SLUGS,
+	isInitScriptSlug,
+	type DeployCommandInput,
+	type InitScriptSlug,
+} from "./command";
 
 type PrivacyConfig = Pick<
 	RuntimeProjectConfig,
@@ -120,7 +125,7 @@ interface Options {
 	transactionHash?: string;
 	runner?: "docker-compose" | "nerdctl-compose" | "bash";
 	appCompose?: string;
-	initScript?: Array<"docker_cleanup" | "env_merge">;
+	initScript?: string[];
 	clearInitScripts?: boolean;
 	launchToken?: string;
 	launchTokenHash?: string;
@@ -176,6 +181,45 @@ const CREATE_ONLY_FLAGS: ReadonlyArray<readonly [keyof Options, string]> = [
 	["generateLaunchToken", "--generate-launch-token"],
 ];
 
+function partitionInitScriptValues(values: string[] | undefined): {
+	slugs: InitScriptSlug[];
+	files: string[];
+} {
+	const slugs: InitScriptSlug[] = [];
+	const files: string[] = [];
+	for (const value of values ?? []) {
+		if (isInitScriptSlug(value)) slugs.push(value);
+		else files.push(value);
+	}
+	return { slugs, files };
+}
+
+function readScriptFile(filePath: string, missingMessage: string): string {
+	if (!fs.existsSync(filePath)) {
+		throw new Error(missingMessage);
+	}
+	return fs.readFileSync(filePath, "utf8");
+}
+
+function unknownInitScriptSlugMessage(value: string): string {
+	return `${value} is not a known init script slug (${INIT_SCRIPT_SLUGS.join(", ")})`;
+}
+
+function assertInitScriptFilesExist(paths: string[]): void {
+	for (const filePath of paths) {
+		if (!fs.existsSync(filePath)) {
+			throw new Error(
+				`${unknownInitScriptSlugMessage(filePath)}, and no such file was found.`,
+			);
+		}
+	}
+}
+
+function readInitScriptFiles(paths: string[]): string[] {
+	assertInitScriptFilesExist(paths);
+	return paths.map((filePath) => readScriptFile(filePath, filePath));
+}
+
 export function assertUpdatableOptions(options: Options): void {
 	const flags = CREATE_ONLY_FLAGS.filter(
 		([key]) => options[key] !== undefined,
@@ -188,6 +232,14 @@ export function assertUpdatableOptions(options: Options): void {
 	if (options.clearInitScripts && options.initScript !== undefined) {
 		throw new Error(
 			"--clear-init-scripts cannot be combined with --init-script.",
+		);
+	}
+	const unknownInitScripts = partitionInitScriptValues(
+		options.initScript,
+	).files;
+	if (unknownInitScripts.length > 0) {
+		throw new Error(
+			`${unknownInitScriptSlugMessage(unknownInitScripts[0] as string)}. File paths with --init-script can only be used when creating a CVM, not with --cvm-id.`,
 		);
 	}
 }
@@ -223,6 +275,21 @@ export function assertCreateOptions(options: Options): void {
 				`${flag} only applies to an update of an existing CVM (--cvm-id).`,
 			);
 		}
+	}
+	const initScripts = partitionInitScriptValues(options.initScript);
+	assertInitScriptFilesExist(initScripts.files);
+	if (initScripts.slugs.length > 0 && initScripts.files.length > 0) {
+		throw new Error(
+			"Send either init script slugs or init script files with --init-script, not both.",
+		);
+	}
+	if (initScripts.files.length > 5) {
+		throw new Error("--init-script accepts at most 5 script files.");
+	}
+	if (options.appCompose !== undefined && initScripts.files.length > 0) {
+		throw new Error(
+			"--init-script file paths cannot be used with --app-compose. Set them in the app-compose file.",
+		);
 	}
 	if (options.appCompose === undefined) return;
 	const flags = COMPOSE_SHAPING_FLAGS.filter(
@@ -783,6 +850,7 @@ function buildComposeFile(
 	envs: EnvVar[],
 	privacySettings: PrivacySettings,
 	preLaunchScriptContent?: string,
+	initScriptContents?: string[],
 ): Record<string, unknown> {
 	const composeFile: Record<string, unknown> = {
 		name: "", // Required by backend schema, defaults to empty string
@@ -816,6 +884,9 @@ function buildComposeFile(
 	if (options.experimentalKeyProviderType) {
 		composeFile.key_provider = options.experimentalKeyProviderType;
 	}
+	if (initScriptContents && initScriptContents.length > 0) {
+		composeFile.init_script = initScriptContents;
+	}
 	return composeFile;
 }
 
@@ -832,6 +903,7 @@ export const buildProvisionPayload = (
 	privacySettings: PrivacySettings,
 	preResolvedKmsSelection?: ReturnType<typeof resolveKmsSelection>,
 	preLaunchScriptContent?: string,
+	initScriptContents?: string[],
 ) => {
 	const payload: ProvisionCvmRequest = options.appCompose
 		? // The file is the whole app compose; the API parses it.
@@ -848,12 +920,14 @@ export const buildProvisionPayload = (
 					envs,
 					privacySettings,
 					preLaunchScriptContent,
+					initScriptContents,
 				),
 				listed: privacySettings.listed,
 			};
 
-	if (options.initScript !== undefined) {
-		payload.init_scripts = options.initScript;
+	const initScripts = partitionInitScriptValues(options.initScript);
+	if (initScripts.slugs.length > 0 && initScripts.files.length === 0) {
+		payload.init_scripts = initScripts.slugs;
 	}
 	if (options.launchToken !== undefined) {
 		payload.launch_token = options.launchToken;
@@ -991,6 +1065,7 @@ const deployNewCvm = async (
 	stderr: NodeJS.WriteStream,
 	projectConfig: PrivacyConfig | undefined,
 	preLaunchScriptContent: string | undefined,
+	initScriptContents: string[],
 	context: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
 ) => {
 	// Resolve KMS selection once at the start to avoid duplicate calls and warnings
@@ -1022,6 +1097,7 @@ const deployNewCvm = async (
 		privacySettings,
 		kmsSelection,
 		preLaunchScriptContent,
+		initScriptContents,
 	);
 
 	logger.info(`Provisioning CVM ${name}...`);
@@ -1671,13 +1747,14 @@ export async function runDeploy(
 		// Read pre-launch script file if provided
 		let preLaunchScriptContent: string | undefined;
 		if (input.preLaunchScript) {
-			if (!fs.existsSync(input.preLaunchScript)) {
-				throw new Error(
-					`Pre-launch script file not found: ${input.preLaunchScript}`,
-				);
-			}
-			preLaunchScriptContent = fs.readFileSync(input.preLaunchScript, "utf8");
+			preLaunchScriptContent = readScriptFile(
+				input.preLaunchScript,
+				`Pre-launch script file not found: ${input.preLaunchScript}`,
+			);
 		}
+		const initScriptContents = readInitScriptFiles(
+			partitionInitScriptValues(input.initScript).files,
+		);
 
 		// Early size check for compose payload (the SDK schema validates the
 		// combined size too, but checking here gives users a faster, friendlier
@@ -1752,6 +1829,7 @@ export async function runDeploy(
 				context.stderr,
 				context.projectConfig,
 				preLaunchScriptContent,
+				initScriptContents,
 				context,
 			);
 		}

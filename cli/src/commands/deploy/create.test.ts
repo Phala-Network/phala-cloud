@@ -187,6 +187,95 @@ describe("phala deploy (create)", () => {
 		expect(body.launch_token).toBe(LAUNCH_TOKEN);
 	});
 
+	test("sends --init-script file contents as compose_file.init_script in order", async () => {
+		const first = path.join(tmpDir, "init-a.sh");
+		const second = path.join(tmpDir, "init-b.sh");
+		await fs.writeFile(first, "echo first\n");
+		await fs.writeFile(second, "echo second\n");
+
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			initScript: [first, second],
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		const body = prepareRequest().body as Record<string, unknown>;
+		const composeFile = body.compose_file as Record<string, unknown>;
+		expect(composeFile.init_script).toEqual(["echo first\n", "echo second\n"]);
+		expect("init_scripts" in body).toBe(false);
+	});
+
+	test("omits compose_file.init_script when --init-script is not passed", async () => {
+		const { exitCode } = await deploy({ compose: composePath });
+
+		expect(exitCode).toBe(0);
+		const body = prepareRequest().body as Record<string, unknown>;
+		const composeFile = body.compose_file as Record<string, unknown>;
+		expect("init_script" in composeFile).toBe(false);
+		expect("init_scripts" in body).toBe(false);
+	});
+
+	test("rejects a non-slug --init-script that is not a file before any request", async () => {
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			initScript: ["not-a-slug-or-file"],
+		});
+
+		expect(exitCode).toBe(1);
+		expect((failure as Error).message).toContain(
+			"not a known init script slug",
+		);
+		expect((failure as Error).message).toContain("no such file");
+		expect(requests).toEqual([]);
+	});
+
+	test("rejects a mistyped slug on create before mix or file checks", async () => {
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			initScript: ["docker_cleanup", "docker_clenaup"],
+		});
+
+		expect(exitCode).toBe(1);
+		expect((failure as Error).message).toContain(
+			"not a known init script slug",
+		);
+		expect((failure as Error).message).toContain("docker_cleanup, env_merge");
+		expect((failure as Error).message).toContain("no such file");
+		expect((failure as Error).message).not.toContain("not both");
+		expect(requests).toEqual([]);
+	});
+
+	test("rejects mixing init script slugs and files before any request", async () => {
+		const script = path.join(tmpDir, "init-mix.sh");
+		await fs.writeFile(script, "echo mix\n");
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			initScript: ["docker_cleanup", script],
+		});
+
+		expect(exitCode).toBe(1);
+		expect((failure as Error).message).toContain("not both");
+		expect(requests).toEqual([]);
+	});
+
+	test("rejects more than 5 init script files before any request", async () => {
+		const files: string[] = [];
+		for (const name of ["a", "b", "c", "d", "e", "f"]) {
+			const filePath = path.join(tmpDir, `init-${name}.sh`);
+			await fs.writeFile(filePath, `echo ${name}\n`);
+			files.push(filePath);
+		}
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			initScript: files,
+		});
+
+		expect(exitCode).toBe(1);
+		expect((failure as Error).message).toContain("at most 5");
+		expect(requests).toEqual([]);
+	});
+
 	test("--json writes exactly one JSON object to stdout", async () => {
 		const { exitCode, failure } = await deploy({ compose: composePath });
 

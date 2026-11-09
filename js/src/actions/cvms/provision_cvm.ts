@@ -248,6 +248,8 @@ export const ProvisionCvmRequestSchema = z
           .optional(),
         snapshotter: z.enum(["overlayfs", "stargz"]).nullable().optional(),
         verity_volumes: z.array(VerityVolumeSchema).nullable().optional(),
+        // Raw guest init scripts. Platform slugs use init_scripts instead.
+        init_script: z.union([z.string(), z.array(z.string())]).optional(),
       })
       // Keep compose_file open to newer backend fields. Without passthrough,
       // zod's default strip mode drops every unknown key at parse time and

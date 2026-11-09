@@ -355,6 +355,20 @@ describe("provisionCvm (wire-level)", () => {
     expect("compose_file" in body).toBe(false);
   });
 
+  it("keeps compose_file.init_script in the provision body", async () => {
+    await provisionCvm(mockClient, {
+      name: "test-app",
+      instance_type: "tdx.small",
+      compose_file: {
+        docker_compose_file: "services: {}",
+        init_script: ["echo one", "echo two"],
+      },
+    });
+
+    const composeFile = getRequestBody().compose_file as Record<string, unknown>;
+    expect(composeFile.init_script).toEqual(["echo one", "echo two"]);
+  });
+
   it("sends the create-time compose and app fields", async () => {
     await provisionCvm(mockClient, {
       name: "test-app",
