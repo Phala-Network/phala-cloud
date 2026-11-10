@@ -1,3 +1,9 @@
+## [0.5.2](https://github.com/Phala-Network/phala-cloud/compare/go/v0.5.1...go/v0.5.2) (2026-11-10)
+
+### fix
+
+* **sdks:** handle guest errors in text streams and stop empty follow loops ([6e3cdeb](https://github.com/Phala-Network/phala-cloud/commit/6e3cdeb38c1fe01bd85727ba40e2be76711c7035))
+* **sdks:** surface guest log errors instead of an NDJSON parse error ([28b49e4](https://github.com/Phala-Network/phala-cloud/commit/28b49e46184f9656f80beb3e9f764675aeb43e18))
 ## [0.5.1](https://github.com/Phala-Network/phala-cloud/compare/go/v0.5.0...go/v0.5.1) (2026-11-10)
 
 ### fix
