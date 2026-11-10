@@ -9,7 +9,7 @@ import {
 
 const runCvmsLogsCommand = createLogsHandler<
 	CvmsLogsCommandInput,
-	{ tail?: number; timestamps?: boolean; container?: string }
+	{ tail?: number | "all"; timestamps?: boolean; container?: string }
 >(
 	{
 		logType: "container",

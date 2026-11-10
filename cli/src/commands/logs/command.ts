@@ -44,9 +44,10 @@ export const logsCommandMeta: CommandMeta = {
 		{
 			name: "tail",
 			shorthand: "n",
-			description: "Number of lines from end",
-			type: "number",
+			description: "Number of lines from the end, or all",
+			type: "string",
 			target: "tail",
+			argumentName: "lines",
 		},
 		{
 			name: "follow",
@@ -110,6 +111,10 @@ export const logsCommandMeta: CommandMeta = {
 			value: "phala logs my-service -n 100",
 		},
 		{
+			name: "All available lines",
+			value: "phala logs my-service -n all",
+		},
+		{
 			name: "Specify CVM",
 			value: "phala logs my-service --cvm-id app_abc123",
 		},
@@ -125,7 +130,7 @@ export const logsCommandSchema = z.object({
 	stderr: z.boolean().default(false),
 	since: z.string().optional(),
 	until: z.string().optional(),
-	tail: z.number().optional(),
+	tail: z.union([z.literal("all"), z.coerce.number().int().nonnegative()]).optional(),
 	follow: z.boolean().default(false),
 	timestamps: z.boolean().default(false),
 	json: z.boolean().default(false),

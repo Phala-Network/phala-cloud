@@ -146,7 +146,7 @@ def test_expired_signature_gives_up_after_three_refreshes() -> None:
 
 
 def test_container_follow_dedupes_boundary_second() -> None:
-    repeated = '{"channel":"stdout","message":"2026-11-09T12:00:00.123456789Z repeated"}'
+    repeated = '{"channel":"stdout","message":"2026-11-09T12:00:00.123456789Z repeated\\n"}'
     state = _LogState()
     state.bodies = [
         f"{repeated}\n{repeated}\n",
@@ -160,7 +160,7 @@ def test_container_follow_dedupes_boundary_second() -> None:
             messages.append(entry["message"])
             if len(messages) == 3:
                 break
-    assert messages == ["repeated", "repeated", "repeated"]
+    assert messages == ["repeated\n", "repeated\n", "repeated\n"]
     assert "timestamps=true" in state.calls[0]
     assert "since=1794225600" in state.calls[1]
     assert "tail=" not in state.calls[1].split("?")[-1]
@@ -199,6 +199,28 @@ def test_public_logs_off_raises_err_17_006() -> None:
     assert err.value.http_status == 409
 
 
+def test_follow_public_logs_off_raises_err_17_006_without_log_request() -> None:
+    calls: list[str] = []
+
+    def api_get(path: str) -> object:
+        calls.append(path)
+        return {"public_logs": False, "logs": {}}
+
+    with httpx.Client() as log_http:
+        with pytest.raises(LogAccessError) as err:
+            next(
+                follow_container_log_entries(
+                    api_get=api_get,
+                    log_http=log_http,
+                    cvm_id="app_test",
+                    container="anything",
+                )
+            )
+    assert err.value.code == "ERR-17-006"
+    assert err.value.http_status == 409
+    assert calls == ["/cvms/app_test"]
+
+
 def test_follow_rejects_ndjson_on_node() -> None:
     with httpx.Client() as log_http:
         with pytest.raises(ValueError, match="format=ndjson"):
@@ -229,7 +251,7 @@ def test_guest_agent_ndjson_error_is_err_17_009_and_does_not_retry() -> None:
                 )
             )
     assert err.value.code == "ERR-17-009"
-    assert GUEST_DOCKER_ERROR in str(err.value)
+    assert str(err.value) == GUEST_DOCKER_ERROR
     assert len(state.calls) == 1
 
 
@@ -247,6 +269,7 @@ def test_http_502_err_17_009_still_reconnects_in_follow() -> None:
             )
     assert err.value.code == "ERR-17-009"
     assert err.value.http_status == 502
+    assert str(err.value) == "Guest agent or gateway unreachable"
     assert len(state.calls) == 5
 
 
@@ -263,8 +286,38 @@ def test_container_text_guest_error_without_newline() -> None:
                 format="text",
             )
     assert err.value.code == "ERR-17-009"
-    assert GUEST_DOCKER_ERROR in str(err.value)
+    assert str(err.value) == GUEST_DOCKER_ERROR
     assert len(state.calls) == 1
+
+
+def test_container_follow_reconnect_dedupes_then_empty_end_stops() -> None:
+    records = [
+        {"channel": "stdout", "message": "2026-11-09T12:00:00.000000001Z exiter one\n"},
+        {"channel": "stdout", "message": "2026-11-09T12:00:01.000000001Z exiter two\n"},
+        {"channel": "stdout", "message": "2026-11-09T12:00:02.000000001Z exiter three\n"},
+    ]
+    body = "".join(json.dumps(record) + "\n" for record in records)
+    last = json.dumps(records[-1]) + "\n"
+    state = _LogState()
+    # Reconnect returns only the since-boundary second (last line), then empty EOFs.
+    state.bodies = [body, last, "", "", "", ""]
+    got: list[str] = []
+    with _client(state) as log_http:
+        with pytest.raises(LogAccessError) as err:
+            for entry in follow_cvm_logs(
+                api_get=state.api_get,
+                log_http=log_http,
+                cvm_id="app_test",
+                source={"type": "container", "name": "app"},
+                tail="all",
+            ):
+                assert isinstance(entry, dict)
+                got.append(entry["message"])
+    assert got == ["exiter one\n", "exiter two\n", "exiter three\n"]
+    assert "keeps ending without new output" in str(err.value)
+    assert "tail=all" in state.calls[0]
+    assert "since=" in state.calls[1]
+    assert "tail=" not in state.calls[1].split("?", 1)[-1]
 
 
 def test_container_follow_stops_after_five_empty_ends() -> None:
@@ -284,7 +337,7 @@ def test_container_follow_stops_after_five_empty_ends() -> None:
 def test_container_follow_with_data_keeps_reconnecting() -> None:
     state = _LogState()
     state.bodies = [
-        json.dumps({"channel": "stdout", "message": f"2026-11-09T12:00:0{i}.0Z line{i}"}) + "\n"
+        json.dumps({"channel": "stdout", "message": f"2026-11-09T12:00:0{i}.0Z line{i}\n"}) + "\n"
         for i in range(1, 7)
     ]
     with _client(state) as log_http:

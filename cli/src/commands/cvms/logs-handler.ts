@@ -40,7 +40,7 @@ export interface LogsHandlerConfig<TOptions> {
 export interface BaseLogsInput {
 	json?: boolean;
 	follow?: boolean;
-	tail?: number;
+	tail?: number | "all";
 	timestamps?: boolean;
 }
 

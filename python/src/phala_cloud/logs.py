@@ -81,7 +81,7 @@ class LogAccessError(ResourceError):
             status = 0
         else:
             status = http_status or (code and _LOG_ERROR_HTTP_STATUS.get(code)) or 0
-        details = f"{code}: {message}" if code else message
+        details = message
         if suggestions:
             details += "\nSuggestions:\n" + "\n".join(f"- {item}" for item in suggestions)
         super().__init__(
@@ -258,15 +258,18 @@ def _container_logs_disabled() -> LogAccessError:
     )
 
 
+def _assert_container_logs_enabled(api_get: Callable[[str], Any], cvm_id: str) -> None:
+    info = api_get(f"/cvms/{cvm_id}")
+    if isinstance(info, dict) and info.get("public_logs") is False:
+        raise _container_logs_disabled()
+
+
 def _get_container_endpoint(
     api_get: Callable[[str], Any],
     cvm_id: str,
     container_name: str | None = None,
     match_prefix: bool = True,
 ) -> str:
-    info = api_get(f"/cvms/{cvm_id}")
-    if isinstance(info, dict) and info.get("public_logs") is False:
-        raise _container_logs_disabled()
     composition = api_get(f"/cvms/{cvm_id}/composition")
     containers = composition.get("containers") or []
     if not containers:
@@ -442,6 +445,7 @@ def fetch_container_log_entries(
     log_format: CvmLogFormat = "ndjson",
 ) -> list[CvmLogEntry]:
     times = resolve_log_time_window(since, until)
+    _assert_container_logs_enabled(api_get, cvm_id)
     url = _build_log_url(
         _get_container_endpoint(api_get, cvm_id, container, match_prefix),
         {**times, "tail": tail, "timestamps": timestamps, "ansi": ansi, "format": log_format},
@@ -465,6 +469,7 @@ def follow_container_log_entries(
     timestamps: bool = False,
 ) -> Iterator[CvmLogEntry]:
     times = resolve_log_time_window(since, until)
+    _assert_container_logs_enabled(api_get, cvm_id)
     state = {
         "since": times.get("since"),
         "boundary_second": None,
@@ -525,7 +530,7 @@ def follow_container_log_entries(
 
     empty_ends = 0
     for response in _iter_follow_responses(
-        resolve_url, log_http, refresh=lambda: api_get(f"/cvms/{cvm_id}")
+        resolve_url, log_http, refresh=lambda: _assert_container_logs_enabled(api_get, cvm_id)
     ):
         delivered = 0
         buffer = ""
@@ -562,27 +567,60 @@ def _follow_container_text(
     ansi: bool,
 ) -> Iterator[str]:
     times = resolve_log_time_window(since, until)
-    first = True
+    _assert_container_logs_enabled(api_get, cvm_id)
+    state: dict[str, Any] = {
+        "since": times.get("since"),
+        "boundary_second": None,
+        "boundary_counts": {},
+        "replay_counts": {},
+        "first": True,
+    }
 
     def resolve_url() -> str:
-        nonlocal first
-        current_tail = tail if first else None
-        first = False
+        current_tail = tail if state["first"] else None
+        state["first"] = False
+        state["replay_counts"] = dict(state["boundary_counts"])
         return _build_log_url(
             _get_container_endpoint(api_get, cvm_id, container, match_prefix),
             {
-                **times,
+                "since": state["since"],
+                "until": times.get("until"),
                 "tail": current_tail,
                 "follow": True,
-                "timestamps": timestamps,
+                "timestamps": True,
                 "ansi": ansi,
                 "format": "text",
             },
         )
 
+    def emit_line(line: str) -> str | None:
+        _throw_if_guest_agent_error(line)
+        parsed = _parse_timestamped_message(line)
+        out = line if timestamps else (parsed["message"] if parsed.get("timestamp") else line)
+        second = parsed.get("second")
+        if second is None or not parsed.get("timestamp"):
+            return out
+        key = line
+        boundary_second = state["boundary_second"]
+        replay_counts: dict[str, int] = state["replay_counts"]
+        boundary_counts: dict[str, int] = state["boundary_counts"]
+        if boundary_second is not None and second < boundary_second:
+            return out
+        if second == boundary_second:
+            replay = replay_counts.get(key, 0)
+            if replay > 0:
+                replay_counts[key] = replay - 1
+                return None
+        elif boundary_second is None or second > boundary_second:
+            state["boundary_second"] = second
+            boundary_counts.clear()
+        state["since"] = max(state["since"] or second, second)
+        boundary_counts[key] = boundary_counts.get(key, 0) + 1
+        return out
+
     empty_ends = 0
     for response in _iter_follow_responses(
-        resolve_url, log_http, refresh=lambda: api_get(f"/cvms/{cvm_id}")
+        resolve_url, log_http, refresh=lambda: _assert_container_logs_enabled(api_get, cvm_id)
     ):
         delivered = 0
         buffer = ""
@@ -590,13 +628,15 @@ def _follow_container_text(
             buffer += chunk
             while "\n" in buffer:
                 line, buffer = buffer.split("\n", 1)
-                _throw_if_guest_agent_error(line)
-                delivered += 1
-                yield line + "\n"
+                item = emit_line(line)
+                if item is not None:
+                    delivered += 1
+                    yield item + "\n"
         if buffer:
-            _throw_if_guest_agent_error(buffer)
-            delivered += 1
-            yield buffer
+            item = emit_line(buffer)
+            if item is not None:
+                delivered += 1
+                yield item
         if delivered:
             empty_ends = 0
         else:
@@ -645,6 +685,7 @@ def fetch_cvm_logs(
             log_format="ndjson",
         )
     times = resolve_log_time_window(since, until)
+    _assert_container_logs_enabled(api_get, cvm_id)
     url = _build_log_url(
         _get_container_endpoint(
             api_get,
