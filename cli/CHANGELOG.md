@@ -1,3 +1,14 @@
+## [1.2.4](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.3...cli-v1.2.4) (2026-11-10)
+
+### feat
+
+* **cli:** read CVM logs through presigned log gateway URLs ([fded6bb](https://github.com/Phala-Network/phala-cloud/commit/fded6bb9f4fcfd53254de6fd90219a6c663f9726))
+* **sdks:** add CVM log fetch and follow helpers ([1a1f8a9](https://github.com/Phala-Network/phala-cloud/commit/1a1f8a99b61cc5911deb9512e40d8225f43b5052))
+* **sdks:** send a unified User-Agent from every SDK ([900700d](https://github.com/Phala-Network/phala-cloud/commit/900700da97788f474fbd2a6e820a8d6e29742aa4))
+
+### fix
+
+* **cli:** route ssh and cp through HTTPS_PROXY ([cd90edd](https://github.com/Phala-Network/phala-cloud/commit/cd90eddb64e03470165e83e209f5e9d840b3938f))
 ## [1.2.3](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.2...cli-v1.2.3) (2026-11-09)
 
 ### docs
