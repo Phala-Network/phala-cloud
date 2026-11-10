@@ -71,6 +71,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   globalThis.fetch = originalFetch;
 });
 
@@ -107,6 +108,30 @@ describe("CVM log access", () => {
     expect(urls[1]?.searchParams.get("tail")).toBe("0");
   });
 
+  test("node short empty EOF backs off before reconnecting and does not stop", async () => {
+    const client = mockClient();
+    const controller = new AbortController();
+    let n = 0;
+    fetchImplementation = async () => {
+      n += 1;
+      if (n >= 3) return new Response("after-backoff\n");
+      return new Response("");
+    };
+    const started = performance.now();
+    await streamCvmChannelLogs(
+      client,
+      "app_test",
+      "serial",
+      (data) => {
+        if (data.includes("after-backoff")) controller.abort();
+      },
+      {},
+      controller.signal,
+    );
+    expect(n).toBe(3);
+    expect(performance.now() - started).toBeGreaterThanOrEqual(700);
+  });
+
   test("ordinary network failures stop after five consecutive failures", async () => {
     const client = mockClient();
     fetchImplementation = async () => {
@@ -122,17 +147,17 @@ describe("CVM log access", () => {
     expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
-  test("a successful HTTP 200 clean EOF resets the ordinary failure counter", async () => {
+  test("a successful HTTP 200 with a record resets the ordinary failure counter", async () => {
     const client = mockClient();
     const controller = new AbortController();
     let requestCount = 0;
     const output: string[] = [];
     fetchImplementation = async () => {
       requestCount += 1;
-      if (requestCount <= 2 || (requestCount >= 4 && requestCount <= 6)) {
+      if (requestCount <= 2 || (requestCount >= 5 && requestCount <= 7)) {
         throw new TypeError("temporary network failure");
       }
-      if (requestCount === 3) return new Response("");
+      if (requestCount === 3) return new Response("checkpoint\n");
       return new Response("recovered after a reset\n");
     };
 
@@ -142,14 +167,26 @@ describe("CVM log access", () => {
       "serial",
       (data) => {
         output.push(data);
-        controller.abort();
+        if (data.includes("recovered")) controller.abort();
       },
       {},
       controller.signal,
     );
 
-    expect(requestCount).toBe(7);
-    expect(output).toEqual(["recovered after a reset\n"]);
+    expect(requestCount).toBe(4);
+    expect(output).toEqual(["checkpoint\n", "recovered after a reset\n"]);
+  });
+
+  test("in-stream gateway error lines count toward the 5-failure cap", async () => {
+    const client = mockClient();
+    fetchImplementation = async () => new Response("[error] ERR-17-008 upstream stream failed\n");
+    const error = await streamCvmChannelLogs(client, "app_test", "serial", () => {}).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    expect(error).toBeInstanceOf(LogAccessError);
+    expect(error).toMatchObject({ code: "ERR-17-008", message: "upstream stream failed" });
+    expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
   test("container follow de-duplicates the boundary second and omits tail on reconnect", async () => {
@@ -187,7 +224,7 @@ describe("CVM log access", () => {
     }
     expect(urls[0]?.searchParams.has("tail")).toBe(false);
     expect(urls[1]?.searchParams.get("since")).toBe("1794225600");
-    expect(urls[1]?.searchParams.has("tail")).toBe(false);
+    expect(urls[1]?.searchParams.get("tail")).toBe("all");
   });
 
   test("container logs keep empty lines and heartbeat-like application content", async () => {
@@ -296,7 +333,18 @@ describe("CVM log access", () => {
       streamContainerLogsEntries(client, "app_test", () => {}, { container: "missing" }),
     ).rejects.toThrow(/Container 'missing' not found/);
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(client.get).toHaveBeenCalledTimes(2);
+    expect(client.get).toHaveBeenCalled();
+  });
+
+  test("glued guest error without newline is parsed as ERR-17-009", async () => {
+    const client = mockClient();
+    fetchImplementation = async () =>
+      new Response('{"error":"x"}{"channel":"stdout","message":"y\n"}\n');
+    await expect(fetchContainerLogsEntries(client, "app_test")).rejects.toMatchObject({
+      name: "LogAccessError",
+      code: "ERR-17-009",
+      message: "x",
+    });
   });
 
   test("guest-agent ndjson error record is ERR-17-009 and does not retry", async () => {
@@ -326,6 +374,19 @@ describe("CVM log access", () => {
     );
     expect(error).toBeInstanceOf(LogAccessError);
     expect(error).toMatchObject({ code: "ERR-17-009" });
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  test("in-stream ndjson gateway error counts toward the 5-failure cap", async () => {
+    const client = mockClient();
+    fetchImplementation = async () =>
+      ndjsonResponse([{ error_code: "ERR-17-008", message: "upstream stream failed" }]);
+    const error = await streamContainerLogsEntries(client, "app_test", () => {}).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    expect(error).toBeInstanceOf(LogAccessError);
+    expect(error).toMatchObject({ code: "ERR-17-008", message: "upstream stream failed" });
     expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
@@ -376,6 +437,107 @@ describe("CVM log access", () => {
     );
     expect(count).toBe(6);
     expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  test("delivered record then in-stream error resets the failure counter", async () => {
+    const client = mockClient();
+    const controller = new AbortController();
+    let n = 0;
+    const output: string[] = [];
+    fetchImplementation = async () => {
+      n += 1;
+      if (n <= 4) return jsonResponse({ error_code: "ERR-17-008", message: "up" }, 503);
+      if (n === 5) return new Response("recovered\n[error] ERR-17-008 upstream stream failed\n");
+      return new Response("ok\n");
+    };
+    await streamCvmChannelLogs(
+      client,
+      "app_test",
+      "serial",
+      (data) => {
+        output.push(data);
+        if (data.includes("ok")) controller.abort();
+      },
+      {},
+      controller.signal,
+    );
+    expect(output.some((line) => line.includes("recovered"))).toBe(true);
+    expect(output.some((line) => line.includes("ok"))).toBe(true);
+    expect(n).toBeGreaterThanOrEqual(6);
+  });
+
+  test("empty-end counter resets on HTTP failure", async () => {
+    const client = mockClient();
+    const controller = new AbortController();
+    let n = 0;
+    fetchImplementation = async () => {
+      n += 1;
+      if (n <= 4) return new Response("");
+      if (n === 5) return jsonResponse({ error_code: "ERR-17-008", message: "up" }, 503);
+      if (n === 6) return new Response("");
+      return ndjsonResponse([{ channel: "stdout", message: "still-going\n" }]);
+    };
+    await streamContainerLogsEntries(
+      client,
+      "app_test",
+      (entry) => {
+        if (entry.message.includes("still-going")) controller.abort();
+      },
+      {},
+      controller.signal,
+    );
+    expect(n).toBeGreaterThanOrEqual(7);
+  });
+
+  test("quiet tail=0 reconnect uses first-200 since and tail=all", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_794_225_600_000);
+    const client = mockClient();
+    const controller = new AbortController();
+    let n = 0;
+    fetchImplementation = async () => {
+      n += 1;
+      if (n === 1) return new Response("");
+      return ndjsonResponse([{ channel: "stdout", message: "2026-11-09T12:00:10.0Z later\n" }]);
+    };
+    await streamContainerLogsEntries(
+      client,
+      "app_test",
+      () => controller.abort(),
+      { tail: 0 },
+      controller.signal,
+    );
+    const urls = fetchMock.mock.calls.map(([input]) => new URL(String(input)));
+    expect(urls[0]?.searchParams.get("tail")).toBe("0");
+    expect(urls[0]?.searchParams.has("since")).toBe(false);
+    expect(urls[1]?.searchParams.get("tail")).toBe("all");
+    expect(urls[1]?.searchParams.get("since")).toBe("1794225600");
+  });
+
+  test("until reached ends follow without error", async () => {
+    const client = mockClient();
+    let n = 0;
+    fetchImplementation = async () => {
+      n += 1;
+      return ndjsonResponse([
+        { channel: "stdout", message: "2026-11-09T12:00:00.000000001Z one\n" },
+      ]);
+    };
+    await streamContainerLogsEntries(client, "app_test", () => {}, {
+      until: 1794225600,
+    });
+    expect(n).toBe(1);
+  });
+
+  test("HTTP 429 is retried up to five times", async () => {
+    const client = mockClient();
+    fetchImplementation = async () =>
+      jsonResponse({ error_code: "ERR-17-011", message: "rate limited" }, 429);
+    const error = await streamCvmChannelLogs(client, "app_test", "serial", () => {}).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    expect(error).toMatchObject({ code: "ERR-17-011" });
+    expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
   test("followCvmLogs yields node lines as an async iterator", async () => {

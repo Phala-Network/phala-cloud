@@ -341,7 +341,7 @@ describe("logs command", () => {
 
 		expect(code).toBe(0);
 		expect(mockStreamContainerLogsEntries).toHaveBeenCalledTimes(1);
-		expect(stdoutWriteSpy).toHaveBeenCalledWith("out\n");
+		expect(stdoutWriteSpy).not.toHaveBeenCalledWith("out\n");
 		expect(stderrWriteSpy).toHaveBeenCalledWith("err\n");
 	});
 

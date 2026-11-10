@@ -26,15 +26,15 @@ function writeLogEntry(
 	context: Pick<CommandContext, "stdout" | "stderr">,
 ): void {
 	const message = entry.message === "" ? "\n" : entry.message;
-	if (entry.channel === "stdout") {
-		if (config.includeStdout) {
-			context.stdout.write(message);
+	if (entry.channel === "stderr") {
+		if (config.includeStderr) {
+			context.stderr.write(message);
 		}
 		return;
 	}
-
-	if (config.includeStderr) {
-		context.stderr.write(message);
+	// stdout and console follow --stderr filtering; stdin is shown whenever it appears.
+	if (entry.channel === "stdin" || config.includeStdout) {
+		context.stdout.write(message);
 	}
 }
 
@@ -261,8 +261,8 @@ async function runContainerMode(
 	timeWindow: LogTimeWindow,
 ): Promise<number> {
 	const outputConfig = {
-		includeStdout: true,
-		includeStderr: input.stderr,
+		includeStdout: !input.stderr,
+		includeStderr: true,
 	};
 
 	const options: ContainerLogsOptions = {
@@ -310,7 +310,7 @@ async function runContainerMode(
 		const filteredEntries = entries.filter((e) =>
 			e.channel === "stderr"
 				? outputConfig.includeStderr
-				: outputConfig.includeStdout,
+				: e.channel === "stdin" || outputConfig.includeStdout,
 		);
 		const combined = filteredEntries
 			.map((entry) => (entry.message === "" ? "\n" : entry.message))

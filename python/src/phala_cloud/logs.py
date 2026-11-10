@@ -1,21 +1,35 @@
+"""CVM log helpers (fetch and follow) shared by the sync and async clients.
+
+The protocol logic is I/O-free: a lookup coroutine resolves a fresh signed URL,
+decoders turn response text into delivered items, and a retry policy decides
+what happens after each connection. The sync and async drivers only move bytes.
+"""
+
 from __future__ import annotations
 
+import asyncio
 import json
 import re
+import threading
 import time
-from collections.abc import Callable, Iterator, Mapping
-from typing import Any, Literal, TypedDict
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Generator, Iterator
+from contextlib import asynccontextmanager, contextmanager
+from dataclasses import dataclass, field
+from typing import Any, Generic, Literal, Protocol, TypedDict, TypeVar, cast
 
 import httpx
 
-from .errors import ResourceError
+from .errors import ApiError, ResourceError
 from .log_time import _parse_rfc3339, resolve_log_time_window
+from .user_agent import default_user_agent
 
 __all__ = [
     "CvmLogEntry",
     "CvmLogSource",
     "LogAccessError",
+    "LogFollowIterator",
+    "afetch_cvm_logs",
+    "afollow_cvm_logs",
     "fetch_cvm_logs",
     "follow_cvm_logs",
     "resolve_log_time_window",
@@ -24,9 +38,15 @@ __all__ = [
 # API version that introduced CVMInfo.logs. Pinned so older clients still get URLs.
 CVM_LOGS_INFO_API_VERSION = "2026-01-21"
 
+T = TypeVar("T")
+T_co = TypeVar("T_co", covariant=True)
+
 CvmLogChannel = Literal["serial", "stdout", "stderr"]
 CvmLogFormat = Literal["text", "ndjson"]
-LogChannel = Literal["stdout", "stderr"]
+LogChannel = Literal["stdout", "stderr", "stdin", "console"]
+
+SyncApiGet = Callable[[str], Any]
+AsyncApiGet = Callable[[str], Awaitable[Any]]
 
 
 class NodeLogSource(TypedDict):
@@ -48,25 +68,41 @@ class CvmLogEntry(TypedDict):
     message: str
 
 
-_LOG_ERROR_HTTP_STATUS = {
-    "ERR-17-001": 400,
-    "ERR-17-002": 401,
-    "ERR-17-003": 401,
-    "ERR-17-004": 404,
-    "ERR-17-005": 409,
-    "ERR-17-006": 409,
-    "ERR-17-007": 404,
-    "ERR-17-008": 502,
-    "ERR-17-009": 502,
-    "ERR-17-010": 504,
-    "ERR-17-011": 429,
-    "ERR-17-012": 503,
-    "ERR-17-013": 404,
-}
+_LOG_CHANNELS = {"stdout", "stderr", "stdin", "console"}
+_HEARTBEATS = frozenset({"[vmm heartbeat]", "[teepod heartbeat]"})
+_CONTAINER_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+_GATEWAY_TEXT_ERROR_RE = re.compile(r"^\[error\] (ERR-17-\d{3}) (.*)$")
+_TIMESTAMP_RE = re.compile(
+    r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})) (.*)$", re.S
+)
+_JSON = json.JSONDecoder()
+
+_EMPTY_STREAM_END_MESSAGE = (
+    "log stream keeps ending without new output; the container may have stopped"
+)
+# Idle connections longer than this that end cleanly are not treated as stopped.
+EMPTY_STREAM_QUIET_SECONDS = 10
+_MAX_CONSECUTIVE_FAILURES = 5
+_MAX_EMPTY_ENDS = 5
+_MAX_EXPIRED_RETRIES = 3
+
+# Indirections so tests can control time without patching the global time module.
+_monotonic = time.monotonic
+_wall_clock = time.time
+
+
+def _backoff_delay(attempt: int) -> float:
+    return min(0.25 * 2 ** (attempt - 1), 5.0)
 
 
 class LogAccessError(ResourceError):
-    """Structured log-gateway error."""
+    """Structured log-gateway error.
+
+    ``http_status`` is the real HTTP status for HTTP errors and ``None`` for
+    errors read from a 200 response body (guest records, gateway in-stream errors).
+    ``from_stream_body`` marks terminal stream conditions that are never retried.
+    """
 
     def __init__(
         self,
@@ -75,166 +111,487 @@ class LogAccessError(ResourceError):
         code: str | None = None,
         http_status: int | None = None,
         suggestions: list[str] | None = None,
+        details: list[dict[str, Any]] | None = None,
+        links: list[dict[str, str]] | None = None,
+        request_id: str | None = None,
         from_stream_body: bool = False,
     ) -> None:
-        if from_stream_body:
-            status = 0
-        else:
-            status = http_status or (code and _LOG_ERROR_HTTP_STATUS.get(code)) or 0
-        details = message
-        if suggestions:
-            details += "\nSuggestions:\n" + "\n".join(f"- {item}" for item in suggestions)
+        status = 0 if from_stream_body else (http_status or 0)
         super().__init__(
             status_code=status,
-            message=details,
+            message=message,
             code=code,
             error_code=code,
-            suggestions=suggestions,
+            request_id=request_id,
+            structured_details=details,
+            suggestions=list(suggestions or []),
+            links=links,
         )
         self.http_status = status or None
         self.from_stream_body = from_stream_body
 
 
-def _build_log_url(base_url: str, options: Mapping[str, Any]) -> str:
-    params: list[tuple[str, str]] = []
-    if options.get("since") is not None:
-        params.append(("since", str(options["since"])))
-    if options.get("until") is not None:
-        params.append(("until", str(options["until"])))
-    if options.get("follow"):
-        params.append(("follow", "true"))
-    if options.get("tail") is not None:
-        params.append(("tail", str(options["tail"])))
-    if options.get("timestamps"):
-        params.append(("timestamps", "true"))
-    if options.get("ansi"):
-        params.append(("ansi", "true"))
-    if options.get("format"):
-        params.append(("format", str(options["format"])))
-    if not params:
-        return base_url
-    parts = urlsplit(base_url)
-    query = urlencode(list(parse_qsl(parts.query, keep_blank_values=True)) + params)
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
+# --- errors -----------------------------------------------------------------
 
 
-def _raise_response_error(response: httpx.Response) -> None:
-    try:
-        envelope = response.json()
-    except Exception:
-        envelope = {}
-    if not isinstance(envelope, dict):
-        envelope = {}
-    suggestions = [item for item in envelope.get("suggestions") or [] if isinstance(item, str)]
-    raise LogAccessError(
-        str(envelope.get("message") or f"HTTP {response.status_code}"),
-        code=envelope.get("error_code") if isinstance(envelope.get("error_code"), str) else None,
-        http_status=response.status_code,
+def _dict_list(value: object) -> list[dict[str, Any]] | None:
+    if not isinstance(value, list):
+        return None
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _error_from_envelope(
+    envelope: dict[str, Any], *, http_status: int | None, fallback_message: str
+) -> LogAccessError:
+    code = envelope.get("error_code")
+    message = envelope.get("message")
+    request_id = envelope.get("request_id")
+    raw_suggestions = envelope.get("suggestions")
+    suggestions = (
+        [item for item in raw_suggestions if isinstance(item, str)]
+        if isinstance(raw_suggestions, list)
+        else []
+    )
+    return LogAccessError(
+        message if isinstance(message, str) else fallback_message,
+        code=code if isinstance(code, str) else None,
+        http_status=http_status,
         suggestions=suggestions,
+        details=_dict_list(envelope.get("details")),
+        links=_dict_list(envelope.get("links")),
+        request_id=request_id if isinstance(request_id, str) else None,
     )
 
 
-def _throw_text_stream_error(line: str) -> None:
-    match = re.match(r"^\[error\] (ERR-17-\d{3}) (.*)$", line.strip())
+def _http_error(response: httpx.Response) -> LogAccessError:
+    try:
+        envelope = json.loads(response.text)
+    except ValueError:
+        envelope = {}
+    return _error_from_envelope(
+        envelope if isinstance(envelope, dict) else {},
+        http_status=response.status_code,
+        fallback_message=f"HTTP {response.status_code}",
+    )
+
+
+def _guest_error(message: str) -> LogAccessError:
+    return LogAccessError(message, code="ERR-17-009", from_stream_body=True)
+
+
+def _guest_error_message(record: object) -> str | None:
+    if (
+        isinstance(record, dict)
+        and isinstance(record.get("error"), str)
+        and "channel" not in record
+        and "message" not in record
+    ):
+        return record["error"]
+    return None
+
+
+def _raise_leading_guest_error(text: str) -> None:
+    """Raise when text starts with a guest ``{"error"}`` record, glued or not."""
+    stripped = text.lstrip()
+    if not stripped.startswith("{"):
+        return
+    try:
+        record, _end = _JSON.raw_decode(stripped)
+    except json.JSONDecodeError:
+        return
+    message = _guest_error_message(record)
+    if message is not None:
+        raise _guest_error(message)
+
+
+def _raise_gateway_text_error(line: str) -> None:
+    match = _GATEWAY_TEXT_ERROR_RE.match(line.strip())
     if match:
         raise LogAccessError(match.group(2), code=match.group(1))
 
 
-def _parse_timestamped_message(message: str) -> dict[str, Any]:
-    match = re.match(
-        r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})) (.*)$",
-        message,
-        re.S,
-    )
+def _container_logs_disabled() -> LogAccessError:
+    return LogAccessError("Container logs are disabled", code="ERR-17-006", http_status=409)
+
+
+# --- output shaping ---------------------------------------------------------
+
+
+def _apply_ansi(text: str, ansi: bool) -> str:
+    return text if ansi else _ANSI_RE.sub("", text)
+
+
+def _split_timestamp(message: str) -> tuple[int, str] | None:
+    """Return (unix second, message without timestamp) for a timestamped message."""
+    match = _TIMESTAMP_RE.match(message)
     if not match:
-        return {}
-    stamp = match.group(1)
-    parsed_ms = _parse_rfc3339(stamp)
+        return None
+    parsed_ms = _parse_rfc3339(match.group(1))
     if parsed_ms is None:
-        return {}
-    return {
-        "timestamp": stamp,
-        "second": int(parsed_ms // 1000),
-        "message": match.group(2),
-    }
-
-
-def _guest_agent_error_message(text: str) -> str | None:
-    trimmed = text.strip()
-    if not trimmed:
         return None
-    try:
-        parsed = json.loads(trimmed)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(parsed, dict):
-        return None
-    if isinstance(parsed.get("error"), str) and "channel" not in parsed and "message" not in parsed:
-        return parsed["error"]
-    return None
+    return int(parsed_ms // 1000), match.group(2)
 
 
-def _throw_if_guest_agent_error(text: str) -> None:
-    message = _guest_agent_error_message(text)
-    if message is not None:
-        raise LogAccessError(message, code="ERR-17-009", from_stream_body=True)
+def _strip_timestamp(message: str) -> str:
+    parsed = _split_timestamp(message)
+    return parsed[1] if parsed else message
 
 
-_EMPTY_STREAM_END_MESSAGE = (
-    "log stream keeps ending without new output; the container may have stopped"
-)
+def _line_ending(line: str) -> str:
+    if line.endswith("\r\n"):
+        return "\r\n"
+    return "\n" if line.endswith("\n") else ""
 
 
-def _note_empty_stream_end(empty_ends: int) -> int:
-    empty_ends += 1
-    if empty_ends >= 5:
-        raise LogAccessError(_EMPTY_STREAM_END_MESSAGE, from_stream_body=True)
-    time.sleep(min(0.25 * 2 ** (empty_ends - 1), 5))
-    return empty_ends
+@dataclass
+class _Cursor:
+    """Reconnect cursor: last timestamp second plus boundary de-dupe counts."""
+
+    since: int | None = None
+    boundary_second: int | None = None
+    boundary_counts: dict[str, int] = field(default_factory=dict)
+    replay_counts: dict[str, int] = field(default_factory=dict)
+
+    def begin_connection(self) -> None:
+        self.replay_counts = dict(self.boundary_counts)
+
+    def accept(self, key: str, stamped_message: str) -> bool:
+        """Record a delivered record; False when it replays the boundary second."""
+        parsed = _split_timestamp(stamped_message)
+        if parsed is None:
+            return True
+        second = parsed[0]
+        if self.boundary_second is not None and second < self.boundary_second:
+            return True
+        if second == self.boundary_second:
+            replay = self.replay_counts.get(key, 0)
+            if replay > 0:
+                self.replay_counts[key] = replay - 1
+                return False
+        else:
+            self.boundary_second = second
+            self.boundary_counts.clear()
+        self.since = second if self.since is None else max(self.since, second)
+        self.boundary_counts[key] = self.boundary_counts.get(key, 0) + 1
+        return True
 
 
-def _parse_ndjson_line(line: str) -> CvmLogEntry | None:
-    trimmed = line.strip()
-    if not trimmed:
-        return None
-    try:
-        parsed = json.loads(trimmed)
-    except json.JSONDecodeError as exc:
-        raise LogAccessError("Invalid NDJSON log record.") from exc
-    guest = _guest_agent_error_message(trimmed)
-    if guest is not None:
-        raise LogAccessError(guest, code="ERR-17-009", from_stream_body=True)
-    if isinstance(parsed.get("error_code"), str):
-        suggestions = [item for item in parsed.get("suggestions") or [] if isinstance(item, str)]
-        raise LogAccessError(
-            str(parsed.get("message") or "The log stream ended with an error."),
-            code=parsed["error_code"],
-            suggestions=suggestions,
-        )
-    if parsed.get("channel") not in {"stdout", "stderr"} or not isinstance(
-        parsed.get("message"), str
-    ):
+class _LineBuffer:
+    def __init__(self) -> None:
+        self.pending = ""
+
+    def feed(self, chunk: str) -> list[str]:
+        self.pending += chunk
+        if "\n" not in self.pending:
+            return []
+        *lines, self.pending = self.pending.split("\n")
+        return [line + "\n" for line in lines]
+
+    def finish(self) -> list[str]:
+        rest, self.pending = self.pending, ""
+        return [rest] if rest else []
+
+
+class _Decoder(Protocol[T_co]):
+    def feed(self, chunk: str) -> Iterator[T_co]: ...
+
+    def finish(self) -> Iterator[T_co]: ...
+
+
+class _NodeTextDecoder:
+    """Node (serial/stdout/stderr) text: drops heartbeats, raises gateway errors."""
+
+    def __init__(self, *, ansi: bool) -> None:
+        self._ansi = ansi
+        self._lines = _LineBuffer()
+
+    def feed(self, chunk: str) -> Iterator[str]:
+        yield from self._emit(self._lines.feed(chunk))
+
+    def finish(self) -> Iterator[str]:
+        yield from self._emit(self._lines.finish())
+
+    def _emit(self, lines: list[str]) -> Iterator[str]:
+        for line in lines:
+            ending = _line_ending(line)
+            content = line[: len(line) - len(ending)]
+            if content in _HEARTBEATS:
+                continue
+            _raise_gateway_text_error(content)
+            yield _apply_ansi(line, self._ansi)
+
+
+class _ContainerTextDecoder:
+    """Container text: raises gateway and guest errors, de-dupes, strips timestamps."""
+
+    def __init__(self, *, ansi: bool, keep_timestamps: bool, cursor: _Cursor | None) -> None:
+        self._ansi = ansi
+        self._keep_timestamps = keep_timestamps
+        self._cursor = cursor
+        self._lines = _LineBuffer()
+
+    def feed(self, chunk: str) -> Iterator[str]:
+        yield from self._emit(self._lines.feed(chunk))
+        # A guest error is written without a newline; do not wait for one.
+        _raise_leading_guest_error(self._lines.pending)
+
+    def finish(self) -> Iterator[str]:
+        yield from self._emit(self._lines.finish())
+
+    def _emit(self, lines: list[str]) -> Iterator[str]:
+        for line in lines:
+            ending = _line_ending(line)
+            content = line[: len(line) - len(ending)]
+            _raise_gateway_text_error(content)
+            _raise_leading_guest_error(content)
+            if self._cursor is not None and not self._cursor.accept(content, content):
+                continue
+            out = content if self._keep_timestamps else _strip_timestamp(content)
+            yield _apply_ansi(out + ending, self._ansi)
+
+
+def _entry_from_record(record: object) -> CvmLogEntry:
+    if not isinstance(record, dict):
         raise LogAccessError("Invalid NDJSON log record.")
-    return {"channel": parsed["channel"], "message": parsed["message"]}
+    guest = _guest_error_message(record)
+    if guest is not None:
+        raise _guest_error(guest)
+    if isinstance(record.get("error_code"), str):
+        raise _error_from_envelope(
+            record, http_status=None, fallback_message="The log stream ended with an error."
+        )
+    channel = record.get("channel")
+    message = record.get("message")
+    if channel not in _LOG_CHANNELS or not isinstance(message, str):
+        raise LogAccessError("Invalid NDJSON log record.")
+    return {"channel": channel, "message": message}
 
 
-def _parse_ndjson_entries(text: str) -> list[CvmLogEntry]:
-    entries: list[CvmLogEntry] = []
-    for line in text.splitlines():
-        entry = _parse_ndjson_line(line)
-        if entry:
-            entries.append(entry)
-    return entries
+class _NdjsonDecoder:
+    """Streaming NDJSON decoder; records may be glued without a newline."""
+
+    def __init__(self, *, ansi: bool, keep_timestamps: bool, cursor: _Cursor | None) -> None:
+        self._ansi = ansi
+        self._keep_timestamps = keep_timestamps
+        self._cursor = cursor
+        self._buffer = ""
+
+    def feed(self, chunk: str) -> Iterator[CvmLogEntry]:
+        self._buffer += chunk
+        yield from self._drain(final=False)
+
+    def finish(self) -> Iterator[CvmLogEntry]:
+        yield from self._drain(final=True)
+
+    def _drain(self, *, final: bool) -> Iterator[CvmLogEntry]:
+        buffer = self._buffer
+        pos = 0
+        try:
+            while True:
+                while pos < len(buffer) and buffer[pos] in " \t\r\n":
+                    pos += 1
+                if pos >= len(buffer):
+                    return
+                try:
+                    record, end = _JSON.raw_decode(buffer, pos)
+                except json.JSONDecodeError as exc:
+                    # Compact JSON never spans a newline: without one, wait for more.
+                    if not final and buffer.find("\n", pos) < 0:
+                        return
+                    raise LogAccessError("Invalid NDJSON log record.") from exc
+                pos = end
+                entry = _entry_from_record(record)
+                stamped = entry["message"]
+                if self._cursor is not None and not self._cursor.accept(
+                    json.dumps([entry["channel"], stamped]), stamped
+                ):
+                    continue
+                message = stamped if self._keep_timestamps else _strip_timestamp(stamped)
+                yield {"channel": entry["channel"], "message": _apply_ansi(message, self._ansi)}
+        finally:
+            self._buffer = buffer[pos:]
 
 
-def _assert_node_options(options: Mapping[str, Any]) -> None:
+def _decode_all(decoder: _Decoder[T], text: str) -> list[T]:
+    return [*decoder.feed(text), *decoder.finish()]
+
+
+# --- URL lookup -------------------------------------------------------------
+
+# Yields API paths, receives each decoded JSON response, returns the log URL.
+_Lookup = Generator[str, Any, str]
+
+
+def _build_log_url(
+    base_url: str,
+    *,
+    since: int | None = None,
+    until: int | None = None,
+    follow: bool = False,
+    tail: int | str | None = None,
+    timestamps: bool = False,
+    ansi: bool = False,
+    format: CvmLogFormat | None = None,
+) -> str:
+    # Appended raw: the gateway rejects any '%' in the request target.
+    params: list[str] = []
+    if since is not None:
+        params.append(f"since={since}")
+    if until is not None:
+        params.append(f"until={until}")
+    if follow:
+        params.append("follow=true")
+    if tail is not None:
+        params.append(f"tail={tail}")
+    if timestamps:
+        params.append("timestamps=true")
+    if ansi:
+        params.append("ansi=true")
+    if format:
+        params.append(f"format={format}")
+    if not params:
+        return base_url
+    separator = "&" if "?" in base_url else "?"
+    return f"{base_url}{separator}{'&'.join(params)}"
+
+
+def _node_endpoint_lookup(cvm_id: str, channel: CvmLogChannel) -> _Lookup:
+    info = yield f"/cvms/{cvm_id}"
+    endpoint = (info.get("logs") or {}).get(channel)
+    if not endpoint:
+        raise ValueError(f"No {channel} log endpoint available for CVM '{cvm_id}'")
+    return str(endpoint)
+
+
+def _safe_container_slug(name: str) -> str:
+    slug = name[1:] if name.startswith("/") else name
+    if not _CONTAINER_NAME_RE.match(slug):
+        raise ValueError(
+            f"Invalid container name '{name}'. Use letters, digits, '_', '.', and '-'."
+        )
+    return slug
+
+
+def _join_container_log_url(base: str, name: str, auth_query: str | None) -> str:
+    url = f"{base.rstrip('/')}/{_safe_container_slug(name)}"
+    if not auth_query:
+        return url
+    return f"{url}{'&' if '?' in url else '?'}{auth_query}"
+
+
+def _container_names(container: dict[str, Any]) -> list[str]:
+    return [str(name) for name in container.get("names") or []]
+
+
+def _container_slug(container: dict[str, Any]) -> str | None:
+    names = _container_names(container)
+    if names:
+        return names[0].removeprefix("/")
+    container_id = container.get("id")
+    return str(container_id) if container_id else None
+
+
+def _container_endpoint(
+    cvm_id: str,
+    info: dict[str, Any],
+    composition: dict[str, Any],
+    name: str | None,
+    match_prefix: bool,
+) -> str:
+    logs = info.get("logs") or {}
+    base = logs.get("container_log_base")
+    auth = logs.get("auth_query")
+    containers: list[dict[str, Any]] = composition.get("containers") or []
+    composition_error = composition.get("error")
+    if not (isinstance(composition_error, str) and composition_error):
+        composition_error = None
+    not_found = ValueError(f"Container '{name}' not found in CVM '{cvm_id}'")
+
+    if name:
+        exact = [
+            c
+            for c in containers
+            if name in _container_names(c) or f"/{name}" in _container_names(c)
+        ]
+        if exact:
+            endpoint = next((c["log_endpoint"] for c in exact if c.get("log_endpoint")), None)
+            if endpoint:
+                return str(endpoint)
+            if base:
+                return _join_container_log_url(base, name, auth)
+            raise not_found
+        if match_prefix:
+            prefixed = [c for c in containers if str(c.get("id") or "").startswith(name)]
+            if len(prefixed) > 1:
+                labels = ", ".join(_container_slug(c) or "" for c in prefixed)
+                raise ValueError(f"Ambiguous container prefix '{name}': {labels}")
+            if prefixed:
+                match = prefixed[0]
+                if match.get("log_endpoint"):
+                    return str(match["log_endpoint"])
+                slug = _container_slug(match)
+                if base and slug:
+                    return _join_container_log_url(base, slug, auth)
+        if containers:
+            raise not_found
+        if composition_error:
+            raise LogAccessError(composition_error)
+        if base:
+            return _join_container_log_url(base, name, auth)
+        raise not_found
+
+    if composition_error:
+        raise LogAccessError(composition_error)
+    if not containers:
+        raise ValueError(f"No containers found for CVM '{cvm_id}'")
+    endpoint = next((c["log_endpoint"] for c in containers if c.get("log_endpoint")), None)
+    if endpoint:
+        return str(endpoint)
+    slug = _container_slug(containers[0])
+    if base and slug:
+        return _join_container_log_url(base, slug, auth)
+    raise ValueError(f"No log endpoints available for CVM '{cvm_id}'")
+
+
+def _container_endpoint_lookup(cvm_id: str, name: str | None, match_prefix: bool) -> _Lookup:
+    info = yield f"/cvms/{cvm_id}"
+    if isinstance(info, dict) and info.get("public_logs") is False:
+        raise _container_logs_disabled()
+    composition = yield f"/cvms/{cvm_id}/composition"
+    return _container_endpoint(cvm_id, info, composition, name, match_prefix)
+
+
+def _run_lookup(lookup: _Lookup, api_get: SyncApiGet) -> str:
+    try:
+        path = next(lookup)
+        while True:
+            path = lookup.send(api_get(path))
+    except StopIteration as done:
+        return str(done.value)
+
+
+async def _arun_lookup(lookup: _Lookup, api_get: AsyncApiGet) -> str:
+    try:
+        path = next(lookup)
+        while True:
+            path = lookup.send(await api_get(path))
+    except StopIteration as done:
+        return str(done.value)
+
+
+# --- request plans ----------------------------------------------------------
+
+
+def _assert_node_options(
+    *, timestamps: bool, since: object, until: object, format: CvmLogFormat | None
+) -> None:
     unsupported = [
         name
         for name, present in (
-            ("timestamps", options.get("timestamps")),
-            ("since", options.get("since") is not None),
-            ("until", options.get("until") is not None),
-            ("format=ndjson", options.get("format") == "ndjson"),
+            ("timestamps", timestamps),
+            ("since", since is not None),
+            ("until", until is not None),
+            ("format=ndjson", format == "ndjson"),
         )
         if present
     ]
@@ -242,411 +599,441 @@ def _assert_node_options(options: Mapping[str, Any]) -> None:
         raise ValueError(f"{', '.join(unsupported)} not supported for serial/stdout/stderr logs")
 
 
-def _get_node_endpoint(api_get: Callable[[str], Any], cvm_id: str, channel: CvmLogChannel) -> str:
-    info = api_get(f"/cvms/{cvm_id}")
-    endpoint = (info.get("logs") or {}).get(channel)
-    if not endpoint:
-        raise ValueError(f"No {channel} log endpoint available for CVM '{cvm_id}'")
-    return str(endpoint)
+def _container_options(
+    source: CvmLogSource, container_match_prefix: bool
+) -> tuple[str | None, bool]:
+    container = cast(ContainerLogSource, source)
+    name = container.get("name")
+    if name:
+        _safe_container_slug(name)
+    return name, container.get("matchContainerIdPrefix", container_match_prefix)
 
 
-def _container_logs_disabled() -> LogAccessError:
-    return LogAccessError(
-        "Container logs are disabled",
-        code="ERR-17-006",
-        http_status=409,
-    )
+@dataclass
+class _FetchPlan:
+    lookup: Callable[[], _Lookup]
+    decode: Callable[[str], str | list[CvmLogEntry]]
 
 
-def _assert_container_logs_enabled(api_get: Callable[[str], Any], cvm_id: str) -> None:
-    info = api_get(f"/cvms/{cvm_id}")
-    if isinstance(info, dict) and info.get("public_logs") is False:
-        raise _container_logs_disabled()
-
-
-def _get_container_endpoint(
-    api_get: Callable[[str], Any],
-    cvm_id: str,
-    container_name: str | None = None,
-    match_prefix: bool = True,
-) -> str:
-    composition = api_get(f"/cvms/{cvm_id}/composition")
-    containers = composition.get("containers") or []
-    if not containers:
-        raise ValueError(f"No containers found for CVM '{cvm_id}'")
-    if container_name:
-        containers = [
-            item
-            for item in containers
-            if container_name in (item.get("names") or [])
-            or f"/{container_name}" in (item.get("names") or [])
-            or (match_prefix and str(item.get("id") or "").startswith(container_name))
-        ]
-        if not containers:
-            raise ValueError(f"Container '{container_name}' not found in CVM '{cvm_id}'")
-    container = next((item for item in containers if item.get("log_endpoint")), None)
-    if not container or not container.get("log_endpoint"):
-        raise ValueError(f"No log endpoints available for CVM '{cvm_id}'")
-    return str(container["log_endpoint"])
-
-
-def _error_http_status(error: BaseException) -> int | None:
-    if isinstance(error, LogAccessError):
-        return error.http_status
-    return None
-
-
-def _iter_follow_responses(
-    resolve_url: Callable[[], str],
-    log_http: httpx.Client,
-    refresh: Callable[[], None] | None = None,
-) -> Iterator[httpx.Response]:
-    failure_count = 0
-    expired_retries = 0
-    while True:
-        try:
-            url = resolve_url()
-            with log_http.stream("GET", url, timeout=None) as response:
-                if response.status_code >= 400:
-                    response.read()
-                    _raise_response_error(response)
-                failure_count = 0
-                yield response
-                expired_retries = 0
-        except LogAccessError as error:
-            if error.from_stream_body:
-                raise
-            if error.code == "ERR-17-003":
-                expired_retries += 1
-                if expired_retries > 3:
-                    raise
-                if refresh is not None:
-                    refresh()
-                continue
-            status = error.http_status
-            if status is not None and status < 500:
-                raise
-            if status is None:
-                raise
-            failure_count += 1
-            if failure_count >= 5:
-                raise
-            time.sleep(min(0.25 * 2 ** (failure_count - 1), 5))
-        except (httpx.HTTPError, OSError):
-            failure_count += 1
-            if failure_count >= 5:
-                raise
-            time.sleep(min(0.25 * 2 ** (failure_count - 1), 5))
-
-
-def _consume_node_text(response: httpx.Response, on_data: Callable[[str], None]) -> None:
-    buffer = ""
-    for chunk in response.iter_text():
-        buffer += chunk
-        while "\n" in buffer:
-            line, buffer = buffer.split("\n", 1)
-            content = line
-            if content not in {"[vmm heartbeat]", "[teepod heartbeat]"}:
-                _throw_text_stream_error(content)
-                on_data(line + "\n")
-    if buffer and buffer not in {"[vmm heartbeat]", "[teepod heartbeat]"}:
-        _throw_text_stream_error(buffer)
-        on_data(buffer)
-
-
-def fetch_cvm_channel_logs(
+def _fetch_plan(
     *,
-    api_get: Callable[[str], Any],
-    log_http: httpx.Client,
     cvm_id: str,
-    channel: CvmLogChannel,
-    tail: int | str | None = None,
-    since: str | int | None = None,
-    until: str | int | None = None,
-    timestamps: bool = False,
-    ansi: bool = False,
-    format: CvmLogFormat | None = None,
-) -> str:
-    _assert_node_options(
-        {
-            "timestamps": timestamps,
-            "since": since,
-            "until": until,
-            "format": format,
-        }
-    )
-    url = _build_log_url(_get_node_endpoint(api_get, cvm_id, channel), {"tail": tail, "ansi": ansi})
-    response = log_http.get(url, timeout=None)
-    if response.status_code >= 400:
-        _raise_response_error(response)
-    return response.text
-
-
-def follow_cvm_channel_logs(
-    *,
-    api_get: Callable[[str], Any],
-    log_http: httpx.Client,
-    cvm_id: str,
-    channel: CvmLogChannel,
-    tail: int | str | None = None,
-    since: str | int | None = None,
-    until: str | int | None = None,
-    timestamps: bool = False,
-    ansi: bool = False,
-    format: CvmLogFormat | None = None,
-) -> Iterator[str]:
-    _assert_node_options(
-        {
-            "timestamps": timestamps,
-            "since": since,
-            "until": until,
-            "format": format,
-        }
-    )
-    first = True
-
-    def resolve_url() -> str:
-        nonlocal first
-        current_tail: int | str | None = tail if first else 0
-        first = False
-        return _build_log_url(
-            _get_node_endpoint(api_get, cvm_id, channel),
-            {"tail": current_tail, "follow": True, "ansi": ansi},
-        )
-
-    for response in _iter_follow_responses(
-        resolve_url, log_http, refresh=lambda: api_get(f"/cvms/{cvm_id}")
-    ):
-        buffer = ""
-        for chunk in response.iter_text():
-            buffer += chunk
-            while "\n" in buffer:
-                line, buffer = buffer.split("\n", 1)
-                if line not in {"[vmm heartbeat]", "[teepod heartbeat]"}:
-                    _throw_text_stream_error(line)
-                    yield line + "\n"
-        if buffer and buffer not in {"[vmm heartbeat]", "[teepod heartbeat]"}:
-            _throw_text_stream_error(buffer)
-            yield buffer
-
-
-def fetch_container_log_entries(
-    *,
-    api_get: Callable[[str], Any],
-    log_http: httpx.Client,
-    cvm_id: str,
-    container: str | None = None,
-    match_prefix: bool = True,
-    tail: int | str | None = None,
-    since: str | int | None = None,
-    until: str | int | None = None,
-    timestamps: bool = False,
-    ansi: bool = False,
-    log_format: CvmLogFormat = "ndjson",
-) -> list[CvmLogEntry]:
-    times = resolve_log_time_window(since, until)
-    _assert_container_logs_enabled(api_get, cvm_id)
-    url = _build_log_url(
-        _get_container_endpoint(api_get, cvm_id, container, match_prefix),
-        {**times, "tail": tail, "timestamps": timestamps, "ansi": ansi, "format": log_format},
-    )
-    response = log_http.get(url, timeout=None)
-    if response.status_code >= 400:
-        _raise_response_error(response)
-    return _parse_ndjson_entries(response.text)
-
-
-def follow_container_log_entries(
-    *,
-    api_get: Callable[[str], Any],
-    log_http: httpx.Client,
-    cvm_id: str,
-    container: str | None = None,
-    match_prefix: bool = True,
-    tail: int | str | None = None,
-    since: str | int | None = None,
-    until: str | int | None = None,
-    timestamps: bool = False,
-) -> Iterator[CvmLogEntry]:
-    times = resolve_log_time_window(since, until)
-    _assert_container_logs_enabled(api_get, cvm_id)
-    state = {
-        "since": times.get("since"),
-        "boundary_second": None,
-        "boundary_counts": {},
-        "replay_counts": {},
-        "first": True,
-    }
-
-    def resolve_url() -> str:
-        current_tail = tail if state["first"] else None
-        state["first"] = False
-        state["replay_counts"] = dict(state["boundary_counts"])
-        return _build_log_url(
-            _get_container_endpoint(api_get, cvm_id, container, match_prefix),
-            {
-                "since": state["since"],
-                "until": times.get("until"),
-                "tail": current_tail,
-                "follow": True,
-                "timestamps": True,
-                "format": "ndjson",
-            },
-        )
-
-    def emit(line: str) -> CvmLogEntry | None:
-        entry = _parse_ndjson_line(line)
-        if not entry:
-            return None
-        parsed = _parse_timestamped_message(entry["message"])
-        formatted: CvmLogEntry = (
-            entry
-            if timestamps
-            else {
-                "channel": entry["channel"],
-                "message": parsed["message"] if parsed.get("timestamp") else entry["message"],
-            }
-        )
-        second = parsed.get("second")
-        if second is None or not parsed.get("timestamp"):
-            return formatted
-        key = json.dumps([entry["channel"], entry["message"]])
-        boundary_second = state["boundary_second"]
-        replay_counts: dict[str, int] = state["replay_counts"]  # type: ignore[assignment]
-        boundary_counts: dict[str, int] = state["boundary_counts"]  # type: ignore[assignment]
-        if boundary_second is not None and second < boundary_second:
-            return formatted
-        if second == boundary_second:
-            replay = replay_counts.get(key, 0)
-            if replay > 0:
-                replay_counts[key] = replay - 1
-                return None
-        elif boundary_second is None or second > boundary_second:
-            state["boundary_second"] = second
-            boundary_counts.clear()
-        state["since"] = max(state["since"] or second, second)
-        boundary_counts[key] = boundary_counts.get(key, 0) + 1
-        return formatted
-
-    empty_ends = 0
-    for response in _iter_follow_responses(
-        resolve_url, log_http, refresh=lambda: _assert_container_logs_enabled(api_get, cvm_id)
-    ):
-        delivered = 0
-        buffer = ""
-        for chunk in response.iter_text():
-            buffer += chunk
-            while "\n" in buffer:
-                line, buffer = buffer.split("\n", 1)
-                item = emit(line)
-                if item is not None:
-                    delivered += 1
-                    yield item
-        if buffer.strip():
-            item = emit(buffer)
-            if item is not None:
-                delivered += 1
-                yield item
-        if delivered:
-            empty_ends = 0
-        else:
-            empty_ends = _note_empty_stream_end(empty_ends)
-
-
-def _follow_container_text(
-    *,
-    api_get: Callable[[str], Any],
-    log_http: httpx.Client,
-    cvm_id: str,
-    container: str | None,
-    match_prefix: bool,
+    source: CvmLogSource,
     tail: int | str | None,
     since: str | int | None,
     until: str | int | None,
     timestamps: bool,
     ansi: bool,
-) -> Iterator[str]:
-    times = resolve_log_time_window(since, until)
-    _assert_container_logs_enabled(api_get, cvm_id)
-    state: dict[str, Any] = {
-        "since": times.get("since"),
-        "boundary_second": None,
-        "boundary_counts": {},
-        "replay_counts": {},
-        "first": True,
-    }
+    format: CvmLogFormat,
+    container_match_prefix: bool,
+) -> _FetchPlan:
+    if source["type"] == "node":
+        _assert_node_options(timestamps=timestamps, since=since, until=until, format=format)
+        channel = source["channel"]
 
-    def resolve_url() -> str:
-        current_tail = tail if state["first"] else None
-        state["first"] = False
-        state["replay_counts"] = dict(state["boundary_counts"])
-        return _build_log_url(
-            _get_container_endpoint(api_get, cvm_id, container, match_prefix),
-            {
-                "since": state["since"],
-                "until": times.get("until"),
-                "tail": current_tail,
-                "follow": True,
-                "timestamps": True,
-                "ansi": ansi,
-                "format": "text",
-            },
+        def node_lookup() -> _Lookup:
+            endpoint = yield from _node_endpoint_lookup(cvm_id, channel)
+            return _build_log_url(endpoint, tail=tail, ansi=ansi)
+
+        return _FetchPlan(
+            node_lookup, lambda text: "".join(_decode_all(_NodeTextDecoder(ansi=ansi), text))
         )
 
-    def emit_line(line: str) -> str | None:
-        _throw_if_guest_agent_error(line)
-        parsed = _parse_timestamped_message(line)
-        out = line if timestamps else (parsed["message"] if parsed.get("timestamp") else line)
-        second = parsed.get("second")
-        if second is None or not parsed.get("timestamp"):
-            return out
-        key = line
-        boundary_second = state["boundary_second"]
-        replay_counts: dict[str, int] = state["replay_counts"]
-        boundary_counts: dict[str, int] = state["boundary_counts"]
-        if boundary_second is not None and second < boundary_second:
-            return out
-        if second == boundary_second:
-            replay = replay_counts.get(key, 0)
-            if replay > 0:
-                replay_counts[key] = replay - 1
-                return None
-        elif boundary_second is None or second > boundary_second:
-            state["boundary_second"] = second
-            boundary_counts.clear()
-        state["since"] = max(state["since"] or second, second)
-        boundary_counts[key] = boundary_counts.get(key, 0) + 1
-        return out
+    name, match_prefix = _container_options(source, container_match_prefix)
+    times = resolve_log_time_window(since, until)
+    text = format == "text"
 
-    empty_ends = 0
-    for response in _iter_follow_responses(
-        resolve_url, log_http, refresh=lambda: _assert_container_logs_enabled(api_get, cvm_id)
-    ):
-        delivered = 0
-        buffer = ""
-        for chunk in response.iter_text():
-            buffer += chunk
-            while "\n" in buffer:
-                line, buffer = buffer.split("\n", 1)
-                item = emit_line(line)
-                if item is not None:
-                    delivered += 1
-                    yield item + "\n"
-        if buffer:
-            item = emit_line(buffer)
-            if item is not None:
-                delivered += 1
-                yield item
+    def container_lookup() -> _Lookup:
+        endpoint = yield from _container_endpoint_lookup(cvm_id, name, match_prefix)
+        return _build_log_url(
+            endpoint,
+            since=times.get("since"),
+            until=times.get("until"),
+            tail=tail,
+            timestamps=timestamps,
+            ansi=ansi and text,
+            format=format,
+        )
+
+    def decode(body: str) -> str | list[CvmLogEntry]:
+        if text:
+            decoder = _ContainerTextDecoder(ansi=ansi, keep_timestamps=True, cursor=None)
+            return "".join(_decode_all(decoder, body))
+        return _decode_all(_NdjsonDecoder(ansi=ansi, keep_timestamps=True, cursor=None), body)
+
+    return _FetchPlan(container_lookup, decode)
+
+
+class _FollowPlan(Protocol[T_co]):
+    stops_on_empty_ends: bool
+
+    def lookup(self) -> _Lookup: ...
+
+    def on_connected(self, now: float) -> None: ...
+
+    def decoder(self) -> _Decoder[T_co]: ...
+
+    def window_reached(self, now: float) -> bool: ...
+
+
+class _NodeFollowPlan:
+    stops_on_empty_ends = False
+
+    def __init__(
+        self, *, cvm_id: str, channel: CvmLogChannel, tail: int | str | None, ansi: bool
+    ) -> None:
+        self._cvm_id = cvm_id
+        self._channel = channel
+        self._tail = tail
+        self._ansi = ansi
+        self._accepted = False
+
+    def lookup(self) -> _Lookup:
+        endpoint = yield from _node_endpoint_lookup(self._cvm_id, self._channel)
+        tail = 0 if self._accepted else self._tail
+        return _build_log_url(endpoint, tail=tail, follow=True, ansi=self._ansi)
+
+    def on_connected(self, now: float) -> None:
+        self._accepted = True
+
+    def decoder(self) -> _Decoder[str]:
+        return _NodeTextDecoder(ansi=self._ansi)
+
+    def window_reached(self, now: float) -> bool:
+        return False
+
+
+class _ContainerFollowPlan:
+    stops_on_empty_ends = True
+
+    def __init__(
+        self,
+        *,
+        cvm_id: str,
+        name: str | None,
+        match_prefix: bool,
+        tail: int | str | None,
+        times: dict[str, int],
+        timestamps: bool,
+        ansi: bool,
+        text: bool,
+    ) -> None:
+        self._cvm_id = cvm_id
+        self._name = name
+        self._match_prefix = match_prefix
+        self._tail = tail
+        self._since = times.get("since")
+        self._until = times.get("until")
+        self._timestamps = timestamps
+        self._ansi = ansi
+        self._text = text
+        self._cursor = _Cursor()
+        self._first_200_second: int | None = None
+
+    def _reconnect_since(self) -> int | None:
+        if self._cursor.since is not None:
+            return self._cursor.since
+        if self._first_200_second is None or self._since is None:
+            return self._first_200_second if self._since is None else self._since
+        return max(self._first_200_second, self._since)
+
+    def lookup(self) -> _Lookup:
+        endpoint = yield from _container_endpoint_lookup(
+            self._cvm_id, self._name, self._match_prefix
+        )
+        accepted = self._first_200_second is not None
+        return _build_log_url(
+            endpoint,
+            since=self._reconnect_since() if accepted else self._since,
+            until=self._until,
+            follow=True,
+            # The caller's tail applies only until the first 200 is accepted.
+            tail="all" if accepted else self._tail,
+            timestamps=True,
+            ansi=self._ansi and self._text,
+            format="text" if self._text else "ndjson",
+        )
+
+    def on_connected(self, now: float) -> None:
+        if self._first_200_second is None:
+            self._first_200_second = int(now)
+
+    def decoder(self) -> _Decoder[str | CvmLogEntry]:
+        self._cursor.begin_connection()
+        if self._text:
+            return _ContainerTextDecoder(
+                ansi=self._ansi, keep_timestamps=self._timestamps, cursor=self._cursor
+            )
+        return _NdjsonDecoder(
+            ansi=self._ansi, keep_timestamps=self._timestamps, cursor=self._cursor
+        )
+
+    def window_reached(self, now: float) -> bool:
+        if self._until is None:
+            return False
+        cursor_since = self._cursor.since
+        return (cursor_since is not None and cursor_since >= self._until) or now >= self._until
+
+
+def _follow_plan(
+    *,
+    cvm_id: str,
+    source: CvmLogSource,
+    tail: int | str | None,
+    since: str | int | None,
+    until: str | int | None,
+    timestamps: bool,
+    ansi: bool,
+    format: CvmLogFormat | None,
+    container_match_prefix: bool,
+) -> _FollowPlan[str | CvmLogEntry]:
+    if source["type"] == "node":
+        _assert_node_options(timestamps=timestamps, since=since, until=until, format=format)
+        return _NodeFollowPlan(cvm_id=cvm_id, channel=source["channel"], tail=tail, ansi=ansi)
+    name, match_prefix = _container_options(source, container_match_prefix)
+    return _ContainerFollowPlan(
+        cvm_id=cvm_id,
+        name=name,
+        match_prefix=match_prefix,
+        tail=tail,
+        times=resolve_log_time_window(since, until),
+        timestamps=timestamps,
+        ansi=ansi,
+        text=format == "text",
+    )
+
+
+# --- retry policy -----------------------------------------------------------
+
+_ErrorKind = Literal["stop", "failure", "expired"]
+
+
+def _classify_error(error: Exception) -> _ErrorKind:
+    if isinstance(error, LogAccessError):
+        if error.from_stream_body:
+            return "stop"
+        status = error.http_status
+        if status is None:
+            # An ERR-17 code read from a 200 body is a gateway in-stream failure;
+            # anything else from the body (invalid record, composition error) is final.
+            return "failure" if error.code else "stop"
+        if status == 401 and error.code == "ERR-17-003":
+            return "expired"
+        if error.code in ("ERR-17-002", "ERR-17-011") or status == 429 or status >= 500:
+            return "failure"
+        return "stop"
+    if isinstance(error, ApiError):
+        return "failure" if error.status_code == 429 or error.status_code >= 500 else "stop"
+    if isinstance(error, httpx.RequestError | OSError):
+        return "failure"
+    return "stop"
+
+
+class _RetryPolicy:
+    """Counters and reconnect decisions for one follow session."""
+
+    def __init__(self, *, stops_on_empty_ends: bool) -> None:
+        self._stops_on_empty_ends = stops_on_empty_ends
+        self._failures = 0
+        self._expired_retries = 0
+        self._empty_ends = 0
+
+    def on_connected(self) -> None:
+        self._expired_retries = 0
+
+    def after_clean_end(self, *, delivered: bool, duration: float) -> float:
+        """Delay before reconnecting; raises when quick empty ends repeat."""
         if delivered:
-            empty_ends = 0
-        else:
-            empty_ends = _note_empty_stream_end(empty_ends)
+            self._failures = 0
+            self._empty_ends = 0
+            return 0.0
+        if duration >= EMPTY_STREAM_QUIET_SECONDS:
+            self._empty_ends = 0
+            return 0.0
+        self._empty_ends += 1
+        if self._stops_on_empty_ends and self._empty_ends >= _MAX_EMPTY_ENDS:
+            raise LogAccessError(_EMPTY_STREAM_END_MESSAGE, from_stream_body=True)
+        return _backoff_delay(self._empty_ends)
+
+    def after_error(self, error: Exception, *, delivered: bool) -> float | None:
+        """Delay before reconnecting, or None when the error must be raised."""
+        self._empty_ends = 0
+        kind = _classify_error(error)
+        if kind == "stop":
+            return None
+        if kind == "expired":
+            self._expired_retries += 1
+            return None if self._expired_retries > _MAX_EXPIRED_RETRIES else 0.0
+        if delivered:
+            self._failures = 0
+        self._failures += 1
+        if self._failures >= _MAX_CONSECUTIVE_FAILURES:
+            return None
+        return _backoff_delay(self._failures)
+
+
+# --- drivers ----------------------------------------------------------------
+
+
+def _log_headers(user_agent: str | None) -> dict[str, str]:
+    return {"User-Agent": user_agent or default_user_agent()}
+
+
+@contextmanager
+def _sync_log_client(log_http: httpx.Client | None) -> Iterator[httpx.Client]:
+    if log_http is not None:
+        yield log_http
+        return
+    with httpx.Client(timeout=None, follow_redirects=False) as client:
+        yield client
+
+
+@asynccontextmanager
+async def _async_log_client(log_http: httpx.AsyncClient | None) -> AsyncIterator[httpx.AsyncClient]:
+    if log_http is not None:
+        yield log_http
+        return
+    async with httpx.AsyncClient(timeout=None, follow_redirects=False) as client:
+        yield client
+
+
+@dataclass
+class _Connection:
+    delivered: bool = False
+    connected_at: float = 0.0
+
+
+class LogFollowIterator(Generic[T]):
+    """Iterator over a followed log stream.
+
+    ``close()`` stops it promptly, including from another thread while it waits
+    to reconnect. Also usable as a context manager.
+    """
+
+    def __init__(self, start: Callable[[threading.Event], Iterator[T]]) -> None:
+        self._stop = threading.Event()
+        self._iterator = start(self._stop)
+
+    def __iter__(self) -> LogFollowIterator[T]:
+        return self
+
+    def __next__(self) -> T:
+        return next(self._iterator)
+
+    def close(self) -> None:
+        self._stop.set()
+        close = getattr(self._iterator, "close", None)
+        if close is None:
+            return
+        try:
+            close()
+        except ValueError:
+            # Running in another thread: it returns at its next wait or record.
+            pass
+
+    def __enter__(self) -> LogFollowIterator[T]:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+
+def _follow_sync(
+    plan: _FollowPlan[T],
+    api_get: SyncApiGet,
+    log_http: httpx.Client | None,
+    headers: dict[str, str],
+    stop: threading.Event,
+) -> Iterator[T]:
+    retry = _RetryPolicy(stops_on_empty_ends=plan.stops_on_empty_ends)
+    with _sync_log_client(log_http) as client:
+        while not stop.is_set():
+            conn = _Connection()
+            try:
+                url = _run_lookup(plan.lookup(), api_get)
+                with client.stream("GET", url, headers=headers, timeout=None) as response:
+                    if response.status_code >= 400:
+                        response.read()
+                        raise _http_error(response)
+                    conn.connected_at = _monotonic()
+                    plan.on_connected(_wall_clock())
+                    retry.on_connected()
+                    decoder = plan.decoder()
+                    for chunk in response.iter_text():
+                        for item in decoder.feed(chunk):
+                            if stop.is_set():
+                                return
+                            conn.delivered = True
+                            yield item
+                    for item in decoder.finish():
+                        if stop.is_set():
+                            return
+                        conn.delivered = True
+                        yield item
+            except Exception as error:
+                if stop.is_set():
+                    return
+                delay = retry.after_error(error, delivered=conn.delivered)
+                if delay is None:
+                    raise
+            else:
+                if plan.window_reached(_wall_clock()):
+                    return
+                delay = retry.after_clean_end(
+                    delivered=conn.delivered, duration=_monotonic() - conn.connected_at
+                )
+            if delay > 0 and stop.wait(delay):
+                return
+
+
+async def _follow_async(
+    plan: _FollowPlan[T],
+    api_get: AsyncApiGet,
+    log_http: httpx.AsyncClient | None,
+    headers: dict[str, str],
+) -> AsyncGenerator[T, None]:
+    retry = _RetryPolicy(stops_on_empty_ends=plan.stops_on_empty_ends)
+    async with _async_log_client(log_http) as client:
+        while True:
+            conn = _Connection()
+            try:
+                url = await _arun_lookup(plan.lookup(), api_get)
+                async with client.stream("GET", url, headers=headers, timeout=None) as response:
+                    if response.status_code >= 400:
+                        await response.aread()
+                        raise _http_error(response)
+                    conn.connected_at = _monotonic()
+                    plan.on_connected(_wall_clock())
+                    retry.on_connected()
+                    decoder = plan.decoder()
+                    async for chunk in response.aiter_text():
+                        for item in decoder.feed(chunk):
+                            conn.delivered = True
+                            yield item
+                    for item in decoder.finish():
+                        conn.delivered = True
+                        yield item
+            except Exception as error:
+                delay = retry.after_error(error, delivered=conn.delivered)
+                if delay is None:
+                    raise
+            else:
+                if plan.window_reached(_wall_clock()):
+                    return
+                delay = retry.after_clean_end(
+                    delivered=conn.delivered, duration=_monotonic() - conn.connected_at
+                )
+            if delay > 0:
+                await asyncio.sleep(delay)
+
+
+# --- public API -------------------------------------------------------------
 
 
 def fetch_cvm_logs(
     *,
-    api_get: Callable[[str], Any],
-    log_http: httpx.Client,
+    api_get: SyncApiGet,
+    log_http: httpx.Client | None = None,
     cvm_id: str,
     source: CvmLogSource,
     tail: int | str | None = None,
@@ -656,57 +1043,65 @@ def fetch_cvm_logs(
     ansi: bool = False,
     format: CvmLogFormat = "text",
     container_match_prefix: bool = True,
+    user_agent: str | None = None,
 ) -> str | list[CvmLogEntry]:
-    if source["type"] == "node":
-        return fetch_cvm_channel_logs(
-            api_get=api_get,
-            log_http=log_http,
-            cvm_id=cvm_id,
-            channel=source["channel"],
-            tail=tail,
-            since=since,
-            until=until,
-            timestamps=timestamps,
-            ansi=ansi,
-            format=format,
-        )
-    if format == "ndjson":
-        return fetch_container_log_entries(
-            api_get=api_get,
-            log_http=log_http,
-            cvm_id=cvm_id,
-            container=source.get("name"),
-            match_prefix=source.get("matchContainerIdPrefix", container_match_prefix),
-            tail=tail,
-            since=since,
-            until=until,
-            timestamps=timestamps,
-            ansi=ansi,
-            log_format="ndjson",
-        )
-    times = resolve_log_time_window(since, until)
-    _assert_container_logs_enabled(api_get, cvm_id)
-    url = _build_log_url(
-        _get_container_endpoint(
-            api_get,
-            cvm_id,
-            source.get("name"),
-            source.get("matchContainerIdPrefix", container_match_prefix),
-        ),
-        {**times, "tail": tail, "timestamps": timestamps, "ansi": ansi, "format": "text"},
+    plan = _fetch_plan(
+        cvm_id=cvm_id,
+        source=source,
+        tail=tail,
+        since=since,
+        until=until,
+        timestamps=timestamps,
+        ansi=ansi,
+        format=format,
+        container_match_prefix=container_match_prefix,
     )
-    response = log_http.get(url, timeout=None)
+    url = _run_lookup(plan.lookup(), api_get)
+    with _sync_log_client(log_http) as client:
+        response = client.get(url, headers=_log_headers(user_agent), timeout=None)
     if response.status_code >= 400:
-        _raise_response_error(response)
-    text = response.text
-    _throw_if_guest_agent_error(text)
-    return text
+        raise _http_error(response)
+    return plan.decode(response.text)
+
+
+async def afetch_cvm_logs(
+    *,
+    api_get: AsyncApiGet,
+    log_http: httpx.AsyncClient | None = None,
+    cvm_id: str,
+    source: CvmLogSource,
+    tail: int | str | None = None,
+    since: str | int | None = None,
+    until: str | int | None = None,
+    timestamps: bool = False,
+    ansi: bool = False,
+    format: CvmLogFormat = "text",
+    container_match_prefix: bool = True,
+    user_agent: str | None = None,
+) -> str | list[CvmLogEntry]:
+    plan = _fetch_plan(
+        cvm_id=cvm_id,
+        source=source,
+        tail=tail,
+        since=since,
+        until=until,
+        timestamps=timestamps,
+        ansi=ansi,
+        format=format,
+        container_match_prefix=container_match_prefix,
+    )
+    url = await _arun_lookup(plan.lookup(), api_get)
+    async with _async_log_client(log_http) as client:
+        response = await client.get(url, headers=_log_headers(user_agent), timeout=None)
+    if response.status_code >= 400:
+        raise _http_error(response)
+    return plan.decode(response.text)
 
 
 def follow_cvm_logs(
     *,
-    api_get: Callable[[str], Any],
-    log_http: httpx.Client,
+    api_get: SyncApiGet,
+    log_http: httpx.Client | None = None,
     cvm_id: str,
     source: CvmLogSource,
     tail: int | str | None = None,
@@ -716,43 +1111,168 @@ def follow_cvm_logs(
     ansi: bool = False,
     format: CvmLogFormat | None = None,
     container_match_prefix: bool = True,
-) -> Iterator[str | CvmLogEntry]:
-    if source["type"] == "node":
-        yield from follow_cvm_channel_logs(
-            api_get=api_get,
-            log_http=log_http,
-            cvm_id=cvm_id,
-            channel=source["channel"],
-            tail=tail,
-            since=since,
-            until=until,
-            timestamps=timestamps,
-            ansi=ansi,
-            format=format,
-        )
-        return
-    if format == "text":
-        yield from _follow_container_text(
-            api_get=api_get,
-            log_http=log_http,
-            cvm_id=cvm_id,
-            container=source.get("name"),
-            match_prefix=source.get("matchContainerIdPrefix", container_match_prefix),
-            tail=tail,
-            since=since,
-            until=until,
-            timestamps=timestamps,
-            ansi=ansi,
-        )
-        return
-    yield from follow_container_log_entries(
-        api_get=api_get,
-        log_http=log_http,
+    user_agent: str | None = None,
+) -> LogFollowIterator[str | CvmLogEntry]:
+    """Follow a log stream. Node and container text yield lines; container NDJSON yields entries."""
+    plan = _follow_plan(
         cvm_id=cvm_id,
-        container=source.get("name"),
-        match_prefix=source.get("matchContainerIdPrefix", container_match_prefix),
+        source=source,
         tail=tail,
         since=since,
         until=until,
         timestamps=timestamps,
+        ansi=ansi,
+        format=format,
+        container_match_prefix=container_match_prefix,
+    )
+    headers = _log_headers(user_agent)
+    return LogFollowIterator(lambda stop: _follow_sync(plan, api_get, log_http, headers, stop))
+
+
+def afollow_cvm_logs(
+    *,
+    api_get: AsyncApiGet,
+    log_http: httpx.AsyncClient | None = None,
+    cvm_id: str,
+    source: CvmLogSource,
+    tail: int | str | None = None,
+    since: str | int | None = None,
+    until: str | int | None = None,
+    timestamps: bool = False,
+    ansi: bool = False,
+    format: CvmLogFormat | None = None,
+    container_match_prefix: bool = True,
+    user_agent: str | None = None,
+) -> AsyncGenerator[str | CvmLogEntry, None]:
+    """Async variant of follow_cvm_logs; stop it with aclose() or task cancellation."""
+    plan = _follow_plan(
+        cvm_id=cvm_id,
+        source=source,
+        tail=tail,
+        since=since,
+        until=until,
+        timestamps=timestamps,
+        ansi=ansi,
+        format=format,
+        container_match_prefix=container_match_prefix,
+    )
+    return _follow_async(plan, api_get, log_http, _log_headers(user_agent))
+
+
+# Single-purpose wrappers kept for existing callers.
+
+
+def fetch_cvm_channel_logs(
+    *,
+    api_get: SyncApiGet,
+    log_http: httpx.Client | None = None,
+    cvm_id: str,
+    channel: CvmLogChannel,
+    tail: int | str | None = None,
+    since: str | int | None = None,
+    until: str | int | None = None,
+    timestamps: bool = False,
+    ansi: bool = False,
+    format: CvmLogFormat | None = None,
+) -> str:
+    text = fetch_cvm_logs(
+        api_get=api_get,
+        log_http=log_http,
+        cvm_id=cvm_id,
+        source={"type": "node", "channel": channel},
+        tail=tail,
+        since=since,
+        until=until,
+        timestamps=timestamps,
+        ansi=ansi,
+        format=format or "text",
+    )
+    return cast(str, text)
+
+
+def follow_cvm_channel_logs(
+    *,
+    api_get: SyncApiGet,
+    log_http: httpx.Client | None = None,
+    cvm_id: str,
+    channel: CvmLogChannel,
+    tail: int | str | None = None,
+    since: str | int | None = None,
+    until: str | int | None = None,
+    timestamps: bool = False,
+    ansi: bool = False,
+    format: CvmLogFormat | None = None,
+) -> LogFollowIterator[str | CvmLogEntry]:
+    return follow_cvm_logs(
+        api_get=api_get,
+        log_http=log_http,
+        cvm_id=cvm_id,
+        source={"type": "node", "channel": channel},
+        tail=tail,
+        since=since,
+        until=until,
+        timestamps=timestamps,
+        ansi=ansi,
+        format=format,
+    )
+
+
+def fetch_container_log_entries(
+    *,
+    api_get: SyncApiGet,
+    log_http: httpx.Client | None = None,
+    cvm_id: str,
+    container: str | None = None,
+    match_prefix: bool = True,
+    tail: int | str | None = None,
+    since: str | int | None = None,
+    until: str | int | None = None,
+    timestamps: bool = False,
+    ansi: bool = False,
+) -> list[CvmLogEntry]:
+    source: ContainerLogSource = {"type": "container", "matchContainerIdPrefix": match_prefix}
+    if container:
+        source["name"] = container
+    entries = fetch_cvm_logs(
+        api_get=api_get,
+        log_http=log_http,
+        cvm_id=cvm_id,
+        source=source,
+        tail=tail,
+        since=since,
+        until=until,
+        timestamps=timestamps,
+        ansi=ansi,
+        format="ndjson",
+    )
+    return cast(list[CvmLogEntry], entries)
+
+
+def follow_container_log_entries(
+    *,
+    api_get: SyncApiGet,
+    log_http: httpx.Client | None = None,
+    cvm_id: str,
+    container: str | None = None,
+    match_prefix: bool = True,
+    tail: int | str | None = None,
+    since: str | int | None = None,
+    until: str | int | None = None,
+    timestamps: bool = False,
+    ansi: bool = False,
+) -> LogFollowIterator[str | CvmLogEntry]:
+    source: ContainerLogSource = {"type": "container", "matchContainerIdPrefix": match_prefix}
+    if container:
+        source["name"] = container
+    return follow_cvm_logs(
+        api_get=api_get,
+        log_http=log_http,
+        cvm_id=cvm_id,
+        source=source,
+        tail=tail,
+        since=since,
+        until=until,
+        timestamps=timestamps,
+        ansi=ansi,
+        format="ndjson",
     )

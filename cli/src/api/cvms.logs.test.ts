@@ -102,8 +102,11 @@ beforeEach(() => {
 	);
 });
 
+const originalDateNow = Date.now;
+
 afterEach(() => {
 	globalThis.fetch = originalFetch;
+	Date.now = originalDateNow;
 });
 
 afterAll(() => {
@@ -155,6 +158,11 @@ describe("CVM log access client", () => {
 	test("successful clean EOF reconnects indefinitely until aborted", async () => {
 		const controller = new AbortController();
 		const output: string[] = [];
+		let now = 0;
+		Date.now = () => {
+			now += 11_000;
+			return now;
+		};
 		fetchImplementation = async () =>
 			fetchMock.mock.calls.length <= 6
 				? new Response("")
@@ -221,16 +229,16 @@ describe("CVM log access client", () => {
 		expect(fetchMock).toHaveBeenCalledTimes(5);
 	});
 
-	test("a successful HTTP 200 clean EOF resets the ordinary failure counter", async () => {
+	test("a successful HTTP 200 with a record resets the ordinary failure counter", async () => {
 		const controller = new AbortController();
 		let requestCount = 0;
 		const output: string[] = [];
 		fetchImplementation = async () => {
 			requestCount += 1;
-			if (requestCount <= 2 || (requestCount >= 4 && requestCount <= 6)) {
+			if (requestCount <= 2) {
 				throw new TypeError("temporary network failure");
 			}
-			if (requestCount === 3) return new Response("");
+			if (requestCount === 3) return new Response("checkpoint\n");
 			return new Response("recovered after a reset\n");
 		};
 
@@ -239,14 +247,14 @@ describe("CVM log access client", () => {
 			"serial",
 			(data) => {
 				output.push(data);
-				controller.abort();
+				if (data.includes("recovered")) controller.abort();
 			},
 			{},
 			controller.signal,
 		);
 
-		expect(requestCount).toBe(7);
-		expect(output).toEqual(["recovered after a reset\n"]);
+		expect(requestCount).toBe(4);
+		expect(output).toEqual(["checkpoint\n", "recovered after a reset\n"]);
 	});
 
 	test("container follow preserves same-second duplicate counts while reconnecting", async () => {
@@ -287,7 +295,7 @@ describe("CVM log access client", () => {
 		}
 		expect(urls[0]?.searchParams.has("tail")).toBe(false);
 		expect(urls[1]?.searchParams.get("since")).toBe("1794225600");
-		expect(urls[1]?.searchParams.has("tail")).toBe(false);
+		expect(urls[1]?.searchParams.get("tail")).toBe("all");
 	});
 
 	test("--timestamps preserves transport prefixes while deduplicating with the raw message", async () => {

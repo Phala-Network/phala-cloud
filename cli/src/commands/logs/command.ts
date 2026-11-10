@@ -130,7 +130,16 @@ export const logsCommandSchema = z.object({
 	stderr: z.boolean().default(false),
 	since: z.string().optional(),
 	until: z.string().optional(),
-	tail: z.union([z.literal("all"), z.coerce.number().int().nonnegative()]).optional(),
+	tail: z
+		.union([
+			z.literal("all"),
+			z.coerce
+				.number()
+				.int()
+				.min(0)
+				.max(10000, { message: "--tail must be 0–10000 or all" }),
+		])
+		.optional(),
 	follow: z.boolean().default(false),
 	timestamps: z.boolean().default(false),
 	json: z.boolean().default(false),

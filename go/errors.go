@@ -34,8 +34,9 @@ type APIError struct {
 	Details     []ErrorDetail
 	Suggestions []string
 	Links       []ErrorLink
-	// fromStreamBody is set when the error was parsed from a 200 log body,
-	// not from an HTTP status. Follow reconnects HTTP 502 ERR-17-009 but not these.
+	// fromStreamBody marks a terminal error read from a 200 log body (guest
+	// agent record, invalid record, repeated empty stream ends). It has no HTTP
+	// status; log follow stops on it instead of reconnecting.
 	fromStreamBody bool
 }
 

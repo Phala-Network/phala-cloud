@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 from datetime import datetime, timezone
 
@@ -68,6 +69,6 @@ def resolve_log_time_window(
         resolved["until"] = (
             int(until)
             if isinstance(until, int)
-            else int((_parse_log_time(str(until), now_ms) + 999) // 1000)
+            else int(math.ceil(_parse_log_time(str(until), now_ms) / 1000))
         )
     return resolved
