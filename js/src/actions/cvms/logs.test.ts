@@ -4,6 +4,7 @@ import {
   CVM_LOGS_INFO_API_VERSION,
   fetchContainerLogsEntries,
   fetchCvmChannelLogs,
+  fetchCvmLogs,
   followCvmLogs,
   LogAccessError,
   streamContainerLogsEntries,
@@ -267,6 +268,85 @@ describe("CVM log access", () => {
       httpStatus: 409,
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("guest-agent ndjson error record is ERR-17-009 and does not retry", async () => {
+    const client = mockClient();
+    const guestError =
+      "Docker responded with status code 501: configured logging driver does not support reading";
+    fetchImplementation = async () => ndjsonResponse([{ error: guestError }]);
+
+    await expect(streamContainerLogsEntries(client, "app_test", () => {})).rejects.toMatchObject({
+      name: "LogAccessError",
+      code: "ERR-17-009",
+      message: expect.stringContaining(guestError),
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("HTTP 502 ERR-17-009 still reconnects in follow", async () => {
+    const client = mockClient();
+    fetchImplementation = async () =>
+      jsonResponse(
+        { error_code: "ERR-17-009", message: "Guest agent or gateway unreachable" },
+        502,
+      );
+    const error = await streamContainerLogsEntries(client, "app_test", () => {}).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    expect(error).toBeInstanceOf(LogAccessError);
+    expect(error).toMatchObject({ code: "ERR-17-009" });
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  test("container text guest error without newline is ERR-17-009", async () => {
+    const client = mockClient();
+    const guestError =
+      "Docker responded with status code 501: configured logging driver does not support reading";
+    fetchImplementation = async () => new Response(JSON.stringify({ error: guestError }));
+    await expect(
+      fetchCvmLogs(client, "app_test", { type: "container" }, { format: "text" }),
+    ).rejects.toMatchObject({
+      name: "LogAccessError",
+      code: "ERR-17-009",
+      message: expect.stringContaining(guestError),
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("container follow stops after 5 empty clean ends", async () => {
+    const client = mockClient();
+    fetchImplementation = async () => new Response("");
+    await expect(streamContainerLogsEntries(client, "app_test", () => {})).rejects.toMatchObject({
+      message: expect.stringContaining("keeps ending without new output"),
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  test("container follow with data keeps reconnecting", async () => {
+    const client = mockClient();
+    let n = 0;
+    fetchImplementation = async () => {
+      n += 1;
+      return ndjsonResponse([
+        { channel: "stdout", message: `2026-11-09T12:00:0${n}.0Z line${n}` },
+      ]);
+    };
+    const controller = new AbortController();
+    let count = 0;
+    await streamContainerLogsEntries(
+      client,
+      "app_test",
+      () => {
+        count += 1;
+        if (count >= 6) controller.abort();
+      },
+      {},
+      controller.signal,
+    );
+    expect(count).toBe(6);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
   });
 
   test("followCvmLogs yields node lines as an async iterator", async () => {
