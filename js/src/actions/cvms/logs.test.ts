@@ -1,12 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { Client } from "../../client";
+import { UnknownError } from "../../utils/errors";
 import {
   CVM_LOGS_INFO_API_VERSION,
+  fetchContainerLogs,
   fetchContainerLogsEntries,
   fetchCvmChannelLogs,
   fetchCvmLogs,
   followCvmLogs,
   LogAccessError,
+  streamContainerLogs,
   streamContainerLogsEntries,
   streamCvmChannelLogs,
 } from "./logs";
@@ -61,7 +64,8 @@ function jsonResponse(value: unknown, status = 200): Response {
 }
 
 function ndjsonResponse(records: unknown[]): Response {
-  return new Response(records.map((record) => JSON.stringify(record)).join("\n"));
+  if (records.length === 0) return new Response("");
+  return new Response(`${records.map((record) => JSON.stringify(record)).join("\n")}\n`);
 }
 
 beforeEach(() => {
@@ -75,7 +79,7 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-describe("CVM log access", () => {
+describe("CVM log access", { timeout: 20_000 }, () => {
   test("node follow reconnects with tail=0 and drops only exact heartbeat lines", async () => {
     const client = mockClient();
     const controller = new AbortController();
@@ -189,7 +193,7 @@ describe("CVM log access", () => {
     expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
-  test("container follow de-duplicates the boundary second and omits tail on reconnect", async () => {
+  test("container follow de-duplicates the boundary second and reconnects with tail=all", async () => {
     const client = mockClient();
     const controller = new AbortController();
     const output: string[] = [];
@@ -296,7 +300,14 @@ describe("CVM log access", () => {
 
   test("container logs with public_logs false raise ERR-17-006", async () => {
     const client = {
-      get: vi.fn(async () => ({ public_logs: false, logs: {} })),
+      get: vi.fn(async (path: string) => {
+        if (String(path).endsWith("/composition")) {
+          return {
+            containers: [{ id: "x", names: ["/app"], log_endpoint: "https://x/app" }],
+          };
+        }
+        return { public_logs: false, logs: {} };
+      }),
       config: { version: "2026-06-23" },
     } as unknown as Client;
     await expect(fetchContainerLogsEntries(client, "app_test")).rejects.toMatchObject({
@@ -309,7 +320,11 @@ describe("CVM log access", () => {
 
   test("container follow with public_logs false raises ERR-17-006 without connecting", async () => {
     const get = vi.fn(async (path: string) => {
-      expect(String(path)).not.toContain("/composition");
+      if (String(path).endsWith("/composition")) {
+        return {
+          containers: [{ id: "x", names: ["/anything"], log_endpoint: "https://x/a" }],
+        };
+      }
       return { public_logs: false, logs: {} };
     });
     const client = {
@@ -323,7 +338,7 @@ describe("CVM log access", () => {
       code: "ERR-17-006",
       httpStatus: 409,
     });
-    expect(get).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledTimes(2);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -331,7 +346,7 @@ describe("CVM log access", () => {
     const client = mockClient();
     await expect(
       streamContainerLogsEntries(client, "app_test", () => {}, { container: "missing" }),
-    ).rejects.toThrow(/Container 'missing' not found/);
+    ).rejects.toMatchObject({ code: "ERR-17-007", message: "Container not found" });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(client.get).toHaveBeenCalled();
   });
@@ -555,5 +570,317 @@ describe("CVM log access", () => {
       controller.abort();
     }
     expect(lines).toEqual(["hello\n"]);
+  });
+
+  test("default format with ansi true keeps escapes and does not send ansi on NDJSON", async () => {
+    const client = mockClient();
+    fetchImplementation = async () =>
+      ndjsonResponse([{ channel: "stdout", message: "\x1b[31mred\x1b[0m\n" }]);
+    const text = await fetchCvmLogs(client, "app_test", { type: "container" }, { ansi: true });
+    expect(text).toBe("\x1b[31mred\x1b[0m\n");
+    const url = new URL(String(fetchMock.mock.calls[0]?.[0]));
+    expect(url.searchParams.has("ansi")).toBe(false);
+    expect(url.searchParams.get("format")).toBe("ndjson");
+  });
+
+  test("invalid container names error before any request", async () => {
+    const client = mockClient();
+    for (const name of ["app/foo", "a..b", "_hidden"]) {
+      await expect(
+        fetchCvmLogs(client, "app_test", { type: "container", name }, { ansi: true }),
+      ).rejects.toThrow(/Invalid container name/);
+    }
+    expect(client.get).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("empty NDJSON message is delivered as an empty string", async () => {
+    const client = mockClient();
+    fetchImplementation = async () => ndjsonResponse([{ channel: "stdout", message: "" }]);
+    await expect(fetchContainerLogs(client, "app_test")).resolves.toBe("");
+  });
+
+  test("reconnect without a timestamp keeps the caller since", async () => {
+    const client = mockClient();
+    const controller = new AbortController();
+    let n = 0;
+    fetchImplementation = async () => {
+      n += 1;
+      if (n === 1) throw new TypeError("temporary");
+      return ndjsonResponse([{ channel: "stdout", message: "ok\n" }]);
+    };
+    await streamContainerLogsEntries(
+      client,
+      "app_test",
+      () => controller.abort(),
+      { since: 100, tail: "all" },
+      controller.signal,
+    );
+    const urls = fetchMock.mock.calls.map(([input]) => new URL(String(input)));
+    expect(urls[0]?.searchParams.get("since")).toBe("100");
+    expect(urls[1]?.searchParams.get("since")).toBe("100");
+    expect(urls[1]?.searchParams.get("tail")).toBe("all");
+  });
+
+  test("until on a clean end finishes without the empty-end error", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_794_268_801_000);
+    const client = mockClient();
+    fetchImplementation = async () => new Response("");
+    await streamContainerLogsEntries(client, "app_test", () => {}, { until: 1794268801 });
+    await streamContainerLogs(client, "app_test", () => {}, {
+      format: "text",
+      until: 1794268801,
+    });
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test("text follow strips ANSI and detects a glued guest error", async () => {
+    const client = mockClient();
+    fetchImplementation = async () => new Response('{"error":"x"}hello\n');
+    await expect(
+      fetchCvmLogs(client, "app_test", { type: "container" }, { format: "text" }),
+    ).rejects.toMatchObject({ code: "ERR-17-009", message: "x" });
+  });
+
+  test("node fetch does not treat JSON error objects as guest errors", async () => {
+    const client = mockClient();
+    fetchImplementation = async () => new Response('{"error":"not a guest record"}\n');
+    await expect(fetchCvmChannelLogs(client, "app_test", "serial")).resolves.toBe(
+      '{"error":"not a guest record"}\n',
+    );
+  });
+
+  test("already-aborted signal makes no request", async () => {
+    const client = mockClient();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      fetchContainerLogsEntries(client, "app_test", { signal: controller.signal }),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(client.get).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("ANSI stripping removes SGR, CSI private mode, and OSC 8", async () => {
+    const client = mockClient();
+    fetchImplementation = async () =>
+      ndjsonResponse([
+        { channel: "stdout", message: "\x1b[31mred\x1b[0m\n" },
+        { channel: "stdout", message: "\x1b[?25lhidden\n" },
+        { channel: "stdout", message: "\x1b]8;;https://example.com\x07link\x1b]8;;\x07\n" },
+      ]);
+    const entries = await fetchContainerLogsEntries(client, "app_test");
+    expect(entries.map((entry) => entry.message)).toEqual(["red\n", "hidden\n", "link\n"]);
+  });
+
+  test("follow retries lookup network errors up to five times", async () => {
+    const client = {
+      get: vi.fn(async () => {
+        throw new UnknownError("network", { status: 0, statusText: "" });
+      }),
+      config: { version: "2026-06-23" },
+    } as unknown as Client;
+    const error = await streamCvmChannelLogs(client, "app_test", "serial", () => {}).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    expect(error).toBeInstanceOf(UnknownError);
+    expect(client.get).toHaveBeenCalledTimes(5);
+  });
+
+  test("follow waits at least 1s between consecutive connections", async () => {
+    const client = mockClient();
+    const controller = new AbortController();
+    const started: number[] = [];
+    fetchImplementation = async () => {
+      started.push(performance.now());
+      return new Response(`line${started.length}\n`);
+    };
+    await streamCvmChannelLogs(
+      client,
+      "app_test",
+      "serial",
+      () => {
+        if (started.length >= 2) controller.abort();
+      },
+      {},
+      controller.signal,
+    );
+    expect(started.length).toBe(2);
+    expect(started[1]! - started[0]!).toBeGreaterThanOrEqual(900);
+  });
+
+  test("accepts console and stdin NDJSON channels", async () => {
+    const client = mockClient();
+    fetchImplementation = async () =>
+      ndjsonResponse([
+        { channel: "console", message: "c\n" },
+        { channel: "stdin", message: "i\n" },
+      ]);
+    await expect(fetchContainerLogsEntries(client, "app_test")).resolves.toEqual([
+      { channel: "console", message: "c\n" },
+      { channel: "stdin", message: "i\n" },
+    ]);
+  });
+
+  test("HTTP 401 ERR-17-002 is retried as a failure", async () => {
+    const client = mockClient();
+    fetchImplementation = async () =>
+      jsonResponse({ error_code: "ERR-17-002", message: "unauthorized" }, 401);
+    const error = await streamCvmChannelLogs(client, "app_test", "serial", () => {}).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    expect(error).toMatchObject({ code: "ERR-17-002" });
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  test("cancel during backoff returns promptly", async () => {
+    const client = mockClient();
+    const controller = new AbortController();
+    fetchImplementation = async () => {
+      throw new TypeError("network unavailable");
+    };
+    const started = performance.now();
+    setTimeout(() => controller.abort(), 50);
+    await streamCvmChannelLogs(client, "app_test", "serial", () => {}, {}, controller.signal);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
+  test("log requests send the client User-Agent", async () => {
+    const client = mockClient();
+    fetchImplementation = async () => new Response("ok\n");
+    await fetchCvmChannelLogs(client, "app_test", "serial");
+    const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers as HeadersInit);
+    expect(headers.get("User-Agent")).toMatch(/phala-cloud-sdk-js\//);
+  });
+
+  test("partial output then a read error recovers and continues", async () => {
+    const client = mockClient();
+    const controller = new AbortController();
+    let n = 0;
+    const output: string[] = [];
+    fetchImplementation = async () => {
+      n += 1;
+      if (n === 1) {
+        let pulls = 0;
+        return new Response(
+          new ReadableStream({
+            pull(stream) {
+              pulls += 1;
+              if (pulls === 1) {
+                stream.enqueue(new TextEncoder().encode("partial\n"));
+                return;
+              }
+              stream.error(new TypeError("read failed"));
+            },
+          }),
+        );
+      }
+      return new Response("recovered\n");
+    };
+    await streamCvmChannelLogs(
+      client,
+      "app_test",
+      "serial",
+      (data) => {
+        output.push(data);
+        if (data.includes("recovered")) controller.abort();
+      },
+      {},
+      controller.signal,
+    );
+    expect(output.some((line) => line.includes("partial"))).toBe(true);
+    expect(output.some((line) => line.includes("recovered"))).toBe(true);
+  });
+
+  test("container long idle EOF keeps following", async () => {
+    let now = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => {
+      now += 11_000;
+      return now;
+    });
+    const client = mockClient();
+    const controller = new AbortController();
+    let n = 0;
+    fetchImplementation = async () => {
+      n += 1;
+      if (n <= 6) return new Response("");
+      return ndjsonResponse([{ channel: "stdout", message: "after-idle\n" }]);
+    };
+    await streamContainerLogsEntries(
+      client,
+      "app_test",
+      (entry) => {
+        if (entry.message.includes("after-idle")) controller.abort();
+      },
+      {},
+      controller.signal,
+    );
+    expect(n).toBe(7);
+  });
+
+  test("follow resolves composition once and CVM-info once per connection", async () => {
+    const client = mockClient();
+    const controller = new AbortController();
+    let n = 0;
+    fetchImplementation = async () => {
+      n += 1;
+      return ndjsonResponse([
+        { channel: "stdout", message: `2026-11-09T12:00:0${n}.0Z line${n}\n` },
+      ]);
+    };
+    await streamContainerLogsEntries(
+      client,
+      "app_test",
+      () => {
+        if (n >= 3) controller.abort();
+      },
+      {},
+      controller.signal,
+    );
+    const paths = vi.mocked(client.get).mock.calls.map(([path]) => String(path));
+    expect(paths.filter((path) => path.endsWith("/composition"))).toHaveLength(1);
+    expect(paths.filter((path) => !path.endsWith("/composition"))).toHaveLength(3);
+  });
+
+  test("unknown container is ERR-17-007", async () => {
+    const client = mockClient();
+    client.get = vi.fn(async (path: string) => {
+      if (String(path).endsWith("/composition")) {
+        return {
+          containers: [{ id: "other", names: ["/other"], log_endpoint: "https://x/c" }],
+        };
+      }
+      return detail;
+    }) as Client["get"];
+    await expect(
+      fetchContainerLogsEntries(client, "app_test", {
+        container: "missing",
+        matchContainerIdPrefix: true,
+      }),
+    ).rejects.toMatchObject({ code: "ERR-17-007", message: "Container not found" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("ambiguous container prefix is ERR-17-001", async () => {
+    const client = mockClient();
+    client.get = vi.fn(async (path: string) => {
+      if (String(path).endsWith("/composition")) {
+        return {
+          containers: [
+            { id: "abc1", names: ["/a"], log_endpoint: "https://x/a" },
+            { id: "abc2", names: ["/b"], log_endpoint: "https://x/b" },
+          ],
+        };
+      }
+      return detail;
+    }) as Client["get"];
+    await expect(
+      fetchContainerLogsEntries(client, "app_test", {
+        container: "abc",
+        matchContainerIdPrefix: true,
+      }),
+    ).rejects.toMatchObject({ code: "ERR-17-001" });
   });
 });

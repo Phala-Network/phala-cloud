@@ -242,7 +242,8 @@ Fetch logs from a CVM. Default: container logs.
 | `--serial` | false | CVM serial console (boot, kernel) |
 | `--cvm-stdout` | false | CVM stdout channel |
 | `--cvm-stderr` | false | CVM stderr channel |
-| `--stderr` | false | Include container stderr |
+| `--stderr` | false | Show only stderr |
+| `--stdout` | false | Show only stdout, console, and stdin |
 | `-n, --tail <lines>` | | Lines from end |
 | `-f, --follow` | false | Stream in real-time |
 | `-t, --timestamps` | false | Show timestamps |
@@ -257,7 +258,8 @@ Fetch logs from a CVM. Default: container logs.
 - `--serial`: VM serial console — boot messages, kernel, docker-compose output
 - `--cvm-stdout`: CVM-level stdout
 - `--cvm-stderr`: CVM-level stderr
-- `--stderr`: Include container stderr (only in container mode)
+- `--stderr`: Show only stderr (container mode only)
+- `--stdout`: Show only stdout, console, and stdin (container mode only)
 
 ### phala ps
 

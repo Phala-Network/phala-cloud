@@ -42,7 +42,10 @@ type SerialLogsOptions = {
 };
 
 type CvmLogChannel = "serial" | "stdout" | "stderr";
-type LogEntry = { channel: "stdout" | "stderr"; message: string };
+type LogEntry = {
+	channel: "stdout" | "stderr" | "stdin" | "console";
+	message: string;
+};
 
 const mockFetchContainerLogsEntries = mock(
 	(_appId: string, _options: ContainerLogsOptions) =>
@@ -58,6 +61,8 @@ const mockStreamContainerLogsEntries = mock(
 	) => {
 		onEntry({ channel: "stdout", message: "out\n" });
 		onEntry({ channel: "stderr", message: "err\n" });
+		onEntry({ channel: "stdin", message: "in\n" });
+		onEntry({ channel: "console", message: "con\n" });
 		return Promise.resolve();
 	},
 );
@@ -159,6 +164,7 @@ const defaultInput = {
 	follow: false,
 	timestamps: false,
 	stderr: false,
+	stdout: false,
 	serial: false,
 	cvmStdout: false,
 	cvmStderr: false,
@@ -256,12 +262,12 @@ describe("logs command", () => {
 			| undefined;
 		expect(firstCall?.[1]).toMatchObject({
 			container: "my-service",
-			matchContainerIdPrefix: false,
+			matchContainerIdPrefix: true,
 		});
 		expect(stdoutWriteSpy).toHaveBeenCalledWith("hello\n");
 	});
 
-	test("writes an empty container log message as a blank line", async () => {
+	test("writes an empty container log message as an empty string", async () => {
 		mockFetchContainerLogsEntries.mockResolvedValue([
 			{ channel: "stdout", message: "" },
 		]);
@@ -276,7 +282,7 @@ describe("logs command", () => {
 		);
 
 		expect(code).toBe(0);
-		expect(stdoutWriteSpy).toHaveBeenCalledWith("\n");
+		expect(stdoutWriteSpy).toHaveBeenCalledWith("");
 	});
 
 	test("outputs container logs as json", async () => {
@@ -342,7 +348,31 @@ describe("logs command", () => {
 		expect(code).toBe(0);
 		expect(mockStreamContainerLogsEntries).toHaveBeenCalledTimes(1);
 		expect(stdoutWriteSpy).not.toHaveBeenCalledWith("out\n");
+		expect(stdoutWriteSpy).not.toHaveBeenCalledWith("in\n");
+		expect(stdoutWriteSpy).not.toHaveBeenCalledWith("con\n");
 		expect(stderrWriteSpy).toHaveBeenCalledWith("err\n");
+	});
+
+	test("--stdout shows only stdout, console, and stdin", async () => {
+		const code = await logsCommand.run(
+			{
+				...defaultInput,
+				containerName: "my-service",
+				follow: true,
+				stdout: true,
+			},
+			makeContext({
+				cvmId: { id: "app_abc123" },
+				stdout: fakeStdout as unknown as NodeJS.WriteStream,
+				stderr: fakeStderr as unknown as NodeJS.WriteStream,
+			}),
+		);
+
+		expect(code).toBe(0);
+		expect(stdoutWriteSpy).toHaveBeenCalledWith("out\n");
+		expect(stdoutWriteSpy).toHaveBeenCalledWith("in\n");
+		expect(stdoutWriteSpy).toHaveBeenCalledWith("con\n");
+		expect(stderrWriteSpy).not.toHaveBeenCalledWith("err\n");
 	});
 
 	// --- CVM mode tests ---
@@ -623,7 +653,7 @@ describe("logs command", () => {
 
 		expect(code).toBe(1);
 		expect(failMessages[0]).toContain(
-			"--stderr is only valid in container mode",
+			"--stdout and --stderr are only valid in container mode",
 		);
 	});
 

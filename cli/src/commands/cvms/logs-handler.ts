@@ -36,6 +36,7 @@ export interface LogsHandlerConfig<TOptions> {
 		onData: (data: string) => void,
 		options: TOptions,
 		signal?: AbortSignal,
+		context?: CommandContext,
 	) => Promise<void>;
 }
 
@@ -102,6 +103,7 @@ export function createLogsHandler<TInput extends BaseLogsInput, TOptions>(
 						(data) => context.stdout.write(data),
 						options,
 						abortController.signal,
+						context,
 					);
 				} catch (error) {
 					if ((error as Error).name === "AbortError") {

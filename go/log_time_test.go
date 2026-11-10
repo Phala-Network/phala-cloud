@@ -12,3 +12,14 @@ func TestParseLogTimeOverflow(t *testing.T) {
 		t.Fatalf("got %v, want overflow", err)
 	}
 }
+
+func TestParseLogTimeCeilsFractionExactly(t *testing.T) {
+	got, err := parseLogTime("2026-11-10T00:00:00.000000001Z", time.Now(), true)
+	if err != nil || got != 1794268801 {
+		t.Fatalf("got %d, %v", got, err)
+	}
+	got, err = parseLogTime("2026-11-10T00:00:00Z", time.Now(), true)
+	if err != nil || got != 1794268800 {
+		t.Fatalf("got %d, %v", got, err)
+	}
+}

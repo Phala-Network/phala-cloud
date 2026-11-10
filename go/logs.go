@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -63,14 +64,23 @@ const (
 	maxFollowExpiredURL = 3
 )
 
+// followMinConnectionInterval is the minimum time between the starts of two
+// consecutive follow connections. The VMM node endpoint can answer 200 with a
+// single plain-text error line and end at once; that counts as delivered output,
+// so without this floor follow would reconnect in a hot loop.
+var followMinConnectionInterval = time.Second
+
 // followNow is the clock used by follow; tests replace it.
 var followNow = time.Now
 
 var (
-	textStreamError    = regexp.MustCompile(`^\[error\] (ERR-17-\d{3}) (.*)$`)
-	timestampPrefix    = regexp.MustCompile(`(?s)^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})) (.*)$`)
-	ansiEscape         = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
-	containerNameChars = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
+	textStreamError = regexp.MustCompile(`^\[error\] (ERR-17-\d{3}) (.*)$`)
+	timestampPrefix = regexp.MustCompile(`(?s)^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})) (.*)$`)
+	// ansiEscape matches OSC (ESC ] ... BEL or ESC \, e.g. OSC 8 hyperlinks),
+	// CSI (ESC [ params intermediates final, including private modes such as
+	// ESC[?25l), and the remaining ESC sequences (ESC intermediates final).
+	ansiEscape         = regexp.MustCompile(`\x1b(?:\][^\x07\x1b]*(?:\x07|\x1b\\)|\[[0-?]*[ -/]*[@-~]|[ -/]*[0-~])`)
+	containerNameChars = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 )
 
 func validLogChannel(channel string) bool {
@@ -173,7 +183,7 @@ func assertNodeLogOptions(opts *LogsOptions) error {
 		unsupported = append(unsupported, "format=ndjson")
 	}
 	if len(unsupported) > 0 {
-		return fmt.Errorf("%s not supported for serial/stdout/stderr logs", strings.Join(unsupported, ", "))
+		return errLogValidation("%s not supported for serial/stdout/stderr logs", strings.Join(unsupported, ", "))
 	}
 	return nil
 }
@@ -185,8 +195,8 @@ func isTextFormat(opts *LogsOptions) bool {
 // containerSlug validates a container name before any request is made.
 func containerSlug(name string) (string, error) {
 	slug := strings.TrimPrefix(name, "/")
-	if !containerNameChars.MatchString(slug) {
-		return "", fmt.Errorf("phala: invalid container name %q; use letters, digits, '_', '.', and '-'", name)
+	if !containerNameChars.MatchString(slug) || strings.Contains(slug, "..") {
+		return "", errLogValidation("invalid container name %q; use 1-128 letters, digits, '_', '.', or '-', starting with a letter or digit, without '..'", name)
 	}
 	return slug, nil
 }
@@ -202,6 +212,28 @@ func validateLogSource(source LogSource) error {
 // ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
+
+// errLogValidation is a client-side validation error: ERR-17-001 without an
+// HTTP status, raised before any request.
+func errLogValidation(format string, args ...any) error {
+	return &APIError{ErrorCode: "ERR-17-001", Message: fmt.Sprintf(format, args...)}
+}
+
+// assertEntriesRequest validates the *Entries APIs: container source, NDJSON.
+func assertEntriesRequest(api string, source LogSource, opts *LogsOptions) error {
+	if source.Type != "container" {
+		return errLogValidation("%s supports container logs only", api)
+	}
+	if opts.Format != "" && !strings.EqualFold(opts.Format, "ndjson") {
+		return errLogValidation("%s requires format=ndjson", api)
+	}
+	return nil
+}
+
+// errContainerNotFound is raised when no container in the composition matches.
+func errContainerNotFound() error {
+	return &APIError{ErrorCode: "ERR-17-007", Message: "Container not found"}
+}
 
 func errContainerLogsDisabled() error {
 	return &APIError{
@@ -458,16 +490,8 @@ func (c *Client) nodeLogURL(ctx context.Context, cvmID string, channel CVMLogCha
 }
 
 type compositionContainer struct {
-	ID          string   `json:"id"`
-	Names       []string `json:"names"`
-	LogEndpoint *string  `json:"log_endpoint"`
-}
-
-func (item compositionContainer) endpoint() string {
-	if item.LogEndpoint == nil {
-		return ""
-	}
-	return *item.LogEndpoint
+	ID    string   `json:"id"`
+	Names []string `json:"names"`
 }
 
 func (item compositionContainer) slug() string {
@@ -492,95 +516,133 @@ func joinContainerLogURL(base, name, authQuery string) (string, error) {
 	return u + "?" + authQuery, nil
 }
 
-// containerLogURL resolves a fresh signed container log URL. It also enforces
-// the Public Logs setting before any composition lookup or log request.
-func (c *Client) containerLogURL(ctx context.Context, cvmID, name string) (string, error) {
+// containerTarget is a container resolved once per fetch or follow. Every
+// connection builds {container_log_base}/{slug}?{auth_query} from a fresh CVM
+// info lookup; the composition is never re-queried.
+type containerTarget struct {
+	cvmID string
+	slug  string
+	// info is the lookup made during resolution, used by the first connection.
+	info *cvmLogInfo
+}
+
+// containerLogInfo looks up the CVM log URLs and enforces the Public Logs setting.
+func (c *Client) containerLogInfo(ctx context.Context, cvmID string) (*cvmLogInfo, error) {
 	info, err := c.getCVMLogInfo(ctx, cvmID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if info.PublicLogs != nil && !*info.PublicLogs {
-		return "", errContainerLogsDisabled()
+		return nil, errContainerLogsDisabled()
 	}
-	base := info.logURL("container_log_base")
-	auth := info.logURL("auth_query")
+	return info, nil
+}
 
+// resolveContainer checks Public Logs, then resolves the container from the
+// composition: an exact name first, else a unique container ID prefix, else
+// the first container when no name is given.
+func (c *Client) resolveContainer(ctx context.Context, cvmID, name string) (*containerTarget, error) {
+	info, err := c.containerLogInfo(ctx, cvmID)
+	if err != nil {
+		return nil, err
+	}
 	var composition struct {
 		Containers []compositionContainer `json:"containers"`
 		Error      *string                `json:"error"`
 	}
 	if err := c.doJSON(ctx, "GET", cvmPath(cvmID, "composition"), nil, &composition); err != nil {
-		return "", err
+		return nil, err
 	}
 	containers := composition.Containers
-	compositionError := ""
-	if composition.Error != nil {
-		compositionError = *composition.Error
+	if len(containers) == 0 && composition.Error != nil && *composition.Error != "" {
+		return nil, &APIError{Message: *composition.Error}
 	}
-	notFound := fmt.Errorf("phala: container %q not found in CVM %s", name, cvmID)
-
-	if name != "" {
-		for _, item := range containers {
-			for _, n := range item.Names {
-				if n == name || n == "/"+name {
-					if ep := item.endpoint(); ep != "" {
-						return ep, nil
-					}
-					if base != "" {
-						return joinContainerLogURL(base, name, auth)
-					}
-					return "", notFound
-				}
-			}
+	target := &containerTarget{cvmID: cvmID, info: info}
+	if name == "" {
+		if len(containers) == 0 {
+			return nil, errContainerNotFound()
 		}
-		var prefixed []compositionContainer
-		for _, item := range containers {
-			if strings.HasPrefix(item.ID, name) {
-				prefixed = append(prefixed, item)
-			}
-		}
-		if len(prefixed) > 1 {
-			labels := make([]string, 0, len(prefixed))
-			for _, item := range prefixed {
-				labels = append(labels, item.slug())
-			}
-			return "", fmt.Errorf("phala: ambiguous container prefix %q: %s", name, strings.Join(labels, ", "))
-		}
-		if len(prefixed) == 1 {
-			if ep := prefixed[0].endpoint(); ep != "" {
-				return ep, nil
-			}
-			if base != "" {
-				return joinContainerLogURL(base, prefixed[0].slug(), auth)
-			}
-		}
-		if len(containers) > 0 {
-			return "", notFound
-		}
-		if compositionError != "" {
-			return "", fmt.Errorf("phala: %s", compositionError)
-		}
-		if base != "" {
-			return joinContainerLogURL(base, name, auth)
-		}
-		return "", notFound
-	}
-
-	if compositionError != "" {
-		return "", fmt.Errorf("phala: %s", compositionError)
-	}
-	if len(containers) == 0 {
-		return "", fmt.Errorf("phala: no containers found for CVM %s", cvmID)
+		target.slug = containers[0].slug()
+		return target, nil
 	}
 	for _, item := range containers {
-		if ep := item.endpoint(); ep != "" {
-			return ep, nil
+		for _, n := range item.Names {
+			if n == name || n == "/"+name {
+				target.slug = strings.TrimPrefix(name, "/")
+				return target, nil
+			}
 		}
 	}
-	if base != "" {
-		return joinContainerLogURL(base, containers[0].slug(), auth)
+	var prefixed []compositionContainer
+	for _, item := range containers {
+		if strings.HasPrefix(item.ID, name) {
+			prefixed = append(prefixed, item)
+		}
 	}
-	return "", fmt.Errorf("phala: no log endpoints available for CVM %s", cvmID)
+	switch len(prefixed) {
+	case 0:
+		return nil, errContainerNotFound()
+	case 1:
+		target.slug = prefixed[0].slug()
+		return target, nil
+	default:
+		labels := make([]string, 0, len(prefixed))
+		for _, item := range prefixed {
+			labels = append(labels, item.slug())
+		}
+		return nil, errLogValidation("ambiguous container prefix %q matches: %s", name, strings.Join(labels, ", "))
+	}
+}
+
+// logURL builds a freshly signed URL for the next connection: one CVM info
+// lookup per connection (the first reuses the resolution lookup).
+func (t *containerTarget) logURL(ctx context.Context, c *Client) (string, error) {
+	info := t.info
+	t.info = nil
+	if info == nil {
+		var err error
+		if info, err = c.containerLogInfo(ctx, t.cvmID); err != nil {
+			return "", err
+		}
+	}
+	base := info.logURL("container_log_base")
+	if base == "" {
+		return "", fmt.Errorf("phala: no container log endpoint available for CVM %s", t.cvmID)
+	}
+	return joinContainerLogURL(base, t.slug, info.logURL("auth_query"))
+}
+
+// lazyContainerTarget resolves the container on the first connection attempt,
+// so transient lookup failures there follow the follow retry rules.
+type lazyTarget struct {
+	c      *Client
+	cvmID  string
+	name   string
+	target *containerTarget
+}
+
+func (c *Client) lazyContainerTarget(cvmID, name string) *lazyTarget {
+	return &lazyTarget{c: c, cvmID: cvmID, name: name}
+}
+
+func (l *lazyTarget) url(ctx context.Context) (string, error) {
+	if l.target == nil {
+		target, err := l.c.resolveContainer(ctx, l.cvmID, l.name)
+		if err != nil {
+			return "", err
+		}
+		l.target = target
+	}
+	return l.target.logURL(ctx, l.c)
+}
+
+// containerLogURL resolves the container and returns a signed URL (one-shot fetch).
+func (c *Client) containerLogURL(ctx context.Context, cvmID, name string) (string, error) {
+	target, err := c.resolveContainer(ctx, cvmID, name)
+	if err != nil {
+		return "", err
+	}
+	return target.logURL(ctx, c)
 }
 
 // logHTTPDo GETs a presigned log-gateway URL using the client's Transport and
@@ -614,7 +676,7 @@ func (c *Client) fetchLogBody(ctx context.Context, rawURL string) (*http.Respons
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		defer resp.Body.Close()
 		return nil, parseLogAccessError(resp)
 	}
@@ -685,8 +747,8 @@ func (c *Client) FetchCVMLogEntries(ctx context.Context, cvmID string, source Lo
 	if opts == nil {
 		opts = &LogsOptions{}
 	}
-	if opts.Format != "" && !strings.EqualFold(opts.Format, "ndjson") {
-		return nil, fmt.Errorf("phala: FetchCVMLogEntries requires format=ndjson")
+	if err := assertEntriesRequest("FetchCVMLogEntries", source, opts); err != nil {
+		return nil, err
 	}
 	if err := validateLogSource(source); err != nil {
 		return nil, err
@@ -739,14 +801,14 @@ func (c *Client) fetchContainerText(ctx context.Context, cvmID string, source Lo
 	}
 	defer resp.Body.Close()
 	var b strings.Builder
-	first := true
+	atBodyStart := true
 	err = readLines(resp.Body, func(line string) error {
-		// Without forced timestamps a guest record is only recognisable at the
-		// start of the body; later JSON-looking lines are container output.
-		if lerr := textLineError(trimLineEnding(line), first); lerr != nil {
+		// Mid-stream text lines may legitimately be {"error":...} JSON; only the
+		// start of the body can carry the guest agent error record.
+		if lerr := textLineError(trimLineEnding(line), atBodyStart); lerr != nil {
 			return lerr
 		}
-		first = false
+		atBodyStart = false
 		b.WriteString(applyANSIPolicy(line, opts.ANSI))
 		return nil
 	})
@@ -786,12 +848,8 @@ func (c *Client) FollowCVMLogEntries(ctx context.Context, cvmID string, source L
 		if opts == nil {
 			opts = &LogsOptions{}
 		}
-		if source.Type != "container" {
-			errs <- fmt.Errorf("phala: FollowCVMLogEntries supports container logs only")
-			return
-		}
-		if opts.Format != "" && !strings.EqualFold(opts.Format, "ndjson") {
-			errs <- fmt.Errorf("phala: FollowCVMLogEntries requires format=ndjson")
+		if err := assertEntriesRequest("FollowCVMLogEntries", source, opts); err != nil {
+			errs <- err
 			return
 		}
 		emit := func(e LogEntry) error { return sendValue(ctx, entries, e) }
@@ -873,25 +931,48 @@ func classifyFollowError(err error) followAction {
 	}
 }
 
+// classifyLookupError decides whether a failed URL lookup (CVM info or
+// composition) is retried: network errors, HTTP 5xx and 429 count as failures;
+// everything else (Public Logs off, missing container, invalid input) stops.
+func classifyLookupError(err error) followAction {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return followFailure
+	}
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && (apiErr.StatusCode >= 500 || apiErr.StatusCode == http.StatusTooManyRequests) {
+		return followFailure
+	}
+	return followStop
+}
+
 // runFollow implements the shared reconnect rules: every connection resolves a
-// fresh URL; failures back off 250 ms doubling to 5 s and give up after 5 in a
+// fresh URL (lookup failures follow classifyLookupError); failures back off 250 ms doubling to 5 s and give up after 5 in a
 // row; a connection that delivered records resets the failure counter even if
 // it later fails; quick clean ends without output back off and, for container
 // streams, stop after 5 in a row.
 func (c *Client) runFollow(ctx context.Context, plan followPlan) error {
 	failures, expired, emptyEnds := 0, 0, 0
+	var lastStart time.Time
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		rawURL, err := plan.requestURL(ctx)
-		if err != nil {
-			return err
+		if !lastStart.IsZero() {
+			if err := waitDuration(ctx, followMinConnectionInterval-time.Since(lastStart)); err != nil {
+				return err
+			}
 		}
+		lastStart = time.Now()
 		delivered := 0
-		resp, err := c.logHTTPDo(ctx, rawURL, true)
-		if err == nil {
-			if resp.StatusCode >= 400 {
+		rawURL, err := plan.requestURL(ctx)
+		lookupFailed := err != nil
+		var resp *http.Response
+		if !lookupFailed {
+			resp, err = c.logHTTPDo(ctx, rawURL, true)
+		}
+		if !lookupFailed && err == nil {
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 				err = parseLogAccessError(resp)
 				resp.Body.Close()
 			} else {
@@ -929,7 +1010,11 @@ func (c *Client) runFollow(ctx context.Context, plan followPlan) error {
 			return ctxErr
 		}
 		emptyEnds = 0
-		switch classifyFollowError(err) {
+		action := classifyFollowError(err)
+		if lookupFailed {
+			action = classifyLookupError(err)
+		}
+		switch action {
 		case followStop:
 			return err
 		case followExpiredURL:
@@ -939,7 +1024,7 @@ func (c *Client) runFollow(ctx context.Context, plan followPlan) error {
 			}
 		case followFailure:
 			if delivered > 0 {
-				failures = 0
+				failures, expired = 0, 0
 			}
 			failures++
 			if failures >= maxFollowFailures {
@@ -1026,11 +1111,13 @@ func (c *followCursor) query(q logQuery) logQuery {
 	return q
 }
 
+// reconnectSince is the last delivered timestamp second; before any timestamped
+// record it is the caller's since if set, else the second of the first HTTP 200.
 func (c *followCursor) reconnectSince() *int64 {
 	if c.since != nil {
 		return c.since
 	}
-	if c.callerSince != nil && *c.callerSince > *c.first200 {
+	if c.callerSince != nil {
 		return c.callerSince
 	}
 	return c.first200
@@ -1082,9 +1169,10 @@ func (c *Client) followContainerText(ctx context.Context, cvmID string, source L
 		return err
 	}
 	cur := newFollowCursor(opts, times)
+	target := c.lazyContainerTarget(cvmID, source.Name)
 	return c.runFollow(ctx, followPlan{
 		requestURL: func(ctx context.Context) (string, error) {
-			base, err := c.containerLogURL(ctx, cvmID, source.Name)
+			base, err := target.url(ctx)
 			if err != nil {
 				return "", err
 			}
@@ -1093,11 +1181,14 @@ func (c *Client) followContainerText(ctx context.Context, cvmID string, source L
 		},
 		accepted: cur.accepted,
 		consume: func(ctx context.Context, body io.Reader, delivered *int) error {
+			atBodyStart := true
 			return readLines(body, func(line string) error {
 				content := trimLineEnding(line)
-				if err := textLineError(content, true); err != nil {
+				// Only the start of the body can carry the guest agent error record.
+				if err := textLineError(content, atBodyStart); err != nil {
 					return err
 				}
+				atBodyStart = false
 				out := line
 				if second, rest, ok := parseTS(line); ok {
 					if !cur.admit(second, content) {
@@ -1128,9 +1219,10 @@ func (c *Client) followContainerEntries(ctx context.Context, cvmID string, sourc
 		return err
 	}
 	cur := newFollowCursor(opts, times)
+	target := c.lazyContainerTarget(cvmID, source.Name)
 	return c.runFollow(ctx, followPlan{
 		requestURL: func(ctx context.Context) (string, error) {
-			base, err := c.containerLogURL(ctx, cvmID, source.Name)
+			base, err := target.url(ctx)
 			if err != nil {
 				return "", err
 			}
@@ -1173,7 +1265,14 @@ func backoffDelay(attempt int) time.Duration {
 }
 
 func waitBackoff(ctx context.Context, attempt int) error {
-	timer := time.NewTimer(backoffDelay(attempt))
+	return waitDuration(ctx, backoffDelay(attempt))
+}
+
+func waitDuration(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return ctx.Err()
+	}
+	timer := time.NewTimer(d)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():

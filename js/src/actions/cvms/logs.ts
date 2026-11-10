@@ -1,6 +1,6 @@
 import type { Client } from "../../client";
 import { CvmIdSchema, type CvmIdInput } from "../../types/cvm_id";
-import { ResourceError } from "../../utils/errors";
+import { ResourceError, UnknownError } from "../../utils/errors";
 import { defaultUserAgent } from "../../user-agent";
 import { resolveLogTimeWindow } from "./log-time";
 
@@ -239,10 +239,7 @@ async function throwResponseError(response: Response): Promise<never> {
     : [];
   throw new LogAccessError({
     code: typeof envelope.error_code === "string" ? envelope.error_code : undefined,
-    message:
-      typeof envelope.message === "string"
-        ? envelope.message
-        : `HTTP ${response.status} ${response.statusText}`,
+    message: typeof envelope.message === "string" ? envelope.message : `HTTP ${response.status}`,
     httpStatus: response.status,
     suggestions,
     requestId: typeof envelope.request_id === "string" ? envelope.request_id : undefined,
@@ -262,6 +259,10 @@ function throwTextStreamError(line: string): void {
 
 function throwIfTextBodyErrors(text: string): void {
   throwIfGuestAgentError(text);
+  for (const line of text.split(/\r?\n/)) throwTextStreamError(line);
+}
+
+function throwIfGatewayTextErrors(text: string): void {
   for (const line of text.split(/\r?\n/)) throwTextStreamError(line);
 }
 
@@ -319,6 +320,26 @@ function guestAgentErrorMessage(text: string): string | undefined {
 }
 
 function throwIfGuestAgentError(text: string): void {
+  const taken = takeJsonObject(text);
+  if (taken) {
+    const parsed = taken.value as {
+      error?: unknown;
+      channel?: unknown;
+      message?: unknown;
+    };
+    if (
+      typeof parsed.error === "string" &&
+      parsed.channel === undefined &&
+      parsed.message === undefined
+    ) {
+      throw new LogAccessError({
+        code: "ERR-17-009",
+        message: parsed.error,
+        fromStreamBody: true,
+      });
+    }
+    return;
+  }
   const message = guestAgentErrorMessage(text);
   if (message !== undefined) {
     throw new LogAccessError({
@@ -329,7 +350,7 @@ function throwIfGuestAgentError(text: string): void {
   }
 }
 
-const ANSI_PATTERN = /\x1B\[[0-9;]*[A-Za-z]/g;
+const ANSI_PATTERN = /\x1b(?:\][^\x07\x1b]*(?:\x07|\x1b\\)|\[[0-?]*[ -/]*[@-~]|[ -/]*[0-~])/g;
 
 function stripAnsi(text: string): string {
   return text.replace(ANSI_PATTERN, "");
@@ -463,7 +484,7 @@ function parseStructuredLogsToEntries(input: string): CvmLogEntry[] {
 
 function decodeStructuredLogsText(input: string): string {
   return parseStructuredLogsToEntries(input)
-    .map((entry) => (entry.message === "" ? "\n" : entry.message))
+    .map((entry) => entry.message)
     .join("");
 }
 
@@ -511,13 +532,9 @@ function assertSupportedNodeLogOptions(options: CvmLogsOptions): void {
     options.format === "ndjson" && "format=ndjson",
   ].filter((option): option is string => Boolean(option));
   if (unsupported.length > 0) {
-    throw new Error(`${unsupported.join(", ")} not supported for serial/stdout/stderr logs`);
-  }
-  if (options.ansi && options.format === "ndjson") {
-    throw new LogAccessError({
-      code: "ERR-17-001",
-      message: "ansi is valid only with format=text",
-    });
+    throw clientValidationError(
+      `${unsupported.join(", ")} not supported for serial/stdout/stderr logs`,
+    );
   }
 }
 
@@ -567,14 +584,47 @@ async function assertContainerLogsEnabled(
   }
 }
 
-const CONTAINER_NAME_RE = /^[A-Za-z0-9_.-]+$/;
+const CONTAINER_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
+
+function clientValidationError(message: string): LogAccessError {
+  return new LogAccessError({ code: "ERR-17-001", message });
+}
+
+function resolveTimes(
+  since: CvmLogsOptions["since"],
+  until: CvmLogsOptions["until"],
+): { since?: number; until?: number } {
+  try {
+    return resolveLogTimeWindow(since, until);
+  } catch (error) {
+    throw clientValidationError(error instanceof Error ? error.message : String(error));
+  }
+}
 
 function assertSafeContainerName(name: string): string {
-  const slug = name.replace(/^\//, "");
-  if (!CONTAINER_NAME_RE.test(slug)) {
-    throw new Error(`Invalid container name '${name}'. Use letters, digits, '_', '.', and '-'.`);
+  if (!CONTAINER_NAME_RE.test(name) || name.includes("..")) {
+    throw clientValidationError(
+      `Invalid container name '${name}'. Use 1–128 characters starting with a letter or digit, then letters, digits, '_', '.', and '-'.`,
+    );
   }
-  return slug;
+  return name;
+}
+
+function assertContainerNameOption(name?: string): void {
+  if (name) assertSafeContainerName(name);
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  const error = new Error("This operation was aborted");
+  error.name = "AbortError";
+  throw error;
+}
+
+function untilReached(until: number | undefined, cursorSince?: number): boolean {
+  if (until === undefined) return false;
+  if (cursorSince !== undefined && cursorSince >= until) return true;
+  return Math.floor(Date.now() / 1000) >= until;
 }
 
 function joinContainerLogUrl(base: string, name: string, authQuery?: string | null): string {
@@ -591,34 +641,28 @@ function reconnectSinceValue(
   callerSince: number | undefined,
 ): number | undefined {
   if (cursorSince !== undefined) return cursorSince;
-  if (first200Second === undefined) return callerSince;
-  if (callerSince === undefined) return first200Second;
-  return Math.max(first200Second, callerSince);
+  if (callerSince !== undefined) return callerSince;
+  return first200Second;
 }
 
 function exactContainerNameMatch(container: ContainerInfo, name: string): boolean {
   return container.names.some((n) => n === name || n === `/${name}`);
 }
 
-async function getContainerLogEndpoint(
+function containerSlug(container: ContainerInfo, fallback: string): string {
+  return container.names[0]?.replace(/^\//, "") ?? container.id ?? fallback;
+}
+
+async function resolveContainerSlug(
   client: Client,
   id: CvmIdInput | string,
   containerName?: string,
   matchContainerIdPrefix = true,
   signal?: AbortSignal,
 ): Promise<string> {
+  throwIfAborted(signal);
+  assertContainerNameOption(containerName);
   const cvmId = resolveCvmId(id);
-  let base: string | null = null;
-  let auth: string | null = null;
-  if (containerName) {
-    const info = await getCvmInfoLogs(client, cvmId, signal);
-    if (info.public_logs === false) {
-      throw containerLogsDisabledError();
-    }
-    base = info.logs?.container_log_base ?? null;
-    auth = info.logs?.auth_query ?? null;
-  }
-
   const composition = (await client.get(`/cvms/${cvmId}/composition`, {
     signal,
   })) as CvmCompositionResponse;
@@ -628,47 +672,67 @@ async function getContainerLogEndpoint(
 
   if (containerName) {
     const exact = containers.filter((item) => exactContainerNameMatch(item, containerName));
-    if (exact.length > 0) {
-      const withEndpoint = exact.find((item) => item.log_endpoint);
-      if (withEndpoint?.log_endpoint) return withEndpoint.log_endpoint;
-      if (base) return joinContainerLogUrl(base, containerName, auth);
-      throw new Error(`Container '${containerName}' not found in CVM '${cvmId}'`);
-    }
+    if (exact[0]) return containerSlug(exact[0], containerName);
     if (matchContainerIdPrefix) {
       const prefixed = containers.filter((item) => item.id.startsWith(containerName));
       if (prefixed.length > 1) {
         const labels = prefixed.map((item) => item.names[0] ?? item.id).join(", ");
-        throw new Error(`Ambiguous container prefix '${containerName}': ${labels}`);
+        throw clientValidationError(`Ambiguous container prefix '${containerName}': ${labels}`);
       }
-      if (prefixed.length === 1) {
-        const match = prefixed[0];
-        if (match?.log_endpoint) return match.log_endpoint;
-        const slug = match?.names[0]?.replace(/^\//, "") ?? match?.id;
-        if (base && slug) return joinContainerLogUrl(base, slug, auth);
-      }
+      if (prefixed[0]) return containerSlug(prefixed[0], containerName);
     }
     if (containers.length > 0) {
-      throw new Error(`Container '${containerName}' not found in CVM '${cvmId}'`);
+      throw new LogAccessError({ code: "ERR-17-007", message: "Container not found" });
     }
     if (compositionError) {
-      throw new Error(compositionError);
+      throw new LogAccessError({ message: compositionError });
     }
-    if (base) return joinContainerLogUrl(base, containerName, auth);
-    throw new Error(`Container '${containerName}' not found in CVM '${cvmId}'`);
+    throw new LogAccessError({ code: "ERR-17-007", message: "Container not found" });
   }
 
   if (compositionError) {
-    throw new Error(compositionError);
+    throw new LogAccessError({ message: compositionError });
   }
   if (!containers.length) {
     throw new Error(`No containers found for CVM '${cvmId}'`);
   }
-  const withEndpoint = containers.find((item) => item.log_endpoint);
-  if (withEndpoint?.log_endpoint) return withEndpoint.log_endpoint;
   const fallback = containers[0];
-  const slug = fallback?.names[0]?.replace(/^\//, "") ?? fallback?.id;
-  if (base && slug) return joinContainerLogUrl(base, slug, auth);
-  throw new Error(`No log endpoints available for CVM '${cvmId}'`);
+  if (!fallback) throw new Error(`No containers found for CVM '${cvmId}'`);
+  return containerSlug(fallback, "app");
+}
+
+async function containerLogUrlFromInfo(
+  client: Client,
+  id: CvmIdInput | string,
+  slug: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const info = await getCvmInfoLogs(client, resolveCvmId(id), signal);
+  if (info.public_logs === false) {
+    throw containerLogsDisabledError();
+  }
+  const base = info.logs?.container_log_base ?? null;
+  if (!base) {
+    throw new Error(`No log endpoints available for CVM '${resolveCvmId(id)}'`);
+  }
+  return joinContainerLogUrl(base, slug, info.logs?.auth_query);
+}
+
+async function getContainerLogEndpoint(
+  client: Client,
+  id: CvmIdInput | string,
+  containerName?: string,
+  matchContainerIdPrefix = true,
+  signal?: AbortSignal,
+): Promise<string> {
+  const slug = await resolveContainerSlug(
+    client,
+    id,
+    containerName,
+    matchContainerIdPrefix,
+    signal,
+  );
+  return containerLogUrlFromInfo(client, id, slug, signal);
 }
 
 function waitForReconnect(signal: AbortSignal | undefined, delayMs: number): Promise<void> {
@@ -716,7 +780,16 @@ async function followLogRequests(
   let failureCount = 0;
   let expiredRetries = 0;
   let emptyEnds = 0;
+  let lastConnectionStartedAt = 0;
+  let haveStarted = false;
   while (!signal?.aborted) {
+    if (haveStarted) {
+      const waitMs = 1000 - (performance.now() - lastConnectionStartedAt);
+      if (waitMs > 0) await waitForReconnect(signal, waitMs);
+      if (signal?.aborted) return;
+    }
+    lastConnectionStartedAt = performance.now();
+    haveStarted = true;
     let deliveredThisConnection = false;
     const markDelivered = () => {
       deliveredThisConnection = true;
@@ -754,7 +827,7 @@ async function followLogRequests(
         return;
       }
 
-      let retryError = error;
+      const retryError = error;
       if (error instanceof LogAccessError && error.fromStreamBody) {
         throw error;
       }
@@ -762,12 +835,7 @@ async function followLogRequests(
       if (error instanceof LogAccessError && error.code === "ERR-17-003") {
         expiredRetries += 1;
         if (expiredRetries > 3) throw error;
-        try {
-          await refreshCvm?.();
-          continue;
-        } catch (refreshError) {
-          retryError = refreshError;
-        }
+        continue;
       }
 
       const status = getErrorHttpStatus(retryError);
@@ -780,16 +848,13 @@ async function followLogRequests(
         "ERR-17-012",
       ]);
       if (code === "ERR-17-002") {
-        try {
-          await refreshCvm?.();
-        } catch (refreshError) {
-          retryError = refreshError;
-        }
+        // Refetch on the next loop via resolveUrl; counts as a failure below.
       } else if (
         retryableCodes.has(code ?? "") ||
         status === 429 ||
         (status !== undefined && status >= 500) ||
-        retryError instanceof TypeError
+        retryError instanceof TypeError ||
+        retryError instanceof UnknownError
       ) {
         // retry as a failure below
       } else {
@@ -813,9 +878,10 @@ export async function fetchCvmChannelLogs(
   channel: CvmLogChannel,
   options: CvmLogsOptions = {},
 ): Promise<string> {
+  throwIfAborted(options.signal);
   assertSupportedNodeLogOptions(options);
-  const times = resolveLogTimeWindow(options.since, options.until);
-  const baseUrl = await getCvmLogEndpoint(client, id, channel);
+  const times = resolveTimes(options.since, options.until);
+  const baseUrl = await getCvmLogEndpoint(client, id, channel, options.signal);
   const url = buildLogUrl(baseUrl, {
     since: times.since,
     until: times.until,
@@ -825,7 +891,7 @@ export async function fetchCvmChannelLogs(
   const response = await logFetch(client, url, options.signal);
   if (!response.ok) await throwResponseError(response);
   const text = await response.text();
-  throwIfTextBodyErrors(text);
+  throwIfGatewayTextErrors(text);
   return applyAnsiPolicy(
     text
       .split(/(?<=\n)/)
@@ -846,9 +912,10 @@ export async function streamCvmChannelLogs(
   options: CvmLogsOptions = {},
   signal?: AbortSignal,
 ): Promise<void> {
+  throwIfAborted(signal ?? options.signal);
   assertSupportedNodeLogOptions(options);
   const abort = signal ?? options.signal;
-  const times = resolveLogTimeWindow(options.since, options.until);
+  const times = resolveTimes(options.since, options.until);
   let firstRequest = true;
   await followLogRequests(
     client,
@@ -865,9 +932,7 @@ export async function streamCvmChannelLogs(
     },
     (response, markDelivered) => streamResponse(response, onData, markDelivered, options.ansi),
     abort,
-    async () => {
-      await getCvmInfoLogs(client, resolveCvmId(id), abort);
-    },
+    undefined,
     false,
     () => {
       firstRequest = false;
@@ -880,19 +945,15 @@ export async function fetchContainerLogsEntries(
   id: CvmIdInput | string,
   options: CvmLogsOptions & { container?: string; matchContainerIdPrefix?: boolean } = {},
 ): Promise<CvmLogEntry[]> {
-  if (options.ansi && (options.format ?? "ndjson") === "ndjson") {
-    throw new LogAccessError({
-      code: "ERR-17-001",
-      message: "ansi is valid only with format=text",
-    });
-  }
-  const times = resolveLogTimeWindow(options.since, options.until);
-  await assertContainerLogsEnabled(client, id);
+  throwIfAborted(options.signal);
+  assertContainerNameOption(options.container);
+  const times = resolveTimes(options.since, options.until);
   const baseUrl = await getContainerLogEndpoint(
     client,
     id,
     options.container,
     options.matchContainerIdPrefix ?? true,
+    options.signal,
   );
   const url = buildLogUrl(baseUrl, {
     ...times,
@@ -913,14 +974,16 @@ export async function fetchContainerLogs(
   id: CvmIdInput | string,
   options: CvmLogsOptions & { container?: string; matchContainerIdPrefix?: boolean } = {},
 ): Promise<string> {
+  throwIfAborted(options.signal);
+  assertContainerNameOption(options.container);
   if (options.format === "text") {
-    const times = resolveLogTimeWindow(options.since, options.until);
-    await assertContainerLogsEnabled(client, id);
+    const times = resolveTimes(options.since, options.until);
     const baseUrl = await getContainerLogEndpoint(
       client,
       id,
       options.container,
       options.matchContainerIdPrefix ?? true,
+      options.signal,
     );
     const url = buildLogUrl(baseUrl, {
       ...times,
@@ -939,7 +1002,7 @@ export async function fetchContainerLogs(
     ...options,
     format: "ndjson",
   });
-  return entries.map((entry) => (entry.message === "" ? "\n" : entry.message)).join("");
+  return entries.map((entry) => entry.message).join("");
 }
 
 export async function streamContainerLogsEntries(
@@ -950,8 +1013,9 @@ export async function streamContainerLogsEntries(
   signal?: AbortSignal,
 ): Promise<void> {
   const abort = signal ?? options.signal;
-  const times = resolveLogTimeWindow(options.since, options.until);
-  await assertContainerLogsEnabled(client, id, abort);
+  throwIfAborted(abort);
+  assertContainerNameOption(options.container);
+  const times = resolveTimes(options.since, options.until);
   const cursor: {
     since?: number;
     boundarySecond?: number;
@@ -960,15 +1024,16 @@ export async function streamContainerLogsEntries(
   let replayCounts = new Map<string, number>();
   let firstRequest = true;
   let first200Second: number | undefined;
+  const slug = await resolveContainerSlug(
+    client,
+    id,
+    options.container,
+    options.matchContainerIdPrefix ?? true,
+    abort,
+  );
 
   const buildRequestUrl = async (): Promise<string> => {
-    const baseUrl = await getContainerLogEndpoint(
-      client,
-      id,
-      options.container,
-      options.matchContainerIdPrefix ?? true,
-      abort,
-    );
+    const baseUrl = await containerLogUrlFromInfo(client, id, slug, abort);
     const tail = firstRequest ? options.tail : "all";
     replayCounts = new Map(cursor.boundaryCounts);
     return buildLogUrl(baseUrl, {
@@ -1027,21 +1092,20 @@ export async function streamContainerLogsEntries(
       return delivered;
     },
     abort,
-    async () => {
-      await assertContainerLogsEnabled(client, id, abort);
-    },
+    undefined,
     true,
     () => {
       firstRequest = false;
       if (first200Second === undefined) first200Second = Math.floor(Date.now() / 1000);
     },
-    () => times.until !== undefined && cursor.since !== undefined && cursor.since >= times.until,
+    () => untilReached(times.until, cursor.since),
   );
 }
 
 async function streamContainerText(
   response: Response,
   onData: (data: string) => void,
+  ansi?: boolean,
 ): Promise<boolean> {
   const reader = response.body?.getReader();
   if (!reader) throw new Error("No response body available for streaming");
@@ -1057,9 +1121,9 @@ async function streamContainerText(
       while (newline >= 0) {
         const line = buffer.slice(0, newline);
         buffer = buffer.slice(newline + 1);
+        if (!delivered) throwIfGuestAgentError(line);
         throwTextStreamError(line);
-        throwIfGuestAgentError(line);
-        onData(line + "\n");
+        onData(applyAnsiPolicy(line + "\n", ansi));
         delivered = true;
         newline = buffer.indexOf("\n");
       }
@@ -1069,9 +1133,9 @@ async function streamContainerText(
       }
     }
     if (buffer) {
+      if (!delivered) throwIfGuestAgentError(buffer);
       throwTextStreamError(buffer);
-      throwIfGuestAgentError(buffer);
-      onData(buffer);
+      onData(applyAnsiPolicy(buffer, ansi));
       delivered = true;
     }
   } finally {
@@ -1090,8 +1154,9 @@ export async function streamContainerLogs(
 ): Promise<void> {
   if (options.format === "text") {
     const abort = signal ?? options.signal;
-    const times = resolveLogTimeWindow(options.since, options.until);
-    await assertContainerLogsEnabled(client, id, abort);
+    throwIfAborted(abort);
+    assertContainerNameOption(options.container);
+    const times = resolveTimes(options.since, options.until);
     const cursor: {
       since?: number;
       boundarySecond?: number;
@@ -1100,16 +1165,17 @@ export async function streamContainerLogs(
     let replayCounts = new Map<string, number>();
     let firstRequest = true;
     let first200Second: number | undefined;
+    const slug = await resolveContainerSlug(
+      client,
+      id,
+      options.container,
+      options.matchContainerIdPrefix ?? true,
+      abort,
+    );
     await followLogRequests(
       client,
       async () => {
-        const baseUrl = await getContainerLogEndpoint(
-          client,
-          id,
-          options.container,
-          options.matchContainerIdPrefix ?? true,
-          abort,
-        );
+        const baseUrl = await containerLogUrlFromInfo(client, id, slug, abort);
         const tail = firstRequest ? options.tail : "all";
         replayCounts = new Map(cursor.boundaryCounts);
         return buildLogUrl(baseUrl, {
@@ -1126,69 +1192,68 @@ export async function streamContainerLogs(
       },
       async (response, markDelivered) => {
         let delivered = false;
-        await streamContainerText(response, (line) => {
-          const raw = line.endsWith("\n") ? line.slice(0, -1) : line;
-          throwTextStreamError(raw);
-          const timestamp = parseTimestampedMessage(raw);
-          const out = options.timestamps
-            ? line
-            : timestamp.timestamp
-              ? `${timestamp.message ?? ""}${line.endsWith("\n") ? "\n" : ""}`
-              : line;
-          if (timestamp.second === undefined || !timestamp.timestamp) {
-            delivered = true;
-            markDelivered();
-            onData(out);
-            return;
-          }
-          const key = raw;
-          if (cursor.boundarySecond !== undefined && timestamp.second < cursor.boundarySecond) {
-            delivered = true;
-            markDelivered();
-            onData(out);
-            return;
-          }
-          if (timestamp.second === cursor.boundarySecond) {
-            const replayCount = replayCounts.get(key) ?? 0;
-            if (replayCount > 0) {
-              replayCounts.set(key, replayCount - 1);
+        await streamContainerText(
+          response,
+          (line) => {
+            const raw = line.endsWith("\n") ? line.slice(0, -1) : line;
+            throwTextStreamError(raw);
+            const timestamp = parseTimestampedMessage(raw);
+            const out = applyAnsiPolicy(
+              options.timestamps
+                ? line
+                : timestamp.timestamp
+                  ? `${timestamp.message ?? ""}${line.endsWith("\n") ? "\n" : ""}`
+                  : line,
+              options.ansi,
+            );
+            if (timestamp.second === undefined || !timestamp.timestamp) {
+              delivered = true;
+              markDelivered();
+              onData(out);
               return;
             }
-          } else if (
-            cursor.boundarySecond === undefined ||
-            timestamp.second > cursor.boundarySecond
-          ) {
-            cursor.boundarySecond = timestamp.second;
-            cursor.boundaryCounts.clear();
-          }
-          cursor.since = Math.max(cursor.since ?? timestamp.second, timestamp.second);
-          cursor.boundaryCounts.set(key, (cursor.boundaryCounts.get(key) ?? 0) + 1);
-          delivered = true;
-          markDelivered();
-          onData(out);
-        });
+            const key = raw;
+            if (cursor.boundarySecond !== undefined && timestamp.second < cursor.boundarySecond) {
+              delivered = true;
+              markDelivered();
+              onData(out);
+              return;
+            }
+            if (timestamp.second === cursor.boundarySecond) {
+              const replayCount = replayCounts.get(key) ?? 0;
+              if (replayCount > 0) {
+                replayCounts.set(key, replayCount - 1);
+                return;
+              }
+            } else if (
+              cursor.boundarySecond === undefined ||
+              timestamp.second > cursor.boundarySecond
+            ) {
+              cursor.boundarySecond = timestamp.second;
+              cursor.boundaryCounts.clear();
+            }
+            cursor.since = Math.max(cursor.since ?? timestamp.second, timestamp.second);
+            cursor.boundaryCounts.set(key, (cursor.boundaryCounts.get(key) ?? 0) + 1);
+            delivered = true;
+            markDelivered();
+            onData(out);
+          },
+          options.ansi,
+        );
         return delivered;
       },
       abort,
-      async () => {
-        await assertContainerLogsEnabled(client, id, abort);
-      },
+      undefined,
       true,
       () => {
         firstRequest = false;
         if (first200Second === undefined) first200Second = Math.floor(Date.now() / 1000);
       },
-      () => times.until !== undefined && cursor.since !== undefined && cursor.since >= times.until,
+      () => untilReached(times.until, cursor.since),
     );
     return;
   }
-  return streamContainerLogsEntries(
-    client,
-    id,
-    (entry) => onData(entry.message === "" ? "\n" : entry.message),
-    options,
-    signal,
-  );
+  return streamContainerLogsEntries(client, id, (entry) => onData(entry.message), options, signal);
 }
 
 export async function fetchCvmLogs(
@@ -1197,6 +1262,8 @@ export async function fetchCvmLogs(
   source: CvmLogSource,
   options: CvmLogsOptions = {},
 ): Promise<string | CvmLogEntry[]> {
+  throwIfAborted(options.signal);
+  if (source.type === "container") assertContainerNameOption(source.name);
   if (source.type === "node") {
     return fetchCvmChannelLogs(client, id, source.channel, options);
   }
@@ -1220,6 +1287,7 @@ export async function* followCvmLogs(
   source: CvmLogSource,
   options: CvmLogsOptions = {},
 ): AsyncGenerator<string | CvmLogEntry> {
+  if (source.type === "container") assertContainerNameOption(source.name);
   const pending: Array<string | CvmLogEntry> = [];
   let wake: (() => void) | undefined;
   let done = false;

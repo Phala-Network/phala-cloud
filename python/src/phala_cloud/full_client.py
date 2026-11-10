@@ -1731,7 +1731,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     def _logs_api_get(self, path: str) -> Any:
         headers = self.config.merged_headers(_logs_api_headers(path))
         response = self._client.get(path, headers=headers, follow_redirects=False)
-        if response.status_code >= 400:
+        if not response.is_success:
             raise self._to_api_error(response)
         return response.json()
 
@@ -1745,7 +1745,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         until: str | int | None = None,
         timestamps: bool = False,
         ansi: bool = False,
-        format: CvmLogFormat = "text",
+        format: CvmLogFormat | None = None,
         log_http: httpx.Client | None = None,
     ) -> str | list[CvmLogEntry]:
         return _fetch_cvm_logs(
@@ -2817,7 +2817,7 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
     async def _logs_api_get(self, path: str) -> Any:
         headers = self.config.merged_headers(_logs_api_headers(path))
         response = await self._client.get(path, headers=headers, follow_redirects=False)
-        if response.status_code >= 400:
+        if not response.is_success:
             raise self._to_api_error(response)
         return response.json()
 
@@ -2831,7 +2831,7 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         until: str | int | None = None,
         timestamps: bool = False,
         ansi: bool = False,
-        format: CvmLogFormat = "text",
+        format: CvmLogFormat | None = None,
         log_http: httpx.AsyncClient | None = None,
     ) -> str | list[CvmLogEntry]:
         return await _afetch_cvm_logs(

@@ -14,6 +14,7 @@ import pytest
 import phala_cloud.logs as logs
 from phala_cloud import AsyncPhalaCloud, PhalaCloud
 from phala_cloud.client import DEFAULT_API_VERSION
+from phala_cloud.errors import ApiError
 from phala_cloud.logs import (
     CVM_LOGS_INFO_API_VERSION,
     LogAccessError,
@@ -28,9 +29,16 @@ BASE_SECOND = 1_794_225_600
 SIGNED_QUERY = "uid=7&exp=1&kid=test&sig=a/b+c="
 NODE_SERIAL_URL = f"https://cloud-logs.example/logs/123/node/serial?{SIGNED_QUERY}"
 CONTAINER_URL = f"https://cloud-logs.example/logs/123/container/app?{SIGNED_QUERY}"
+CONTAINER_LOG_BASE = "https://cloud-logs.example/logs/123/container"
 DETAIL: dict[str, Any] = {
     "public_logs": True,
-    "logs": {"serial": NODE_SERIAL_URL, "stdout": None, "stderr": None},
+    "logs": {
+        "serial": NODE_SERIAL_URL,
+        "stdout": None,
+        "stderr": None,
+        "container_log_base": CONTAINER_LOG_BASE,
+        "auth_query": SIGNED_QUERY,
+    },
 }
 COMPOSITION: dict[str, Any] = {
     "containers": [{"id": "0123abcd", "names": ["/app"], "log_endpoint": CONTAINER_URL}]
@@ -81,6 +89,7 @@ class _Body(httpx.SyncByteStream, httpx.AsyncByteStream):
 
     def _end(self) -> None:
         self._clock.monotonic += self._reply.idle_seconds
+        self._clock.wall += self._reply.idle_seconds
         if self._reply.read_error:
             raise httpx.ReadError("connection reset by peer")
 
@@ -150,6 +159,33 @@ def clock(monkeypatch: pytest.MonkeyPatch) -> FakeClock:
     monkeypatch.setattr(logs, "_monotonic", lambda: fake.monotonic)
     monkeypatch.setattr(logs, "_wall_clock", lambda: fake.wall)
     return fake
+
+
+REAL_WAIT_SYNC = logs._wait_sync
+REAL_WAIT_ASYNC = logs._wait_async
+
+
+@pytest.fixture(autouse=True)
+def waits(monkeypatch: pytest.MonkeyPatch, clock: FakeClock) -> list[float]:
+    """Record reconnect waits and advance the fake monotonic clock instead of sleeping."""
+    recorded: list[float] = []
+
+    def wait_sync(_stop: threading.Event, seconds: float) -> bool:
+        recorded.append(seconds)
+        clock.monotonic += seconds
+        return False
+
+    async def wait_async(seconds: float) -> None:
+        wait_sync(threading.Event(), seconds)
+
+    monkeypatch.setattr(logs, "_wait_sync", wait_sync)
+    monkeypatch.setattr(logs, "_wait_async", wait_async)
+    return recorded
+
+
+def use_real_waits(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(logs, "_wait_sync", REAL_WAIT_SYNC)
+    monkeypatch.setattr(logs, "_wait_async", REAL_WAIT_ASYNC)
 
 
 def run_follow(
@@ -377,6 +413,17 @@ def test_quiet_reconnect_keeps_later_caller_since(mode: str, clock: FakeClock) -
 
 
 @pytest.mark.parametrize("mode", MODES)
+def test_reconnect_without_records_keeps_earlier_caller_since(mode: str, clock: FakeClock) -> None:
+    # since=100 is long before the first 200; a reconnect must not move it to now.
+    server = LogServer([body(read_error=True), body(record("later\n"))], clock)
+    _items, error = run_follow(server, mode, source=CONTAINER, since=100, tail="all", limit=1)
+    assert error is None
+    for url in server.log_calls:
+        assert "since=100&" in url
+        assert "tail=all" in url
+
+
+@pytest.mark.parametrize("mode", MODES)
 def test_reconnect_after_records_dedupes_boundary_second(mode: str, clock: FakeClock) -> None:
     repeated = record(stamp(0, "repeated\n"))
     server = LogServer(
@@ -429,10 +476,29 @@ def test_clean_end_after_until_finishes_without_error(mode: str, clock: FakeCloc
 
 
 @pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize("fmt", [None, "text"])
+def test_until_passed_on_clean_end_never_reports_stopped(
+    mode: str, fmt: str | None, clock: FakeClock
+) -> None:
+    # No record reaches until; four quick empty ends follow, and the fifth clean
+    # end happens after until. Without the until rule it would be the
+    # "may have stopped" error.
+    payload = stamp(1, "one\n") if fmt == "text" else record(stamp(1, "one\n"))
+    server = LogServer([body(payload)] + [body()] * 4 + [body(idle_seconds=3)], clock)
+    items, error = run_follow(server, mode, source=CONTAINER, format=fmt, until=BASE_SECOND + 3)
+    assert error is None
+    assert len(items) == 1
+    assert clock.wall >= BASE_SECOND + 3
+    assert len(server.log_calls) == 6
+
+
+@pytest.mark.parametrize("mode", MODES)
 def test_node_rejects_until(mode: str, clock: FakeClock) -> None:
     server = LogServer([], clock)
-    with pytest.raises(ValueError, match="until"):
+    with pytest.raises(LogAccessError, match="until") as err:
         run_follow(server, mode, source=NODE, until=BASE_SECOND)
+    assert err.value.code == "ERR-17-001"
+    assert err.value.http_status is None
 
 
 @pytest.mark.parametrize("mode", MODES)
@@ -507,12 +573,245 @@ def test_network_failures_stop_after_five(mode: str, clock: FakeClock) -> None:
 
 
 @pytest.mark.parametrize("mode", MODES)
-def test_missing_container_stops_without_retry(mode: str, clock: FakeClock) -> None:
-    server = LogServer([], clock)
-    _items, error = run_follow(server, mode, source={"type": "container", "name": "nope"})
-    assert isinstance(error, ValueError)
-    assert "not found" in str(error)
+@pytest.mark.parametrize(
+    ("source", "composition"),
+    [
+        ({"type": "container", "name": "nope"}, COMPOSITION),
+        ({"type": "container"}, {"containers": []}),
+    ],
+)
+def test_missing_container_is_err_17_007_and_not_retried(
+    mode: str, source: logs.CvmLogSource, composition: dict[str, Any], clock: FakeClock
+) -> None:
+    server = LogServer([], clock, composition=composition)
+    with pytest.raises(LogAccessError) as err:
+        run_fetch(server, mode, source=source)
+    _items, error = run_follow(server, mode, source=source)
+    for value in (err.value, error):
+        assert isinstance(value, LogAccessError)
+        assert value.code == "ERR-17-007"
+        assert str(value) == "Container not found"
+        assert value.http_status is None
+    # One lookup round each for fetch and follow; follow does not retry.
+    assert server.api_calls == ["/cvms/app_test", "/cvms/app_test/composition"] * 2
     assert server.log_calls == []
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_ambiguous_container_prefix_is_err_17_001_with_candidates(
+    mode: str, clock: FakeClock
+) -> None:
+    composition = {
+        "containers": [
+            {"id": "abc123", "names": ["/web"], "log_endpoint": CONTAINER_URL},
+            {"id": "abc456", "names": ["/worker"], "log_endpoint": CONTAINER_URL},
+        ]
+    }
+    server = LogServer([], clock, composition=composition)
+    source: logs.CvmLogSource = {"type": "container", "name": "abc"}
+    with pytest.raises(LogAccessError) as err:
+        run_fetch(server, mode, source=source)
+    _items, error = run_follow(server, mode, source=source)
+    for value in (err.value, error):
+        assert isinstance(value, LogAccessError)
+        assert value.code == "ERR-17-001"
+        assert value.http_status is None
+        assert str(value) == "Ambiguous container prefix 'abc': web, worker"
+    assert len(server.api_calls) == 4
+    assert server.log_calls == []
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_missing_node_endpoint_is_a_log_access_error(mode: str, clock: FakeClock) -> None:
+    server = LogServer([], clock)
+    source: logs.CvmLogSource = {"type": "node", "channel": "stderr"}
+    with pytest.raises(LogAccessError, match="No stderr log endpoint"):
+        run_fetch(server, mode, source=source)
+    _items, error = run_follow(server, mode, source=source)
+    assert isinstance(error, LogAccessError)
+    assert server.log_calls == []
+
+
+@pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize("source", [NODE, CONTAINER])
+def test_connections_start_at_least_one_second_apart(
+    mode: str, source: logs.CvmLogSource, clock: FakeClock, waits: list[float]
+) -> None:
+    # The VMM can answer 200 with a single error-looking line and end at once.
+    # That counts as output, yet the next connection must not start immediately.
+    line = "vmm: guest is not running\n"
+    payload = line if source is NODE else record(line)
+    starts: list[float] = []
+    server = LogServer([body(payload), body(payload), body(payload)], clock)
+    handler = server.handler
+
+    def timed_handler(request: httpx.Request) -> httpx.Response:
+        starts.append(clock.monotonic)
+        return handler(request)
+
+    server.handler = timed_handler  # type: ignore[method-assign]
+    items, error = run_follow(server, mode, source=source, limit=3)
+    assert error is None
+    assert len(items) == 3
+    assert waits == [1.0, 1.0]
+    assert [later - earlier for earlier, later in zip(starts, starts[1:], strict=False)] == [
+        1.0,
+        1.0,
+    ]
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_slow_connection_reconnects_without_extra_wait(
+    mode: str, clock: FakeClock, waits: list[float]
+) -> None:
+    server = LogServer([body("one\n", idle_seconds=2), body("two\n")], clock)
+    items, error = run_follow(server, mode, source=NODE, limit=2)
+    assert error is None
+    assert items == ["one\n", "two\n"]
+    assert waits == []
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_backoff_longer_than_interval_is_kept(
+    monkeypatch: pytest.MonkeyPatch, mode: str, clock: FakeClock, waits: list[float]
+) -> None:
+    monkeypatch.setattr(logs, "_backoff_delay", lambda _attempt: 4.0)
+    server = LogServer([http_error(503, "ERR-17-012"), body("ok\n")], clock)
+    items, error = run_follow(server, mode, source=NODE, limit=1)
+    assert error is None
+    assert waits == [4.0]
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_bare_200_does_not_reset_expired_counter(mode: str, clock: FakeClock) -> None:
+    expired = http_error(401, "ERR-17-003", "URL expired")
+    # A 200 that fails before any record is not a recovery for the expired counter.
+    server = LogServer([expired] * 3 + [body(read_error=True), expired], clock)
+    _items, error = run_follow(server, mode, source=NODE)
+    assert isinstance(error, LogAccessError)
+    assert error.code == "ERR-17-003"
+    assert len(server.log_calls) == 5
+
+
+@pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize("recovery", ["records", "clean_end"])
+def test_expired_counter_resets_after_records_or_clean_end(
+    mode: str, recovery: str, clock: FakeClock
+) -> None:
+    expired = http_error(401, "ERR-17-003", "URL expired")
+    middle = body("x\n", read_error=True) if recovery == "records" else body()
+    server = LogServer([expired] * 3 + [middle] + [expired] * 3 + [body("y\n")], clock)
+    items, error = run_follow(server, mode, source=NODE, limit=2 if recovery == "records" else 1)
+    assert error is None
+    assert items[-1] == "y\n"
+    assert len(server.log_calls) == 8
+
+
+@pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize("status", [301, 302, 304, 307])
+def test_non_2xx_log_response_is_an_error(mode: str, status: int, clock: FakeClock) -> None:
+    server = LogServer([Reply(status=status, chunks=("moved",))] * 2, clock)
+    with pytest.raises(LogAccessError) as err:
+        run_fetch(server, mode, source=NODE)
+    assert err.value.http_status == status
+    assert str(err.value) == f"HTTP {status}"
+    _items, error = run_follow(server, mode, source=NODE)
+    assert isinstance(error, LogAccessError)
+    assert error.http_status == status
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_http_error_without_envelope_uses_status_message(mode: str, clock: FakeClock) -> None:
+    server = LogServer([Reply(status=500, chunks=("<html>oops</html>",))], clock)
+    with pytest.raises(LogAccessError) as err:
+        run_fetch(server, mode, source=NODE)
+    assert str(err.value) == "HTTP 500"
+    assert err.value.code is None
+    assert err.value.http_status == 500
+
+
+@pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize(
+    ("source", "options"),
+    [
+        (NODE, {"timestamps": True}),
+        (NODE, {"since": "10m"}),
+        (NODE, {"format": "ndjson"}),
+        (CONTAINER, {"since": "yesterday"}),
+        (CONTAINER, {"until": "999999999999999999999d"}),
+        (CONTAINER, {"since": "106752d"}),
+    ],
+)
+def test_client_validation_errors_are_err_17_001_before_any_request(
+    mode: str, source: logs.CvmLogSource, options: dict[str, Any], clock: FakeClock
+) -> None:
+    server = LogServer([], clock)
+    for run in (run_fetch, run_follow):
+        with pytest.raises(LogAccessError) as err:
+            run(server, mode, source=source, **options)
+        assert err.value.code == "ERR-17-001"
+        assert err.value.http_status is None
+    assert server.api_calls == []
+    assert server.log_calls == []
+
+
+def test_relative_time_at_duration_limit_is_accepted() -> None:
+    # 106751 days fits a signed 64-bit nanosecond duration; 106752 days does not.
+    resolved = logs.resolve_log_time_window("106751d", None, now_ms=0)
+    assert resolved == {"since": -106751 * 86_400}
+    with pytest.raises(ValueError, match="too far"):
+        logs.resolve_log_time_window("106752d", None, now_ms=0)
+
+
+@pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize(
+    ("source", "slug"),
+    [
+        ({"type": "container", "name": "app"}, "app"),
+        ({"type": "container", "name": "0123"}, "app"),  # ID prefix
+        ({"type": "container"}, "app"),  # default container
+    ],
+)
+def test_follow_resolves_container_once_then_only_refreshes_info(
+    mode: str, source: logs.CvmLogSource, slug: str, clock: FakeClock
+) -> None:
+    signed = [f"uid=7&exp={n}&kid=test&sig=s{n}" for n in range(4)]
+    infos = [
+        {**DETAIL, "logs": {"container_log_base": CONTAINER_LOG_BASE, "auth_query": query}}
+        for query in signed
+    ]
+    server = LogServer([body(record(f"line {n}\n")) for n in range(4)], clock)
+    api_get = server.api_get
+
+    def rotating_api_get(path: str) -> Any:
+        if path.endswith("/composition"):
+            return api_get(path)
+        server.api_calls.append(path)
+        return infos[server.api_calls.count("/cvms/app_test") - 1]
+
+    server.api_get = rotating_api_get  # type: ignore[method-assign]
+    items, error = run_follow(server, mode, source=source, limit=4)
+    assert error is None
+    assert len(items) == 4
+    # 1 composition + 1 info per connection, across 3 reconnects.
+    assert server.api_calls.count("/cvms/app_test/composition") == 1
+    assert server.api_calls.count("/cvms/app_test") == 4
+    for url, query in zip(server.log_calls, signed, strict=True):
+        assert url.startswith(f"{CONTAINER_LOG_BASE}/{slug}?{query}&")
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_reconnect_without_log_base_does_not_reuse_signed_endpoint(
+    mode: str, clock: FakeClock
+) -> None:
+    detail = {**DETAIL, "logs": {"serial": NODE_SERIAL_URL}}
+    server = LogServer([body(record("one\n")), body(record("two\n"))], clock, detail=detail)
+    items, error = run_follow(server, mode, source=CONTAINER)
+    assert items == [{"channel": "stdout", "message": "one\n"}]
+    assert isinstance(error, LogAccessError)
+    assert "No log endpoints available" in str(error)
+    assert server.log_calls[0].startswith(CONTAINER_URL)
+    assert len(server.log_calls) == 1
 
 
 # --- guest records and channels ---------------------------------------------
@@ -549,13 +848,34 @@ def test_guest_error_split_across_chunks_after_record(mode: str, clock: FakeCloc
 @pytest.mark.parametrize("mode", MODES)
 def test_glued_guest_error_in_text_follow(mode: str, clock: FakeClock) -> None:
     glued = json.dumps({"error": GUEST_DOCKER_ERROR}) + stamp(1, "y\n")
-    server = LogServer([body(stamp(0, "before\n") + glued)], clock)
+    server = LogServer([body(glued)], clock)
     items, error = run_follow(server, mode, source=CONTAINER, format="text")
-    assert items == ["before\n"]
+    assert items == []
     assert isinstance(error, LogAccessError)
     assert error.code == "ERR-17-009"
     assert str(error) == GUEST_DOCKER_ERROR
     assert len(server.log_calls) == 1
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_text_error_json_after_body_start_is_application_output(
+    mode: str, clock: FakeClock
+) -> None:
+    app_line = '{"error":"timeout"}\n'
+    server = LogServer([body("starting\n" + app_line), body(stamp(0, "a\n") + app_line)], clock)
+    assert run_fetch(server, mode, source=CONTAINER, format="text") == "starting\n" + app_line
+    items, error = run_follow(server, mode, source=CONTAINER, format="text", limit=2)
+    assert error is None
+    assert items == ["a\n", app_line]
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_ndjson_guest_error_mid_stream_still_stops(mode: str, clock: FakeClock) -> None:
+    server = LogServer([body(record("a\n") + '{"error":"x"}\n')], clock)
+    items, error = run_follow(server, mode, source=CONTAINER)
+    assert items == [{"channel": "stdout", "message": "a\n"}]
+    assert isinstance(error, LogAccessError)
+    assert error.code == "ERR-17-009"
 
 
 @pytest.mark.parametrize("mode", MODES)
@@ -703,11 +1023,38 @@ def test_container_log_base_fallback(mode: str, clock: FakeClock) -> None:
 
 
 @pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize(
+    "name",
+    ["-app", ".app", "_app", "a" * 129, "a b", "a/b", "app\n", "\u00e9t\u00e9", "a..b", "app.."],
+)
+def test_container_name_rule_matches_gateway(mode: str, name: str, clock: FakeClock) -> None:
+    server = LogServer([], clock)
+    with pytest.raises(LogAccessError, match="Invalid container name"):
+        run_fetch(server, mode, source={"type": "container", "name": name})
+    with pytest.raises(LogAccessError, match="Invalid container name"):
+        run_follow(server, mode, source={"type": "container", "name": name})
+    assert server.api_calls == []
+    assert server.log_calls == []
+
+
+@pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize("name", ["a", "0app", "web.1", "a.b.c", "my_app-2", "/app", "a" * 128])
+def test_container_name_rule_accepts_valid_names(mode: str, name: str, clock: FakeClock) -> None:
+    composition = {
+        "containers": [
+            {"id": "0123abcd", "names": [f"/{name.lstrip('/')}"], "log_endpoint": CONTAINER_URL}
+        ]
+    }
+    server = LogServer([body(record("ok\n"))], clock, composition=composition)
+    assert run_fetch(server, mode, source={"type": "container", "name": name}) == "ok\n"
+
+
+@pytest.mark.parametrize("mode", MODES)
 def test_invalid_container_name_fails_before_any_request(mode: str, clock: FakeClock) -> None:
     server = LogServer([], clock)
-    with pytest.raises(ValueError, match="Invalid container name"):
+    with pytest.raises(LogAccessError, match="Invalid container name"):
         run_fetch(server, mode, source={"type": "container", "name": "a/b"})
-    with pytest.raises(ValueError, match="Invalid container name"):
+    with pytest.raises(LogAccessError, match="Invalid container name"):
         run_follow(server, mode, source={"type": "container", "name": "a%20b"})
     assert server.api_calls == []
     assert server.log_calls == []
@@ -749,6 +1096,102 @@ def test_text_strips_ansi_unless_requested(
     assert fetched.endswith("red\n") and RED not in fetched
 
 
+@pytest.mark.parametrize("mode", MODES)
+def test_default_format_with_ansi_keeps_escapes(mode: str, clock: FakeClock) -> None:
+    colored = record(f"{RED}red{RESET}\n")
+    server = LogServer([body(colored), body(colored), body(f"{RED}red{RESET}\n")], clock)
+    items, error = run_follow(server, mode, source=CONTAINER, ansi=True, limit=1)
+    assert error is None
+    assert items == [{"channel": "stdout", "message": f"{RED}red{RESET}\n"}]
+    assert run_fetch(server, mode, source=CONTAINER, ansi=True) == f"{RED}red{RESET}\n"
+    for url in server.log_calls[:2]:
+        assert "format=ndjson" in url
+        assert "ansi=" not in url
+    run_fetch(server, mode, source=CONTAINER, format="text", ansi=True)
+    assert "format=text" in server.log_calls[2]
+    assert "ansi=true" in server.log_calls[2]
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_default_container_fetch_joins_ndjson_messages(mode: str, clock: FakeClock) -> None:
+    payload = (
+        record(f"{RED}one{RESET}\n")
+        + record("", "stdout")
+        + record("err\n", "stderr")
+        + record("no newline")
+    )
+    server = LogServer([body(payload)], clock)
+    text = run_fetch(server, mode, source=CONTAINER)
+    # Messages are joined exactly as received: no added newlines, ANSI stripped.
+    assert text == "one\nerr\nno newline"
+    assert "format=ndjson" in server.log_calls[0]
+    assert "ansi=" not in server.log_calls[0]
+
+
+ESCAPES = (
+    "\x1b[1;31mred\x1b[0m"  # SGR
+    "\x1b[?25l\x1b[2K\x1b[?25h"  # CSI incl. private modes
+    "\x1b]8;;https://example.com\x07link\x1b]8;;\x07"  # OSC 8 ended by BEL
+    "\x1b]8;;https://example.com\x1b\\st\x1b]8;;\x1b\\"  # OSC 8 ended by ESC backslash
+    "\x1b7\x1b(B\x1b8"  # two-byte and charset sequences
+    " done\n"
+)
+ESCAPES_STRIPPED = "redlinkst done\n"
+
+
+@pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize(
+    ("source", "fmt", "payload"),
+    [
+        (CONTAINER, None, record(ESCAPES)),
+        (CONTAINER, "text", ESCAPES),
+        (NODE, None, ESCAPES),
+    ],
+)
+def test_ansi_strip_removes_every_escape_sequence(
+    mode: str, source: logs.CvmLogSource, fmt: str | None, payload: str, clock: FakeClock
+) -> None:
+    server = LogServer([body(payload)] * 4, clock)
+    fetch_format = "text" if source is NODE else fmt
+    assert run_fetch(server, mode, source=source, format=fetch_format) == ESCAPES_STRIPPED
+    assert run_fetch(server, mode, source=source, format=fetch_format, ansi=True) == ESCAPES
+    items, error = run_follow(server, mode, source=source, format=fmt, limit=1)
+    assert error is None
+    delivered = items[0] if isinstance(items[0], str) else items[0]["message"]
+    assert delivered == ESCAPES_STRIPPED
+    items, error = run_follow(server, mode, source=source, format=fmt, ansi=True, limit=1)
+    delivered = items[0] if isinstance(items[0], str) else items[0]["message"]
+    assert delivered == ESCAPES
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_node_guest_shaped_output_is_delivered(mode: str, clock: FakeClock) -> None:
+    # Guest error records exist only on container streams; on node streams this is
+    # ordinary process output.
+    line = '{"error":"x"}{"channel":"stdout","message":"y"}\n'
+    server = LogServer([body(line), body(line)], clock)
+    assert run_fetch(server, mode, source=NODE) == line
+    items, error = run_follow(server, mode, source=NODE, limit=1)
+    assert error is None
+    assert items == [line]
+
+
+@pytest.mark.parametrize(
+    ("value", "since", "until"),
+    [
+        ("2026-11-10T00:00:00.000000001Z", 1_794_268_800, 1_794_268_801),
+        ("2026-11-10T00:00:00.000000000Z", 1_794_268_800, 1_794_268_800),
+        ("2026-11-10T00:00:00Z", 1_794_268_800, 1_794_268_800),
+        ("2026-11-10T08:00:00.5+08:00", 1_794_268_800, 1_794_268_801),
+        ("2026-11-09T23:59:59.999999999Z", 1_794_268_799, 1_794_268_800),
+    ],
+)
+def test_rfc3339_fraction_floors_since_and_ceils_until_exactly(
+    value: str, since: int, until: int
+) -> None:
+    assert logs.resolve_log_time_window(value, value) == {"since": since, "until": until}
+
+
 # --- public logs ------------------------------------------------------------
 
 
@@ -772,6 +1215,7 @@ def test_public_logs_off_fetch_and_follow(mode: str, clock: FakeClock) -> None:
 def test_sync_close_during_backoff_returns_promptly(
     monkeypatch: pytest.MonkeyPatch, clock: FakeClock
 ) -> None:
+    use_real_waits(monkeypatch)
     monkeypatch.setattr(logs, "_backoff_delay", lambda _attempt: 30.0)
     server = LogServer([http_error(503, "ERR-17-012")] * 2, clock)
     outcome: dict[str, Any] = {}
@@ -802,6 +1246,7 @@ def test_sync_close_during_backoff_returns_promptly(
 async def test_async_cancel_during_backoff_returns_promptly(
     monkeypatch: pytest.MonkeyPatch, clock: FakeClock
 ) -> None:
+    use_real_waits(monkeypatch)
     monkeypatch.setattr(logs, "_backoff_delay", lambda _attempt: 30.0)
     server = LogServer([http_error(503, "ERR-17-012")] * 2, clock)
     async with httpx.AsyncClient(transport=server.transport) as log_http:
@@ -865,3 +1310,30 @@ async def test_async_client_fetch_and_follow(clock: FakeClock) -> None:
     assert first == {"channel": "stdout", "message": "two\n"}
     # CVM info is pinned for the logs field; composition uses the client's version.
     assert versions == [CVM_LOGS_INFO_API_VERSION, DEFAULT_API_VERSION] * 2
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_non_2xx_lookup_is_an_error(mode: str, clock: FakeClock) -> None:
+    server = LogServer([], clock)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "cloud-logs.example":
+            return server.handler(request)
+        return httpx.Response(302, headers={"Location": "https://elsewhere.example/"})
+
+    transport = httpx.MockTransport(handler)
+    base_url = "https://example.com/api/v1"
+    if mode == "sync":
+        with httpx.Client(transport=transport, base_url=base_url) as api:
+            with pytest.raises(ApiError) as err:
+                PhalaCloud(api_key="k", http_client=api).fetch_cvm_logs("app_test", NODE)
+    else:
+
+        async def run() -> None:
+            async with httpx.AsyncClient(transport=transport, base_url=base_url) as api:
+                await AsyncPhalaCloud(api_key="k", http_client=api).fetch_cvm_logs("app_test", NODE)
+
+        with pytest.raises(ApiError) as err:
+            asyncio.run(run())
+    assert err.value.status_code == 302
+    assert server.log_calls == []

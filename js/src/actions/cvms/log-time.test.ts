@@ -21,6 +21,12 @@ describe("resolveLogTimeWindow", () => {
     });
   });
 
+  test("ceils RFC3339 until with a nanosecond fraction without float milliseconds", () => {
+    expect(resolveLogTimeWindow(undefined, "2026-11-10T00:00:00.000000001Z", now)).toEqual({
+      until: 1794268801,
+    });
+  });
+
   test("rejects unknown values", () => {
     expect(() => resolveLogTimeWindow("yesterday", undefined, now)).toThrow(/Invalid log time/);
   });

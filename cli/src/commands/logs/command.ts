@@ -37,9 +37,15 @@ export const logsCommandMeta: CommandMeta = {
 		},
 		{
 			name: "stderr",
-			description: "Include container stderr (container mode only)",
+			description: "Show only stderr",
 			type: "boolean",
 			target: "stderr",
+		},
+		{
+			name: "stdout",
+			description: "Show only stdout, console, and stdin",
+			type: "boolean",
+			target: "stdout",
 		},
 		{
 			name: "tail",
@@ -87,8 +93,12 @@ export const logsCommandMeta: CommandMeta = {
 			value: "phala logs my-service",
 		},
 		{
-			name: "Container stderr",
+			name: "Container stderr only",
 			value: "phala logs my-service --stderr",
+		},
+		{
+			name: "Container stdout, console, and stdin only",
+			value: "phala logs my-service --stdout",
 		},
 		{
 			name: "Follow container logs",
@@ -128,6 +138,7 @@ export const logsCommandSchema = z.object({
 	cvmStdout: z.boolean().default(false),
 	cvmStderr: z.boolean().default(false),
 	stderr: z.boolean().default(false),
+	stdout: z.boolean().default(false),
 	since: z.string().optional(),
 	until: z.string().optional(),
 	tail: z

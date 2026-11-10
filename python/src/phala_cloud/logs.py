@@ -14,7 +14,7 @@ import threading
 import time
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Generator, Iterator
 from contextlib import asynccontextmanager, contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Generic, Literal, Protocol, TypedDict, TypeVar, cast
 
 import httpx
@@ -70,8 +70,10 @@ class CvmLogEntry(TypedDict):
 
 _LOG_CHANNELS = {"stdout", "stderr", "stdin", "console"}
 _HEARTBEATS = frozenset({"[vmm heartbeat]", "[teepod heartbeat]"})
-_CONTAINER_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+# Same rule as the gateway: 1-128 characters, first one alphanumeric.
+_CONTAINER_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
+# Every ANSI escape: OSC (ended by BEL or ESC \\), CSI incl. private modes, two-byte ESC.
+_ANSI_RE = re.compile(r"\x1b(?:\][^\x07\x1b]*(?:\x07|\x1b\\)|\[[0-?]*[ -/]*[@-~]|[ -/]*[0-~])")
 _GATEWAY_TEXT_ERROR_RE = re.compile(r"^\[error\] (ERR-17-\d{3}) (.*)$")
 _TIMESTAMP_RE = re.compile(
     r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})) (.*)$", re.S
@@ -86,10 +88,26 @@ EMPTY_STREAM_QUIET_SECONDS = 10
 _MAX_CONSECUTIVE_FAILURES = 5
 _MAX_EMPTY_ENDS = 5
 _MAX_EXPIRED_RETRIES = 3
+# Minimum gap between connection starts. A node can answer 200 with one error line
+# and end at once; that counts as output and would otherwise reconnect in a hot loop.
+_MIN_CONNECTION_INTERVAL_SECONDS = 1.0
 
 # Indirections so tests can control time without patching the global time module.
 _monotonic = time.monotonic
 _wall_clock = time.time
+
+
+def _wait_sync(stop: threading.Event, seconds: float) -> bool:
+    """Wait unless stopped first; True when stopped."""
+    return stop.wait(seconds)
+
+
+async def _wait_async(seconds: float) -> None:
+    await asyncio.sleep(seconds)
+
+
+def _reconnect_delay(delay: float, started_at: float) -> float:
+    return max(delay, _MIN_CONNECTION_INTERVAL_SECONDS - (_monotonic() - started_at))
 
 
 def _backoff_delay(attempt: int) -> float:
@@ -131,6 +149,10 @@ class LogAccessError(ResourceError):
         self.from_stream_body = from_stream_body
 
 
+class _GatewayStreamError(LogAccessError):
+    """Gateway error reported inside a 200 stream; retried like a network failure."""
+
+
 # --- errors -----------------------------------------------------------------
 
 
@@ -141,7 +163,11 @@ def _dict_list(value: object) -> list[dict[str, Any]] | None:
 
 
 def _error_from_envelope(
-    envelope: dict[str, Any], *, http_status: int | None, fallback_message: str
+    envelope: dict[str, Any],
+    *,
+    http_status: int | None,
+    fallback_message: str,
+    error_type: type[LogAccessError] = LogAccessError,
 ) -> LogAccessError:
     code = envelope.get("error_code")
     message = envelope.get("message")
@@ -152,7 +178,7 @@ def _error_from_envelope(
         if isinstance(raw_suggestions, list)
         else []
     )
-    return LogAccessError(
+    return error_type(
         message if isinstance(message, str) else fallback_message,
         code=code if isinstance(code, str) else None,
         http_status=http_status,
@@ -207,7 +233,19 @@ def _raise_leading_guest_error(text: str) -> None:
 def _raise_gateway_text_error(line: str) -> None:
     match = _GATEWAY_TEXT_ERROR_RE.match(line.strip())
     if match:
-        raise LogAccessError(match.group(2), code=match.group(1))
+        raise _GatewayStreamError(match.group(2), code=match.group(1))
+
+
+def _client_error(message: str) -> LogAccessError:
+    """Invalid caller input, raised before any request."""
+    return LogAccessError(message, code="ERR-17-001")
+
+
+def _resolve_times(since: str | int | None, until: str | int | None) -> dict[str, int]:
+    try:
+        return resolve_log_time_window(since, until)
+    except ValueError as exc:
+        raise _client_error(str(exc)) from exc
 
 
 def _container_logs_disabled() -> LogAccessError:
@@ -226,10 +264,10 @@ def _split_timestamp(message: str) -> tuple[int, str] | None:
     match = _TIMESTAMP_RE.match(message)
     if not match:
         return None
-    parsed_ms = _parse_rfc3339(match.group(1))
-    if parsed_ms is None:
+    parsed = _parse_rfc3339(match.group(1))
+    if parsed is None:
         return None
-    return int(parsed_ms // 1000), match.group(2)
+    return parsed[0], match.group(2)
 
 
 def _strip_timestamp(message: str) -> str:
@@ -329,11 +367,15 @@ class _ContainerTextDecoder:
         self._keep_timestamps = keep_timestamps
         self._cursor = cursor
         self._lines = _LineBuffer()
+        # Application lines may be JSON like {"error": ...}; only the start of the
+        # body can be told apart as a guest error record.
+        self._at_body_start = True
 
     def feed(self, chunk: str) -> Iterator[str]:
         yield from self._emit(self._lines.feed(chunk))
-        # A guest error is written without a newline; do not wait for one.
-        _raise_leading_guest_error(self._lines.pending)
+        if self._at_body_start:
+            # A guest error is written without a newline; do not wait for one.
+            _raise_leading_guest_error(self._lines.pending)
 
     def finish(self) -> Iterator[str]:
         yield from self._emit(self._lines.finish())
@@ -343,7 +385,9 @@ class _ContainerTextDecoder:
             ending = _line_ending(line)
             content = line[: len(line) - len(ending)]
             _raise_gateway_text_error(content)
-            _raise_leading_guest_error(content)
+            if self._at_body_start:
+                _raise_leading_guest_error(content)
+                self._at_body_start = False
             if self._cursor is not None and not self._cursor.accept(content, content):
                 continue
             out = content if self._keep_timestamps else _strip_timestamp(content)
@@ -358,7 +402,10 @@ def _entry_from_record(record: object) -> CvmLogEntry:
         raise _guest_error(guest)
     if isinstance(record.get("error_code"), str):
         raise _error_from_envelope(
-            record, http_status=None, fallback_message="The log stream ended with an error."
+            record,
+            http_status=None,
+            fallback_message="The log stream ended with an error.",
+            error_type=_GatewayStreamError,
         )
     channel = record.get("channel")
     message = record.get("message")
@@ -459,15 +506,16 @@ def _node_endpoint_lookup(cvm_id: str, channel: CvmLogChannel) -> _Lookup:
     info = yield f"/cvms/{cvm_id}"
     endpoint = (info.get("logs") or {}).get(channel)
     if not endpoint:
-        raise ValueError(f"No {channel} log endpoint available for CVM '{cvm_id}'")
+        raise LogAccessError(f"No {channel} log endpoint available for CVM '{cvm_id}'")
     return str(endpoint)
 
 
 def _safe_container_slug(name: str) -> str:
     slug = name[1:] if name.startswith("/") else name
-    if not _CONTAINER_NAME_RE.match(slug):
-        raise ValueError(
-            f"Invalid container name '{name}'. Use letters, digits, '_', '.', and '-'."
+    if not _CONTAINER_NAME_RE.fullmatch(slug) or ".." in slug:
+        raise _client_error(
+            f"Invalid container name '{name}'. Use 1-128 letters, digits, '_', '.', and '-', "
+            "starting with a letter or digit, without '..'."
         )
     return slug
 
@@ -491,74 +539,81 @@ def _container_slug(container: dict[str, Any]) -> str | None:
     return str(container_id) if container_id else None
 
 
-def _container_endpoint(
-    cvm_id: str,
-    info: dict[str, Any],
-    composition: dict[str, Any],
-    name: str | None,
-    match_prefix: bool,
-) -> str:
-    logs = info.get("logs") or {}
-    base = logs.get("container_log_base")
-    auth = logs.get("auth_query")
+@dataclass(frozen=True)
+class _ResolvedContainer:
+    slug: str
+    # Signed URL from the composition response that resolved the name; usable only
+    # in that same lookup round, since it expires.
+    log_endpoint: str | None = None
+
+
+def _resolve_container(
+    cvm_id: str, composition: dict[str, Any], name: str | None, match_prefix: bool
+) -> _ResolvedContainer:
     containers: list[dict[str, Any]] = composition.get("containers") or []
     composition_error = composition.get("error")
     if not (isinstance(composition_error, str) and composition_error):
         composition_error = None
-    not_found = ValueError(f"Container '{name}' not found in CVM '{cvm_id}'")
+    not_found = LogAccessError("Container not found", code="ERR-17-007")
+
+    def resolved(container: dict[str, Any], slug: str | None) -> _ResolvedContainer:
+        if not slug:
+            raise not_found
+        endpoint = container.get("log_endpoint")
+        return _ResolvedContainer(slug, str(endpoint) if endpoint else None)
 
     if name:
-        exact = [
-            c
-            for c in containers
-            if name in _container_names(c) or f"/{name}" in _container_names(c)
-        ]
+        names = {name, f"/{name}"}
+        exact = [c for c in containers if names & set(_container_names(c))]
         if exact:
-            endpoint = next((c["log_endpoint"] for c in exact if c.get("log_endpoint")), None)
-            if endpoint:
-                return str(endpoint)
-            if base:
-                return _join_container_log_url(base, name, auth)
-            raise not_found
+            container = next((c for c in exact if c.get("log_endpoint")), exact[0])
+            return resolved(container, name.removeprefix("/"))
         if match_prefix:
             prefixed = [c for c in containers if str(c.get("id") or "").startswith(name)]
             if len(prefixed) > 1:
                 labels = ", ".join(_container_slug(c) or "" for c in prefixed)
-                raise ValueError(f"Ambiguous container prefix '{name}': {labels}")
+                raise _client_error(f"Ambiguous container prefix '{name}': {labels}")
             if prefixed:
-                match = prefixed[0]
-                if match.get("log_endpoint"):
-                    return str(match["log_endpoint"])
-                slug = _container_slug(match)
-                if base and slug:
-                    return _join_container_log_url(base, slug, auth)
+                return resolved(prefixed[0], _container_slug(prefixed[0]))
         if containers:
             raise not_found
         if composition_error:
             raise LogAccessError(composition_error)
-        if base:
-            return _join_container_log_url(base, name, auth)
-        raise not_found
+        # Nothing listed (the guest may not report yet): trust the caller's name.
+        return _ResolvedContainer(name.removeprefix("/"))
 
     if composition_error:
         raise LogAccessError(composition_error)
     if not containers:
-        raise ValueError(f"No containers found for CVM '{cvm_id}'")
-    endpoint = next((c["log_endpoint"] for c in containers if c.get("log_endpoint")), None)
-    if endpoint:
-        return str(endpoint)
-    slug = _container_slug(containers[0])
-    if base and slug:
-        return _join_container_log_url(base, slug, auth)
-    raise ValueError(f"No log endpoints available for CVM '{cvm_id}'")
+        raise not_found
+    container = next((c for c in containers if c.get("log_endpoint")), containers[0])
+    return resolved(container, _container_slug(container))
 
 
-def _container_endpoint_lookup(cvm_id: str, name: str | None, match_prefix: bool) -> _Lookup:
+def _container_url(cvm_id: str, info: dict[str, Any], container: _ResolvedContainer) -> str:
+    logs = info.get("logs") or {}
+    base = logs.get("container_log_base")
+    if base:
+        return _join_container_log_url(base, container.slug, logs.get("auth_query"))
+    if container.log_endpoint:
+        return container.log_endpoint
+    raise LogAccessError(f"No log endpoints available for CVM '{cvm_id}'")
+
+
+def _container_endpoint_lookup(
+    cvm_id: str,
+    name: str | None,
+    match_prefix: bool,
+    resolved: _ResolvedContainer | None = None,
+) -> Generator[str, Any, tuple[str, _ResolvedContainer]]:
+    """One CVM-info lookup; composition only when the container is not resolved yet."""
     info = yield f"/cvms/{cvm_id}"
     if isinstance(info, dict) and info.get("public_logs") is False:
         raise _container_logs_disabled()
-    composition = yield f"/cvms/{cvm_id}/composition"
-    return _container_endpoint(cvm_id, info, composition, name, match_prefix)
+    if resolved is None:
+        composition = yield f"/cvms/{cvm_id}/composition"
+        resolved = _resolve_container(cvm_id, composition, name, match_prefix)
+    return _container_url(cvm_id, info, resolved), resolved
 
 
 def _run_lookup(lookup: _Lookup, api_get: SyncApiGet) -> str:
@@ -596,7 +651,7 @@ def _assert_node_options(
         if present
     ]
     if unsupported:
-        raise ValueError(f"{', '.join(unsupported)} not supported for serial/stdout/stderr logs")
+        raise _client_error(f"{', '.join(unsupported)} not supported for serial/stdout/stderr logs")
 
 
 def _container_options(
@@ -624,7 +679,7 @@ def _fetch_plan(
     until: str | int | None,
     timestamps: bool,
     ansi: bool,
-    format: CvmLogFormat,
+    format: CvmLogFormat | None,
     container_match_prefix: bool,
 ) -> _FetchPlan:
     if source["type"] == "node":
@@ -640,11 +695,11 @@ def _fetch_plan(
         )
 
     name, match_prefix = _container_options(source, container_match_prefix)
-    times = resolve_log_time_window(since, until)
+    times = _resolve_times(since, until)
     text = format == "text"
 
     def container_lookup() -> _Lookup:
-        endpoint = yield from _container_endpoint_lookup(cvm_id, name, match_prefix)
+        endpoint, _container = yield from _container_endpoint_lookup(cvm_id, name, match_prefix)
         return _build_log_url(
             endpoint,
             since=times.get("since"),
@@ -652,14 +707,18 @@ def _fetch_plan(
             tail=tail,
             timestamps=timestamps,
             ansi=ansi and text,
-            format=format,
+            # Without an explicit format, NDJSON is fetched and joined into text.
+            format="text" if text else "ndjson",
         )
 
     def decode(body: str) -> str | list[CvmLogEntry]:
         if text:
             decoder = _ContainerTextDecoder(ansi=ansi, keep_timestamps=True, cursor=None)
             return "".join(_decode_all(decoder, body))
-        return _decode_all(_NdjsonDecoder(ansi=ansi, keep_timestamps=True, cursor=None), body)
+        entries = _decode_all(_NdjsonDecoder(ansi=ansi, keep_timestamps=True, cursor=None), body)
+        if format == "ndjson":
+            return entries
+        return "".join(entry["message"] for entry in entries)
 
     return _FetchPlan(container_lookup, decode)
 
@@ -729,18 +788,20 @@ class _ContainerFollowPlan:
         self._text = text
         self._cursor = _Cursor()
         self._first_200_second: int | None = None
+        self._container: _ResolvedContainer | None = None
 
     def _reconnect_since(self) -> int | None:
         if self._cursor.since is not None:
             return self._cursor.since
-        if self._first_200_second is None or self._since is None:
-            return self._first_200_second if self._since is None else self._since
-        return max(self._first_200_second, self._since)
+        # Without a cursor the caller's since stands; otherwise the first-200 second.
+        return self._since if self._since is not None else self._first_200_second
 
     def lookup(self) -> _Lookup:
-        endpoint = yield from _container_endpoint_lookup(
-            self._cvm_id, self._name, self._match_prefix
+        endpoint, resolved = yield from _container_endpoint_lookup(
+            self._cvm_id, self._name, self._match_prefix, self._container
         )
+        # Resolve the name once per follow; later rounds only refresh the signed URL.
+        self._container = replace(resolved, log_endpoint=None)
         accepted = self._first_200_second is not None
         return _build_log_url(
             endpoint,
@@ -796,7 +857,7 @@ def _follow_plan(
         name=name,
         match_prefix=match_prefix,
         tail=tail,
-        times=resolve_log_time_window(since, until),
+        times=_resolve_times(since, until),
         timestamps=timestamps,
         ansi=ansi,
         text=format == "text",
@@ -814,9 +875,9 @@ def _classify_error(error: Exception) -> _ErrorKind:
             return "stop"
         status = error.http_status
         if status is None:
-            # An ERR-17 code read from a 200 body is a gateway in-stream failure;
-            # anything else from the body (invalid record, composition error) is final.
-            return "failure" if error.code else "stop"
+            # Gateway errors inside a 200 stream are transient; client-side and other
+            # body errors (invalid record, composition, container resolution) are final.
+            return "failure" if isinstance(error, _GatewayStreamError) else "stop"
         if status == 401 and error.code == "ERR-17-003":
             return "expired"
         if error.code in ("ERR-17-002", "ERR-17-011") or status == 429 or status >= 500:
@@ -838,11 +899,9 @@ class _RetryPolicy:
         self._expired_retries = 0
         self._empty_ends = 0
 
-    def on_connected(self) -> None:
-        self._expired_retries = 0
-
     def after_clean_end(self, *, delivered: bool, duration: float) -> float:
         """Delay before reconnecting; raises when quick empty ends repeat."""
+        self._expired_retries = 0
         if delivered:
             self._failures = 0
             self._empty_ends = 0
@@ -866,6 +925,7 @@ class _RetryPolicy:
             return None if self._expired_retries > _MAX_EXPIRED_RETRIES else 0.0
         if delivered:
             self._failures = 0
+            self._expired_retries = 0
         self._failures += 1
         if self._failures >= _MAX_CONSECUTIVE_FAILURES:
             return None
@@ -948,16 +1008,16 @@ def _follow_sync(
     retry = _RetryPolicy(stops_on_empty_ends=plan.stops_on_empty_ends)
     with _sync_log_client(log_http) as client:
         while not stop.is_set():
+            started_at = _monotonic()
             conn = _Connection()
             try:
                 url = _run_lookup(plan.lookup(), api_get)
                 with client.stream("GET", url, headers=headers, timeout=None) as response:
-                    if response.status_code >= 400:
+                    if not response.is_success:
                         response.read()
                         raise _http_error(response)
                     conn.connected_at = _monotonic()
                     plan.on_connected(_wall_clock())
-                    retry.on_connected()
                     decoder = plan.decoder()
                     for chunk in response.iter_text():
                         for item in decoder.feed(chunk):
@@ -982,7 +1042,8 @@ def _follow_sync(
                 delay = retry.after_clean_end(
                     delivered=conn.delivered, duration=_monotonic() - conn.connected_at
                 )
-            if delay > 0 and stop.wait(delay):
+            delay = _reconnect_delay(delay, started_at)
+            if delay > 0 and _wait_sync(stop, delay):
                 return
 
 
@@ -995,16 +1056,16 @@ async def _follow_async(
     retry = _RetryPolicy(stops_on_empty_ends=plan.stops_on_empty_ends)
     async with _async_log_client(log_http) as client:
         while True:
+            started_at = _monotonic()
             conn = _Connection()
             try:
                 url = await _arun_lookup(plan.lookup(), api_get)
                 async with client.stream("GET", url, headers=headers, timeout=None) as response:
-                    if response.status_code >= 400:
+                    if not response.is_success:
                         await response.aread()
                         raise _http_error(response)
                     conn.connected_at = _monotonic()
                     plan.on_connected(_wall_clock())
-                    retry.on_connected()
                     decoder = plan.decoder()
                     async for chunk in response.aiter_text():
                         for item in decoder.feed(chunk):
@@ -1023,8 +1084,9 @@ async def _follow_async(
                 delay = retry.after_clean_end(
                     delivered=conn.delivered, duration=_monotonic() - conn.connected_at
                 )
+            delay = _reconnect_delay(delay, started_at)
             if delay > 0:
-                await asyncio.sleep(delay)
+                await _wait_async(delay)
 
 
 # --- public API -------------------------------------------------------------
@@ -1041,7 +1103,7 @@ def fetch_cvm_logs(
     until: str | int | None = None,
     timestamps: bool = False,
     ansi: bool = False,
-    format: CvmLogFormat = "text",
+    format: CvmLogFormat | None = None,
     container_match_prefix: bool = True,
     user_agent: str | None = None,
 ) -> str | list[CvmLogEntry]:
@@ -1059,7 +1121,7 @@ def fetch_cvm_logs(
     url = _run_lookup(plan.lookup(), api_get)
     with _sync_log_client(log_http) as client:
         response = client.get(url, headers=_log_headers(user_agent), timeout=None)
-    if response.status_code >= 400:
+    if not response.is_success:
         raise _http_error(response)
     return plan.decode(response.text)
 
@@ -1075,7 +1137,7 @@ async def afetch_cvm_logs(
     until: str | int | None = None,
     timestamps: bool = False,
     ansi: bool = False,
-    format: CvmLogFormat = "text",
+    format: CvmLogFormat | None = None,
     container_match_prefix: bool = True,
     user_agent: str | None = None,
 ) -> str | list[CvmLogEntry]:
@@ -1093,7 +1155,7 @@ async def afetch_cvm_logs(
     url = await _arun_lookup(plan.lookup(), api_get)
     async with _async_log_client(log_http) as client:
         response = await client.get(url, headers=_log_headers(user_agent), timeout=None)
-    if response.status_code >= 400:
+    if not response.is_success:
         raise _http_error(response)
     return plan.decode(response.text)
 
@@ -1185,7 +1247,7 @@ def fetch_cvm_channel_logs(
         until=until,
         timestamps=timestamps,
         ansi=ansi,
-        format=format or "text",
+        format=format,
     )
     return cast(str, text)
 

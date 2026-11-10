@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -127,12 +128,11 @@ func TestFetchContainerKeepsHeartbeatLikeContent(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"containers": []map[string]any{{
 					"id": "container-id", "names": []string{"/app"},
-					"log_endpoint": logs.URL + "/logs/123/container/app",
 				}},
 			})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"logs": map[string]any{}})
+		_ = json.NewEncoder(w).Encode(containerInfo(logs.URL))
 	}))
 	defer api.Close()
 	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
@@ -264,12 +264,11 @@ func TestGuestAgentNdjsonErrorIsERR17009(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"containers": []map[string]any{{
 					"id": "container-id", "names": []string{"/app"},
-					"log_endpoint": logs.URL + "/logs/123/container/app",
 				}},
 			})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": true, "logs": map[string]any{}})
+		_ = json.NewEncoder(w).Encode(containerInfo(logs.URL))
 	}))
 	defer api.Close()
 	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
@@ -302,12 +301,11 @@ func TestFollowHTTP502ERR17009Reconnects(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"containers": []map[string]any{{
 					"id": "c1", "names": []string{"/app"},
-					"log_endpoint": logs.URL + "/logs/123/container/app",
 				}},
 			})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": true})
+		_ = json.NewEncoder(w).Encode(containerInfo(logs.URL))
 	}))
 	defer api.Close()
 	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
@@ -341,12 +339,11 @@ func TestFollowGuestStreamErrorStops(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"containers": []map[string]any{{
 					"id": "c1", "names": []string{"/app"},
-					"log_endpoint": logs.URL + "/logs/123/container/app",
 				}},
 			})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": true})
+		_ = json.NewEncoder(w).Encode(containerInfo(logs.URL))
 	}))
 	defer api.Close()
 	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
@@ -378,12 +375,11 @@ func TestContainerTextGuestErrorWithoutNewline(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"containers": []map[string]any{{
 					"id": "c1", "names": []string{"/app"},
-					"log_endpoint": logs.URL + "/logs/123/container/app",
 				}},
 			})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": true})
+		_ = json.NewEncoder(w).Encode(containerInfo(logs.URL))
 	}))
 	defer api.Close()
 	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
@@ -425,12 +421,11 @@ func TestContainerFollowReconnectDedupesThenEmptyEndStops(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"containers": []map[string]any{{
 					"id": "c1", "names": []string{"/app"},
-					"log_endpoint": logs.URL + "/logs/123/container/app",
 				}},
 			})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": true})
+		_ = json.NewEncoder(w).Encode(containerInfo(logs.URL))
 	}))
 	defer api.Close()
 	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
@@ -484,12 +479,11 @@ func TestContainerFollowStopsAfterFiveEmptyEnds(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"containers": []map[string]any{{
 					"id": "c1", "names": []string{"/app"},
-					"log_endpoint": logs.URL + "/logs/123/container/app",
 				}},
 			})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": true})
+		_ = json.NewEncoder(w).Encode(containerInfo(logs.URL))
 	}))
 	defer api.Close()
 	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
@@ -521,12 +515,11 @@ func TestContainerFollowWithDataKeepsReconnecting(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"containers": []map[string]any{{
 					"id": "c1", "names": []string{"/app"},
-					"log_endpoint": logs.URL + "/logs/123/container/app",
 				}},
 			})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": true})
+		_ = json.NewEncoder(w).Encode(containerInfo(logs.URL))
 	}))
 	defer api.Close()
 	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
@@ -582,12 +575,11 @@ func TestContainerTextFollowReconnectDedupesThenEmptyEndStops(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"containers": []map[string]any{{
 					"id": "c1", "names": []string{"/app"},
-					"log_endpoint": logs.URL + "/logs/123/container/app",
 				}},
 			})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": true})
+		_ = json.NewEncoder(w).Encode(containerInfo(logs.URL))
 	}))
 	defer api.Close()
 	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
@@ -642,12 +634,11 @@ func TestInStreamGatewayNDJSONCountsTowardFiveFailures(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"containers": []map[string]any{{
 					"id": "c1", "names": []string{"/app"},
-					"log_endpoint": logs.URL + "/logs/123/container/app",
 				}},
 			})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": true})
+		_ = json.NewEncoder(w).Encode(containerInfo(logs.URL))
 	}))
 	defer api.Close()
 	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
@@ -711,12 +702,11 @@ func TestFollowContainerPassesANSI(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"containers": []map[string]any{{
 					"id": "c1", "names": []string{"/app"},
-					"log_endpoint": logs.URL + "/logs/123/container/app",
 				}},
 			})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": true})
+		_ = json.NewEncoder(w).Encode(containerInfo(logs.URL))
 	}))
 	defer api.Close()
 	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
@@ -782,12 +772,11 @@ func TestFollowIgnoresClientRequestTimeout(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"containers": []map[string]any{{
 					"id": "c1", "names": []string{"/app"},
-					"log_endpoint": logs.URL + "/logs/123/container/app",
 				}},
 			})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": true})
+		_ = json.NewEncoder(w).Encode(containerInfo(logs.URL))
 	}))
 	defer api.Close()
 	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL), WithTimeout(30*time.Millisecond))
@@ -830,12 +819,11 @@ func TestQuietTail0ReconnectUsesFirst200Since(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"containers": []map[string]any{{
 					"id": "c1", "names": []string{"/app"},
-					"log_endpoint": logs.URL + "/logs/123/container/app",
 				}},
 			})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": true})
+		_ = json.NewEncoder(w).Encode(containerInfo(logs.URL))
 	}))
 	defer api.Close()
 	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
@@ -869,12 +857,13 @@ func TestQuietTail0ReconnectUsesFirst200Since(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 type logRequests struct {
-	mu      sync.Mutex
-	queries []string
-	uris    []string
-	agents  []string
-	times   []time.Time
-	info    int
+	mu          sync.Mutex
+	queries     []string
+	uris        []string
+	agents      []string
+	times       []time.Time
+	info        int
+	composition int
 }
 
 func (r *logRequests) snapshot() (queries []string, times []time.Time) {
@@ -914,10 +903,12 @@ func newLogTestClient(t *testing.T, logs func(n int, w http.ResponseWriter, r *h
 	t.Cleanup(logSrv.Close)
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/composition") {
+			rec.mu.Lock()
+			rec.composition++
+			rec.mu.Unlock()
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"containers": []map[string]any{{
 					"id": "c1", "names": []string{"/app"},
-					"log_endpoint": logSrv.URL + "/logs/123/container/app?sig=abc",
 				}},
 			})
 			return
@@ -925,10 +916,9 @@ func newLogTestClient(t *testing.T, logs func(n int, w http.ResponseWriter, r *h
 		rec.mu.Lock()
 		rec.info++
 		rec.mu.Unlock()
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"public_logs": true,
-			"logs":        map[string]any{"serial": logSrv.URL + "/logs/123/node/serial?sig=abc"},
-		})
+		info := containerInfo(logSrv.URL)
+		info["logs"].(map[string]any)["serial"] = logSrv.URL + "/logs/123/node/serial?sig=abc"
+		_ = json.NewEncoder(w).Encode(info)
 	}))
 	t.Cleanup(api.Close)
 	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
@@ -936,6 +926,35 @@ func newLogTestClient(t *testing.T, logs func(n int, w http.ResponseWriter, r *h
 		t.Fatal(err)
 	}
 	return client, rec
+}
+
+// TestMain drops the 1 s connection floor so counter tests stay fast; it is set
+// before any follow goroutine starts, so tests that cancel without draining do
+// not race with a reset. TestFollowEnforcesMinimumConnectionInterval restores it.
+func TestMain(m *testing.M) {
+	followMinConnectionInterval = 0
+	os.Exit(m.Run())
+}
+
+// setMinConnectionInterval overrides the floor for one test; the test must
+// drain its follow before returning so the reset does not race.
+func setMinConnectionInterval(t *testing.T, d time.Duration) {
+	t.Helper()
+	prev := followMinConnectionInterval
+	followMinConnectionInterval = d
+	t.Cleanup(func() { followMinConnectionInterval = prev })
+}
+
+// containerInfo is a CVM info response with Public Logs on and the container
+// log base under logsURL.
+func containerInfo(logsURL string) map[string]any {
+	return map[string]any{
+		"public_logs": true,
+		"logs": map[string]any{
+			"container_log_base": logsURL + "/logs/123/container",
+			"auth_query":         "sig=abc",
+		},
+	}
 }
 
 func stubFollowNow(t *testing.T, now func() time.Time) {
@@ -1174,6 +1193,36 @@ func TestQuietTail0TextReconnectUsesFirst200Since(t *testing.T) {
 	}
 }
 
+func TestReconnectBeforeTimestampKeepsCallerSince(t *testing.T) {
+	stubFollowNow(t, func() time.Time { return time.Unix(1794225600, 0) })
+	client, rec := newLogTestClient(t, func(n int, w http.ResponseWriter, r *http.Request) {
+		if n == 1 {
+			abortConnection(w) // 200 accepted, then a read error before any record
+			return
+		}
+		_, _ = io.WriteString(w, ndjsonRecord("stdout", "2026-11-09T12:00:00Z back\n"))
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	lines, errs := client.FollowCVMLogs(ctx, "app_test", containerSource, &LogsOptions{Tail: "all", Since: int64(100)})
+	select {
+	case line := <-lines:
+		if line != "back\n" {
+			t.Fatalf("line = %q", line)
+		}
+	case err := <-errs:
+		t.Fatal(err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout")
+	}
+	cancel()
+	queries, _ := rec.snapshot()
+	if !strings.Contains(queries[0], "since=100") || !strings.Contains(queries[1], "since=100&") ||
+		!strings.Contains(queries[1], "tail=all") {
+		t.Fatalf("queries = %q, want since=100 kept on reconnect", queries)
+	}
+}
+
 func TestFollowUntilReachedEndsWithoutError(t *testing.T) {
 	until := time.Date(2026, 11, 9, 12, 0, 2, 0, time.UTC)
 	records := []string{
@@ -1205,6 +1254,25 @@ func TestFollowUntilReachedEndsWithoutError(t *testing.T) {
 			queries, _ := rec.snapshot()
 			if len(queries) != 1 || !strings.Contains(queries[0], fmt.Sprintf("until=%d", until.Unix())) {
 				t.Fatalf("queries = %v", queries)
+			}
+		})
+		t.Run(format+"/clean end after until with older records", func(t *testing.T) {
+			stubFollowNow(t, func() time.Time { return until.Add(5 * time.Second) })
+			client, rec := newLogTestClient(t, func(n int, w http.ResponseWriter, r *http.Request) {
+				if format == "text" {
+					_, _ = io.WriteString(w, records[0])
+				} else {
+					_, _ = io.WriteString(w, ndjsonRecord("stdout", records[0]))
+				}
+			})
+			lines, errs := client.FollowCVMLogs(context.Background(), "app_test", containerSource,
+				&LogsOptions{Until: until.Format(time.RFC3339), Format: format})
+			got, err := collectFollow(t, lines, errs, 5*time.Second)
+			if err != nil || strings.Join(got, "") != "one\n" {
+				t.Fatalf("got %q, %v", got, err)
+			}
+			if rec.count() != 1 {
+				t.Fatalf("connections = %d, want 1", rec.count())
 			}
 		})
 		t.Run(format+"/clean end after until", func(t *testing.T) {
@@ -1419,9 +1487,15 @@ func TestANSIStrippedUnlessRequested(t *testing.T) {
 		if err != nil || got != "red done\n" {
 			t.Fatalf("got %q, %v", got, err)
 		}
-		entries, err := client.FetchCVMLogEntries(context.Background(), "app_test", containerSource, &LogsOptions{ANSI: true})
-		if err != nil || entries[0].Message != colored {
-			t.Fatalf("ANSI=true must keep escapes: %+v, %v", entries, err)
+		kept, err := client.FetchCVMLogs(context.Background(), "app_test", containerSource, &LogsOptions{ANSI: true})
+		if err != nil || kept != colored {
+			t.Fatalf("ANSI=true with the default format must keep escapes: %q, %v", kept, err)
+		}
+		for _, opts := range []*LogsOptions{{ANSI: true, Format: "ndjson"}, {ANSI: true}} {
+			entries, err := client.FetchCVMLogEntries(context.Background(), "app_test", containerSource, opts)
+			if err != nil || entries[0].Message != colored {
+				t.Fatalf("ANSI=true with NDJSON must keep escapes: %+v, %v", entries, err)
+			}
 		}
 		for _, q := range func() []string { q, _ := rec.snapshot(); return q }() {
 			if strings.Contains(q, "ansi=") {
@@ -1476,6 +1550,283 @@ func TestANSIStrippedUnlessRequested(t *testing.T) {
 		got, err := client.FetchCVMLogs(context.Background(), "app_test", serialSource, nil)
 		if err != nil || got != "red done\n" {
 			t.Fatalf("got %q, %v", got, err)
+		}
+	})
+}
+
+func TestStripANSIRemovesAllEscapeSequences(t *testing.T) {
+	cases := map[string]string{
+		"sgr":                  "\x1b[1;31mred\x1b[0m",
+		"csi private mode":     "\x1b[?25lred\x1b[?25h",
+		"csi cursor":           "\x1b[2K\x1b[1Ared",
+		"osc 8 bel":            "\x1b]8;;https://example.com\x07red\x1b]8;;\x07",
+		"osc 8 st":             "\x1b]8;;https://example.com\x1b\\red\x1b]8;;\x1b\\",
+		"osc title":            "\x1b]0;title\x07red",
+		"two-byte and charset": "\x1bcred\x1b(B\x1b7",
+	}
+	for name, in := range cases {
+		if got := applyANSIPolicy(in, false); got != "red" {
+			t.Errorf("%s: got %q", name, got)
+		}
+		if got := applyANSIPolicy(in, true); got != in {
+			t.Errorf("%s: ANSI=true changed output to %q", name, got)
+		}
+	}
+	client, _ := newLogTestClient(t, func(n int, w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, ndjsonRecord("stdout", "\x1b[?25l\x1b]8;;https://example.com\x07link\x1b]8;;\x07\n"))
+	})
+	got, err := client.FetchCVMLogs(context.Background(), "app_test", containerSource, nil)
+	if err != nil || got != "link\n" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+}
+
+func TestNodeStreamsTreatOnlyGatewayLinesAsErrors(t *testing.T) {
+	const body = `{"error":"x"}` + "\n" + "after\n"
+	client, _ := newLogTestClient(t, func(n int, w http.ResponseWriter, r *http.Request) {
+		if n <= 2 {
+			_, _ = io.WriteString(w, body)
+		}
+	})
+	got, err := client.FetchCVMLogs(context.Background(), "app_test", serialSource, nil)
+	if err != nil || got != body {
+		t.Fatalf("fetch: got %q, %v", got, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	lines, errs := client.FollowCVMLogs(ctx, "app_test", serialSource, nil)
+	for _, want := range []string{`{"error":"x"}` + "\n", "after\n"} {
+		select {
+		case line := <-lines:
+			if line != want {
+				t.Fatalf("line = %q, want %q", line, want)
+			}
+		case err := <-errs:
+			t.Fatalf("node output must not be a guest error: %v", err)
+		case <-time.After(2 * time.Second):
+			t.Fatal("timeout")
+		}
+	}
+}
+
+func TestTextGuestErrorOnlyAtBodyStart(t *testing.T) {
+	// Mid-stream text lines that look like a guest record are application output.
+	client, _ := newLogTestClient(t, func(n int, w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("follow") == "true" {
+			_, _ = io.WriteString(w, "2026-11-09T12:00:00Z ok\n"+`{"error":"timeout"}`+"\n")
+			return
+		}
+		_, _ = io.WriteString(w, "ok\n"+`{"error":"timeout"}`+"\n")
+	})
+	got, err := client.FetchCVMLogs(context.Background(), "app_test", containerSource, &LogsOptions{Format: "text"})
+	if err != nil || got != "ok\n"+`{"error":"timeout"}`+"\n" {
+		t.Fatalf("fetch: got %q, %v", got, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	lines, errs := client.FollowCVMLogs(ctx, "app_test", containerSource, &LogsOptions{Format: "text"})
+	for _, want := range []string{"ok\n", `{"error":"timeout"}` + "\n"} {
+		select {
+		case line := <-lines:
+			if line != want {
+				t.Fatalf("line = %q, want %q", line, want)
+			}
+		case err := <-errs:
+			t.Fatalf("mid-stream JSON line must not stop the follow: %v", err)
+		case <-time.After(2 * time.Second):
+			t.Fatal("timeout")
+		}
+	}
+}
+
+func TestClientValidationErrorsAreERR17001(t *testing.T) {
+	client, rec := newLogTestClient(t, func(n int, w http.ResponseWriter, r *http.Request) {})
+	ctx := context.Background()
+	_, e1 := client.FetchCVMLogs(ctx, "app_test", LogSource{Type: "container", Name: ".bad"}, nil)
+	_, e2 := client.FetchCVMLogs(ctx, "app_test", serialSource, &LogsOptions{Since: "1h"})
+	_, e3 := client.FetchCVMLogEntries(ctx, "app_test", containerSource, &LogsOptions{Since: "yesterday"})
+	_, e4 := client.FetchCVMLogEntries(ctx, "app_test", serialSource, nil)
+	_, followErrs := client.FollowCVMLogEntries(ctx, "app_test", serialSource, nil)
+	e5 := <-followErrs
+	_, e6 := client.FetchCVMLogEntries(ctx, "app_test", containerSource, &LogsOptions{Since: "999999999999999999999d"})
+	for i, err := range []error{e1, e2, e3, e4, e5, e6} {
+		apiErr := asAPIError(t, err)
+		if apiErr.ErrorCode != "ERR-17-001" || apiErr.StatusCode != 0 {
+			t.Fatalf("error %d = %+v", i+1, apiErr)
+		}
+	}
+	if rec.infoCalls() != 0 || rec.count() != 0 {
+		t.Fatalf("requests were made: info=%d logs=%d", rec.infoCalls(), rec.count())
+	}
+}
+
+func TestLogRedirectIsAnError(t *testing.T) {
+	client, rec := newLogTestClient(t, func(n int, w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "https://example.com/elsewhere")
+		w.WriteHeader(http.StatusFound)
+	})
+	_, err := client.FetchCVMLogs(context.Background(), "app_test", containerSource, nil)
+	if apiErr := asAPIError(t, err); apiErr.StatusCode != 302 || apiErr.Message != "HTTP 302" {
+		t.Fatalf("fetch error = %+v", apiErr)
+	}
+	_, errs := client.FollowCVMLogs(context.Background(), "app_test", serialSource, nil)
+	if apiErr := asAPIError(t, <-errs); apiErr.StatusCode != 302 {
+		t.Fatalf("follow error = %+v", apiErr)
+	}
+	if rec.count() != 2 {
+		t.Fatalf("connections = %d, want 2 (redirect not followed, follow stops)", rec.count())
+	}
+}
+
+// lookupFailingTransport fails the first API lookups, then serves the API normally.
+type lookupFailingTransport struct {
+	mu       sync.Mutex
+	failures []int // per API request: status to return, or -1 for a network error
+	lookups  int
+}
+
+func (tr *lookupFailingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	tr.mu.Lock()
+	i := tr.lookups
+	tr.lookups++
+	tr.mu.Unlock()
+	if i < len(tr.failures) {
+		if tr.failures[i] < 0 {
+			return nil, errors.New("connection reset")
+		}
+		return &http.Response{
+			StatusCode: tr.failures[i], Header: http.Header{},
+			Body: io.NopCloser(strings.NewReader(`{"message":"gateway"}`)), Request: req,
+		}, nil
+	}
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+func TestFollowEnforcesMinimumConnectionInterval(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		source LogSource
+		body   string
+	}{
+		// The VMM answers 200 with one plain-text error line and ends at once.
+		{"node", serialSource, "<failed to read line: stream did not contain valid UTF-8>\n"},
+		{"container", containerSource, ndjsonRecord("stdout", "2026-11-09T12:00:00Z once\n")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client, rec := newLogTestClient(t, func(n int, w http.ResponseWriter, r *http.Request) {
+				_, _ = io.WriteString(w, tc.body)
+			})
+			setMinConnectionInterval(t, time.Second)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			lines, errs := client.FollowCVMLogs(ctx, "app_test", tc.source, nil)
+			go func() {
+				for range lines {
+				}
+			}()
+			deadline := time.After(5 * time.Second)
+			for rec.count() < 3 {
+				select {
+				case err := <-errs:
+					t.Fatalf("follow stopped: %v", err)
+				case <-deadline:
+					t.Fatalf("connections = %d", rec.count())
+				case <-time.After(10 * time.Millisecond):
+				}
+			}
+			cancel()
+			for range errs { // wait for the follow goroutine before cleanup resets the interval
+			}
+			_, times := rec.snapshot()
+			for i := 1; i < 3; i++ {
+				if gap := times[i].Sub(times[i-1]); gap < 950*time.Millisecond {
+					t.Fatalf("connection %d started %v after the previous one, want >= 1s", i+1, gap)
+				}
+			}
+		})
+	}
+}
+
+func TestFollowCancelDuringConnectionIntervalReturnsPromptly(t *testing.T) {
+	client, rec := newLogTestClient(t, func(n int, w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "line\n")
+	})
+	setMinConnectionInterval(t, time.Hour)
+	ctx, cancel := context.WithCancel(context.Background())
+	lines, errs := client.FollowCVMLogs(ctx, "app_test", serialSource, nil)
+	<-lines
+	for rec.count() < 1 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	time.Sleep(50 * time.Millisecond)
+	cancelled := time.Now()
+	cancel()
+	if _, err := collectFollow(t, lines, errs, 2*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(cancelled); elapsed > 200*time.Millisecond {
+		t.Fatalf("cancel during the connection interval took %v", elapsed)
+	}
+}
+
+func TestFollowRetriesTransientLookupFailures(t *testing.T) {
+	logs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, ndjsonRecord("stdout", "2026-11-09T12:00:00Z up\n"))
+	}))
+	defer logs.Close()
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/composition") {
+			_ = json.NewEncoder(w).Encode(map[string]any{"containers": []map[string]any{{
+				"id": "c1", "names": []string{"/app"},
+			}}})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(containerInfo(logs.URL))
+	}))
+	defer api.Close()
+	newClient := func(tr *lookupFailingTransport) *Client {
+		client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL), WithMaxRetries(0),
+			WithHTTPClient(&http.Client{Transport: tr}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return client
+	}
+
+	t.Run("502, 429 and network error then success", func(t *testing.T) {
+		tr := &lookupFailingTransport{failures: []int{502, 429, -1}}
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		lines, errs := newClient(tr).FollowCVMLogs(ctx, "app_test", containerSource, nil)
+		select {
+		case line := <-lines:
+			if line != "up\n" {
+				t.Fatalf("line = %q", line)
+			}
+		case err := <-errs:
+			t.Fatalf("transient lookup failure must be retried: %v", err)
+		case <-time.After(5 * time.Second):
+			t.Fatal("timeout")
+		}
+	})
+	t.Run("gives up after five", func(t *testing.T) {
+		tr := &lookupFailingTransport{failures: []int{502, 502, 502, 502, 502, 502}}
+		_, errs := newClient(tr).FollowCVMLogs(context.Background(), "app_test", containerSource, nil)
+		var err error
+		select {
+		case err = <-errs:
+		case <-time.After(10 * time.Second):
+			t.Fatal("timeout")
+		}
+		if asAPIError(t, err).StatusCode != 502 || tr.lookups != 5 {
+			t.Fatalf("got %v after %d lookups, want 502 after 5", err, tr.lookups)
+		}
+	})
+	t.Run("4xx lookup stops", func(t *testing.T) {
+		tr := &lookupFailingTransport{failures: []int{404}}
+		_, errs := newClient(tr).FollowCVMLogs(context.Background(), "app_test", containerSource, nil)
+		if err := <-errs; asAPIError(t, err).StatusCode != 404 || tr.lookups != 1 {
+			t.Fatalf("got %v after %d lookups", err, tr.lookups)
 		}
 	})
 }
@@ -1637,6 +1988,28 @@ func TestInvalidContainerNameRejectedBeforeRequest(t *testing.T) {
 	}
 }
 
+func TestContainerNameMatchesGatewayRule(t *testing.T) {
+	client, rec := newLogTestClient(t, func(n int, w http.ResponseWriter, r *http.Request) {})
+	for _, name := range []string{".app", "-x", "_x", "a..b", "..", strings.Repeat("a", 129)} {
+		_, err := client.FetchCVMLogEntries(context.Background(), "app_test", LogSource{Type: "container", Name: name}, nil)
+		if err == nil || !strings.Contains(err.Error(), "invalid container name") {
+			t.Fatalf("%q: got %v", name, err)
+		}
+		entries, errs := client.FollowCVMLogEntries(context.Background(), "app_test", LogSource{Type: "container", Name: name}, nil)
+		if _, err := collectFollow(t, entries, errs, time.Second); err == nil || !strings.Contains(err.Error(), "invalid container name") {
+			t.Fatalf("%q: follow got %v", name, err)
+		}
+	}
+	if rec.infoCalls() != 0 || rec.count() != 0 {
+		t.Fatalf("requests were made: info=%d logs=%d", rec.infoCalls(), rec.count())
+	}
+	for _, name := range []string{"a" + strings.Repeat("b", 127), "/web-1.v2_x", "9", "a.b.c"} {
+		if _, err := containerSlug(name); err != nil {
+			t.Fatalf("%q must be valid: %v", name, err)
+		}
+	}
+}
+
 func TestContainerLogBaseFallbackAppendsQueryRaw(t *testing.T) {
 	var target string
 	logs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1671,6 +2044,69 @@ func TestContainerLogBaseFallbackAppendsQueryRaw(t *testing.T) {
 	}
 }
 
+func TestFollowResolvesContainerOnceAndLooksUpInfoPerConnection(t *testing.T) {
+	until := time.Date(2026, 11, 9, 12, 0, 3, 0, time.UTC)
+	stubFollowNow(t, func() time.Time { return until.Add(-time.Hour) })
+	for _, source := range []LogSource{{Type: "container"}, {Type: "container", Name: "app"}, {Type: "container", Name: "c1"}} {
+		t.Run("name="+source.Name, func(t *testing.T) {
+			client, rec := newLogTestClient(t, func(n int, w http.ResponseWriter, r *http.Request) {
+				// Two connections end cleanly after one record; the third reaches until.
+				_, _ = io.WriteString(w, ndjsonRecord("stdout", fmt.Sprintf("2026-11-09T12:00:%02dZ r%d\n", n+(n/3), n)))
+			})
+			lines, errs := client.FollowCVMLogs(context.Background(), "app_test", source,
+				&LogsOptions{Until: until.Format(time.RFC3339)})
+			got, err := collectFollow(t, lines, errs, 5*time.Second)
+			if err != nil || strings.Join(got, "") != "r1\nr2\nr3\n" {
+				t.Fatalf("got %q, %v", got, err)
+			}
+			rec.mu.Lock()
+			defer rec.mu.Unlock()
+			if len(rec.uris) != 3 || rec.composition != 1 || rec.info != 3 {
+				t.Fatalf("connections=%d composition=%d info=%d, want 3/1/3", len(rec.uris), rec.composition, rec.info)
+			}
+			for _, uri := range rec.uris {
+				if !strings.HasPrefix(uri, "/logs/123/container/app?sig=abc&") {
+					t.Fatalf("request target %q not built from container_log_base", uri)
+				}
+			}
+		})
+	}
+}
+
+func TestContainerResolutionErrors(t *testing.T) {
+	var calls int
+	logs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++ }))
+	defer logs.Close()
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/composition") {
+			_ = json.NewEncoder(w).Encode(map[string]any{"containers": []map[string]any{
+				{"id": "abc111", "names": []string{"/web"}},
+				{"id": "abc222", "names": []string{"/worker"}},
+			}})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(containerInfo(logs.URL))
+	}))
+	defer api.Close()
+	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.FetchCVMLogEntries(context.Background(), "app_test", LogSource{Type: "container", Name: "missing"}, nil)
+	if apiErr := asAPIError(t, err); apiErr.ErrorCode != "ERR-17-007" || apiErr.Message != "Container not found" || apiErr.StatusCode != 0 {
+		t.Fatalf("not found = %+v", apiErr)
+	}
+	_, errs := client.FollowCVMLogs(context.Background(), "app_test", LogSource{Type: "container", Name: "abc"}, nil)
+	apiErr := asAPIError(t, <-errs)
+	if apiErr.ErrorCode != "ERR-17-001" || apiErr.StatusCode != 0 ||
+		!strings.Contains(apiErr.Message, "web") || !strings.Contains(apiErr.Message, "worker") {
+		t.Fatalf("ambiguous prefix = %+v", apiErr)
+	}
+	if calls != 0 {
+		t.Fatalf("log requests = %d, want 0", calls)
+	}
+}
+
 func TestCompositionErrorIsSurfaced(t *testing.T) {
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/composition") {
@@ -1685,8 +2121,8 @@ func TestCompositionErrorIsSurfaced(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = client.FetchCVMLogEntries(context.Background(), "app_test", LogSource{Type: "container"}, nil)
-	if err == nil || !strings.Contains(err.Error(), "CVM is not running") {
-		t.Fatalf("got %v", err)
+	if apiErr := asAPIError(t, err); apiErr.Message != "CVM is not running" || apiErr.StatusCode != 0 {
+		t.Fatalf("got %+v", apiErr)
 	}
 }
 

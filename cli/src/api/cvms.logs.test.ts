@@ -181,7 +181,7 @@ describe("CVM log access client", () => {
 
 		expect(fetchMock).toHaveBeenCalledTimes(7);
 		expect(output).toEqual(["still following\n"]);
-	});
+	}, 20_000);
 
 	test("ordinary network failures stop after five consecutive failures", async () => {
 		fetchImplementation = async () => {
@@ -199,7 +199,7 @@ describe("CVM log access client", () => {
 		expect(error).toBeInstanceOf(TypeError);
 		expect(error).toMatchObject({ message: "network unavailable" });
 		expect(fetchMock).toHaveBeenCalledTimes(5);
-	});
+	}, 20_000);
 
 	test("retryable non-200 StructuredErrors stop after five failures and retain suggestions", async () => {
 		fetchImplementation = async () =>
@@ -227,7 +227,7 @@ describe("CVM log access client", () => {
 			message: expect.stringContaining("Node VMM unavailable"),
 		});
 		expect(fetchMock).toHaveBeenCalledTimes(5);
-	});
+	}, 20_000);
 
 	test("a successful HTTP 200 with a record resets the ordinary failure counter", async () => {
 		const controller = new AbortController();
@@ -438,9 +438,9 @@ describe("CVM log access client", () => {
 		expect(error).toBeInstanceOf(LogAccessError);
 		expect(error).toMatchObject({ code: "ERR-17-003" });
 		expect(fetchMock).toHaveBeenCalledTimes(4);
-		// 4 URL resolutions + 3 CVM-info refreshes before giving up.
-		expect(clientGet).toHaveBeenCalledTimes(7);
-	});
+		// One CVM-info lookup per connection attempt (no extra 003 refresh).
+		expect(clientGet).toHaveBeenCalledTimes(4);
+	}, 20_000);
 
 	test("repeated midstream ERR-17-003 is also limited across HTTP 200 bodies", async () => {
 		fetchImplementation = async () =>
@@ -453,8 +453,8 @@ describe("CVM log access client", () => {
 		expect(error).toBeInstanceOf(LogAccessError);
 		expect(error).toMatchObject({ code: "ERR-17-003" });
 		expect(fetchMock).toHaveBeenCalledTimes(4);
-		// 1 public_logs check + 4 composition lookups + 3 CVM-info refreshes.
-		expect(clientGet).toHaveBeenCalledTimes(8);
+		// 1 composition at start + 1 CVM-info per connection attempt.
+		expect(clientGet).toHaveBeenCalledTimes(5);
 	});
 
 	test("midstream 4xx error is surfaced with its message and suggestions and not retried", async () => {
