@@ -1,3 +1,8 @@
+## [0.6.3](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.2...js-v0.6.3) (2026-11-10)
+
+### fix
+
+* **sdks:** align follow behavior verified against live log endpoints ([200cda6](https://github.com/Phala-Network/phala-cloud/commit/200cda6248e947e6bf125928feffdd391195fb80))
 ## [0.6.2](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.1...js-v0.6.2) (2026-11-10)
 
 ### feat
