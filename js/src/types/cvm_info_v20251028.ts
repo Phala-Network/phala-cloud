@@ -103,6 +103,7 @@ export const CvmDetailV20251028Schema = z.object({
   instance_type: z.string().optional().nullable(),
   public_sysinfo: z.boolean().optional().default(false),
   public_logs: z.boolean().optional().default(false),
+  public_tcbinfo: z.boolean().optional(),
   managed_env: z.boolean().optional().default(false),
   dapp_dashboard_url: z.string().optional().nullable(),
   /** Presigned serial log URL; expires shortly after it is issued. */

@@ -281,6 +281,17 @@ describe("version-based schema validation", () => {
       }
     });
 
+    it("keeps public_tcbinfo false on v20251028 CVM detail", () => {
+      const result = CvmDetailV20251028Schema.safeParse({
+        ...mockCvmDetailV20251028,
+        public_tcbinfo: false,
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.public_tcbinfo).toBe(false);
+      }
+    });
+
     it("should validate versioned table IDs in v20251028 CVM mutation responses", () => {
       const result = CvmDetailV20251028Schema.safeParse({
         ...mockCvmDetailV20251028,
