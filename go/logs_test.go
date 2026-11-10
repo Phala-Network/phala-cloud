@@ -3,6 +3,8 @@ package phala
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +12,22 @@ import (
 	"testing"
 	"time"
 )
+
+func TestWaitBackoffCancelReturnsPromptly(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+	}()
+	start := time.Now()
+	err := waitBackoff(ctx, 5)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v", err)
+	}
+	if time.Since(start) > 500*time.Millisecond {
+		t.Fatalf("took %v", time.Since(start))
+	}
+}
 
 func TestFetchCVMLogsStructuredError(t *testing.T) {
 	logs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -307,5 +325,119 @@ func TestFollowGuestStreamErrorStops(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("calls = %d, want 1", calls)
+	}
+}
+
+func TestContainerTextGuestErrorWithoutNewline(t *testing.T) {
+	const guest = "Docker responded with status code 501: configured logging driver does not support reading"
+	logs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"error":"`+guest+`"}`)
+	}))
+	defer logs.Close()
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/composition") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"containers": []map[string]any{{
+					"id": "c1", "names": []string{"/app"},
+					"log_endpoint": logs.URL + "/logs/123/container/app",
+				}},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": true})
+	}))
+	defer api.Close()
+	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.FetchCVMLogs(context.Background(), "app_test", LogSource{Type: "container"}, &LogsOptions{Format: "text"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	apiErr, ok := err.(*APIError)
+	if !ok || apiErr.ErrorCode != "ERR-17-009" || !strings.Contains(apiErr.Message, guest) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestContainerFollowStopsAfterFiveEmptyEnds(t *testing.T) {
+	var calls int
+	logs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+	}))
+	defer logs.Close()
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/composition") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"containers": []map[string]any{{
+					"id": "c1", "names": []string{"/app"},
+					"log_endpoint": logs.URL + "/logs/123/container/app",
+				}},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": true})
+	}))
+	defer api.Close()
+	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, errs := client.FollowCVMLogs(context.Background(), "app_test", LogSource{Type: "container"}, nil)
+	err = <-errs
+	if err == nil || !strings.Contains(err.Error(), "keeps ending without new output") {
+		t.Fatalf("got %v", err)
+	}
+	if calls != 5 {
+		t.Fatalf("calls = %d, want 5", calls)
+	}
+}
+
+func TestContainerFollowWithDataKeepsReconnecting(t *testing.T) {
+	var calls int
+	logs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		_, _ = io.WriteString(w, fmt.Sprintf(`{"channel":"stdout","message":"2026-11-09T12:00:%02d.0Z line%d"}`+"\n", calls, calls))
+	}))
+	defer logs.Close()
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/composition") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"containers": []map[string]any{{
+					"id": "c1", "names": []string{"/app"},
+					"log_endpoint": logs.URL + "/logs/123/container/app",
+				}},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": true})
+	}))
+	defer api.Close()
+	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	lines, errs := client.FollowCVMLogs(ctx, "app_test", LogSource{Type: "container"}, nil)
+	got := 0
+	for got < 6 {
+		select {
+		case <-lines:
+			got++
+			if got >= 6 {
+				cancel()
+			}
+		case err := <-errs:
+			if err != nil {
+				t.Fatal(err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timeout, got %d", got)
+		}
+	}
+	if calls < 6 {
+		t.Fatalf("calls = %d, want >= 6", calls)
 	}
 }

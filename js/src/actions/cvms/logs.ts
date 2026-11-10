@@ -242,6 +242,39 @@ function formatFollowContainerEntry(
   };
 }
 
+function guestAgentErrorMessage(text: string): string | undefined {
+  const trimmed = text.trim();
+  if (!trimmed) return undefined;
+  try {
+    const parsed = JSON.parse(trimmed) as {
+      error?: unknown;
+      channel?: unknown;
+      message?: unknown;
+    };
+    if (
+      typeof parsed.error === "string" &&
+      parsed.channel === undefined &&
+      parsed.message === undefined
+    ) {
+      return parsed.error;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+function throwIfGuestAgentError(text: string): void {
+  const message = guestAgentErrorMessage(text);
+  if (message !== undefined) {
+    throw new LogAccessError({
+      code: "ERR-17-009",
+      message,
+      fromStreamBody: true,
+    });
+  }
+}
+
 function parseStructuredLogLineToEntry(line: string): StructuredLogEntry | null {
   const trimmed = line.trim();
   if (!trimmed) return null;
@@ -460,14 +493,19 @@ function getErrorHttpStatus(error: unknown): number | undefined {
   return undefined;
 }
 
+const EMPTY_STREAM_END_MESSAGE =
+  "log stream keeps ending without new output; the container may have stopped";
+
 async function followLogRequests(
   resolveUrl: () => Promise<string>,
-  consume: (response: Response) => Promise<void>,
+  consume: (response: Response) => Promise<boolean | void>,
   signal?: AbortSignal,
   refreshCvm?: () => Promise<void>,
+  trackEmptyEnds = false,
 ): Promise<void> {
   let failureCount = 0;
   let expiredRetries = 0;
+  let emptyEnds = 0;
   while (!signal?.aborted) {
     try {
       const url = await resolveUrl();
@@ -475,9 +513,23 @@ async function followLogRequests(
       const response = await fetch(url, { signal });
       if (!response.ok) await throwResponseError(response);
       failureCount = 0;
-      await consume(response);
+      const delivered = (await consume(response)) ?? true;
       expiredRetries = 0;
       if (signal?.aborted) return;
+      if (trackEmptyEnds) {
+        if (delivered) {
+          emptyEnds = 0;
+        } else {
+          emptyEnds += 1;
+          if (emptyEnds >= 5) {
+            throw new LogAccessError({
+              message: EMPTY_STREAM_END_MESSAGE,
+              fromStreamBody: true,
+            });
+          }
+          await waitForReconnect(signal, Math.min(250 * 2 ** (emptyEnds - 1), 5000));
+        }
+      }
     } catch (error) {
       if (signal?.aborted || (error instanceof Error && error.name === "AbortError")) {
         return;
@@ -594,6 +646,27 @@ export async function fetchContainerLogs(
   id: CvmIdInput | string,
   options: CvmLogsOptions & { container?: string; matchContainerIdPrefix?: boolean } = {},
 ): Promise<string> {
+  if (options.format === "text") {
+    const times = resolveLogTimeWindow(options.since, options.until);
+    const baseUrl = await getContainerLogEndpoint(
+      client,
+      id,
+      options.container,
+      options.matchContainerIdPrefix ?? true,
+    );
+    const url = buildLogUrl(baseUrl, {
+      ...times,
+      tail: options.tail,
+      timestamps: options.timestamps,
+      ansi: options.ansi,
+      format: "text",
+    });
+    const response = await fetch(url, { signal: options.signal });
+    if (!response.ok) await throwResponseError(response);
+    const text = await response.text();
+    throwIfGuestAgentError(text);
+    return text;
+  }
   const entries = await fetchContainerLogsEntries(client, id, {
     ...options,
     format: "ndjson",
@@ -640,16 +713,19 @@ export async function streamContainerLogsEntries(
 
   await followLogRequests(
     buildRequestUrl,
-    (response) =>
-      streamNdjsonEntriesResponse(response, (entry) => {
+    async (response) => {
+      let delivered = false;
+      await streamNdjsonEntriesResponse(response, (entry) => {
         const timestamp = parseTimestampedMessage(entry.message);
         if (timestamp.second === undefined || !timestamp.timestamp) {
+          delivered = true;
           onEntry(formatFollowContainerEntry(entry, options.timestamps ?? false));
           return;
         }
 
         const key = JSON.stringify([entry.channel, entry.message]);
         if (cursor.boundarySecond !== undefined && timestamp.second < cursor.boundarySecond) {
+          delivered = true;
           onEntry(formatFollowContainerEntry(entry, options.timestamps ?? false));
           return;
         }
@@ -669,13 +745,57 @@ export async function streamContainerLogsEntries(
 
         cursor.since = Math.max(cursor.since ?? timestamp.second, timestamp.second);
         cursor.boundaryCounts.set(key, (cursor.boundaryCounts.get(key) ?? 0) + 1);
+        delivered = true;
         onEntry(formatFollowContainerEntry(entry, options.timestamps ?? false));
-      }),
+      });
+      return delivered;
+    },
     abort,
     async () => {
       await getCvmInfoLogs(client, resolveCvmId(id));
     },
+    true,
   );
+}
+
+async function streamContainerText(
+  response: Response,
+  onData: (data: string) => void,
+): Promise<boolean> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("No response body available for streaming");
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finished = false;
+  let delivered = false;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      let newline = buffer.indexOf("\n");
+      while (newline >= 0) {
+        const line = buffer.slice(0, newline);
+        buffer = buffer.slice(newline + 1);
+        throwIfGuestAgentError(line);
+        onData(line + "\n");
+        delivered = true;
+        newline = buffer.indexOf("\n");
+      }
+      if (done) {
+        finished = true;
+        break;
+      }
+    }
+    if (buffer) {
+      throwIfGuestAgentError(buffer);
+      onData(buffer);
+      delivered = true;
+    }
+  } finally {
+    if (!finished) await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+  return delivered;
 }
 
 export async function streamContainerLogs(
@@ -685,6 +805,38 @@ export async function streamContainerLogs(
   options: CvmLogsOptions & { container?: string; matchContainerIdPrefix?: boolean } = {},
   signal?: AbortSignal,
 ): Promise<void> {
+  if (options.format === "text") {
+    const abort = signal ?? options.signal;
+    const times = resolveLogTimeWindow(options.since, options.until);
+    let firstRequest = true;
+    await followLogRequests(
+      async () => {
+        const baseUrl = await getContainerLogEndpoint(
+          client,
+          id,
+          options.container,
+          options.matchContainerIdPrefix ?? true,
+        );
+        const tail = firstRequest ? options.tail : undefined;
+        firstRequest = false;
+        return buildLogUrl(baseUrl, {
+          ...times,
+          tail,
+          follow: true,
+          timestamps: options.timestamps,
+          ansi: options.ansi,
+          format: "text",
+        });
+      },
+      (response) => streamContainerText(response, onData),
+      abort,
+      async () => {
+        await getCvmInfoLogs(client, resolveCvmId(id));
+      },
+      true,
+    );
+    return;
+  }
   return streamContainerLogsEntries(
     client,
     id,
@@ -736,17 +888,29 @@ export async function* followCvmLogs(
   const run =
     source.type === "node"
       ? streamCvmChannelLogs(client, id, source.channel, push, options, options.signal)
-      : streamContainerLogsEntries(
-          client,
-          id,
-          push,
-          {
-            ...options,
-            container: source.name,
-            matchContainerIdPrefix: source.matchContainerIdPrefix,
-          },
-          options.signal,
-        );
+      : options.format === "text"
+        ? streamContainerLogs(
+            client,
+            id,
+            (data) => push(data),
+            {
+              ...options,
+              container: source.name,
+              matchContainerIdPrefix: source.matchContainerIdPrefix,
+            },
+            options.signal,
+          )
+        : streamContainerLogsEntries(
+            client,
+            id,
+            push,
+            {
+              ...options,
+              container: source.name,
+              matchContainerIdPrefix: source.matchContainerIdPrefix,
+            },
+            options.signal,
+          );
 
   void run.then(
     () => {

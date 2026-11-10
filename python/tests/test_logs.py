@@ -250,6 +250,55 @@ def test_http_502_err_17_009_still_reconnects_in_follow() -> None:
     assert len(state.calls) == 5
 
 
+def test_container_text_guest_error_without_newline() -> None:
+    state = _LogState()
+    state.bodies = [json.dumps({"error": GUEST_DOCKER_ERROR})]
+    with _client(state) as log_http:
+        with pytest.raises(LogAccessError) as err:
+            fetch_cvm_logs(
+                api_get=state.api_get,
+                log_http=log_http,
+                cvm_id="app_test",
+                source={"type": "container"},
+                format="text",
+            )
+    assert err.value.code == "ERR-17-009"
+    assert GUEST_DOCKER_ERROR in str(err.value)
+    assert len(state.calls) == 1
+
+
+def test_container_follow_stops_after_five_empty_ends() -> None:
+    state = _LogState()
+    state.bodies = [""] * 5
+    with _client(state) as log_http:
+        with pytest.raises(LogAccessError) as err:
+            next(
+                follow_container_log_entries(
+                    api_get=state.api_get, log_http=log_http, cvm_id="app_test"
+                )
+            )
+    assert "keeps ending without new output" in str(err.value)
+    assert len(state.calls) == 5
+
+
+def test_container_follow_with_data_keeps_reconnecting() -> None:
+    state = _LogState()
+    state.bodies = [
+        json.dumps({"channel": "stdout", "message": f"2026-11-09T12:00:0{i}.0Z line{i}"}) + "\n"
+        for i in range(1, 7)
+    ]
+    with _client(state) as log_http:
+        count = 0
+        for _entry in follow_container_log_entries(
+            api_get=state.api_get, log_http=log_http, cvm_id="app_test"
+        ):
+            count += 1
+            if count >= 6:
+                break
+    assert count == 6
+    assert len(state.calls) == 6
+
+
 def test_node_fetch_rejects_since() -> None:
     with httpx.Client() as log_http:
         with pytest.raises(ValueError, match="since"):

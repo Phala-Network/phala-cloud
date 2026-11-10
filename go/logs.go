@@ -225,6 +225,9 @@ func (c *Client) FetchCVMLogs(ctx context.Context, cvmID string, source LogSourc
 		opts = &LogsOptions{}
 	}
 	if source.Type == "container" {
+		if strings.EqualFold(opts.Format, "text") {
+			return c.fetchContainerText(ctx, cvmID, source, opts)
+		}
 		entryOpts := *opts
 		entryOpts.Format = "ndjson"
 		entries, err := c.FetchCVMLogEntries(ctx, cvmID, source, &entryOpts)
@@ -332,26 +335,49 @@ func parseNDJSON(text string) ([]LogEntry, error) {
 	return entries, nil
 }
 
+const emptyStreamEndMessage = "log stream keeps ending without new output; the container may have stopped"
+
+func guestAgentErrorMessage(text string) string {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return ""
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
+		return ""
+	}
+	errMsg, ok := parsed["error"].(string)
+	if !ok || errMsg == "" {
+		return ""
+	}
+	_, hasChannel := parsed["channel"]
+	_, hasMessage := parsed["message"]
+	if hasChannel || hasMessage {
+		return ""
+	}
+	return errMsg
+}
+
+func errGuestAgent(message string) error {
+	return &APIError{
+		StatusCode:     logErrorStatus["ERR-17-009"],
+		ErrorCode:      "ERR-17-009",
+		Message:        "ERR-17-009: " + message,
+		fromStreamBody: true,
+	}
+}
+
 func parseNDJSONLine(line string) (*LogEntry, error) {
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" {
 		return nil, nil
 	}
+	if msg := guestAgentErrorMessage(trimmed); msg != "" {
+		return nil, errGuestAgent(msg)
+	}
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
 		return nil, &APIError{Message: "Invalid NDJSON log record."}
-	}
-	if errMsg, ok := parsed["error"].(string); ok {
-		_, hasChannel := parsed["channel"]
-		_, hasMessage := parsed["message"]
-		if errMsg != "" && !hasChannel && !hasMessage {
-			return nil, &APIError{
-				StatusCode:     logErrorStatus["ERR-17-009"],
-				ErrorCode:      "ERR-17-009",
-				Message:        "ERR-17-009: " + errMsg,
-				fromStreamBody: true,
-			}
-		}
 	}
 	if code, ok := parsed["error_code"].(string); ok {
 		msg, _ := parsed["message"].(string)
@@ -382,7 +408,12 @@ func (c *Client) FollowCVMLogs(ctx context.Context, cvmID string, source LogSour
 		defer close(lines)
 		defer close(errs)
 		if source.Type == "container" {
-			err := c.followContainer(ctx, cvmID, source, opts, lines)
+			var err error
+			if opts != nil && strings.EqualFold(opts.Format, "text") {
+				err = c.followContainerText(ctx, cvmID, source, opts, lines)
+			} else {
+				err = c.followContainer(ctx, cvmID, source, opts, lines)
+			}
 			if err != nil && !errors.Is(err, context.Canceled) {
 				errs <- err
 			}
@@ -432,7 +463,9 @@ func (c *Client) followNode(ctx context.Context, cvmID string, channel CVMLogCha
 			if failureCount >= 5 {
 				return err
 			}
-			time.Sleep(time.Duration(minInt(250<<uint(failureCount-1), 5000)) * time.Millisecond)
+			if err := waitBackoff(ctx, failureCount); err != nil {
+				return err
+			}
 			continue
 		}
 		if resp.StatusCode >= 400 {
@@ -454,7 +487,9 @@ func (c *Client) followNode(ctx context.Context, cvmID string, channel CVMLogCha
 			if failureCount >= 5 {
 				return apiErr
 			}
-			time.Sleep(time.Duration(minInt(250<<uint(failureCount-1), 5000)) * time.Millisecond)
+			if err := waitBackoff(ctx, failureCount); err != nil {
+				return err
+			}
 			continue
 		}
 		failureCount = 0
@@ -496,6 +531,156 @@ func scanNodeBody(body io.Reader, lines chan<- string) error {
 	return scanner.Err()
 }
 
+func (c *Client) fetchContainerText(ctx context.Context, cvmID string, source LogSource, opts *LogsOptions) (string, error) {
+	base, err := c.containerLogURL(ctx, cvmID, source.Name)
+	if err != nil {
+		return "", err
+	}
+	times, err := resolveLogTimeWindow(opts.Since, opts.Until, time.Now())
+	if err != nil {
+		return "", err
+	}
+	params := map[string]string{"format": "text"}
+	if t := tailValue(opts.Tail); t != "" {
+		params["tail"] = t
+	}
+	if times.Since != nil {
+		params["since"] = strconv.FormatInt(*times.Since, 10)
+	}
+	if times.Until != nil {
+		params["until"] = strconv.FormatInt(*times.Until, 10)
+	}
+	if opts.Timestamps {
+		params["timestamps"] = "true"
+	}
+	if opts.ANSI {
+		params["ansi"] = "true"
+	}
+	resp, err := logHTTPDo(ctx, buildLogURL(base, params))
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return "", parseLogAccessError(resp)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	text := string(body)
+	if msg := guestAgentErrorMessage(text); msg != "" {
+		return "", errGuestAgent(msg)
+	}
+	return text, nil
+}
+
+func (c *Client) followContainerText(ctx context.Context, cvmID string, source LogSource, opts *LogsOptions, lines chan<- string) error {
+	if opts == nil {
+		opts = &LogsOptions{}
+	}
+	times, err := resolveLogTimeWindow(opts.Since, opts.Until, time.Now())
+	if err != nil {
+		return err
+	}
+	first := true
+	failureCount := 0
+	expiredRetries := 0
+	emptyEnds := 0
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		base, err := c.containerLogURL(ctx, cvmID, source.Name)
+		if err != nil {
+			return err
+		}
+		params := map[string]string{"follow": "true", "format": "text"}
+		if first {
+			if t := tailValue(opts.Tail); t != "" {
+				params["tail"] = t
+			}
+			first = false
+		}
+		if times.Since != nil {
+			params["since"] = strconv.FormatInt(*times.Since, 10)
+		}
+		if times.Until != nil {
+			params["until"] = strconv.FormatInt(*times.Until, 10)
+		}
+		if opts.Timestamps {
+			params["timestamps"] = "true"
+		}
+		resp, err := logHTTPDo(ctx, buildLogURL(base, params))
+		if err != nil {
+			failureCount++
+			if failureCount >= 5 {
+				return err
+			}
+			if err := waitBackoff(ctx, failureCount); err != nil {
+				return err
+			}
+			continue
+		}
+		if resp.StatusCode >= 400 {
+			apiErr := parseLogAccessError(resp)
+			resp.Body.Close()
+			var typed *APIError
+			if errors.As(apiErr, &typed) && typed.ErrorCode == "ERR-17-003" {
+				expiredRetries++
+				if expiredRetries > 3 {
+					return apiErr
+				}
+				continue
+			}
+			if typed != nil && typed.StatusCode < 500 {
+				return apiErr
+			}
+			failureCount++
+			if failureCount >= 5 {
+				return apiErr
+			}
+			continue
+		}
+		failureCount = 0
+		delivered, err := scanContainerText(resp.Body, lines)
+		resp.Body.Close()
+		if err != nil {
+			return err
+		}
+		expiredRetries = 0
+		if delivered {
+			emptyEnds = 0
+			continue
+		}
+		emptyEnds++
+		if emptyEnds >= 5 {
+			return &APIError{Message: emptyStreamEndMessage, fromStreamBody: true}
+		}
+		if err := waitBackoff(ctx, emptyEnds); err != nil {
+			return err
+		}
+	}
+}
+
+func scanContainerText(body io.Reader, lines chan<- string) (bool, error) {
+	scanner := bufio.NewScanner(body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	delivered := false
+	for scanner.Scan() {
+		content := scanner.Text()
+		if msg := guestAgentErrorMessage(content); msg != "" {
+			return delivered, errGuestAgent(msg)
+		}
+		lines <- content + "\n"
+		delivered = true
+	}
+	if err := scanner.Err(); err != nil {
+		return delivered, err
+	}
+	return delivered, nil
+}
+
 func (c *Client) followContainer(ctx context.Context, cvmID string, source LogSource, opts *LogsOptions, lines chan<- string) error {
 	if opts == nil {
 		opts = &LogsOptions{}
@@ -510,6 +695,7 @@ func (c *Client) followContainer(ctx context.Context, cvmID string, source LogSo
 	first := true
 	failureCount := 0
 	expiredRetries := 0
+	emptyEnds := 0
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -538,7 +724,9 @@ func (c *Client) followContainer(ctx context.Context, cvmID string, source LogSo
 			if failureCount >= 5 {
 				return err
 			}
-			time.Sleep(time.Duration(minInt(250<<uint(failureCount-1), 5000)) * time.Millisecond)
+			if err := waitBackoff(ctx, failureCount); err != nil {
+				return err
+			}
 			continue
 		}
 		if resp.StatusCode >= 400 {
@@ -564,12 +752,24 @@ func (c *Client) followContainer(ctx context.Context, cvmID string, source LogSo
 			continue
 		}
 		failureCount = 0
-		err = scanContainerBody(resp.Body, opts.Timestamps, &since, &boundarySecond, boundaryCounts, replayCounts, lines)
+		delivered := 0
+		err = scanContainerBody(resp.Body, opts.Timestamps, &since, &boundarySecond, boundaryCounts, replayCounts, lines, &delivered)
 		resp.Body.Close()
 		if err != nil {
 			return err
 		}
 		expiredRetries = 0
+		if delivered > 0 {
+			emptyEnds = 0
+			continue
+		}
+		emptyEnds++
+		if emptyEnds >= 5 {
+			return &APIError{Message: emptyStreamEndMessage, fromStreamBody: true}
+		}
+		if err := waitBackoff(ctx, emptyEnds); err != nil {
+			return err
+		}
 	}
 }
 
@@ -580,6 +780,7 @@ func scanContainerBody(
 	boundarySecond **int64,
 	boundaryCounts, replayCounts map[string]int,
 	lines chan<- string,
+	delivered *int,
 ) error {
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -598,11 +799,13 @@ func scanContainerBody(
 		}
 		if !ok {
 			lines <- out
+			*delivered++
 			continue
 		}
 		key := entry.Channel + "\x00" + entry.Message
 		if *boundarySecond != nil && second < **boundarySecond {
 			lines <- out
+			*delivered++
 			continue
 		}
 		if *boundarySecond != nil && second == **boundarySecond {
@@ -623,6 +826,7 @@ func scanContainerBody(
 		}
 		boundaryCounts[key]++
 		lines <- out
+		*delivered++
 	}
 	return scanner.Err()
 }
@@ -655,4 +859,14 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func waitBackoff(ctx context.Context, attempt int) error {
+	d := time.Duration(minInt(250<<uint(attempt-1), 5000)) * time.Millisecond
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(d):
+		return nil
+	}
 }
