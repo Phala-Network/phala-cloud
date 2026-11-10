@@ -142,7 +142,7 @@ async function runSshCommand(
 		// Build SSH arguments
 		// SSH format: ssh [options] destination [command]
 		// We need to split pass-through into options vs command
-		const sshOptions = buildSshOptions(input.verbose, input.timeout);
+		const sshOptions = buildSshOptions(input.verbose, input.timeout, hostname);
 		const { options: ptOptions, command: ptCommand } =
 			splitPassThroughArgs(passThroughArgs);
 

@@ -30,6 +30,10 @@ Copy files to/from a CVM via SCP through the Phala Cloud gateway.
 - **Linked CVM**: `:~/config.yml` (uses `cvm_id` from `phala.toml`)
 - **Named CVM**: `my-app:~/logs/`, `app_abc123:/tmp/script.sh`
 
+## HTTP Proxy
+
+`phala cp` honours `HTTPS_PROXY` and `NO_PROXY` the same way as `phala ssh`. See [ssh.md](ssh.md#http-proxy).
+
 ## Examples
 
 Upload file to linked CVM:

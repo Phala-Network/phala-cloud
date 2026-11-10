@@ -36,6 +36,21 @@ Common pass-through options:
 
 Note: `-o ProxyCommand` is blocked for security reasons.
 
+## HTTP Proxy
+
+`phala ssh` and `phala cp` reach the gateway with `openssl s_client` as the SSH `ProxyCommand`. When `HTTPS_PROXY` (or `https_proxy`, which takes precedence) is set, the CLI adds `-proxy <host>:<port>` so the TLS connection goes through the proxy with HTTP CONNECT:
+
+    $ HTTPS_PROXY=http://proxy.example.com:3128 phala ssh
+
+`NO_PROXY` (or `no_proxy`) skips the proxy for matching hosts. It is a comma-separated list; each entry matches the host or any of its subdomains, with or without a leading dot, and `*` disables the proxy for every host.
+
+Limits:
+
+- Only `http://` proxies are supported. A value without a scheme is treated as `http://`, and the port defaults to 80. An `https://` or `socks5://` proxy fails with an error instead of connecting directly.
+- Proxy credentials in the URL (`http://user:pass@host:port`) are not supported and fail with an error, so a password never ends up on the `ssh` command line.
+- `HTTP_PROXY` and `ALL_PROXY` are not read. `NO_PROXY` entries with a port or a CIDR range are not matched.
+- Requires an `openssl` with `s_client -proxy`: OpenSSL 1.1.0 or later, or LibreSSL (tested with LibreSSL 3.3.6 as shipped with macOS).
+
 ## Examples
 
 Connect to linked CVM:

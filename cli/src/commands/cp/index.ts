@@ -154,7 +154,7 @@ async function runCpCommand(
 		}
 
 		// Build SCP arguments (SCP uses -P for port, not -p)
-		const sshOptions = buildSshOptions(input.verbose, "30");
+		const sshOptions = buildSshOptions(input.verbose, "30", hostname);
 		const scpArgs: string[] = [...sshOptions, "-P", port];
 
 		if (input.verbose) {
