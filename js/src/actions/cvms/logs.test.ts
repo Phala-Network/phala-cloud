@@ -157,12 +157,12 @@ describe("CVM log access", () => {
     const controller = new AbortController();
     const output: string[] = [];
     const first = [
-      { channel: "stdout", message: "2026-11-09T12:00:00.123456789Z repeated" },
-      { channel: "stdout", message: "2026-11-09T12:00:00.123456789Z repeated" },
+      { channel: "stdout", message: "2026-11-09T12:00:00.123456789Z repeated\n" },
+      { channel: "stdout", message: "2026-11-09T12:00:00.123456789Z repeated\n" },
     ];
     const second = [
       ...first,
-      { channel: "stdout", message: "2026-11-09T12:00:00.123456789Z repeated" },
+      { channel: "stdout", message: "2026-11-09T12:00:00.123456789Z repeated\n" },
     ];
     fetchImplementation = async () =>
       fetchMock.mock.calls.length === 1 ? ndjsonResponse(first) : ndjsonResponse(second);
@@ -178,7 +178,7 @@ describe("CVM log access", () => {
       controller.signal,
     );
 
-    expect(output).toEqual(["repeated", "repeated", "repeated"]);
+    expect(output).toEqual(["repeated\n", "repeated\n", "repeated\n"]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const urls = fetchMock.mock.calls.map(([input]) => new URL(String(input)));
     for (const url of urls) {
@@ -270,6 +270,35 @@ describe("CVM log access", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  test("container follow with public_logs false raises ERR-17-006 without connecting", async () => {
+    const get = vi.fn(async (path: string) => {
+      expect(String(path)).not.toContain("/composition");
+      return { public_logs: false, logs: {} };
+    });
+    const client = {
+      get,
+      config: { version: "2026-06-23" },
+    } as unknown as Client;
+    await expect(
+      streamContainerLogsEntries(client, "app_test", () => {}, { container: "anything" }),
+    ).rejects.toMatchObject({
+      name: "LogAccessError",
+      code: "ERR-17-006",
+      httpStatus: 409,
+    });
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("container not found is not retried", async () => {
+    const client = mockClient();
+    await expect(
+      streamContainerLogsEntries(client, "app_test", () => {}, { container: "missing" }),
+    ).rejects.toThrow(/Container 'missing' not found/);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(client.get).toHaveBeenCalledTimes(2);
+  });
+
   test("guest-agent ndjson error record is ERR-17-009 and does not retry", async () => {
     const client = mockClient();
     const guestError =
@@ -279,7 +308,7 @@ describe("CVM log access", () => {
     await expect(streamContainerLogsEntries(client, "app_test", () => {})).rejects.toMatchObject({
       name: "LogAccessError",
       code: "ERR-17-009",
-      message: expect.stringContaining(guestError),
+      message: guestError,
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -310,7 +339,7 @@ describe("CVM log access", () => {
     ).rejects.toMatchObject({
       name: "LogAccessError",
       code: "ERR-17-009",
-      message: expect.stringContaining(guestError),
+      message: guestError,
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -330,7 +359,7 @@ describe("CVM log access", () => {
     fetchImplementation = async () => {
       n += 1;
       return ndjsonResponse([
-        { channel: "stdout", message: `2026-11-09T12:00:0${n}.0Z line${n}` },
+        { channel: "stdout", message: `2026-11-09T12:00:0${n}.0Z line${n}\n` },
       ]);
     };
     const controller = new AbortController();

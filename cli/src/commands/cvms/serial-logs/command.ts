@@ -12,9 +12,10 @@ export const cvmsSerialLogsCommandMeta: CommandMeta = {
 		{
 			name: "tail",
 			shorthand: "n",
-			description: "Lines from end",
-			type: "number",
+			description: "Number of lines from the end, or all",
+			type: "string",
 			target: "tail",
+			argumentName: "lines",
 		},
 		{
 			name: "follow",
@@ -55,7 +56,7 @@ export const cvmsSerialLogsCommandMeta: CommandMeta = {
 
 export const cvmsSerialLogsCommandSchema = z.object({
 	cvmId: z.string().optional(),
-	tail: z.number().optional(),
+	tail: z.union([z.literal("all"), z.coerce.number().int().nonnegative()]).optional(),
 	follow: z.boolean().default(false),
 	timestamps: z.boolean().default(false),
 	json: z.boolean().default(false),

@@ -1764,7 +1764,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         until: str | int | None = None,
         timestamps: bool = False,
         ansi: bool = False,
-        format: CvmLogFormat = "text",
+        format: CvmLogFormat | None = None,
         log_http: httpx.Client | None = None,
     ) -> Iterator[str | CvmLogEntry]:
         owns = log_http is None

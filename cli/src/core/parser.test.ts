@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { logsCommandMeta, logsCommandSchema } from "@/src/commands/logs/command";
 import { buildCommandSchemaInput } from "./input-builder";
 import { hoistLeadingGlobalOptions, parseCommandArguments } from "./parser";
 import type { CommandMeta } from "./types";
@@ -263,5 +264,29 @@ describe("hoistLeadingGlobalOptions", () => {
 	test("keeps global-only invocations intact", () => {
 		expect(hoistLeadingGlobalOptions(["--help"])).toEqual(["--help"]);
 		expect(hoistLeadingGlobalOptions(["--profile"])).toEqual(["--profile"]);
+	});
+});
+
+describe("logs --tail", () => {
+	test("accepts -n all", () => {
+		const parsed = parseCommandArguments(["-n", "all"], logsCommandMeta.options);
+		expect(parsed.flags["--tail"]).toBe("all");
+		expect(logsCommandSchema.parse({ tail: parsed.flags["--tail"] }).tail).toBe(
+			"all",
+		);
+	});
+
+	test("coerces -n 100 to a number", () => {
+		const parsed = parseCommandArguments(["-n", "100"], logsCommandMeta.options);
+		expect(logsCommandSchema.parse({ tail: parsed.flags["--tail"] }).tail).toBe(
+			100,
+		);
+	});
+
+	test("rejects a non-numeric tail", () => {
+		const parsed = parseCommandArguments(["-n", "nope"], logsCommandMeta.options);
+		expect(() =>
+			logsCommandSchema.parse({ tail: parsed.flags["--tail"] }),
+		).toThrow();
 	});
 });
