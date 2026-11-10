@@ -1,3 +1,8 @@
+## [0.5.3](https://github.com/Phala-Network/phala-cloud/compare/go/v0.5.2...go/v0.5.3) (2026-11-10)
+
+### fix
+
+* **sdks:** align follow behavior verified against live log endpoints ([200cda6](https://github.com/Phala-Network/phala-cloud/commit/200cda6248e947e6bf125928feffdd391195fb80))
 ## [0.5.2](https://github.com/Phala-Network/phala-cloud/compare/go/v0.5.1...go/v0.5.2) (2026-11-10)
 
 ### fix
