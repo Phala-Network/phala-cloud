@@ -79,19 +79,23 @@ export class LogAccessError extends ResourceError {
   readonly code?: string;
   readonly httpStatus?: number;
   readonly suggestions: string[];
+  /** True when the error was parsed from a 200 stream body, not an HTTP status. */
+  readonly fromStreamBody: boolean;
 
   constructor(options: {
     message: string;
     code?: string;
     httpStatus?: number;
     suggestions?: readonly string[];
+    fromStreamBody?: boolean;
   }) {
     const details = options.code ? `${options.code}: ${options.message}` : options.message;
     const suggestionText = options.suggestions?.length
       ? `\nSuggestions:\n${options.suggestions.map((suggestion) => `- ${suggestion}`).join("\n")}`
       : "";
-    const status =
-      options.httpStatus ?? (options.code ? logErrorHttpStatus(options.code) : undefined) ?? 0;
+    const status = options.fromStreamBody
+      ? 0
+      : (options.httpStatus ?? (options.code ? logErrorHttpStatus(options.code) : undefined) ?? 0);
     super(`${details}${suggestionText}`, {
       status,
       statusText: "",
@@ -102,6 +106,7 @@ export class LogAccessError extends ResourceError {
     this.code = options.code;
     this.httpStatus = status || undefined;
     this.suggestions = options.suggestions ? [...options.suggestions] : [];
+    this.fromStreamBody = options.fromStreamBody === true;
   }
 }
 
@@ -244,6 +249,7 @@ function parseStructuredLogLineToEntry(line: string): StructuredLogEntry | null 
   let parsed: {
     channel?: unknown;
     message?: unknown;
+    error?: unknown;
     error_code?: unknown;
     suggestions?: unknown;
   };
@@ -251,6 +257,18 @@ function parseStructuredLogLineToEntry(line: string): StructuredLogEntry | null 
     parsed = JSON.parse(trimmed) as typeof parsed;
   } catch {
     throw new LogAccessError({ message: "Invalid NDJSON log record." });
+  }
+
+  if (
+    typeof parsed.error === "string" &&
+    parsed.channel === undefined &&
+    parsed.message === undefined
+  ) {
+    throw new LogAccessError({
+      code: "ERR-17-009",
+      message: parsed.error,
+      fromStreamBody: true,
+    });
   }
 
   if (typeof parsed.error_code === "string") {
@@ -466,6 +484,9 @@ async function followLogRequests(
       }
 
       let retryError = error;
+      if (error instanceof LogAccessError && error.fromStreamBody) {
+        throw error;
+      }
       if (error instanceof LogAccessError && error.code === "ERR-17-003") {
         expiredRetries += 1;
         if (expiredRetries > 3) throw error;

@@ -269,6 +269,36 @@ describe("CVM log access", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  test("guest-agent ndjson error record is ERR-17-009 and does not retry", async () => {
+    const client = mockClient();
+    const guestError =
+      "Docker responded with status code 501: configured logging driver does not support reading";
+    fetchImplementation = async () => ndjsonResponse([{ error: guestError }]);
+
+    await expect(streamContainerLogsEntries(client, "app_test", () => {})).rejects.toMatchObject({
+      name: "LogAccessError",
+      code: "ERR-17-009",
+      message: expect.stringContaining(guestError),
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("HTTP 502 ERR-17-009 still reconnects in follow", async () => {
+    const client = mockClient();
+    fetchImplementation = async () =>
+      jsonResponse(
+        { error_code: "ERR-17-009", message: "Guest agent or gateway unreachable" },
+        502,
+      );
+    const error = await streamContainerLogsEntries(client, "app_test", () => {}).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    expect(error).toBeInstanceOf(LogAccessError);
+    expect(error).toMatchObject({ code: "ERR-17-009" });
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
   test("followCvmLogs yields node lines as an async iterator", async () => {
     const client = mockClient();
     const controller = new AbortController();

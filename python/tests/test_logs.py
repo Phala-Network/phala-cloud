@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 
@@ -209,6 +211,43 @@ def test_follow_rejects_ndjson_on_node() -> None:
                     format="ndjson",
                 )
             )
+
+
+GUEST_DOCKER_ERROR = (
+    "Docker responded with status code 501: configured logging driver does not support reading"
+)
+
+
+def test_guest_agent_ndjson_error_is_err_17_009_and_does_not_retry() -> None:
+    state = _LogState()
+    state.bodies = [json.dumps({"error": GUEST_DOCKER_ERROR}) + "\n"] * 5
+    with _client(state) as log_http:
+        with pytest.raises(LogAccessError) as err:
+            next(
+                follow_container_log_entries(
+                    api_get=state.api_get, log_http=log_http, cvm_id="app_test"
+                )
+            )
+    assert err.value.code == "ERR-17-009"
+    assert GUEST_DOCKER_ERROR in str(err.value)
+    assert len(state.calls) == 1
+
+
+def test_http_502_err_17_009_still_reconnects_in_follow() -> None:
+    state = _LogState()
+    state.bodies = [
+        (502, {"error_code": "ERR-17-009", "message": "Guest agent or gateway unreachable"})
+    ] * 5
+    with _client(state) as log_http:
+        with pytest.raises(LogAccessError) as err:
+            next(
+                follow_container_log_entries(
+                    api_get=state.api_get, log_http=log_http, cvm_id="app_test"
+                )
+            )
+    assert err.value.code == "ERR-17-009"
+    assert err.value.http_status == 502
+    assert len(state.calls) == 5
 
 
 def test_node_fetch_rejects_since() -> None:

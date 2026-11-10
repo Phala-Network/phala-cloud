@@ -198,3 +198,114 @@ func TestPublicLogsOffReturnsERR17006(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestGuestAgentNdjsonErrorIsERR17009(t *testing.T) {
+	const guest = "Docker responded with status code 501: configured logging driver does not support reading"
+	logs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"error":"`+guest+`"}`+"\n")
+	}))
+	defer logs.Close()
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/composition") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"containers": []map[string]any{{
+					"id": "container-id", "names": []string{"/app"},
+					"log_endpoint": logs.URL + "/logs/123/container/app",
+				}},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": true, "logs": map[string]any{}})
+	}))
+	defer api.Close()
+	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.FetchCVMLogEntries(context.Background(), "app_test", LogSource{Type: "container"}, nil)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	apiErr, ok := err.(*APIError)
+	if !ok || apiErr.ErrorCode != "ERR-17-009" || !strings.Contains(apiErr.Message, guest) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestFollowHTTP502ERR17009Reconnects(t *testing.T) {
+	var calls int
+	logs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(502)
+		_, _ = io.WriteString(w, `{"error_code":"ERR-17-009","message":"Guest agent or gateway unreachable"}`)
+	}))
+	defer logs.Close()
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/composition") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"containers": []map[string]any{{
+					"id": "c1", "names": []string{"/app"},
+					"log_endpoint": logs.URL + "/logs/123/container/app",
+				}},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": true})
+	}))
+	defer api.Close()
+	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, errs := client.FollowCVMLogs(context.Background(), "app_test", LogSource{Type: "container"}, nil)
+	err = <-errs
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	apiErr, ok := err.(*APIError)
+	if !ok || apiErr.ErrorCode != "ERR-17-009" {
+		t.Fatalf("got %v", err)
+	}
+	if calls != 5 {
+		t.Fatalf("calls = %d, want 5", calls)
+	}
+}
+
+func TestFollowGuestStreamErrorStops(t *testing.T) {
+	const guest = "Docker responded with status code 501: configured logging driver does not support reading"
+	var calls int
+	logs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		_, _ = io.WriteString(w, `{"error":"`+guest+`"}`+"\n")
+	}))
+	defer logs.Close()
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/composition") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"containers": []map[string]any{{
+					"id": "c1", "names": []string{"/app"},
+					"log_endpoint": logs.URL + "/logs/123/container/app",
+				}},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": true})
+	}))
+	defer api.Close()
+	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, errs := client.FollowCVMLogs(context.Background(), "app_test", LogSource{Type: "container"}, nil)
+	err = <-errs
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	apiErr, ok := err.(*APIError)
+	if !ok || apiErr.ErrorCode != "ERR-17-009" || !strings.Contains(apiErr.Message, guest) {
+		t.Fatalf("got %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("calls = %d, want 1", calls)
+	}
+}

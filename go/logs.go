@@ -341,6 +341,18 @@ func parseNDJSONLine(line string) (*LogEntry, error) {
 	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
 		return nil, &APIError{Message: "Invalid NDJSON log record."}
 	}
+	if errMsg, ok := parsed["error"].(string); ok {
+		_, hasChannel := parsed["channel"]
+		_, hasMessage := parsed["message"]
+		if errMsg != "" && !hasChannel && !hasMessage {
+			return nil, &APIError{
+				StatusCode:     logErrorStatus["ERR-17-009"],
+				ErrorCode:      "ERR-17-009",
+				Message:        "ERR-17-009: " + errMsg,
+				fromStreamBody: true,
+			}
+		}
+	}
 	if code, ok := parsed["error_code"].(string); ok {
 		msg, _ := parsed["message"].(string)
 		if msg == "" {

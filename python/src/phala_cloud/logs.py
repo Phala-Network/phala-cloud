@@ -75,8 +75,12 @@ class LogAccessError(ResourceError):
         code: str | None = None,
         http_status: int | None = None,
         suggestions: list[str] | None = None,
+        from_stream_body: bool = False,
     ) -> None:
-        status = http_status or (code and _LOG_ERROR_HTTP_STATUS.get(code)) or 0
+        if from_stream_body:
+            status = 0
+        else:
+            status = http_status or (code and _LOG_ERROR_HTTP_STATUS.get(code)) or 0
         details = f"{code}: {message}" if code else message
         if suggestions:
             details += "\nSuggestions:\n" + "\n".join(f"- {item}" for item in suggestions)
@@ -88,6 +92,7 @@ class LogAccessError(ResourceError):
             suggestions=suggestions,
         )
         self.http_status = status or None
+        self.from_stream_body = from_stream_body
 
 
 def _build_log_url(base_url: str, options: Mapping[str, Any]) -> str:
@@ -162,6 +167,8 @@ def _parse_ndjson_line(line: str) -> CvmLogEntry | None:
         parsed = json.loads(trimmed)
     except json.JSONDecodeError as exc:
         raise LogAccessError("Invalid NDJSON log record.") from exc
+    if isinstance(parsed.get("error"), str) and "channel" not in parsed and "message" not in parsed:
+        raise LogAccessError(parsed["error"], code="ERR-17-009", from_stream_body=True)
     if isinstance(parsed.get("error_code"), str):
         suggestions = [item for item in parsed.get("suggestions") or [] if isinstance(item, str)]
         raise LogAccessError(
@@ -269,6 +276,8 @@ def _iter_follow_responses(
                 yield response
                 expired_retries = 0
         except LogAccessError as error:
+            if error.from_stream_body:
+                raise
             if error.code == "ERR-17-003":
                 expired_retries += 1
                 if expired_retries > 3:
