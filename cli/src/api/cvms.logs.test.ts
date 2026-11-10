@@ -445,8 +445,8 @@ describe("CVM log access client", () => {
 		expect(error).toBeInstanceOf(LogAccessError);
 		expect(error).toMatchObject({ code: "ERR-17-003" });
 		expect(fetchMock).toHaveBeenCalledTimes(4);
-		// 4 composition lookups + 3 CVM-info refreshes before giving up.
-		expect(clientGet).toHaveBeenCalledTimes(7);
+		// 1 public_logs check + 4 composition lookups + 3 CVM-info refreshes.
+		expect(clientGet).toHaveBeenCalledTimes(8);
 	});
 
 	test("midstream 4xx error is surfaced with its message and suggestions and not retried", async () => {

@@ -9,7 +9,7 @@ import {
 
 const runCvmsSerialLogsCommand = createLogsHandler<
 	CvmsSerialLogsCommandInput,
-	{ tail?: number; timestamps?: boolean }
+	{ tail?: number | "all"; timestamps?: boolean }
 >(
 	{
 		logType: "serial",

@@ -217,6 +217,41 @@ func TestPublicLogsOffReturnsERR17006(t *testing.T) {
 	}
 }
 
+func TestFollowPublicLogsOffReturnsERR17006(t *testing.T) {
+	var infoCalls, logCalls int
+	logs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logCalls++
+	}))
+	defer logs.Close()
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/composition") {
+			t.Fatal("composition should not be called")
+		}
+		infoCalls++
+		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": false, "logs": map[string]any{}})
+	}))
+	defer api.Close()
+	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, errs := client.FollowCVMLogs(context.Background(), "app_test", LogSource{Type: "container", Name: "anything"}, nil)
+	err = <-errs
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	apiErr, ok := err.(*APIError)
+	if !ok || apiErr.ErrorCode != "ERR-17-006" || apiErr.StatusCode != 409 {
+		t.Fatalf("got %v", err)
+	}
+	if infoCalls != 1 {
+		t.Fatalf("infoCalls = %d, want 1", infoCalls)
+	}
+	if logCalls != 0 {
+		t.Fatalf("logCalls = %d, want 0", logCalls)
+	}
+}
+
 func TestGuestAgentNdjsonErrorIsERR17009(t *testing.T) {
 	const guest = "Docker responded with status code 501: configured logging driver does not support reading"
 	logs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -245,8 +280,11 @@ func TestGuestAgentNdjsonErrorIsERR17009(t *testing.T) {
 		t.Fatal("expected error")
 	}
 	apiErr, ok := err.(*APIError)
-	if !ok || apiErr.ErrorCode != "ERR-17-009" || !strings.Contains(apiErr.Message, guest) {
+	if !ok || apiErr.ErrorCode != "ERR-17-009" || apiErr.Message != guest {
 		t.Fatalf("got %v", err)
+	}
+	if strings.Contains(err.Error(), "phala api error") {
+		t.Fatalf("in-stream error should omit HTTP status: %v", err)
 	}
 }
 
@@ -320,7 +358,7 @@ func TestFollowGuestStreamErrorStops(t *testing.T) {
 		t.Fatal("expected error")
 	}
 	apiErr, ok := err.(*APIError)
-	if !ok || apiErr.ErrorCode != "ERR-17-009" || !strings.Contains(apiErr.Message, guest) {
+	if !ok || apiErr.ErrorCode != "ERR-17-009" || apiErr.Message != guest {
 		t.Fatalf("got %v", err)
 	}
 	if calls != 1 {
@@ -356,8 +394,81 @@ func TestContainerTextGuestErrorWithoutNewline(t *testing.T) {
 		t.Fatal("expected error")
 	}
 	apiErr, ok := err.(*APIError)
-	if !ok || apiErr.ErrorCode != "ERR-17-009" || !strings.Contains(apiErr.Message, guest) {
+	if !ok || apiErr.ErrorCode != "ERR-17-009" || apiErr.Message != guest {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestContainerFollowReconnectDedupesThenEmptyEndStops(t *testing.T) {
+	body := strings.Join([]string{
+		`{"channel":"stdout","message":"2026-11-09T12:00:00.000000001Z exiter one\n"}`,
+		`{"channel":"stdout","message":"2026-11-09T12:00:01.000000001Z exiter two\n"}`,
+		`{"channel":"stdout","message":"2026-11-09T12:00:02.000000001Z exiter three\n"}`,
+	}, "\n") + "\n"
+	var calls []string
+	last := `{"channel":"stdout","message":"2026-11-09T12:00:02.000000001Z exiter three\n"}` + "\n"
+	var n int
+	logs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.URL.RawQuery)
+		n++
+		switch n {
+		case 1:
+			_, _ = io.WriteString(w, body)
+		case 2:
+			_, _ = io.WriteString(w, last)
+		}
+	}))
+	defer logs.Close()
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/composition") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"containers": []map[string]any{{
+					"id": "c1", "names": []string{"/app"},
+					"log_endpoint": logs.URL + "/logs/123/container/app",
+				}},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": true})
+	}))
+	defer api.Close()
+	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines, errs := client.FollowCVMLogs(context.Background(), "app_test", LogSource{Type: "container"}, &LogsOptions{Tail: "all"})
+	var got []string
+loop:
+	for {
+		select {
+		case line, ok := <-lines:
+			if !ok {
+				break loop
+			}
+			got = append(got, strings.TrimSuffix(line, "\n"))
+		case err := <-errs:
+			if err == nil || !strings.Contains(err.Error(), "keeps ending without new output") {
+				t.Fatalf("got %v want empty-end, items=%q", err, got)
+			}
+			break loop
+		case <-time.After(15 * time.Second):
+			t.Fatalf("timeout items=%q", got)
+		}
+	}
+	if strings.Join(got, ",") != "exiter one,exiter two,exiter three" {
+		t.Fatalf("got %q", got)
+	}
+	if len(calls) < 2 {
+		t.Fatalf("calls = %v", calls)
+	}
+	if !strings.Contains(calls[0], "tail=all") {
+		t.Fatalf("first query %q", calls[0])
+	}
+	if !strings.Contains(calls[1], "since=") {
+		t.Fatalf("second query missing since: %q", calls[1])
+	}
+	if strings.Contains(calls[1], "tail=") {
+		t.Fatalf("second query still has tail: %q", calls[1])
 	}
 }
 
@@ -389,6 +500,9 @@ func TestContainerFollowStopsAfterFiveEmptyEnds(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "keeps ending without new output") {
 		t.Fatalf("got %v", err)
 	}
+	if strings.Contains(err.Error(), "phala api error") {
+		t.Fatalf("non-HTTP error should omit status: %v", err)
+	}
 	if calls != 5 {
 		t.Fatalf("calls = %d, want 5", calls)
 	}
@@ -398,7 +512,7 @@ func TestContainerFollowWithDataKeepsReconnecting(t *testing.T) {
 	var calls int
 	logs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		_, _ = io.WriteString(w, fmt.Sprintf(`{"channel":"stdout","message":"2026-11-09T12:00:%02d.0Z line%d"}`+"\n", calls, calls))
+		_, _ = io.WriteString(w, fmt.Sprintf(`{"channel":"stdout","message":"2026-11-09T12:00:%02d.0Z line%d\n"}`+"\n", calls, calls))
 	}))
 	defer logs.Close()
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

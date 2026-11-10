@@ -200,7 +200,7 @@ export type { CvmLogChannel };
 export type LogEntry = CvmLogEntry;
 
 export interface SerialLogsOptions {
-	tail?: number;
+	tail?: number | "all";
 	timestamps?: boolean;
 	/** Absolute Unix seconds resolved at command start. */
 	since?: number;

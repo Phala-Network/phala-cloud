@@ -22,6 +22,21 @@ func TestAPIError_Error(t *testing.T) {
 			err:  APIError{StatusCode: 404},
 			want: "phala api error (status 404): Not Found",
 		},
+		{
+			name: "non-http",
+			err:  APIError{Message: "log stream keeps ending without new output; the container may have stopped"},
+			want: "log stream keeps ending without new output; the container may have stopped",
+		},
+		{
+			name: "in-stream guest",
+			err: APIError{
+				StatusCode:     502,
+				ErrorCode:      "ERR-17-009",
+				Message:        "Docker responded with status code 501: configured logging driver does not support reading",
+				fromStreamBody: true,
+			},
+			want: "Docker responded with status code 501: configured logging driver does not support reading",
+		},
 	}
 
 	for _, tt := range tests {

@@ -432,6 +432,22 @@ describe("CLI error envelope", () => {
 		expect(JSON.stringify(json)).not.toContain("Check the CVM status");
 	});
 
+	test("prints a log-access error code once", () => {
+		const guest =
+			"Docker responded with status code 501: configured logging driver does not support reading";
+		const error = new ResourceError(guest, {
+			status: 0,
+			statusText: "",
+			errorCode: "ERR-17-009",
+		});
+		const envelope = normalizeCliError(error);
+		expect(envelope.errorCode).toBe("ERR-17-009");
+		expect(envelope.message).toBe(guest);
+		const human = renderHumanCliError(envelope);
+		expect(human).toContain(`Error [ERR-17-009]: ${guest}`);
+		expect(countOccurrences(human, "ERR-17-009")).toBe(1);
+	});
+
 	test("does not map numeric HTTP code to error_code", () => {
 		const error = new RequestError("server exploded", {
 			status: 500,

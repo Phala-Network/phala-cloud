@@ -99,7 +99,7 @@ func errContainerLogsDisabled() error {
 	return &APIError{
 		StatusCode: 409,
 		ErrorCode:  "ERR-17-006",
-		Message:    "ERR-17-006: Container logs are disabled",
+		Message:    "Container logs are disabled",
 	}
 }
 
@@ -139,16 +139,20 @@ func (c *Client) nodeLogURL(ctx context.Context, cvmID string, channel CVMLogCha
 	return *info.Logs[string(channel)], nil
 }
 
-func (c *Client) containerLogURL(ctx context.Context, cvmID, name string) (string, error) {
+func (c *Client) assertContainerLogsEnabled(ctx context.Context, cvmID string) error {
 	var info struct {
 		PublicLogs *bool `json:"public_logs"`
 	}
 	if err := c.doJSONVersioned(ctx, "GET", cvmPath(cvmID), cvmLogsInfoAPIVersion, nil, &info); err != nil {
-		return "", err
+		return err
 	}
 	if info.PublicLogs != nil && !*info.PublicLogs {
-		return "", errContainerLogsDisabled()
+		return errContainerLogsDisabled()
 	}
+	return nil
+}
+
+func (c *Client) containerLogURL(ctx context.Context, cvmID, name string) (string, error) {
 	var composition struct {
 		Containers []struct {
 			ID          string   `json:"id"`
@@ -198,9 +202,6 @@ func parseLogAccessError(resp *http.Response) error {
 	msg := envelope.Message
 	if msg == "" {
 		msg = fmt.Sprintf("HTTP %d", resp.StatusCode)
-	}
-	if envelope.ErrorCode != "" {
-		msg = envelope.ErrorCode + ": " + msg
 	}
 	return &APIError{
 		StatusCode:  resp.StatusCode,
@@ -282,6 +283,9 @@ func (c *Client) FetchCVMLogEntries(ctx context.Context, cvmID string, source Lo
 	if !strings.EqualFold(format, "ndjson") {
 		return nil, fmt.Errorf("phala: FetchCVMLogEntries requires format=ndjson")
 	}
+	if err := c.assertContainerLogsEnabled(ctx, cvmID); err != nil {
+		return nil, err
+	}
 	base, err := c.containerLogURL(ctx, cvmID, source.Name)
 	if err != nil {
 		return nil, err
@@ -362,7 +366,7 @@ func errGuestAgent(message string) error {
 	return &APIError{
 		StatusCode:     logErrorStatus["ERR-17-009"],
 		ErrorCode:      "ERR-17-009",
-		Message:        "ERR-17-009: " + message,
+		Message:        message,
 		fromStreamBody: true,
 	}
 }
@@ -385,7 +389,7 @@ func parseNDJSONLine(line string) (*LogEntry, error) {
 			msg = "The log stream ended with an error."
 		}
 		status := logErrorStatus[code]
-		return nil, &APIError{StatusCode: status, Message: code + ": " + msg, ErrorCode: code}
+		return nil, &APIError{StatusCode: status, Message: msg, ErrorCode: code}
 	}
 	channel, _ := parsed["channel"].(string)
 	message, _ := parsed["message"].(string)
@@ -524,7 +528,7 @@ func scanNodeBody(body io.Reader, lines chan<- string) error {
 			continue
 		}
 		if match := textStreamError.FindStringSubmatch(content); match != nil {
-			return &APIError{ErrorCode: match[1], Message: match[1] + ": " + match[2], StatusCode: logErrorStatus[match[1]]}
+			return &APIError{ErrorCode: match[1], Message: match[2], StatusCode: logErrorStatus[match[1]]}
 		}
 		lines <- content + "\n"
 	}
@@ -532,6 +536,9 @@ func scanNodeBody(body io.Reader, lines chan<- string) error {
 }
 
 func (c *Client) fetchContainerText(ctx context.Context, cvmID string, source LogSource, opts *LogsOptions) (string, error) {
+	if err := c.assertContainerLogsEnabled(ctx, cvmID); err != nil {
+		return "", err
+	}
 	base, err := c.containerLogURL(ctx, cvmID, source.Name)
 	if err != nil {
 		return "", err
@@ -583,6 +590,9 @@ func (c *Client) followContainerText(ctx context.Context, cvmID string, source L
 	if err != nil {
 		return err
 	}
+	if err := c.assertContainerLogsEnabled(ctx, cvmID); err != nil {
+		return err
+	}
 	first := true
 	failureCount := 0
 	expiredRetries := 0
@@ -630,6 +640,9 @@ func (c *Client) followContainerText(ctx context.Context, cvmID string, source L
 				expiredRetries++
 				if expiredRetries > 3 {
 					return apiErr
+				}
+				if err := c.assertContainerLogsEnabled(ctx, cvmID); err != nil {
+					return err
 				}
 				continue
 			}
@@ -689,6 +702,9 @@ func (c *Client) followContainer(ctx context.Context, cvmID string, source LogSo
 	if err != nil {
 		return err
 	}
+	if err := c.assertContainerLogsEnabled(ctx, cvmID); err != nil {
+		return err
+	}
 	var since *int64 = times.Since
 	var boundarySecond *int64
 	boundaryCounts := map[string]int{}
@@ -738,8 +754,9 @@ func (c *Client) followContainer(ctx context.Context, cvmID string, source LogSo
 				if expiredRetries > 3 {
 					return apiErr
 				}
-				var info map[string]any
-				_ = c.doJSONVersioned(ctx, "GET", cvmPath(cvmID), cvmLogsInfoAPIVersion, nil, &info)
+				if err := c.assertContainerLogsEnabled(ctx, cvmID); err != nil {
+					return err
+				}
 				continue
 			}
 			if typed != nil && typed.StatusCode < 500 {
@@ -831,19 +848,34 @@ func scanContainerBody(
 	return scanner.Err()
 }
 
+func trimOneTrailingNL(s string) (string, string) {
+	if strings.HasSuffix(s, "\r\n") {
+		return s[:len(s)-2], "\r\n"
+	}
+	if strings.HasSuffix(s, "\n") {
+		return s[:len(s)-1], "\n"
+	}
+	return s, ""
+}
+
 func parseTS(message string) (int64, string, bool) {
-	match := timestampPrefix.FindStringSubmatch(message)
+	core, nl := trimOneTrailingNL(message)
+	match := timestampPrefix.FindStringSubmatch(core)
 	if match == nil {
 		return 0, "", false
 	}
-	t, err := time.Parse(time.RFC3339Nano, strings.Replace(match[1], "Z", "+00:00", 1))
-	if err != nil {
-		t, err = time.Parse(time.RFC3339, match[1])
-		if err != nil {
-			return 0, "", false
+	stamp := match[1]
+	for _, layout := range []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02T15:04:05.999999999Z",
+		"2006-01-02T15:04:05Z",
+	} {
+		if t, err := time.Parse(layout, stamp); err == nil {
+			return t.Unix(), match[2] + nl, true
 		}
 	}
-	return t.Unix(), match[2], true
+	return 0, "", false
 }
 
 func copyCounts(in map[string]int) map[string]int {

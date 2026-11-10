@@ -29,13 +29,13 @@ type ContainerLogsOptions = {
 	container?: string;
 	since?: string;
 	until?: string;
-	tail?: number;
+	tail?: number | "all";
 	timestamps?: boolean;
 	matchContainerIdPrefix?: boolean;
 };
 
 type SerialLogsOptions = {
-	tail?: number;
+	tail?: number | "all";
 	timestamps?: boolean;
 	since?: string;
 	until?: string;
@@ -214,6 +214,27 @@ describe("logs command", () => {
 	});
 
 	// --- Container mode tests ---
+
+	test("passes --tail all through to the SDK", async () => {
+		const code = await logsCommand.run(
+			{
+				...defaultInput,
+				containerName: "my-service",
+				tail: "all",
+			},
+			makeContext({
+				cvmId: { id: "app_abc123" },
+				stdout: fakeStdout as unknown as NodeJS.WriteStream,
+				stderr: fakeStderr as unknown as NodeJS.WriteStream,
+			}),
+		);
+
+		expect(code).toBe(0);
+		const firstCall = mockFetchContainerLogsEntries.mock.calls[0] as
+			| [string, ContainerLogsOptions]
+			| undefined;
+		expect(firstCall?.[1]).toMatchObject({ tail: "all" });
+	});
 
 	test("fetches container logs with container name", async () => {
 		const code = await logsCommand.run(

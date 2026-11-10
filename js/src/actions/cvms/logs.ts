@@ -89,7 +89,7 @@ export class LogAccessError extends ResourceError {
     suggestions?: readonly string[];
     fromStreamBody?: boolean;
   }) {
-    const details = options.code ? `${options.code}: ${options.message}` : options.message;
+    const details = options.message;
     const suggestionText = options.suggestions?.length
       ? `\nSuggestions:\n${options.suggestions.map((suggestion) => `- ${suggestion}`).join("\n")}`
       : "";
@@ -428,6 +428,13 @@ function containerLogsDisabledError(): LogAccessError {
   });
 }
 
+async function assertContainerLogsEnabled(client: Client, id: CvmIdInput | string): Promise<void> {
+  const info = await getCvmInfoLogs(client, resolveCvmId(id));
+  if (info.public_logs === false) {
+    throw containerLogsDisabledError();
+  }
+}
+
 async function getContainerLogEndpoint(
   client: Client,
   id: CvmIdInput | string,
@@ -435,10 +442,6 @@ async function getContainerLogEndpoint(
   matchContainerIdPrefix = true,
 ): Promise<string> {
   const cvmId = resolveCvmId(id);
-  const info = await getCvmInfoLogs(client, cvmId);
-  if (info.public_logs === false) {
-    throw containerLogsDisabledError();
-  }
   const composition = (await client.get(`/cvms/${cvmId}/composition`)) as CvmCompositionResponse;
 
   if (!composition.containers?.length) {
@@ -555,6 +558,9 @@ async function followLogRequests(
       if (retryError instanceof LogAccessError && status === undefined) {
         throw retryError;
       }
+      if (status === undefined && !(retryError instanceof TypeError)) {
+        throw retryError;
+      }
 
       failureCount += 1;
       if (failureCount >= 5) throw retryError;
@@ -623,6 +629,7 @@ export async function fetchContainerLogsEntries(
   options: CvmLogsOptions & { container?: string; matchContainerIdPrefix?: boolean } = {},
 ): Promise<CvmLogEntry[]> {
   const times = resolveLogTimeWindow(options.since, options.until);
+  await assertContainerLogsEnabled(client, id);
   const baseUrl = await getContainerLogEndpoint(
     client,
     id,
@@ -648,6 +655,7 @@ export async function fetchContainerLogs(
 ): Promise<string> {
   if (options.format === "text") {
     const times = resolveLogTimeWindow(options.since, options.until);
+    await assertContainerLogsEnabled(client, id);
     const baseUrl = await getContainerLogEndpoint(
       client,
       id,
@@ -683,6 +691,7 @@ export async function streamContainerLogsEntries(
 ): Promise<void> {
   const abort = signal ?? options.signal;
   const times = resolveLogTimeWindow(options.since, options.until);
+  await assertContainerLogsEnabled(client, id);
   const cursor: {
     since?: number;
     boundarySecond?: number;
@@ -752,7 +761,7 @@ export async function streamContainerLogsEntries(
     },
     abort,
     async () => {
-      await getCvmInfoLogs(client, resolveCvmId(id));
+      await assertContainerLogsEnabled(client, id);
     },
     true,
   );
@@ -808,6 +817,7 @@ export async function streamContainerLogs(
   if (options.format === "text") {
     const abort = signal ?? options.signal;
     const times = resolveLogTimeWindow(options.since, options.until);
+    await assertContainerLogsEnabled(client, id);
     let firstRequest = true;
     await followLogRequests(
       async () => {
@@ -831,7 +841,7 @@ export async function streamContainerLogs(
       (response) => streamContainerText(response, onData),
       abort,
       async () => {
-        await getCvmInfoLogs(client, resolveCvmId(id));
+        await assertContainerLogsEnabled(client, id);
       },
       true,
     );

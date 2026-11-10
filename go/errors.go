@@ -40,6 +40,12 @@ type APIError struct {
 }
 
 func (e *APIError) Error() string {
+	if e.fromStreamBody || e.StatusCode <= 0 {
+		if e.Message != "" {
+			return e.Message
+		}
+		return "phala api error"
+	}
 	if e.Message != "" {
 		return fmt.Sprintf("phala api error (status %d): %s", e.StatusCode, e.Message)
 	}
