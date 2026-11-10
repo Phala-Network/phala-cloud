@@ -157,3 +157,44 @@ func TestLegacyAPIVersionStillResolvesLogURLs(t *testing.T) {
 		t.Fatalf("X-Phala-Version = %q, want %q", infoVersion, cvmLogsInfoAPIVersion)
 	}
 }
+
+func TestNodeLogsRejectSinceUntilTimestamps(t *testing.T) {
+	client, err := NewClient(WithAPIKey("k"), WithBaseURL("https://example.test"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.FetchCVMLogs(context.Background(), "app_test", LogSource{Type: "node", Channel: CVMLogSerial}, &LogsOptions{Since: int64(1)})
+	if err == nil || !strings.Contains(err.Error(), "since") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestFetchCVMLogEntriesHonorsFormat(t *testing.T) {
+	client, err := NewClient(WithAPIKey("k"), WithBaseURL("https://example.test"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.FetchCVMLogEntries(context.Background(), "app_test", LogSource{Type: "container"}, &LogsOptions{Format: "text"})
+	if err == nil || !strings.Contains(err.Error(), "format=ndjson") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestPublicLogsOffReturnsERR17006(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"public_logs": false, "logs": map[string]any{}})
+	}))
+	defer api.Close()
+	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.FetchCVMLogEntries(context.Background(), "app_test", LogSource{Type: "container"}, nil)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	apiErr, ok := err.(*APIError)
+	if !ok || apiErr.ErrorCode != "ERR-17-006" || apiErr.StatusCode != 409 {
+		t.Fatalf("got %v", err)
+	}
+}

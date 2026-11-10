@@ -9,8 +9,10 @@ from phala_cloud.logs import (
     LogAccessError,
     fetch_container_log_entries,
     fetch_cvm_channel_logs,
+    fetch_cvm_logs,
     follow_container_log_entries,
     follow_cvm_channel_logs,
+    follow_cvm_logs,
 )
 
 DETAIL = {
@@ -182,3 +184,40 @@ def test_legacy_client_version_still_resolves_log_urls() -> None:
             )
     assert text == "ok"
     assert versions == [CVM_LOGS_INFO_API_VERSION]
+
+
+def test_public_logs_off_raises_err_17_006() -> None:
+    def api_get(_path: str) -> object:
+        return {"public_logs": False, "logs": {}}
+
+    with httpx.Client() as log_http:
+        with pytest.raises(LogAccessError) as err:
+            fetch_container_log_entries(api_get=api_get, log_http=log_http, cvm_id="app_test")
+    assert err.value.code == "ERR-17-006"
+    assert err.value.http_status == 409
+
+
+def test_follow_rejects_ndjson_on_node() -> None:
+    with httpx.Client() as log_http:
+        with pytest.raises(ValueError, match="format=ndjson"):
+            next(
+                follow_cvm_logs(
+                    api_get=lambda _path: DETAIL,
+                    log_http=log_http,
+                    cvm_id="app_test",
+                    source={"type": "node", "channel": "serial"},
+                    format="ndjson",
+                )
+            )
+
+
+def test_node_fetch_rejects_since() -> None:
+    with httpx.Client() as log_http:
+        with pytest.raises(ValueError, match="since"):
+            fetch_cvm_logs(
+                api_get=lambda _path: DETAIL,
+                log_http=log_http,
+                cvm_id="app_test",
+                source={"type": "node", "channel": "serial"},
+                since=1,
+            )

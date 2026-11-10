@@ -256,6 +256,19 @@ describe("CVM log access", () => {
     expect(String(get.mock.calls[0]?.[0])).not.toContain("/composition");
   });
 
+  test("container logs with public_logs false raise ERR-17-006", async () => {
+    const client = {
+      get: vi.fn(async () => ({ public_logs: false, logs: {} })),
+      config: { version: "2026-06-23" },
+    } as unknown as Client;
+    await expect(fetchContainerLogsEntries(client, "app_test")).rejects.toMatchObject({
+      name: "LogAccessError",
+      code: "ERR-17-006",
+      httpStatus: 409,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   test("followCvmLogs yields node lines as an async iterator", async () => {
     const client = mockClient();
     const controller = new AbortController();

@@ -208,12 +208,23 @@ def _get_node_endpoint(api_get: Callable[[str], Any], cvm_id: str, channel: CvmL
     return str(endpoint)
 
 
+def _container_logs_disabled() -> LogAccessError:
+    return LogAccessError(
+        "Container logs are disabled",
+        code="ERR-17-006",
+        http_status=409,
+    )
+
+
 def _get_container_endpoint(
     api_get: Callable[[str], Any],
     cvm_id: str,
     container_name: str | None = None,
     match_prefix: bool = True,
 ) -> str:
+    info = api_get(f"/cvms/{cvm_id}")
+    if isinstance(info, dict) and info.get("public_logs") is False:
+        raise _container_logs_disabled()
     composition = api_get(f"/cvms/{cvm_id}/composition")
     containers = composition.get("containers") or []
     if not containers:
@@ -303,9 +314,20 @@ def fetch_cvm_channel_logs(
     cvm_id: str,
     channel: CvmLogChannel,
     tail: int | str | None = None,
+    since: str | int | None = None,
+    until: str | int | None = None,
+    timestamps: bool = False,
     ansi: bool = False,
+    format: CvmLogFormat | None = None,
 ) -> str:
-    _assert_node_options({"tail": tail, "ansi": ansi})
+    _assert_node_options(
+        {
+            "timestamps": timestamps,
+            "since": since,
+            "until": until,
+            "format": format,
+        }
+    )
     url = _build_log_url(_get_node_endpoint(api_get, cvm_id, channel), {"tail": tail, "ansi": ansi})
     response = log_http.get(url, timeout=None)
     if response.status_code >= 400:
@@ -320,9 +342,20 @@ def follow_cvm_channel_logs(
     cvm_id: str,
     channel: CvmLogChannel,
     tail: int | str | None = None,
+    since: str | int | None = None,
+    until: str | int | None = None,
+    timestamps: bool = False,
     ansi: bool = False,
+    format: CvmLogFormat | None = None,
 ) -> Iterator[str]:
-    _assert_node_options({"tail": tail, "ansi": ansi})
+    _assert_node_options(
+        {
+            "timestamps": timestamps,
+            "since": since,
+            "until": until,
+            "format": format,
+        }
+    )
     first = True
 
     def resolve_url() -> str:
@@ -484,7 +517,11 @@ def fetch_cvm_logs(
             cvm_id=cvm_id,
             channel=source["channel"],
             tail=tail,
+            since=since,
+            until=until,
+            timestamps=timestamps,
             ansi=ansi,
+            format=format,
         )
     entries = fetch_container_log_entries(
         api_get=api_get,
@@ -515,6 +552,7 @@ def follow_cvm_logs(
     until: str | int | None = None,
     timestamps: bool = False,
     ansi: bool = False,
+    format: CvmLogFormat | None = None,
     container_match_prefix: bool = True,
 ) -> Iterator[str | CvmLogEntry]:
     if source["type"] == "node":
@@ -524,7 +562,11 @@ def follow_cvm_logs(
             cvm_id=cvm_id,
             channel=source["channel"],
             tail=tail,
+            since=since,
+            until=until,
+            timestamps=timestamps,
             ansi=ansi,
+            format=format,
         )
         return
     yield from follow_container_log_entries(
