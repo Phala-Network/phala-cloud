@@ -1,3 +1,8 @@
+## [0.4.3](https://github.com/Phala-Network/phala-cloud/compare/python-v0.4.2...python-v0.4.3) (2026-11-10)
+
+### fix
+
+* **sdks:** align follow behavior verified against live log endpoints ([200cda6](https://github.com/Phala-Network/phala-cloud/commit/200cda6248e947e6bf125928feffdd391195fb80))
 ## [0.4.2](https://github.com/Phala-Network/phala-cloud/compare/python-v0.4.1...python-v0.4.2) (2026-11-10)
 
 ### fix
