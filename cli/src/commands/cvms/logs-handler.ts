@@ -55,6 +55,11 @@ export function createLogsHandler<TInput extends BaseLogsInput, TOptions>(
 		input: TInput,
 		context: CommandContext,
 	): Promise<number> {
+		if (config.logType === "serial" && input.timestamps) {
+			context.fail("--timestamps not supported for serial/stdout/stderr logs");
+			return 1;
+		}
+
 		if (!context.cvmId) {
 			context.fail(
 				"No CVM ID provided. Use --interactive to select interactively.",
@@ -123,7 +128,7 @@ export function createLogsHandler<TInput extends BaseLogsInput, TOptions>(
 				return 0;
 			}
 
-			if (logs.trim()) {
+			if (logs.length > 0) {
 				console.log(logs);
 			} else {
 				const logsDisabled = await checkAndWarnIfLogsDisabled(appId, context);

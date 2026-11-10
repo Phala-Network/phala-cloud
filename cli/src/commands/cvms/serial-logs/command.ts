@@ -47,8 +47,8 @@ export const cvmsSerialLogsCommandMeta: CommandMeta = {
 			value: "phala cvms serial-logs app_abc123 --follow",
 		},
 		{
-			name: "Show serial logs with timestamps",
-			value: "phala cvms serial-logs app_abc123 --timestamps",
+			name: "Show last 100 lines of serial logs",
+			value: "phala cvms serial-logs app_abc123 --tail 100",
 		},
 	],
 };

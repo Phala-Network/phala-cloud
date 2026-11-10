@@ -40,7 +40,11 @@ const ContainerInfoSchema = z.object({
   created: z.number(),
   state: z.string(),
   status: z.string(),
-  log_endpoint: z.string().nullable(),
+  /** Presigned container log URL that expires shortly after it is issued. */
+  log_endpoint: z
+    .string()
+    .nullable()
+    .describe("Presigned container log URL that expires shortly after issuance."),
 });
 
 export const CvmContainersStatsSchema = z.object({

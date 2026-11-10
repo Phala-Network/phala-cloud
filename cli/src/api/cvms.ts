@@ -192,14 +192,10 @@ export async function getCvmCreateResources(): Promise<CvmCreateResourcesRespons
 export interface SerialLogsOptions {
 	tail?: number;
 	timestamps?: boolean;
-	/** RFC3339 timestamp or relative time (backend-dependent) */
-	since?: string;
-	/** RFC3339 timestamp or relative time (backend-dependent) */
-	until?: string;
-	/** Ask backend to return human-readable text output (recommended default). */
-	text?: boolean;
-	/** Ask backend to omit metadata wrappers if supported. */
-	bare?: boolean;
+	/** Absolute Unix seconds resolved at command start. */
+	since?: number;
+	/** Absolute Unix seconds resolved at command start. */
+	until?: number;
 }
 
 export type LogChannel = "stdout" | "stderr";
@@ -234,32 +230,28 @@ interface CvmCompositionResponse {
 function buildLogUrl(
 	baseUrl: string,
 	options: {
-		since?: string;
-		until?: string;
+		since?: number;
+		until?: number;
 		tail?: number;
-		text?: boolean;
-		bare?: boolean;
 		timestamps?: boolean;
 		follow?: boolean;
-		ansi?: boolean;
+		format?: "text" | "ndjson";
 	},
 ): string {
 	const params: string[] = [];
-	if (options.since) params.push(`since=${encodeURIComponent(options.since)}`);
-	if (options.until) params.push(`until=${encodeURIComponent(options.until)}`);
-	if (options.follow) params.push("follow");
-	if (options.text) params.push("text");
-	if (options.bare) params.push("bare");
-	if (options.tail !== undefined) {
-		// Backend supports `tail`; keep `lines` for backward compatibility.
-		params.push(`tail=${options.tail}`);
-		params.push(`lines=${options.tail}`);
+	if (options.since !== undefined) {
+		params.push(`since=${options.since}`);
 	}
-	if (options.timestamps) params.push("timestamps");
-	if (options.ansi ?? true) params.push("ansi");
+	if (options.until !== undefined) {
+		params.push(`until=${options.until}`);
+	}
+	if (options.follow) params.push("follow=true");
+	if (options.tail !== undefined) params.push(`tail=${options.tail}`);
+	if (options.timestamps) params.push("timestamps=true");
+	if (options.format) params.push(`format=${options.format}`);
 
 	const sep = baseUrl.includes("?") ? "&" : "?";
-	return baseUrl + sep + params.join("&");
+	return `${baseUrl}${sep}${params.join("&")}`;
 }
 
 /** Stream response body to callback */
@@ -271,231 +263,283 @@ async function streamResponse(
 	if (!reader) throw new Error("No response body available for streaming");
 
 	const decoder = new TextDecoder();
-	while (true) {
-		const { done, value } = await reader.read();
-		if (done) break;
-		onData(decoder.decode(value, { stream: true }));
-	}
-}
-
-function isLikelyBase64(data: string): boolean {
-	// Fast heuristic: base64 strings usually don't contain whitespace and only contain base64 alphabet
-	// and optional padding '='.
-	// We also require length to be a multiple of 4 to reduce false positives.
-	if (!data) return false;
-	if (/\s/.test(data)) return false;
-	if (data.length % 4 !== 0) return false;
-	return /^[A-Za-z0-9+/]+={0,2}$/.test(data);
-}
-
-function decodeBase64ToUtf8(data: string): string {
-	if (!isLikelyBase64(data)) return data;
-
+	let buffer = "";
+	let finished = false;
 	try {
-		return Buffer.from(data, "base64").toString("utf-8");
-	} catch {
-		return data;
+		while (true) {
+			const { done, value } = await reader.read();
+			buffer += decoder.decode(value, { stream: !done });
+			let newline = buffer.indexOf("\n");
+			while (newline >= 0) {
+				const line = buffer.slice(0, newline + 1);
+				buffer = buffer.slice(newline + 1);
+				const content = line.replace(/\r?\n$/, "");
+				if (content !== "[vmm heartbeat]" && content !== "[teepod heartbeat]") {
+					throwTextStreamError(content);
+					onData(line);
+				}
+				newline = buffer.indexOf("\n");
+			}
+			if (done) {
+				finished = true;
+				break;
+			}
+		}
+		if (
+			buffer &&
+			buffer !== "[vmm heartbeat]" &&
+			buffer !== "[teepod heartbeat]"
+		) {
+			throwTextStreamError(buffer);
+			onData(buffer);
+		}
+	} finally {
+		if (!finished) await reader.cancel().catch(() => {});
+		reader.releaseLock();
 	}
 }
 
-function parseStructuredLogLineToEntry(line: string): LogEntry | null {
+interface StructuredLogEntry extends LogEntry {
+	timestamp?: string;
+}
+
+function logErrorHttpStatus(code: string): number | undefined {
+	const statuses: Record<string, number> = {
+		"ERR-17-001": 400,
+		"ERR-17-002": 401,
+		"ERR-17-003": 401,
+		"ERR-17-004": 404,
+		"ERR-17-005": 409,
+		"ERR-17-006": 409,
+		"ERR-17-007": 404,
+		"ERR-17-008": 502,
+		"ERR-17-009": 502,
+		"ERR-17-010": 504,
+		"ERR-17-011": 429,
+		"ERR-17-012": 503,
+		"ERR-17-013": 404,
+	};
+	return statuses[code];
+}
+
+export class LogAccessError extends Error {
+	readonly code?: string;
+	readonly httpStatus?: number;
+	readonly suggestions: readonly string[];
+
+	constructor(options: {
+		message: string;
+		code?: string;
+		httpStatus?: number;
+		suggestions?: readonly string[];
+	}) {
+		const details = options.code
+			? `${options.code}: ${options.message}`
+			: options.message;
+		const suggestions = options.suggestions?.length
+			? `\nSuggestions:\n${options.suggestions.map((suggestion) => `- ${suggestion}`).join("\n")}`
+			: "";
+		super(`${details}${suggestions}`);
+		this.name = "LogAccessError";
+		this.code = options.code;
+		this.httpStatus =
+			options.httpStatus ??
+			(options.code ? logErrorHttpStatus(options.code) : undefined);
+		this.suggestions = options.suggestions ?? [];
+	}
+}
+
+async function throwResponseError(response: Response): Promise<never> {
+	const body = await response.text();
+	let envelope: {
+		error_code?: unknown;
+		message?: unknown;
+		suggestions?: unknown;
+	};
+	try {
+		envelope = JSON.parse(body) as typeof envelope;
+	} catch {
+		envelope = {};
+	}
+	const suggestions = Array.isArray(envelope.suggestions)
+		? envelope.suggestions.filter(
+				(item): item is string => typeof item === "string",
+			)
+		: [];
+	throw new LogAccessError({
+		code:
+			typeof envelope.error_code === "string" ? envelope.error_code : undefined,
+		message:
+			typeof envelope.message === "string"
+				? envelope.message
+				: `HTTP ${response.status} ${response.statusText}`,
+		httpStatus: response.status,
+		suggestions,
+	});
+}
+
+function throwTextStreamError(line: string): void {
+	const match = /^\[error\] (ERR-17-\d{3}) (.*)$/.exec(line.trim());
+	if (match) throw new LogAccessError({ code: match[1], message: match[2] });
+}
+
+function parseTimestampedMessage(message: string): {
+	timestamp?: string;
+	second?: number;
+	message?: string;
+} {
+	const match =
+		/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})) (.*)$/s.exec(
+			message,
+		);
+	if (!match) return {};
+	const time = Date.parse(match[1]);
+	if (!Number.isFinite(time)) return {};
+	return {
+		timestamp: match[1],
+		second: Math.floor(time / 1000),
+		message: match[2],
+	};
+}
+
+function formatFollowContainerEntry(
+	entry: StructuredLogEntry,
+	includeTimestamps: boolean,
+): LogEntry {
+	if (includeTimestamps)
+		return { channel: entry.channel, message: entry.message };
+	const timestamp = parseTimestampedMessage(entry.message);
+	return {
+		channel: entry.channel,
+		message: timestamp.timestamp ? (timestamp.message ?? "") : entry.message,
+	};
+}
+
+function parseStructuredLogLineToEntry(
+	line: string,
+): StructuredLogEntry | null {
 	const trimmed = line.trim();
 	if (!trimmed) return null;
 
+	let parsed: {
+		channel?: unknown;
+		message?: unknown;
+		error_code?: unknown;
+		suggestions?: unknown;
+	};
 	try {
-		const parsed = JSON.parse(trimmed) as {
-			channel?: string;
-			message?: string;
-		};
-		if (typeof parsed.message !== "string") return null;
-
-		const parsedChannel: LogChannel =
-			parsed.channel === "stderr" ? "stderr" : "stdout";
-		return {
-			channel: parsedChannel,
-			message: decodeBase64ToUtf8(parsed.message),
-		};
+		parsed = JSON.parse(trimmed) as typeof parsed;
 	} catch {
-		return null;
+		throw new LogAccessError({ message: "Invalid NDJSON log record." });
 	}
+
+	if (typeof parsed.error_code === "string") {
+		throw new LogAccessError({
+			code: parsed.error_code,
+			message:
+				typeof parsed.message === "string"
+					? parsed.message
+					: "The log stream ended with an error.",
+			suggestions: Array.isArray(parsed.suggestions)
+				? parsed.suggestions.filter(
+						(item): item is string => typeof item === "string",
+					)
+				: [],
+		});
+	}
+	if (
+		(parsed.channel !== "stdout" && parsed.channel !== "stderr") ||
+		typeof parsed.message !== "string"
+	) {
+		throw new LogAccessError({ message: "Invalid NDJSON log record." });
+	}
+
+	const entry: StructuredLogEntry = {
+		channel: parsed.channel,
+		message: parsed.message,
+	};
+	const timestamp = parseTimestampedMessage(entry.message).timestamp;
+	if (timestamp) entry.timestamp = timestamp;
+	return entry;
 }
 
 function parseStructuredLogsToEntries(input: string): LogEntry[] {
-	const lines = input.split(/\r?\n/);
-	const out: LogEntry[] = [];
-	for (const line of lines) {
-		if (!line.trim()) continue;
+	const entries: LogEntry[] = [];
+	for (const line of input.split(/\r?\n/)) {
 		const entry = parseStructuredLogLineToEntry(line);
-		if (entry) {
-			out.push(entry);
-			continue;
-		}
-		out.push({ channel: "stdout", message: `${line}\n` });
+		if (entry) entries.push(entry);
 	}
-	return out;
+	return entries;
 }
 
 function decodeStructuredLogsText(input: string): string {
-	// The backend may return NDJSON lines like:
-	// {"channel":"stderr","message":"<base64>"}
-	// We decode them into human-readable text.
-	const lines = input.split(/\r?\n/);
-	let out = "";
-	for (const line of lines) {
-		const entry = parseStructuredLogLineToEntry(line);
-		if (entry) {
-			out += entry.message;
-			continue;
-		}
-		if (line.trim()) out += `${line}\n`;
-	}
-	return out;
+	return parseStructuredLogsToEntries(input)
+		.map((entry) => (entry.message === "" ? "\n" : entry.message))
+		.join("");
 }
 
-async function streamStructuredLogsResponse(
+async function streamNdjsonEntriesResponse(
 	response: Response,
-	onData: (data: string) => void,
+	onEntry: (entry: StructuredLogEntry) => void,
 ): Promise<void> {
 	const reader = response.body?.getReader();
 	if (!reader) throw new Error("No response body available for streaming");
 
 	const decoder = new TextDecoder();
 	let buffer = "";
-	let mode: "unknown" | "raw" | "structured" = "unknown";
-
-	const flushStructuredLine = (line: string) => {
-		const entry = parseStructuredLogLineToEntry(line);
-		if (entry) {
-			onData(entry.message);
-			return;
-		}
-		if (line.trim()) onData(`${line}\n`);
-	};
-
-	while (true) {
-		const { done, value } = await reader.read();
-		if (done) break;
-
-		const chunk = decoder.decode(value, { stream: true });
-		if (mode === "raw") {
-			onData(chunk);
-			continue;
-		}
-
-		buffer += chunk;
-
-		if (mode === "unknown") {
-			const probe = buffer.trimStart();
-			// Heuristic: structured logs are NDJSON objects.
-			if (probe.startsWith("{")) {
-				mode = "structured";
-			} else {
-				mode = "raw";
-				onData(buffer);
-				buffer = "";
-				continue;
+	let finished = false;
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+			buffer += decoder.decode(value, { stream: !done });
+			let newline = buffer.indexOf("\n");
+			while (newline >= 0) {
+				const entry = parseStructuredLogLineToEntry(buffer.slice(0, newline));
+				if (entry) onEntry(entry);
+				buffer = buffer.slice(newline + 1);
+				newline = buffer.indexOf("\n");
+			}
+			if (done) {
+				finished = true;
+				break;
 			}
 		}
-
-		let idx = buffer.indexOf("\n");
-		while (idx >= 0) {
-			const line = buffer.slice(0, idx);
-			buffer = buffer.slice(idx + 1);
-			flushStructuredLine(line);
-			idx = buffer.indexOf("\n");
+		if (buffer.trim()) {
+			const entry = parseStructuredLogLineToEntry(buffer);
+			if (entry) onEntry(entry);
 		}
-	}
-
-	if (mode === "structured" && buffer.trim()) {
-		flushStructuredLine(buffer);
-	} else if (mode === "raw" && buffer) {
-		onData(buffer);
-	}
-}
-
-async function streamStructuredLogsEntriesResponse(
-	response: Response,
-	onEntry: (entry: LogEntry) => void,
-): Promise<void> {
-	const reader = response.body?.getReader();
-	if (!reader) throw new Error("No response body available for streaming");
-
-	const decoder = new TextDecoder();
-	let buffer = "";
-	let mode: "unknown" | "raw" | "structured" = "unknown";
-
-	const flushStructuredLine = (line: string) => {
-		const entry = parseStructuredLogLineToEntry(line);
-		if (entry) {
-			onEntry(entry);
-			return;
-		}
-		if (line.trim()) onEntry({ channel: "stdout", message: `${line}\n` });
-	};
-
-	while (true) {
-		const { done, value } = await reader.read();
-		if (done) break;
-
-		const chunk = decoder.decode(value, { stream: true });
-		if (mode === "raw") {
-			onEntry({ channel: "stdout", message: chunk });
-			continue;
-		}
-
-		buffer += chunk;
-
-		if (mode === "unknown") {
-			const probe = buffer.trimStart();
-			if (probe.startsWith("{")) {
-				mode = "structured";
-			} else {
-				mode = "raw";
-				onEntry({ channel: "stdout", message: buffer });
-				buffer = "";
-				continue;
-			}
-		}
-
-		let idx = buffer.indexOf("\n");
-		while (idx >= 0) {
-			const line = buffer.slice(0, idx);
-			buffer = buffer.slice(idx + 1);
-			flushStructuredLine(line);
-			idx = buffer.indexOf("\n");
-		}
-	}
-
-	if (mode === "structured" && buffer.trim()) {
-		flushStructuredLine(buffer);
-	} else if (mode === "raw" && buffer) {
-		onEntry({ channel: "stdout", message: buffer });
+	} finally {
+		if (!finished) await reader.cancel().catch(() => {});
+		reader.releaseLock();
 	}
 }
 
 export type CvmLogChannel = "serial" | "stdout" | "stderr";
 
-/** Get CVM-level (syslog) log endpoint URL for a given channel */
+function assertSupportedNodeLogOptions(options: SerialLogsOptions): void {
+	const unsupported = [
+		options.timestamps && "--timestamps",
+		options.since !== undefined && "--since",
+		options.until !== undefined && "--until",
+	].filter((option): option is string => Boolean(option));
+	if (unsupported.length > 0) {
+		throw new Error(
+			`${unsupported.join(", ")} not supported for serial/stdout/stderr logs`,
+		);
+	}
+}
+
+/** Get a presigned CVM-level log URL for a given node channel. */
 export async function getCvmLogEndpoint(
 	appId: string,
 	channel: CvmLogChannel,
 ): Promise<string> {
-	// syslog_endpoint is not in the v20260121 schema. Force the legacy version
-	// header so the backend returns CvmBasicInfo which includes the field.
-	const client = await getClient();
-	const rawInfo = await client.get<{ syslog_endpoint?: string | null }>(
-		`cvms/${appId}`,
-		{ headers: { "X-Phala-Version": "2025-10-28" } },
-	);
-	if (!rawInfo.syslog_endpoint) {
-		throw new Error(`No syslog endpoint available for CVM '${appId}'`);
+	const info = await getCvmByAppId(appId);
+	const endpoint = info.logs?.[channel];
+	if (!endpoint) {
+		throw new Error(`No ${channel} log endpoint available for CVM '${appId}'`);
 	}
-	return `${rawInfo.syslog_endpoint}&ch=${channel}`;
-}
-
-/** Get serial log endpoint URL (backward compat wrapper) */
-async function getSerialLogEndpoint(appId: string): Promise<string> {
-	return getCvmLogEndpoint(appId, "serial");
+	return endpoint;
 }
 
 /** Get container log endpoint URL */
@@ -540,20 +584,94 @@ async function getContainerLogEndpoint(
 	return container.log_endpoint;
 }
 
+function waitForReconnect(
+	signal: AbortSignal | undefined,
+	delayMs: number,
+): Promise<void> {
+	if (signal?.aborted) return Promise.resolve();
+	return new Promise((resolve) => {
+		const timeout = setTimeout(() => {
+			signal?.removeEventListener("abort", onAbort);
+			resolve();
+		}, delayMs);
+		const onAbort = () => {
+			clearTimeout(timeout);
+			signal?.removeEventListener("abort", onAbort);
+			resolve();
+		};
+		signal?.addEventListener("abort", onAbort, { once: true });
+	});
+}
+
+function getErrorHttpStatus(error: unknown): number | undefined {
+	if (typeof error !== "object" || error === null) return undefined;
+	if ("httpStatus" in error && typeof error.httpStatus === "number") {
+		return error.httpStatus;
+	}
+	if ("status" in error && typeof error.status === "number") {
+		return error.status;
+	}
+	return undefined;
+}
+
+async function followLogRequests(
+	resolveUrl: () => Promise<string>,
+	consume: (response: Response) => Promise<void>,
+	signal?: AbortSignal,
+	refreshCvm?: () => Promise<void>,
+): Promise<void> {
+	let failureCount = 0;
+	let expiredRetries = 0;
+	while (!signal?.aborted) {
+		try {
+			const url = await resolveUrl();
+			if (signal?.aborted) return;
+			const response = await fetch(url, { signal });
+			if (!response.ok) await throwResponseError(response);
+			failureCount = 0;
+			await consume(response);
+			expiredRetries = 0;
+			if (signal?.aborted) return;
+		} catch (error) {
+			if (
+				signal?.aborted ||
+				(error instanceof Error && error.name === "AbortError")
+			) {
+				return;
+			}
+
+			let retryError = error;
+			if (error instanceof LogAccessError && error.code === "ERR-17-003") {
+				expiredRetries += 1;
+				if (expiredRetries > 3) throw error;
+				try {
+					await refreshCvm?.();
+					continue;
+				} catch (refreshError) {
+					retryError = refreshError;
+				}
+			}
+
+			const status = getErrorHttpStatus(retryError);
+			if (status !== undefined && status < 500) throw retryError;
+			if (retryError instanceof LogAccessError && status === undefined) {
+				throw retryError;
+			}
+
+			failureCount += 1;
+			if (failureCount >= 5) throw retryError;
+			const delayMs = Math.min(250 * 2 ** (failureCount - 1), 5000);
+			await waitForReconnect(signal, delayMs);
+		}
+	}
+}
+
 /** Fetch serial logs from a CVM */
 export async function fetchSerialLogs(
 	appId: string,
 	options: SerialLogsOptions = {},
 ): Promise<string> {
-	const baseUrl = await getSerialLogEndpoint(appId);
-	const url = buildLogUrl(baseUrl, options);
-	const response = await fetch(url);
-	if (!response.ok) {
-		throw new Error(
-			`Failed to fetch serial logs: ${response.status} ${response.statusText}`,
-		);
-	}
-	return response.text();
+	return fetchCvmChannelLogs(appId, "serial", options);
 }
 
 /**
@@ -571,27 +689,11 @@ export async function fetchContainerLogs(
 		options.matchContainerIdPrefix ?? true,
 	);
 
-	const text = options.text ?? true;
-	const bare = options.bare ?? true;
-
-	const url = buildLogUrl(baseUrl, {
-		...options,
-		text,
-		bare,
-	});
+	const url = buildLogUrl(baseUrl, { ...options, format: "ndjson" });
 	const response = await fetch(url);
-	if (!response.ok) {
-		throw new Error(
-			`Failed to fetch container logs: ${response.status} ${response.statusText}`,
-		);
-	}
+	if (!response.ok) await throwResponseError(response);
 
-	const body = await response.text();
-	// If backend returned structured logs (NDJSON with base64 payloads), decode them.
-	if (body.trimStart().startsWith("{")) {
-		return decodeStructuredLogsText(body);
-	}
-	return body;
+	return decodeStructuredLogsText(await response.text());
 }
 
 /**
@@ -610,26 +712,11 @@ export async function fetchContainerLogsEntries(
 		options.matchContainerIdPrefix ?? true,
 	);
 
-	// Request structured logs (NDJSON with channel + base64 message)
-	const url = buildLogUrl(baseUrl, {
-		...options,
-		// Request structured logs (NDJSON with channel + message). We'll decode the
-		// message (base64 when applicable) and optionally route stderr.
-		text: false,
-		bare: false,
-	});
+	const url = buildLogUrl(baseUrl, { ...options, format: "ndjson" });
 	const response = await fetch(url);
-	if (!response.ok) {
-		throw new Error(
-			`Failed to fetch container logs: ${response.status} ${response.statusText}`,
-		);
-	}
+	if (!response.ok) await throwResponseError(response);
 
-	const body = await response.text();
-	if (body.trimStart().startsWith("{")) {
-		return parseStructuredLogsToEntries(body);
-	}
-	return [{ channel: "stdout", message: body }];
+	return parseStructuredLogsToEntries(await response.text());
 }
 
 /** Stream container logs as structured entries. */
@@ -639,26 +726,84 @@ export async function streamContainerLogsEntries(
 	options: ContainerLogsOptions = {},
 	signal?: AbortSignal,
 ): Promise<void> {
-	const baseUrl = await getContainerLogEndpoint(
-		appId,
-		options.container,
-		options.matchContainerIdPrefix ?? true,
-	);
+	const cursor: {
+		since?: number;
+		boundarySecond?: number;
+		boundaryCounts: Map<string, number>;
+	} = { since: options.since, boundaryCounts: new Map() };
+	let replayCounts = new Map<string, number>();
+	let firstRequest = true;
 
-	const url = buildLogUrl(baseUrl, {
-		...options,
-		follow: true,
-		text: false,
-		bare: false,
-	});
-	const response = await fetch(url, { signal });
-	if (!response.ok) {
-		throw new Error(
-			`Failed to stream container logs: ${response.status} ${response.statusText}`,
+	const buildRequestUrl = async (): Promise<string> => {
+		const baseUrl = await getContainerLogEndpoint(
+			appId,
+			options.container,
+			options.matchContainerIdPrefix ?? true,
 		);
-	}
+		const tail = firstRequest ? options.tail : undefined;
+		firstRequest = false;
+		replayCounts = new Map(cursor.boundaryCounts);
+		return buildLogUrl(baseUrl, {
+			since: cursor.since,
+			until: options.until,
+			tail,
+			follow: true,
+			timestamps: true,
+			format: "ndjson",
+		});
+	};
 
-	await streamStructuredLogsEntriesResponse(response, onEntry);
+	await followLogRequests(
+		buildRequestUrl,
+		(response) =>
+			streamNdjsonEntriesResponse(response, (entry) => {
+				const timestamp = parseTimestampedMessage(entry.message);
+				if (timestamp.second === undefined || !timestamp.timestamp) {
+					onEntry(
+						formatFollowContainerEntry(entry, options.timestamps ?? false),
+					);
+					return;
+				}
+
+				const key = JSON.stringify([entry.channel, entry.message]);
+				if (
+					cursor.boundarySecond !== undefined &&
+					timestamp.second < cursor.boundarySecond
+				) {
+					onEntry(
+						formatFollowContainerEntry(entry, options.timestamps ?? false),
+					);
+					return;
+				}
+				if (timestamp.second === cursor.boundarySecond) {
+					const replayCount = replayCounts.get(key) ?? 0;
+					if (replayCount > 0) {
+						replayCounts.set(key, replayCount - 1);
+						return;
+					}
+				} else if (
+					cursor.boundarySecond === undefined ||
+					timestamp.second > cursor.boundarySecond
+				) {
+					cursor.boundarySecond = timestamp.second;
+					cursor.boundaryCounts.clear();
+				}
+
+				cursor.since = Math.max(
+					cursor.since ?? timestamp.second,
+					timestamp.second,
+				);
+				cursor.boundaryCounts.set(
+					key,
+					(cursor.boundaryCounts.get(key) ?? 0) + 1,
+				);
+				onEntry(formatFollowContainerEntry(entry, options.timestamps ?? false));
+			}),
+		signal,
+		async () => {
+			await getCvmByAppId(appId);
+		},
+	);
 }
 
 /** Stream serial logs from a CVM */
@@ -668,15 +813,7 @@ export async function streamSerialLogs(
 	options: SerialLogsOptions = {},
 	signal?: AbortSignal,
 ): Promise<void> {
-	const baseUrl = await getSerialLogEndpoint(appId);
-	const url = buildLogUrl(baseUrl, { ...options, follow: true });
-	const response = await fetch(url, { signal });
-	if (!response.ok) {
-		throw new Error(
-			`Failed to stream serial logs: ${response.status} ${response.statusText}`,
-		);
-	}
-	await streamResponse(response, onData);
+	return streamCvmChannelLogs(appId, "serial", onData, options, signal);
 }
 
 /**
@@ -690,31 +827,12 @@ export async function streamContainerLogs(
 	options: ContainerLogsOptions = {},
 	signal?: AbortSignal,
 ): Promise<void> {
-	const baseUrl = await getContainerLogEndpoint(
+	return streamContainerLogsEntries(
 		appId,
-		options.container,
-		options.matchContainerIdPrefix ?? true,
+		(entry) => onData(entry.message === "" ? "\n" : entry.message),
+		options,
+		signal,
 	);
-
-	const text = options.text ?? true;
-	const bare = options.bare ?? true;
-
-	const url = buildLogUrl(baseUrl, {
-		...options,
-		follow: true,
-		text,
-		bare,
-	});
-	const response = await fetch(url, { signal });
-	if (!response.ok) {
-		throw new Error(
-			`Failed to stream container logs: ${response.status} ${response.statusText}`,
-		);
-	}
-
-	// Always use the structured-aware streamer: if the backend returns plain text,
-	// it will fall back to raw streaming; if it returns structured logs, it will decode.
-	await streamStructuredLogsResponse(response, onData);
 }
 
 /** Fetch CVM-level channel logs (serial/stdout/stderr) */
@@ -723,14 +841,15 @@ export async function fetchCvmChannelLogs(
 	channel: CvmLogChannel,
 	options: SerialLogsOptions = {},
 ): Promise<string> {
+	assertSupportedNodeLogOptions(options);
 	const baseUrl = await getCvmLogEndpoint(appId, channel);
-	const url = buildLogUrl(baseUrl, options);
+	const url = buildLogUrl(baseUrl, {
+		since: options.since,
+		until: options.until,
+		tail: options.tail,
+	});
 	const response = await fetch(url);
-	if (!response.ok) {
-		throw new Error(
-			`Failed to fetch CVM ${channel} logs: ${response.status} ${response.statusText}`,
-		);
-	}
+	if (!response.ok) await throwResponseError(response);
 	return response.text();
 }
 
@@ -742,15 +861,26 @@ export async function streamCvmChannelLogs(
 	options: SerialLogsOptions = {},
 	signal?: AbortSignal,
 ): Promise<void> {
-	const baseUrl = await getCvmLogEndpoint(appId, channel);
-	const url = buildLogUrl(baseUrl, { ...options, follow: true });
-	const response = await fetch(url, { signal });
-	if (!response.ok) {
-		throw new Error(
-			`Failed to stream CVM ${channel} logs: ${response.status} ${response.statusText}`,
-		);
-	}
-	await streamResponse(response, onData);
+	assertSupportedNodeLogOptions(options);
+	let firstRequest = true;
+	await followLogRequests(
+		async () => {
+			const baseUrl = await getCvmLogEndpoint(appId, channel);
+			const tail = firstRequest ? options.tail : 0;
+			firstRequest = false;
+			return buildLogUrl(baseUrl, {
+				since: options.since,
+				until: options.until,
+				tail,
+				follow: true,
+			});
+		},
+		(response) => streamResponse(response, onData),
+		signal,
+		async () => {
+			await getCvmByAppId(appId);
+		},
+	);
 }
 
 /** Get CVM status string (e.g. "running", "stopped") */

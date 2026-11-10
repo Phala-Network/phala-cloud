@@ -36,6 +36,42 @@ func intPtr(v int) *int {
 	return &v
 }
 
+func TestCVMLogURLsDeserialization(t *testing.T) {
+	payload := []byte(`{
+		"serial":"https://cloud-logs.phala.com/logs/550e8400-e29b-41d4-a716-446655440000/node/serial?uid=42&exp=1790000000&kid=k1&sig=signature",
+		"stdout":"https://cloud-logs.phala.com/logs/550e8400-e29b-41d4-a716-446655440000/node/stdout?uid=42&exp=1790000000&kid=k1&sig=signature",
+		"stderr":"https://cloud-logs.phala.com/logs/550e8400-e29b-41d4-a716-446655440000/node/stderr?uid=42&exp=1790000000&kid=k1&sig=signature",
+		"container_log_base":"https://cloud-logs.phala.com/logs/550e8400-e29b-41d4-a716-446655440000/container",
+		"auth_query":"uid=42&exp=1790000000&kid=k1&sig=signature"
+	}`)
+
+	var logs CVMLogURLs
+	if err := json.Unmarshal(payload, &logs); err != nil {
+		t.Fatalf("unmarshal CVM log URLs: %v", err)
+	}
+	if logs.Serial == nil || *logs.Serial == "" {
+		t.Fatalf("serial = %v, want complete presigned URL", logs.Serial)
+	}
+	if logs.Stdout == nil || *logs.Stdout == "" {
+		t.Fatalf("stdout = %v, want complete presigned URL", logs.Stdout)
+	}
+	if logs.Stderr == nil || *logs.Stderr == "" {
+		t.Fatalf("stderr = %v, want complete presigned URL", logs.Stderr)
+	}
+	if logs.ContainerLogBase == nil {
+		t.Fatal("container_log_base is nil")
+	}
+	if got, want := *logs.ContainerLogBase, "https://cloud-logs.phala.com/logs/550e8400-e29b-41d4-a716-446655440000/container"; got != want {
+		t.Errorf("container_log_base = %q, want %q", got, want)
+	}
+	if logs.AuthQuery == nil {
+		t.Fatal("auth_query is nil")
+	}
+	if got, want := *logs.AuthQuery, "uid=42&exp=1790000000&kid=k1&sig=signature"; got != want {
+		t.Errorf("auth_query = %q, want %q", got, want)
+	}
+}
+
 func TestCvmAvailableOSImageDeserialization(t *testing.T) {
 	var images []CvmAvailableOSImage
 	if err := json.Unmarshal([]byte(`[

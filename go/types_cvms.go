@@ -104,12 +104,18 @@ type CVMEndpoint struct {
 	Instance string `json:"instance"`
 }
 
-// CVMLogURLs contains links to CVM log streams.
+// CVMLogURLs contains short-lived, expiring presigned URLs for CVM log streams.
+// Serial, Stdout, and Stderr are complete URLs. ContainerLogBase is the
+// query-free base URL for container logs; append the container name, display
+// query parameters, and AuthQuery to construct a complete container log URL.
+// ContainerLogBase and AuthQuery are populated only when public_logs is true
+// and vm_uuid is available; otherwise they are unset.
 type CVMLogURLs struct {
 	Serial           *string `json:"serial,omitempty"`
 	Stdout           *string `json:"stdout,omitempty"`
 	Stderr           *string `json:"stderr,omitempty"`
 	ContainerLogBase *string `json:"container_log_base,omitempty"`
+	AuthQuery        *string `json:"auth_query,omitempty"`
 }
 
 // CvmResource holds CVM resource allocation.

@@ -106,10 +106,38 @@ export const CvmGatewayInfoV20260121Schema = z.object({
 export type CvmGatewayInfoV20260121 = z.infer<typeof CvmGatewayInfoV20260121Schema>;
 
 export const CvmLogUrlsV20260121Schema = z.object({
-  serial: z.string().nullable().optional(),
-  stdout: z.string().nullable().optional(),
-  stderr: z.string().nullable().optional(),
-  container_log_base: z.string().nullable().optional(),
+  /** Presigned serial log URL; expires shortly after it is issued. */
+  serial: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("Optional presigned serial log URL that expires shortly after issuance."),
+  /** Presigned stdout log URL; expires shortly after it is issued. */
+  stdout: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("Optional presigned stdout log URL that expires shortly after issuance."),
+  /** Presigned stderr log URL; expires shortly after it is issued. */
+  stderr: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("Optional presigned stderr log URL that expires shortly after issuance."),
+  /** Container URL base without query; present only when public logs and a VM UUID exist. */
+  container_log_base: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("Optional container log URL base without query parameters."),
+  /** Container URL auth query; present only when public logs and a VM UUID exist. */
+  auth_query: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      "Optional container log auth query; null when public logs or VM UUID are unavailable.",
+    ),
 });
 export type CvmLogUrlsV20260121 = z.infer<typeof CvmLogUrlsV20260121Schema>;
 

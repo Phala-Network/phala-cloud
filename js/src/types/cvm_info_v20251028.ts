@@ -62,7 +62,11 @@ export const CvmInfoV20251028Schema = z.object({
   status: z.string(),
   in_progress: z.boolean().default(false),
   dapp_dashboard_url: z.string().nullable(),
-  syslog_endpoint: z.string().nullable(),
+  /** Presigned serial log URL; expires shortly after it is issued. */
+  syslog_endpoint: z
+    .string()
+    .nullable()
+    .describe("Presigned serial log URL that expires shortly after issuance."),
   allow_upgrade: z.boolean().default(false),
   project_id: z.string().nullable(),
   project_type: z.string().nullable(),
@@ -101,7 +105,12 @@ export const CvmDetailV20251028Schema = z.object({
   public_logs: z.boolean().optional().default(false),
   managed_env: z.boolean().optional().default(false),
   dapp_dashboard_url: z.string().optional().nullable(),
-  syslog_endpoint: z.string().optional().nullable(),
+  /** Presigned serial log URL; expires shortly after it is issued. */
+  syslog_endpoint: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("Optional presigned serial log URL that expires shortly after issuance."),
   kms_info: KmsInfoSchema.optional().nullable(),
   contract_address: z.string().optional().nullable(),
   deployer_address: z.string().optional().nullable(),
