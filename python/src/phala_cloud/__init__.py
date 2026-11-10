@@ -50,6 +50,12 @@ from .full_client import (
     create_async_client,
     create_client,
 )
+from .logs import (
+    LogAccessError,
+    fetch_cvm_logs,
+    follow_cvm_logs,
+    resolve_log_time_window,
+)
 from .models import *  # noqa: F403
 from .models import CheckAppIsAllowedRequest, CheckCvmIsAllowedRequest
 from .result import SafeResult
@@ -109,6 +115,10 @@ __all__ = [
     "PhalaCloudError",
     "ReplicateCvmRequest",
     "RequestError",
+    "LogAccessError",
+    "fetch_cvm_logs",
+    "follow_cvm_logs",
+    "resolve_log_time_window",
     "revoke_current_api_token",
     "safe_revoke_current_api_token",
     "ResourceError",

@@ -57,6 +57,9 @@ from .action_responses import (
 from .client import AsyncPhalaCloud as _AsyncBase
 from .client import PhalaCloud as _SyncBase
 from .errors import ApiError, RequestError
+from .logs import CVM_LOGS_INFO_API_VERSION, CvmLogEntry, CvmLogFormat, CvmLogSource
+from .logs import fetch_cvm_logs as _fetch_cvm_logs
+from .logs import follow_cvm_logs as _follow_cvm_logs
 from .models.apps import DeviceAllowlistResponseV20260121, DeviceAllowlistResponseV20260522
 from .models.auth import CurrentUserV20251028, CurrentUserV20260121
 from .models.base import CloudModel, NodeSelectionRequest
@@ -1709,6 +1712,77 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         self, request: CheckAppCvmsIsAllowedRequest | Mapping[str, Any]
     ) -> SafeResult[Any]:
         return self.safe(self.check_app_cvms_is_allowed, request)
+
+    def _logs_api_get(self, path: str) -> Any:
+        headers: dict[str, str] = {}
+        if not path.rstrip("/").endswith("/composition"):
+            headers["X-Phala-Version"] = CVM_LOGS_INFO_API_VERSION
+        response = self._client.get(path, headers=headers or None)
+        if response.status_code >= 400:
+            raise self._to_api_error(response)
+        return response.json()
+
+    def fetch_cvm_logs(
+        self,
+        cvm_id: str,
+        source: CvmLogSource,
+        *,
+        tail: int | str | None = None,
+        since: str | int | None = None,
+        until: str | int | None = None,
+        timestamps: bool = False,
+        ansi: bool = False,
+        format: CvmLogFormat = "text",
+        log_http: httpx.Client | None = None,
+    ) -> str | list[CvmLogEntry]:
+        owns = log_http is None
+        client = log_http or httpx.Client(timeout=None, follow_redirects=False)
+        try:
+            return _fetch_cvm_logs(
+                api_get=self._logs_api_get,
+                log_http=client,
+                cvm_id=cvm_id,
+                source=source,
+                tail=tail,
+                since=since,
+                until=until,
+                timestamps=timestamps,
+                ansi=ansi,
+                format=format,
+            )
+        finally:
+            if owns:
+                client.close()
+
+    def follow_cvm_logs(
+        self,
+        cvm_id: str,
+        source: CvmLogSource,
+        *,
+        tail: int | str | None = None,
+        since: str | int | None = None,
+        until: str | int | None = None,
+        timestamps: bool = False,
+        ansi: bool = False,
+        log_http: httpx.Client | None = None,
+    ) -> Iterator[str | CvmLogEntry]:
+        owns = log_http is None
+        client = log_http or httpx.Client(timeout=None, follow_redirects=False)
+        try:
+            yield from _follow_cvm_logs(
+                api_get=self._logs_api_get,
+                log_http=client,
+                cvm_id=cvm_id,
+                source=source,
+                tail=tail,
+                since=since,
+                until=until,
+                timestamps=timestamps,
+                ansi=ansi,
+            )
+        finally:
+            if owns:
+                client.close()
 
 
 class AsyncPhalaCloud(_AsyncBase, _ExtMixin):

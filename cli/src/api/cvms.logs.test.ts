@@ -411,7 +411,8 @@ describe("CVM log access client", () => {
 
 		expect(output).toEqual(["reconnected log"]);
 		expect(fetchMock).toHaveBeenCalledTimes(2);
-		expect(safeGetCvmInfo).toHaveBeenCalledTimes(1);
+		// One CVM-info refresh plus composition lookups on each attempt.
+		expect(clientGet).toHaveBeenCalled();
 	});
 
 	test("repeated HTTP ERR-17-003 refreshes only a finite number of times", async () => {
@@ -429,7 +430,8 @@ describe("CVM log access client", () => {
 		expect(error).toBeInstanceOf(LogAccessError);
 		expect(error).toMatchObject({ code: "ERR-17-003" });
 		expect(fetchMock).toHaveBeenCalledTimes(4);
-		expect(safeGetCvmInfo).toHaveBeenCalledTimes(7);
+		// 4 URL resolutions + 3 CVM-info refreshes before giving up.
+		expect(clientGet).toHaveBeenCalledTimes(7);
 	});
 
 	test("repeated midstream ERR-17-003 is also limited across HTTP 200 bodies", async () => {
@@ -443,7 +445,8 @@ describe("CVM log access client", () => {
 		expect(error).toBeInstanceOf(LogAccessError);
 		expect(error).toMatchObject({ code: "ERR-17-003" });
 		expect(fetchMock).toHaveBeenCalledTimes(4);
-		expect(safeGetCvmInfo).toHaveBeenCalledTimes(3);
+		// 4 composition lookups + 3 CVM-info refreshes before giving up.
+		expect(clientGet).toHaveBeenCalledTimes(7);
 	});
 
 	test("midstream 4xx error is surfaced with its message and suggestions and not retried", async () => {

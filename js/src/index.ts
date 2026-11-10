@@ -15,6 +15,27 @@ export * from "./credentials";
 // Actions
 export * from "./actions";
 
+// CVM logs (log-gateway; not bound as client methods)
+export {
+  LogAccessError,
+  fetchCvmLogs,
+  followCvmLogs,
+  fetchCvmChannelLogs,
+  streamCvmChannelLogs,
+  fetchContainerLogs,
+  fetchContainerLogsEntries,
+  streamContainerLogs,
+  streamContainerLogsEntries,
+  getCvmLogEndpoint,
+  resolveLogTimeWindow,
+  type CvmLogChannel,
+  type CvmLogEntry,
+  type CvmLogFormat,
+  type CvmLogSource,
+  type CvmLogsOptions,
+  type LogChannel,
+} from "./actions/cvms/logs";
+
 // Utils
 export * from "./utils";
 export { defineAction, defineSimpleAction } from "./utils/define-action";
