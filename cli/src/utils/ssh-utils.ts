@@ -343,13 +343,118 @@ export function checkLibreSSLEd25519Compatibility(keyPath: string): void {
 }
 
 /**
- * Build common SSH options for ssh/scp commands
+ * HTTP proxy that `openssl s_client -proxy` tunnels through with CONNECT.
  */
-export function buildSshOptions(verbose: boolean, timeout: string): string[] {
+export type HttpConnectProxy = { host: string; port: string; isIpv6: boolean };
+
+/**
+ * Whether `host` is excluded from proxying by a NO_PROXY value.
+ * Entries are comma-separated; each matches the host itself or any subdomain,
+ * with or without a leading dot. A lone `*` disables proxying for every host.
+ */
+function isNoProxyHost(host: string, noProxy: string): boolean {
+	const target = host.toLowerCase();
+	return noProxy
+		.split(",")
+		.map((entry) =>
+			entry
+				.trim()
+				.toLowerCase()
+				.replace(/^\*?\./, ""),
+		)
+		.some(
+			(entry) =>
+				entry === "*" ||
+				(entry.length > 0 &&
+					(target === entry || target.endsWith(`.${entry}`))),
+		);
+}
+
+function readEnv(env: NodeJS.ProcessEnv, name: string): string | undefined {
+	return env[name.toLowerCase()] || env[name.toUpperCase()] || undefined;
+}
+
+/**
+ * Resolve the HTTPS proxy for a TLS connection to `host` from the environment.
+ * Returns undefined when no proxy applies. Throws when the configured proxy
+ * cannot be used by `openssl s_client -proxy`, so the connection never
+ * silently bypasses a proxy the user asked for.
+ */
+export function resolveHttpsProxy(
+	host: string,
+	env: NodeJS.ProcessEnv,
+): HttpConnectProxy | undefined {
+	const proxyValue = readEnv(env, "https_proxy");
+	if (!proxyValue) {
+		return undefined;
+	}
+	const noProxy = readEnv(env, "no_proxy");
+	if (noProxy && isNoProxyHost(host, noProxy)) {
+		return undefined;
+	}
+
+	// A value without a scheme ("proxy.example.com:3128") means an HTTP proxy.
+	const withScheme = proxyValue.includes("://")
+		? proxyValue
+		: `http://${proxyValue}`;
+	let url: URL;
+	try {
+		url = new URL(withScheme);
+	} catch {
+		throw new Error(`Invalid HTTPS_PROXY value: ${proxyValue}`);
+	}
+
+	if (url.protocol !== "http:") {
+		throw new Error(
+			`Unsupported proxy scheme "${url.protocol.slice(0, -1)}" in HTTPS_PROXY. SSH through the gateway supports only http:// proxies (HTTP CONNECT). Set NO_PROXY to connect directly.`,
+		);
+	}
+	if (url.username || url.password) {
+		throw new Error(
+			"Proxy credentials in HTTPS_PROXY are not supported for SSH through the gateway. Use a proxy that does not require authentication, or set NO_PROXY to connect directly.",
+		);
+	}
+
+	const isIpv6 = url.hostname.startsWith("[");
+	return {
+		host: isIpv6 ? url.hostname.slice(1, -1) : url.hostname,
+		port: url.port || "80",
+		isIpv6,
+	};
+}
+
+/**
+ * Format the `-proxy` argument for openssl s_client.
+ * OpenSSL requires brackets around an IPv6 address; LibreSSL splits at the
+ * last colon and rejects the bracketed form.
+ */
+export function formatOpensslProxyArg(
+	proxy: HttpConnectProxy,
+	libreSSL: boolean,
+): string {
+	const host = proxy.isIpv6 && !libreSSL ? `[${proxy.host}]` : proxy.host;
+	return `${host}:${proxy.port}`;
+}
+
+/**
+ * Build common SSH options for ssh/scp commands.
+ * `host` is the SSH destination host, used to evaluate NO_PROXY.
+ */
+export function buildSshOptions(
+	verbose: boolean,
+	timeout: string,
+	host: string,
+	env: NodeJS.ProcessEnv = process.env,
+): string[] {
 	// The full app-port hostname selects the CVM through gateway SNI routing.
 	// Authenticate that same hostname and abort on certificate verification errors.
-	const tlsCommand =
+	let tlsCommand =
 		"openssl s_client -quiet -connect %h:%p -servername %h -verify_hostname %h -verify_return_error";
+	const proxy = resolveHttpsProxy(host, env);
+	if (proxy) {
+		const libreSSL = proxy.isIpv6 && isLibreSSL();
+		tlsCommand += ` -proxy ${shellEscape(formatOpensslProxyArg(proxy, libreSSL))}`;
+	}
 	const proxyCommand = verbose ? tlsCommand : `${tlsCommand} 2>/dev/null`;
 
 	return [
