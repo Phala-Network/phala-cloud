@@ -72,6 +72,37 @@ func buildLogURL(base string, opts map[string]string) string {
 	return u.String()
 }
 
+func assertNodeLogOptions(opts *LogsOptions) error {
+	if opts == nil {
+		return nil
+	}
+	var unsupported []string
+	if opts.Timestamps {
+		unsupported = append(unsupported, "timestamps")
+	}
+	if opts.Since != nil {
+		unsupported = append(unsupported, "since")
+	}
+	if opts.Until != nil {
+		unsupported = append(unsupported, "until")
+	}
+	if strings.EqualFold(opts.Format, "ndjson") {
+		unsupported = append(unsupported, "format=ndjson")
+	}
+	if len(unsupported) > 0 {
+		return fmt.Errorf("%s not supported for serial/stdout/stderr logs", strings.Join(unsupported, ", "))
+	}
+	return nil
+}
+
+func errContainerLogsDisabled() error {
+	return &APIError{
+		StatusCode: 409,
+		ErrorCode:  "ERR-17-006",
+		Message:    "ERR-17-006: Container logs are disabled",
+	}
+}
+
 func tailValue(v any) string {
 	if v == nil {
 		return ""
@@ -109,6 +140,15 @@ func (c *Client) nodeLogURL(ctx context.Context, cvmID string, channel CVMLogCha
 }
 
 func (c *Client) containerLogURL(ctx context.Context, cvmID, name string) (string, error) {
+	var info struct {
+		PublicLogs *bool `json:"public_logs"`
+	}
+	if err := c.doJSONVersioned(ctx, "GET", cvmPath(cvmID), cvmLogsInfoAPIVersion, nil, &info); err != nil {
+		return "", err
+	}
+	if info.PublicLogs != nil && !*info.PublicLogs {
+		return "", errContainerLogsDisabled()
+	}
 	var composition struct {
 		Containers []struct {
 			ID          string   `json:"id"`
@@ -185,7 +225,9 @@ func (c *Client) FetchCVMLogs(ctx context.Context, cvmID string, source LogSourc
 		opts = &LogsOptions{}
 	}
 	if source.Type == "container" {
-		entries, err := c.FetchCVMLogEntries(ctx, cvmID, source, opts)
+		entryOpts := *opts
+		entryOpts.Format = "ndjson"
+		entries, err := c.FetchCVMLogEntries(ctx, cvmID, source, &entryOpts)
 		if err != nil {
 			return "", err
 		}
@@ -198,6 +240,9 @@ func (c *Client) FetchCVMLogs(ctx context.Context, cvmID string, source LogSourc
 			}
 		}
 		return b.String(), nil
+	}
+	if err := assertNodeLogOptions(opts); err != nil {
+		return "", err
 	}
 	base, err := c.nodeLogURL(ctx, cvmID, source.Channel)
 	if err != nil {
@@ -226,6 +271,13 @@ func (c *Client) FetchCVMLogs(ctx context.Context, cvmID string, source LogSourc
 func (c *Client) FetchCVMLogEntries(ctx context.Context, cvmID string, source LogSource, opts *LogsOptions) ([]LogEntry, error) {
 	if opts == nil {
 		opts = &LogsOptions{}
+	}
+	format := opts.Format
+	if format == "" {
+		format = "ndjson"
+	}
+	if !strings.EqualFold(format, "ndjson") {
+		return nil, fmt.Errorf("phala: FetchCVMLogEntries requires format=ndjson")
 	}
 	base, err := c.containerLogURL(ctx, cvmID, source.Name)
 	if err != nil {
@@ -335,6 +387,9 @@ func (c *Client) FollowCVMLogs(ctx context.Context, cvmID string, source LogSour
 func (c *Client) followNode(ctx context.Context, cvmID string, channel CVMLogChannel, opts *LogsOptions, lines chan<- string) error {
 	if opts == nil {
 		opts = &LogsOptions{}
+	}
+	if err := assertNodeLogOptions(opts); err != nil {
+		return err
 	}
 	first := true
 	failureCount := 0

@@ -41,6 +41,7 @@ interface CvmLogUrls {
 
 interface CvmInfoWithLogs {
   logs?: CvmLogUrls | null;
+  public_logs?: boolean | null;
 }
 
 interface ContainerInfo {
@@ -368,6 +369,14 @@ export async function getCvmLogEndpoint(
   return endpoint;
 }
 
+function containerLogsDisabledError(): LogAccessError {
+  return new LogAccessError({
+    code: "ERR-17-006",
+    message: "Container logs are disabled",
+    httpStatus: 409,
+  });
+}
+
 async function getContainerLogEndpoint(
   client: Client,
   id: CvmIdInput | string,
@@ -375,6 +384,10 @@ async function getContainerLogEndpoint(
   matchContainerIdPrefix = true,
 ): Promise<string> {
   const cvmId = resolveCvmId(id);
+  const info = await getCvmInfoLogs(client, cvmId);
+  if (info.public_logs === false) {
+    throw containerLogsDisabledError();
+  }
   const composition = (await client.get(`/cvms/${cvmId}/composition`)) as CvmCompositionResponse;
 
   if (!composition.containers?.length) {
