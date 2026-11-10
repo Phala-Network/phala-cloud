@@ -69,6 +69,8 @@ asyncio.run(main())
 - `headers`
 - `use_cookie_auth`
 
+The SDK sets `User-Agent` to `phala-cloud-sdk-python/<version> python/<x.y.z> httpx/<ver>`. A `User-Agent` in `headers` replaces that default.
+
 A non-empty client option takes precedence over its corresponding environment variable. After resolving both credentials, the SDK uses the API key if both are set. This includes an API key from `PHALA_CLOUD_API_KEY` when `bearer_token` is set explicitly. Cookie auth suppresses both generated authentication headers; it does not remove headers supplied by the caller. The SDK removes surrounding whitespace from the workspace value.
 
 When you supply `http_client`, its base URL and timeout control requests; configure them on that client. Watch streams use their own read timeout, as described below. The SDK does not close the supplied client.

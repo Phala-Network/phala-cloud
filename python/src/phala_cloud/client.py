@@ -39,6 +39,7 @@ from .models import (
     PaginatedCvmInfosV20260522,
 )
 from .result import SafeResult
+from .user_agent import default_user_agent
 
 ApiVersion = Literal["2025-10-28", "2026-01-21", "2026-05-22", "2026-06-23"]
 SUPPORTED_API_VERSIONS: tuple[ApiVersion, ...] = (
@@ -87,6 +88,7 @@ class _BaseConfig:
         result: dict[str, str] = {
             "X-Phala-Version": self.version,
             "Content-Type": "application/json",
+            "User-Agent": default_user_agent(),
         }
         result.update(self.headers)
         if not self.use_cookie_auth and self.api_key:

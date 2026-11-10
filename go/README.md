@@ -66,6 +66,8 @@ client, err := phala.NewClient(
 )
 ```
 
+The default User-Agent is `phala-cloud-sdk-go/<version> go/<go version>`. `DefaultUserAgent()` returns that value so wrappers can prepend their own product token. `WithUserAgent` replaces it. A `User-Agent` set with `WithHeader` wins over both.
+
 ## Does the SDK follow redirects?
 
 No. Redirects can send your API key to another server, so the SDK stops at the first response. This applies to API calls and SSE streams. Set `WithBaseURL` to the final API URL instead of relying on a redirect.

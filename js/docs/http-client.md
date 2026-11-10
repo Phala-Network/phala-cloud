@@ -140,7 +140,10 @@ const client = createClient({
   baseURL: 'https://api.custom.com',
   timeout: 10000,
   
-  // Custom headers
+  // Custom headers. The SDK sets User-Agent to
+  // `phala-cloud-sdk-js/<version> <runtime>/<runtime version>` on Node,
+  // Bun, Deno, and Cloudflare Workers (`workerd`). It does not set
+  // User-Agent in browsers. A caller-supplied User-Agent replaces the default.
   headers: {
     'User-Agent': 'MyApp/1.0',
     'Accept-Language': 'en-US'
