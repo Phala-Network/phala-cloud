@@ -1,3 +1,8 @@
+## [0.5.1](https://github.com/Phala-Network/phala-cloud/compare/go/v0.5.0...go/v0.5.1) (2026-11-10)
+
+### fix
+
+* **sdks:** align log helper options and errors across SDKs ([a70487a](https://github.com/Phala-Network/phala-cloud/commit/a70487aae559bd5cb49b6906fb87f01936b8387c))
 ## 0.5.0 (2026-11-10)
 
 ### ⚠ BREAKING CHANGE
