@@ -1,3 +1,8 @@
+## [1.2.5](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.4...cli-v1.2.5) (2026-11-10)
+
+### fix
+
+* **sdks:** align follow behavior verified against live log endpoints ([200cda6](https://github.com/Phala-Network/phala-cloud/commit/200cda6248e947e6bf125928feffdd391195fb80))
 ## [1.2.4](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.3...cli-v1.2.4) (2026-11-10)
 
 ### feat
