@@ -1,3 +1,15 @@
+## [0.6.0](https://github.com/Phala-Network/phala-cloud/compare/js-v0.5.0...js-v0.6.0) (2026-11-10)
+
+### docs
+
+* **sdk:** describe presigned CVM log URL fields ([c37ccce](https://github.com/Phala-Network/phala-cloud/commit/c37ccce205a7f6c1839a8e67e18c35745b6884bc))
+
+### feat
+
+* **cli:** accept init-script files on create ([1153e1c](https://github.com/Phala-Network/phala-cloud/commit/1153e1c90771a98038e2af9fefb379309c7b181f))
+* **cli:** add phala cvms init-scripts ([5103158](https://github.com/Phala-Network/phala-cloud/commit/51031582e96da1a680168c626541ed0bae4be146))
+* **sdks:** add CVM log fetch and follow helpers ([1a1f8a9](https://github.com/Phala-Network/phala-cloud/commit/1a1f8a99b61cc5911deb9512e40d8225f43b5052))
+* **sdks:** send a unified User-Agent from every SDK ([900700d](https://github.com/Phala-Network/phala-cloud/commit/900700da97788f474fbd2a6e820a8d6e29742aa4))
 ## [](https://github.com/Phala-Network/phala-cloud/compare/js-v0.4.0...js-v) (2026-11-07)
 
 ### ⚠ BREAKING CHANGE
