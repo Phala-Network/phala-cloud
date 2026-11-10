@@ -51,7 +51,7 @@ func WithTimeout(d time.Duration) Option {
 	}
 }
 
-// WithUserAgent sets a custom User-Agent header.
+// WithUserAgent replaces the default User-Agent returned by DefaultUserAgent.
 func WithUserAgent(ua string) Option {
 	return func(c *Client) { c.userAgent = ua }
 }

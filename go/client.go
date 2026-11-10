@@ -43,7 +43,7 @@ func NewClient(opts ...Option) (*Client, error) {
 		baseURL:    DefaultBaseURL,
 		apiVersion: DefaultAPIVersion,
 		httpClient: &http.Client{Timeout: DefaultTimeout},
-		userAgent:  "phala-cloud-sdk-go/" + sdkVersion,
+		userAgent:  DefaultUserAgent(),
 		headers:    make(map[string]string),
 		maxRetries: 30,
 	}

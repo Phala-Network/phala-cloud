@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 const createClientMock = mock((config: Record<string, unknown>) => config);
 
+const realCloud = await import(
+	`${require.resolve("@phala/cloud")}?client-user-agent-test-real`
+);
 mock.module("@phala/cloud", () => ({
+	...realCloud,
 	createClient: createClientMock,
 	safeRevokeCurrentApiToken: mock(() => Promise.resolve({ success: true })),
 }));
@@ -29,6 +33,7 @@ describe("CLI client User-Agent", () => {
 			headers?: { "User-Agent"?: string };
 		};
 		expect(config.headers?.["User-Agent"]).toBe(CLI_USER_AGENT);
+		expect(config.headers?.["User-Agent"]).not.toMatch(/^phala-cloud-sdk-js\//);
 	});
 
 	test("getClientWithKey sets phala-cli User-Agent", async () => {
@@ -39,5 +44,6 @@ describe("CLI client User-Agent", () => {
 			headers?: { "User-Agent"?: string };
 		};
 		expect(config.headers?.["User-Agent"]).toBe(CLI_USER_AGENT);
+		expect(config.headers?.["User-Agent"]).not.toMatch(/^phala-cloud-sdk-js\//);
 	});
 });

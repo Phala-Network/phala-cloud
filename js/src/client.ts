@@ -12,6 +12,7 @@ import {
 } from "./types/client";
 import type { Prettify } from "./types/common";
 import { parseApiError, PhalaCloudError, RequestError } from "./utils/errors";
+import { defaultUserAgent } from "./user-agent";
 export type {
   SafeResult,
   FullResponse,
@@ -165,6 +166,10 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
     } = this.config;
 
     const requestHeaders = new Headers({ "Content-Type": "application/json" });
+    const userAgent = defaultUserAgent();
+    if (userAgent) {
+      requestHeaders.set("User-Agent", userAgent);
+    }
     new Headers(headers).forEach((value, key) => requestHeaders.set(key, value));
     requestHeaders.set("X-Phala-Version", version);
 

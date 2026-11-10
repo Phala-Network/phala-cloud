@@ -4,6 +4,7 @@ import { type SafeResult, type ClientConfig } from "./types";
 import { PhalaCloudError, RequestError } from "./utils";
 import { getErrorMessage } from "./utils";
 import { ofetch } from "ofetch";
+import { defaultUserAgent } from "./user-agent";
 
 // Mock ofetch module
 vi.mock("ofetch", async () => {
@@ -259,6 +260,23 @@ describe("Client", () => {
 
 		test("should provide access to raw ofetch instance", () => {
 			expect(client.raw).toBe(mockFetchInstance);
+		});
+
+		test("sets the default SDK User-Agent", () => {
+			vi.clearAllMocks();
+			createClient({ apiKey: "test-key" });
+			const headers = vi.mocked(ofetch.create).mock.calls[0][0].headers as Headers;
+			expect(headers.get("User-Agent")).toBe(defaultUserAgent());
+		});
+
+		test("caller User-Agent header overrides the default", () => {
+			vi.clearAllMocks();
+			createClient({
+				apiKey: "test-key",
+				headers: { "User-Agent": "MyApp/1.0" },
+			});
+			const headers = vi.mocked(ofetch.create).mock.calls[0][0].headers as Headers;
+			expect(headers.get("User-Agent")).toBe("MyApp/1.0");
 		});
 	});
 

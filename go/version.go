@@ -1,6 +1,10 @@
 package phala
 
-import "time"
+import (
+	"runtime"
+	"strings"
+	"time"
+)
 
 const (
 	// DefaultAPIVersion is the default Phala Cloud API version.
@@ -20,3 +24,13 @@ const (
 	// sdkVersion is the version of this SDK, used in User-Agent.
 	sdkVersion = "0.4.0"
 )
+
+// DefaultUserAgent returns the SDK User-Agent product tokens.
+// Wrappers can prepend their own product token:
+//
+//	"my-wrapper/1.0 " + phala.DefaultUserAgent()
+//
+// WithUserAgent replaces this value entirely.
+func DefaultUserAgent() string {
+	return "phala-cloud-sdk-go/" + sdkVersion + " go/" + strings.TrimPrefix(runtime.Version(), "go")
+}
