@@ -1,4 +1,4 @@
-import type { Client } from "@phala/cloud";
+import type { CliApiClient } from "@/src/lib/client";
 import {
 	safeGetAppEnvEncryptPubKey,
 	verifyEnvEncryptPublicKeyLegacy,
@@ -57,7 +57,7 @@ export function verifyAndExtractEnvEncryptPubkey(
  * Decentralized KMS (ethereum/base): fetches from KMS endpoint.
  */
 export async function getEncryptPubkey(
-	client: Client,
+	client: CliApiClient,
 	cvm: {
 		app_id?: string | null;
 		kms_type?: string | null;

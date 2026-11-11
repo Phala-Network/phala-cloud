@@ -1,4 +1,5 @@
 import type { Client } from "../../client";
+import type { ApiVersion } from "../../types/client";
 import { CvmIdSchema, type CvmIdInput } from "../../types/cvm_id";
 import { ResourceError, UnknownError } from "../../utils/errors";
 import { defaultUserAgent } from "../../user-agent";
@@ -15,7 +16,7 @@ export type LogChannel = "stdout" | "stderr" | "stdin" | "console";
 
 const LOG_CHANNELS = new Set<LogChannel>(["stdout", "stderr", "stdin", "console"]);
 
-function logFetchHeaders(client: Client): Headers {
+function logFetchHeaders(client: Client<ApiVersion>): Headers {
   const headers = new Headers();
   const ua = defaultUserAgent();
   if (ua) headers.set("User-Agent", ua);
@@ -28,7 +29,11 @@ function logFetchHeaders(client: Client): Headers {
   return headers;
 }
 
-function logFetch(client: Client, url: string, signal?: AbortSignal): Promise<Response> {
+function logFetch(
+  client: Client<ApiVersion>,
+  url: string,
+  signal?: AbortSignal,
+): Promise<Response> {
   return fetch(url, {
     method: "GET",
     headers: logFetchHeaders(client),
@@ -537,7 +542,7 @@ function assertSupportedNodeLogOptions(options: CvmLogsOptions): void {
 }
 
 async function getCvmInfoLogs(
-  client: Client,
+  client: Client<ApiVersion>,
   cvmId: string,
   signal?: AbortSignal,
 ): Promise<CvmInfoWithLogs> {
@@ -549,7 +554,7 @@ async function getCvmInfoLogs(
 
 /** Get a presigned CVM-level log URL for a given node channel. */
 export async function getCvmLogEndpoint(
-  client: Client,
+  client: Client<ApiVersion>,
   id: CvmIdInput | string,
   channel: CvmLogChannel,
   signal?: AbortSignal,
@@ -574,7 +579,7 @@ function containerLogsDisabledError(): LogAccessError {
 }
 
 async function assertContainerLogsEnabled(
-  client: Client,
+  client: Client<ApiVersion>,
   id: CvmIdInput | string,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -654,7 +659,7 @@ function containerSlug(container: ContainerInfo, fallback: string): string {
 }
 
 async function resolveContainerSlug(
-  client: Client,
+  client: Client<ApiVersion>,
   id: CvmIdInput | string,
   containerName?: string,
   matchContainerIdPrefix = true,
@@ -707,7 +712,7 @@ async function resolveContainerSlug(
 }
 
 async function loadCvmLogInfo(
-  client: Client,
+  client: Client<ApiVersion>,
   id: CvmIdInput | string,
   signal?: AbortSignal,
 ): Promise<CvmInfoWithLogs> {
@@ -727,7 +732,7 @@ function urlFromLogInfo(info: CvmInfoWithLogs, slug: string, cvmId: string): str
 }
 
 async function getContainerLogEndpoint(
-  client: Client,
+  client: Client<ApiVersion>,
   id: CvmIdInput | string,
   containerName?: string,
   matchContainerIdPrefix = true,
@@ -777,7 +782,7 @@ const EMPTY_STREAM_END_MESSAGE =
 export const EMPTY_STREAM_QUIET_MS = 10_000;
 
 async function followLogRequests(
-  client: Client,
+  client: Client<ApiVersion>,
   resolveUrl: () => Promise<string>,
   consume: (response: Response, markDelivered: () => void) => Promise<boolean | void>,
   signal?: AbortSignal,
@@ -879,7 +884,7 @@ async function followLogRequests(
 }
 
 export async function fetchCvmChannelLogs(
-  client: Client,
+  client: Client<ApiVersion>,
   id: CvmIdInput | string,
   channel: CvmLogChannel,
   options: CvmLogsOptions = {},
@@ -911,7 +916,7 @@ export async function fetchCvmChannelLogs(
 }
 
 export async function streamCvmChannelLogs(
-  client: Client,
+  client: Client<ApiVersion>,
   id: CvmIdInput | string,
   channel: CvmLogChannel,
   onData: (data: string) => void,
@@ -947,7 +952,7 @@ export async function streamCvmChannelLogs(
 }
 
 export async function fetchContainerLogsEntries(
-  client: Client,
+  client: Client<ApiVersion>,
   id: CvmIdInput | string,
   options: CvmLogsOptions & { container?: string; matchContainerIdPrefix?: boolean } = {},
 ): Promise<CvmLogEntry[]> {
@@ -976,7 +981,7 @@ export async function fetchContainerLogsEntries(
 }
 
 export async function fetchContainerLogs(
-  client: Client,
+  client: Client<ApiVersion>,
   id: CvmIdInput | string,
   options: CvmLogsOptions & { container?: string; matchContainerIdPrefix?: boolean } = {},
 ): Promise<string> {
@@ -1012,7 +1017,7 @@ export async function fetchContainerLogs(
 }
 
 export async function streamContainerLogsEntries(
-  client: Client,
+  client: Client<ApiVersion>,
   id: CvmIdInput | string,
   onEntry: (entry: CvmLogEntry) => void,
   options: CvmLogsOptions & { container?: string; matchContainerIdPrefix?: boolean } = {},
@@ -1156,7 +1161,7 @@ async function streamContainerText(
 }
 
 export async function streamContainerLogs(
-  client: Client,
+  client: Client<ApiVersion>,
   id: CvmIdInput | string,
   onData: (data: string) => void,
   options: CvmLogsOptions & { container?: string; matchContainerIdPrefix?: boolean } = {},
@@ -1271,7 +1276,7 @@ export async function streamContainerLogs(
 }
 
 export async function fetchCvmLogs(
-  client: Client,
+  client: Client<ApiVersion>,
   id: CvmIdInput | string,
   source: CvmLogSource,
   options: CvmLogsOptions = {},
@@ -1296,7 +1301,7 @@ export async function fetchCvmLogs(
 }
 
 export async function* followCvmLogs(
-  client: Client,
+  client: Client<ApiVersion>,
   id: CvmIdInput | string,
   source: CvmLogSource,
   options: CvmLogsOptions = {},
