@@ -41,12 +41,13 @@ from .models import (
 from .result import SafeResult
 from .user_agent import default_user_agent
 
-ApiVersion = Literal["2025-10-28", "2026-01-21", "2026-05-22", "2026-06-23"]
+ApiVersion = Literal["2025-10-28", "2026-01-21", "2026-05-22", "2026-06-23", "2026-11-11"]
 SUPPORTED_API_VERSIONS: tuple[ApiVersion, ...] = (
     "2025-10-28",
     "2026-01-21",
     "2026-05-22",
     "2026-06-23",
+    "2026-11-11",
 )
 DEFAULT_API_VERSION: ApiVersion = "2026-06-23"
 DEFAULT_BASE_URL = "https://cloud-api.phala.com/api/v1"

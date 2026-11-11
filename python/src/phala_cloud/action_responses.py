@@ -10,6 +10,7 @@ from .models.auth import CurrentUserV20251028, CurrentUserV20260121
 from .models.base import CloudModel
 from .models.cvms import (
     Certificate,
+    CvmInfoDetailV20261111,
     InitScriptSlug,
     PaginatedCvmInfosV20251028,
     PaginatedCvmInfosV20260121,
@@ -209,6 +210,9 @@ class CvmInfoResponseV20260121(CvmInfoResponseBase):
 
 class CvmInfoResponseV20260522(CvmInfoResponseBase):
     id: str | None = None
+
+
+CvmInfoResponseV20261111 = CvmInfoDetailV20261111
 
 
 CvmInfoResponse = CvmInfoResponseV20260522
