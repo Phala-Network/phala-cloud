@@ -8,14 +8,16 @@ import { CvmInfoDetailV20261111Schema } from "../../types/cvm_info_v20260121";
 
 describe("API version activation", () => {
   it("preserves detail and compose through the versioned action", async () => {
-    const client = createBaseClient({ version: "2026-11-11" });
-    const detail = { id: "cvm-123", name: "example", status: "running", resource: { memory_in_mb: 4096 }, gateway: {}, dapp_dashboard_url: null, syslog_endpoint: "https://example.test/syslog" };
+    const client = createBaseClient();
+    const detail = { id: "cvm-123", name: "example", status: "running", resource: { memory_in_mb: 4096 }, gateway: {}, gpu: { product_id: "H100", gpus: 2, cc_mode: { expected: "on" } }, dapp_dashboard_url: null, syslog_endpoint: "https://example.test/syslog" }; 
     vi.spyOn(client, "get").mockResolvedValueOnce(detail).mockResolvedValueOnce({ ...detail, compose_file: { services: {} } });
     const cpu = await getCvmInfo(client, { cvmId: "cvm-123" });
     expect(cpu.resource.memory_in_mb).toBe(4096);
     expect(cpu.dapp_dashboard_url).toBeNull();
     expect(cpu.syslog_endpoint).toBe(detail.syslog_endpoint);
-    expect(cpu).not.toHaveProperty("gpu");
+    expect(cpu.gpu).toEqual(detail.gpu);
+    expectTypeOf(cpu).toEqualTypeOf<GetCvmInfoResponse<"2026-11-11">>();
+    expectTypeOf(createClient().config.version).toEqualTypeOf<"2026-11-11">();
     expect(cpu).not.toHaveProperty("compose_file");
     expect((await getCvmInfo(client, { cvmId: "cvm-123", include_compose: true })).compose_file).toEqual({ services: {} });
   });
@@ -35,7 +37,7 @@ describe("API version activation", () => {
     const detail = await getCvmInfo(client, { cvmId: "cvm-123" });
     expect(detail.resource).toMatchObject({ memory_in_mb: 4096, memory_in_gb: 4 });
     expect(detail.syslog_endpoint).toBe("https://example.test/syslog");
-    expect(createClient().config.version).toBe("2026-06-23");
+    expect(createClient().config.version).toBe("2026-11-11");
     expectTypeOf(detail).toEqualTypeOf<GetCvmInfoResponse<"2026-11-11">>();
     expectTypeOf<GetAppInfoResponse<"2026-11-11">>().toEqualTypeOf<GetAppInfoResponse<"2026-06-23">>();
     expectTypeOf<GetCvmListResponse<"2026-11-11">>().toEqualTypeOf<GetCvmListResponse<"2026-06-23">>();
@@ -69,7 +71,7 @@ describe("GPU status", () => {
 describe("CVM compose opt-in", () => {
   it("forwards true and false and omits an unspecified option", async () => {
     const client = createBaseClient();
-    const detail = { id: "cvm-123", name: "example", status: "running", resource: {}, gateway: {} };
+    const detail = { id: "cvm-123", name: "example", status: "running", resource: { memory_in_mb: 4096 }, gateway: {} };
     const get = vi.spyOn(client, "get").mockResolvedValue(detail);
     await getCvmInfo(client, { cvmId: "cvm-123" });
     await getCvmInfo(client, { cvmId: "cvm-123", include_compose: true });

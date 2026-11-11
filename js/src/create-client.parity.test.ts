@@ -91,7 +91,7 @@ it("rebinds chained custom actions and factories when switching versions", async
   const clone = original.withVersion("2025-10-28");
   expect(await clone.readVersion()).toEqual({ version: "2025-10-28" });
   expect(clone.configVersion()).toBe("2025-10-28");
-  expect(await original.readVersion()).toEqual({ version: "2026-06-23" });
+  expect(await original.readVersion()).toEqual({ version: "2026-11-11" });
   expectTypeOf(clone.config.version).toEqualTypeOf<"2025-10-28">();
   expectTypeOf(clone.configVersion).returns.toEqualTypeOf<unknown>();
   expectTypeOf(clone.info).returns.toEqualTypeOf<unknown>();

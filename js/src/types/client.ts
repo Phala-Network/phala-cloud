@@ -10,7 +10,7 @@ export type ApiVersion = "2025-10-28" | "2026-01-21" | "2026-05-22" | "2026-06-2
 /**
  * Default API version (latest stable)
  */
-export type DefaultApiVersion = "2026-06-23";
+export type DefaultApiVersion = "2026-11-11";
 
 /**
  * Full HTTP response including status, headers, and parsed body

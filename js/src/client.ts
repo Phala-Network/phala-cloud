@@ -28,7 +28,7 @@ export const SUPPORTED_API_VERSIONS = [
   "2026-06-23",
   "2026-11-11",
 ] as const satisfies readonly ApiVersion[];
-export const DEFAULT_API_VERSION: DefaultApiVersion = "2026-06-23";
+export const DEFAULT_API_VERSION: DefaultApiVersion = "2026-11-11";
 const logger = debug("phala::api-client");
 
 type BoundActions<A> = {

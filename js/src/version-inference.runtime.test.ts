@@ -571,9 +571,9 @@ describe("version-based schema validation", () => {
   });
 
   describe("client version configuration", () => {
-    it("should default to 2026-06-23 version", () => {
+    it("should default to 2026-11-11 version", () => {
       const client = createClient({ apiKey: "test" });
-      expect(client.config.version).toBe("2026-06-23");
+      expect(client.config.version).toBe("2026-11-11");
     });
 
     it("should use specified version 2025-10-28", () => {
