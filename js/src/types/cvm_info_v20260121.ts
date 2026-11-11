@@ -228,6 +228,13 @@ export const CvmInfoDetailV20260522Schema = CvmInfoV20260522Schema.extend({
 export type CvmInfoDetailV20260522 = z.infer<typeof CvmInfoDetailV20260522Schema>;
 
 export const CvmInfoDetailV20261111Schema = CvmInfoDetailV20260522Schema.extend({
+  gpu: z
+    .object({
+      product_id: z.string().nullable(),
+      gpus: z.number().int(),
+      cc_mode: z.object({ expected: z.enum(["on", "devtools"]) }),
+    })
+    .optional(),
   dapp_dashboard_url: z.string().nullable().optional(),
   syslog_endpoint: z.string().nullable().optional(),
 });

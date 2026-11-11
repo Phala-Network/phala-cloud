@@ -18,6 +18,15 @@ describe("CVM compose opt-in", () => {
 });
 
 describe("2026-11-11 CVM detail schema", () => {
+  it("preserves GPU details including a null product ID", () => {
+    const detail = { id: "cvm-123", name: "example", status: "running", resource: {}, gateway: {} };
+    for (const product_id of ["H100", null]) {
+      const gpu = { product_id, gpus: 2, cc_mode: { expected: "devtools" } };
+      expect(CvmInfoDetailV20261111Schema.parse({ ...detail, gpu }).gpu).toEqual(gpu);
+    }
+    expect(CvmInfoDetailV20261111Schema.parse(detail)).not.toHaveProperty("gpu");
+  });
+
   it("parses the base detail fields", () => {
     const detail = {
       id: "cvm-123",
