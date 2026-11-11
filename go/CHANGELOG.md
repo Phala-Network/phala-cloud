@@ -1,3 +1,10 @@
+## [0.5.4](https://github.com/Phala-Network/phala-cloud/compare/go/v0.5.3...go/v0.5.4) (2026-11-11)
+
+### fix
+
+* **sdk:** align log error handling and container resolution across SDKs ([1d66cde](https://github.com/Phala-Network/phala-cloud/commit/1d66cde27ce0ad52d40a689c3b401873d80e5307))
+* **sdks:** close remaining log helper gaps from review ([c62ece4](https://github.com/Phala-Network/phala-cloud/commit/c62ece4ec338f73e9d44e08a6829bd589d001187))
+* **sdks:** make log helpers behave the same in JS, Python, Go and the CLI ([873ff86](https://github.com/Phala-Network/phala-cloud/commit/873ff86de3f59b3af38a9014f4c93c22702c1aa6))
 ## [0.5.3](https://github.com/Phala-Network/phala-cloud/compare/go/v0.5.2...go/v0.5.3) (2026-11-10)
 
 ### fix
