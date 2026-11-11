@@ -22,7 +22,7 @@ const (
 	DefaultTimeout = 60 * time.Second
 
 	// sdkVersion is the version of this SDK, used in User-Agent.
-	sdkVersion = "0.5.3"
+	sdkVersion = "0.5.4"
 )
 
 // DefaultUserAgent returns the SDK User-Agent product tokens.
