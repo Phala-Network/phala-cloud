@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { Client } from "../../client";
 import { UnknownError } from "../../utils/errors";
 import {
+  backoffDelayMs,
   CVM_LOGS_INFO_API_VERSION,
   fetchContainerLogs,
   fetchContainerLogsEntries,
@@ -1014,4 +1015,9 @@ describe("CVM log access", { timeout: 20_000 }, () => {
     });
   });
 
+  test("backoff delay saturates at 5 s without relying on Infinity", () => {
+    expect(backoffDelayMs(1)).toBe(250);
+    expect(backoffDelayMs(5)).toBe(4000);
+    expect(backoffDelayMs(2000)).toBe(5000);
+  });
 });

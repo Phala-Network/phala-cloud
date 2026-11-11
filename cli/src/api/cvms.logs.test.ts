@@ -442,7 +442,7 @@ describe("CVM log access client", () => {
 		expect(clientGet).toHaveBeenCalledTimes(4);
 	}, 20_000);
 
-	test("repeated midstream ERR-17-003 is also limited across HTTP 200 bodies", async () => {
+	test("midstream ERR-17-003 inside an HTTP 200 body counts as a failure, not an expired URL", async () => {
 		fetchImplementation = async () =>
 			ndjsonResponse([{ error_code: "ERR-17-003", message: "URL expired" }]);
 
@@ -452,8 +452,9 @@ describe("CVM log access client", () => {
 		);
 		expect(error).toBeInstanceOf(LogAccessError);
 		expect(error).toMatchObject({ code: "ERR-17-003" });
-		expect(fetchMock).toHaveBeenCalledTimes(4);
+		// Gateway errors in a 200 body follow the 5-failure cap.
+		expect(fetchMock).toHaveBeenCalledTimes(5);
 		// 1 composition at start + 1 CVM-info per connection attempt.
-		expect(clientGet).toHaveBeenCalledTimes(5);
-	});
+		expect(clientGet).toHaveBeenCalledTimes(6);
+	}, 20_000);
 });

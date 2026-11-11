@@ -2861,7 +2861,11 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         format: CvmLogFormat | None = None,
         log_http: httpx.AsyncClient | None = None,
     ) -> AsyncGenerator[str | CvmLogEntry, None]:
-        """Async iterator over a followed log stream; stop with aclose() or task cancel."""
+        """Async iterator over a followed log stream; stop with aclose() or task cancel.
+
+        Node logs, and container logs with ``format="text"``, yield lines. Container logs
+        otherwise (the default, or ``format="ndjson"``) yield ``{channel, message}`` entries.
+        """
         return _afollow_cvm_logs(
             api_get=self._logs_api_get,
             log_http=log_http,

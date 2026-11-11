@@ -1155,7 +1155,11 @@ def follow_cvm_logs(
     container_match_prefix: bool = True,
     user_agent: str | None = None,
 ) -> LogFollowIterator[str | CvmLogEntry]:
-    """Follow a log stream. Node and container text yield lines; container NDJSON yields entries."""
+    """Follow a log stream.
+
+    Node logs, and container logs with ``format="text"``, yield lines. Container logs
+    otherwise (the default, or ``format="ndjson"``) yield ``{channel, message}`` entries.
+    """
     plan = _follow_plan(
         cvm_id=cvm_id,
         source=source,

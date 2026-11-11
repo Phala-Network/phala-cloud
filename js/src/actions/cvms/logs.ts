@@ -237,6 +237,11 @@ async function throwResponseError(response: Response): Promise<never> {
   });
 }
 
+/** 250 ms doubling to 5 s; the attempt is clamped before the power so it never overflows. */
+export function backoffDelayMs(attempt: number): number {
+  return Math.min(250 * 2 ** (Math.min(Math.max(attempt, 1), 6) - 1), 5000);
+}
+
 function throwTextStreamError(line: string): void {
   const match = /^\[error\] (ERR-17-\d{3}) (.*)$/.exec(line.trim());
   const code = match?.[1];
@@ -824,7 +829,7 @@ async function followLogRequests(
             fromStreamBody: true,
           });
         }
-        await waitForReconnect(signal, Math.min(250 * 2 ** (emptyEnds - 1), 5000));
+        await waitForReconnect(signal, backoffDelayMs(emptyEnds));
       }
     } catch (error) {
       if (signal?.aborted || (error instanceof Error && error.name === "AbortError")) {
@@ -839,7 +844,7 @@ async function followLogRequests(
       if (deliveredThisConnection) {
         expiredRetries = 0;
       }
-      if (error instanceof LogAccessError && error.code === "ERR-17-003") {
+      if (error instanceof LogAccessError && !error.gatewayStream && error.code === "ERR-17-003") {
         expiredRetries += 1;
         if (expiredRetries > 3) throw error;
         continue;
@@ -848,7 +853,7 @@ async function followLogRequests(
       const status = getErrorHttpStatus(retryError);
       const code = retryError instanceof LogAccessError ? retryError.code : undefined;
       const gatewayStream = retryError instanceof LogAccessError && retryError.gatewayStream;
-      if (code === "ERR-17-002") {
+      if (!gatewayStream && code === "ERR-17-002") {
         // Refetch on the next loop via resolveUrl; counts as a failure below.
       } else if (
         gatewayStream ||
@@ -867,7 +872,7 @@ async function followLogRequests(
       }
       failureCount += 1;
       if (failureCount >= 5) throw retryError;
-      const delayMs = Math.min(250 * 2 ** (failureCount - 1), 5000);
+      const delayMs = backoffDelayMs(failureCount);
       await waitForReconnect(signal, delayMs);
     }
   }
