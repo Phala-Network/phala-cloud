@@ -67,7 +67,7 @@ def test_sync_detail_and_gpu_status() -> None:
         return handler(request)
 
     with httpx.Client(transport=httpx.MockTransport(record), base_url="https://example.com") as raw:
-        client = PhalaCloud(http_client=raw, version="2026-11-11")
+        client = PhalaCloud(http_client=raw)
         cpu = client.get_cvm_info(CvmIdRequest(id="cpu"))
         assert isinstance(cpu, CvmInfoDetailV20261111)
         assert cpu.resource.memory_in_mb == 12345
@@ -94,8 +94,8 @@ def test_sync_detail_and_gpu_status() -> None:
         assert exc.value.status_code == 404
         error = safe_get_cvm_gpu_status(client, {"id": "cpu"}).error
         assert isinstance(error, ApiError) and error.status_code == 404
-        default = PhalaCloud(http_client=raw)
-        legacy = default.get_cvm_info({"id": "cpu"})
+        old_client = PhalaCloud(http_client=raw, version="2026-06-23")
+        legacy = old_client.get_cvm_info({"id": "cpu"})
         assert not isinstance(legacy, CvmInfoDetailV20261111)
         assert isinstance(legacy.node_info, dict)
         assert requests[-1].headers["x-phala-version"] == "2026-06-23"
@@ -106,7 +106,7 @@ async def test_async_detail_and_gpu_status() -> None:
     async with httpx.AsyncClient(
         transport=httpx.MockTransport(handler), base_url="https://example.com"
     ) as raw:
-        client = AsyncPhalaCloud(http_client=raw, version="2026-11-11")
+        client = AsyncPhalaCloud(http_client=raw)
         detail = await client.get_cvm_info({"id": "gpu", "include_compose": True})
         assert isinstance(detail, CvmInfoDetailV20261111)
         assert detail.compose_file == {"name": "test"}

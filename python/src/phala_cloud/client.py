@@ -49,7 +49,7 @@ SUPPORTED_API_VERSIONS: tuple[ApiVersion, ...] = (
     "2026-06-23",
     "2026-11-11",
 )
-DEFAULT_API_VERSION: ApiVersion = "2026-06-23"
+DEFAULT_API_VERSION: ApiVersion = "2026-11-11"
 DEFAULT_BASE_URL = "https://cloud-api.phala.com/api/v1"
 # Per-request HTTP timeout, matching the JS and Go SDKs. Provisioning and
 # attestation calls routinely exceed the previous 30s.
