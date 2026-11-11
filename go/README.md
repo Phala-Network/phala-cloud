@@ -129,6 +129,20 @@ _, err = client.ShutdownCVM(ctx, "cvm-id")
 err = client.DeleteCVM(ctx, "cvm-id")
 ```
 
+API version `2026-11-11` is opt-in with `phala.WithAPIVersion("2026-11-11")`.
+CVM details omit `compose_file` by default in that version. To include it:
+
+```go
+includeCompose := true
+info, err := client.GetCVMInfoWithOptions(ctx, "cvm-id", &phala.GetCVMInfoOptions{
+	IncludeCompose: &includeCompose,
+})
+status, err := client.GetCVMGPUStatus(ctx, "cvm-id")
+```
+
+`GetCVMGPUStatus` returns a 404 error for CPU-only CVMs; `status.Observed` is nil
+when GPU observations are unavailable.
+
 ### Update CVM Configuration
 
 ```go

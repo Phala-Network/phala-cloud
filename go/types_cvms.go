@@ -75,6 +75,9 @@ type CVMInfoFields struct {
 	BillingInterval     *string                `json:"billing_interval,omitempty"`
 	GpuRentalOrder      *CVMGpuRentalOrderInfo `json:"gpu_rental_order,omitempty"`
 	ComposeFile         any                    `json:"compose_file,omitempty"`
+	GPU                 *CVMGPUInfo            `json:"gpu,omitempty"`
+	DappDashboardURL    *string                `json:"dapp_dashboard_url,omitempty"`
+	SyslogEndpoint      *string                `json:"syslog_endpoint,omitempty"`
 
 	// Additional fields used by the Terraform provider.
 	InProgress         bool          `json:"in_progress,omitempty"`
@@ -97,6 +100,29 @@ type CVMInfoV20260522 struct {
 
 // CVMInfo is the latest CVM information schema.
 type CVMInfo = CVMInfoV20260522
+
+// CVMGPUInfo describes the GPU allocation and expected confidential computing mode.
+type CVMGPUInfo struct {
+	ProductID *string      `json:"product_id"`
+	GPUs      int          `json:"gpus"`
+	CCMode    CVMGPUCCMode `json:"cc_mode"`
+}
+
+// CVMGPUCCMode describes the expected GPU confidential computing mode.
+type CVMGPUCCMode struct {
+	Expected string `json:"expected"`
+}
+
+// CVMGPUStatus contains observed GPU status, or nil when unavailable.
+type CVMGPUStatus struct {
+	Observed []CVMGPUObservedStatus `json:"observed"`
+}
+
+// CVMGPUObservedStatus describes the observed mode of one GPU.
+type CVMGPUObservedStatus struct {
+	Slot   string `json:"slot"`
+	CCMode string `json:"cc_mode"`
+}
 
 // CVMEndpoint represents a CVM endpoint URL.
 type CVMEndpoint struct {
@@ -123,6 +149,7 @@ type CvmResource struct {
 	InstanceType        *string  `json:"instance_type,omitempty"`
 	VCPU                *int     `json:"vcpu,omitempty"`
 	MemoryInGB          *float64 `json:"memory_in_gb,omitempty"`
+	MemoryInMB          *int64   `json:"memory_in_mb,omitempty"`
 	DiskInGB            *int     `json:"disk_in_gb,omitempty"`
 	GPUs                *int     `json:"gpus,omitempty"`
 	ComputeBillingPrice *string  `json:"compute_billing_price,omitempty"`
