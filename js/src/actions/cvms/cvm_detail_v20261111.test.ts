@@ -1,7 +1,33 @@
-import { describe, expect, it, vi } from "vitest";
-import { createBaseClient } from "../../index";
-import { getCvmInfo } from "./get_cvm_info";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createBaseClient, createClient } from "../../index";
+
+afterEach(() => vi.unstubAllGlobals());
+import { getCvmGpuStatus, getCvmInfo, safeGetCvmGpuStatus } from "./get_cvm_info";
 import { CvmInfoDetailV20261111Schema } from "../../types/cvm_info_v20260121";
+
+describe("GPU status", () => {
+  it("returns observed and null statuses through the exported actions", async () => {
+    const client = createBaseClient();
+    const observed = [{ slot: "0000:01:00.0", cc_mode: "unknown" }];
+    const get = vi.spyOn(client, "get").mockResolvedValueOnce({ observed }).mockResolvedValueOnce({ observed: null }).mockResolvedValueOnce({ observed });
+    expect(await getCvmGpuStatus(client, { cvmId: "cvm-123" })).toEqual({ observed });
+    expect(get).toHaveBeenCalledWith("/cvms/cvm-123/gpu-status");
+    expect(await getCvmGpuStatus(client, { cvmId: "cvm-123" })).toEqual({ observed: null });
+    expect(await safeGetCvmGpuStatus(client, { cvmId: "cvm-123" })).toEqual({ success: true, data: { observed } });
+  });
+  it("binds methods and handles HTTP success and errors", async () => {
+    const observed = [{ slot: "0000:01:00.0", cc_mode: "on" }];
+    const fetch = vi.fn().mockResolvedValueOnce(Response.json({ observed })).mockResolvedValueOnce(Response.json({ observed: null })).mockImplementation(async () => Response.json({ detail: "CVM has no GPU" }, { status: 404 }));
+    vi.stubGlobal("fetch", fetch);
+    const client = createClient({ baseURL: "https://example.test" });
+    expect(await client.getCvmGpuStatus({ cvmId: "gpu" })).toEqual({ observed });
+    expect(await client.safeGetCvmGpuStatus({ cvmId: "gpu" })).toEqual({ success: true, data: { observed: null } });
+    await expect(client.getCvmGpuStatus({ cvmId: "cpu" })).rejects.toMatchObject({ status: 404 });
+    const result = await client.safeGetCvmGpuStatus({ cvmId: "cpu" });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error).toMatchObject({ status: 404 });
+  });
+});
 
 describe("CVM compose opt-in", () => {
   it("forwards true and false and omits an unspecified option", async () => {

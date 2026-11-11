@@ -42,7 +42,13 @@ import {
   type WorkspaceResponse,
 } from "./actions/workspaces/list_workspaces";
 import { getWorkspace, safeGetWorkspace } from "./actions/workspaces/get_workspace";
-import { getCvmInfo, safeGetCvmInfo, type GetCvmInfoRequest } from "./actions/cvms/get_cvm_info";
+import {
+  getCvmInfo,
+  safeGetCvmInfo,
+  getCvmGpuStatus,
+  safeGetCvmGpuStatus,
+  type GetCvmInfoRequest,
+} from "./actions/cvms/get_cvm_info";
 import { getCvmList, safeGetCvmList, type GetCvmListRequest } from "./actions/cvms/get_cvm_list";
 import {
   provisionCvm,
@@ -491,6 +497,8 @@ function buildClient<V extends ApiVersion>(client: BaseClient<V>): Client<V> {
     readonly getWorkspace: typeof getWorkspace;
     readonly safeGetWorkspace: typeof safeGetWorkspace;
     readonly getCvmInfo: typeof getCvmInfo;
+    readonly getCvmGpuStatus: typeof getCvmGpuStatus;
+    readonly safeGetCvmGpuStatus: typeof safeGetCvmGpuStatus;
     readonly safeGetCvmInfo: typeof safeGetCvmInfo;
     readonly getCvmList: typeof getCvmList;
     readonly safeGetCvmList: typeof safeGetCvmList;
@@ -590,6 +598,8 @@ function buildClient<V extends ApiVersion>(client: BaseClient<V>): Client<V> {
     getWorkspace,
     safeGetWorkspace,
     getCvmInfo,
+    getCvmGpuStatus,
+    safeGetCvmGpuStatus,
     safeGetCvmInfo,
     getCvmList,
     safeGetCvmList,
@@ -937,6 +947,12 @@ export interface Client<V extends ApiVersion = DefaultApiVersion>
   safeGetWorkspace(teamSlug: string, parameters: { schema: false }): Promise<SafeResult<unknown>>;
 
   getCvmInfo(request: GetCvmInfoRequest): Promise<GetCvmInfoResponse<V>>;
+  getCvmGpuStatus(request: { cvmId: string }): Promise<
+    import("./types/cvm_info_v20260121").CvmGpuStatus
+  >;
+  safeGetCvmGpuStatus(request: { cvmId: string }): Promise<
+    SafeResult<import("./types/cvm_info_v20260121").CvmGpuStatus>
+  >;
 
   safeGetCvmInfo(request: GetCvmInfoRequest): Promise<SafeResult<GetCvmInfoResponse<V>>>;
 

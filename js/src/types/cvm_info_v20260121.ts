@@ -249,6 +249,11 @@ export type CvmInfoDetailV20261111 = Omit<CvmInfoDetailV20261111Inferred, "resou
   };
 };
 
+export const CvmGpuStatusSchema = z.object({
+  observed: z.array(z.object({ slot: z.string(), cc_mode: z.string() })).nullable(),
+});
+export type CvmGpuStatus = z.infer<typeof CvmGpuStatusSchema>;
+
 export const PaginatedCvmInfosV20260121Schema = z.object({
   items: z.array(CvmInfoV20260121Schema),
   total: z.number(),

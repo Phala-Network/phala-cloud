@@ -4,6 +4,8 @@ import type { ApiVersion } from "../../types/client";
 import { CvmDetailV20251028Schema } from "../../types/cvm_info_v20251028";
 import type { CvmDetailV20251028 } from "../../types/cvm_info_v20251028";
 import {
+  type CvmGpuStatus,
+  CvmGpuStatusSchema,
   CvmInfoDetailV20260121Schema,
   CvmInfoDetailV20260522Schema,
 } from "../../types/cvm_info_v20260121";
@@ -66,6 +68,34 @@ export async function getCvmInfo<V extends ApiVersion>(
         });
   const schema = getSchemaForVersion(client.config.version);
   return schema.parse(response) as GetCvmInfoResponse<V>;
+}
+
+export async function getCvmGpuStatus(
+  client: Client<ApiVersion>,
+  request: { cvmId: string },
+): Promise<CvmGpuStatus> {
+  const { cvmId } = z.object({ cvmId: z.string().min(1) }).parse(request);
+  return CvmGpuStatusSchema.parse(await client.get(`/cvms/${cvmId}/gpu-status`));
+}
+
+export async function safeGetCvmGpuStatus(
+  client: Client<ApiVersion>,
+  request: { cvmId: string },
+): Promise<SafeResult<CvmGpuStatus>> {
+  try {
+    return { success: true, data: await getCvmGpuStatus(client, request) };
+  } catch (error) {
+    if (error && typeof error === "object" && ("status" in error || "issues" in error)) {
+      return { success: false, error } as SafeResult<CvmGpuStatus>;
+    }
+    return {
+      success: false,
+      error: {
+        name: "Error",
+        message: error instanceof Error ? error.message : String(error),
+      },
+    } as SafeResult<CvmGpuStatus>;
+  }
 }
 
 /**

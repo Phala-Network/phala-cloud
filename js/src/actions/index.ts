@@ -194,6 +194,8 @@ export {
 
 export {
   getCvmInfo,
+  getCvmGpuStatus,
+  safeGetCvmGpuStatus,
   safeGetCvmInfo,
   GetCvmInfoRequestSchema,
   type GetCvmInfoRequest,
