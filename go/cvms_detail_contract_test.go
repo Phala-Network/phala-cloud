@@ -32,7 +32,7 @@ func TestCVMDetailVersionAndOptions(t *testing.T) {
 		fmt.Fprint(w, `{"id":"id","resource":{"memory_in_mb":1537},"gpu":{"product_id":null,"gpus":2,"cc_mode":{"expected":"devtools"}},"dapp_dashboard_url":null,"syslog_endpoint":"syslog://host"}`)
 	}))
 	defer server.Close()
-	client, _ := NewClient(WithAPIKey("key"), WithBaseURL(server.URL))
+	client, _ := NewClient(WithAPIKey("key"), WithBaseURL(server.URL), WithAPIVersion("2026-06-23"))
 	var method func(context.Context, string) (*CVMInfo, error) = client.GetCVMInfo
 	info, err := method(context.Background(), "id")
 	if err != nil {
@@ -45,7 +45,7 @@ func TestCVMDetailVersionAndOptions(t *testing.T) {
 	if !ok || legacyCompose["name"] != "legacy-app" || info.Resource.MemoryInGB == nil || *info.Resource.MemoryInGB != 1.5 || info.GPU != nil {
 		t.Fatalf("legacy info = %#v", info)
 	}
-	client, _ = NewClient(WithAPIKey("key"), WithBaseURL(server.URL), WithAPIVersion("2026-11-11"))
+	client, _ = NewClient(WithAPIKey("key"), WithBaseURL(server.URL))
 	for _, tc := range []struct {
 		option *bool
 		want   string

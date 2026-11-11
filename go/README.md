@@ -129,8 +129,8 @@ _, err = client.ShutdownCVM(ctx, "cvm-id")
 err = client.DeleteCVM(ctx, "cvm-id")
 ```
 
-API version `2026-11-11` is opt-in with `phala.WithAPIVersion("2026-11-11")`.
-CVM details omit `compose_file` by default in that version. To include it:
+API version `2026-11-11` is the default. To use an older version, set it explicitly with `phala.WithAPIVersion("2026-06-23")`.
+CVM details omit `compose_file` by default in the new version. To include it:
 
 ```go
 includeCompose := true
