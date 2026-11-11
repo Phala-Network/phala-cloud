@@ -70,9 +70,12 @@ async function runCvmsGetCommand(
 			Status: statusColour,
 			vCPU: cvm.resource.vcpu,
 			Memory:
-				cvm.resource.memory_in_gb != null
-					? `${cvm.resource.memory_in_gb} GB`
-					: "N/A",
+				"memory_in_mb" in cvm.resource &&
+				typeof cvm.resource.memory_in_mb === "number"
+					? `${cvm.resource.memory_in_mb} MB`
+					: cvm.resource.memory_in_gb != null
+						? `${cvm.resource.memory_in_gb} GB`
+						: "N/A",
 			"Disk Size":
 				cvm.resource.disk_in_gb != null
 					? `${cvm.resource.disk_in_gb} GB`
