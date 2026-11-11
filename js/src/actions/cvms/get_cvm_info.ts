@@ -8,6 +8,7 @@ import {
   CvmGpuStatusSchema,
   CvmInfoDetailV20260121Schema,
   CvmInfoDetailV20260522Schema,
+  CvmInfoDetailV20261111Schema,
 } from "../../types/cvm_info_v20260121";
 import type {
   CvmInfoDetailV20260121,
@@ -32,6 +33,7 @@ export const GetCvmInfoRequestSchema = CvmIdObjectSchema.extend({
 export type GetCvmInfoRequest = CvmIdInput & { cvmId?: string; include_compose?: boolean };
 
 function getSchemaForVersion(version: ApiVersion) {
+  if (version === "2026-11-11") return CvmInfoDetailV20261111Schema;
   if (version === "2025-10-28") return CvmDetailV20251028Schema;
   if (version === "2026-01-21") return CvmInfoDetailV20260121Schema;
   return CvmInfoDetailV20260522Schema;

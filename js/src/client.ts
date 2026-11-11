@@ -26,6 +26,7 @@ export const SUPPORTED_API_VERSIONS = [
   "2026-01-21",
   "2026-05-22",
   "2026-06-23",
+  "2026-11-11",
 ] as const satisfies readonly ApiVersion[];
 export const DEFAULT_API_VERSION: DefaultApiVersion = "2026-06-23";
 const logger = debug("phala::api-client");
