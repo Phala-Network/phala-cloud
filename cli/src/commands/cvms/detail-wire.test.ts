@@ -13,6 +13,13 @@ beforeAll(() => {
 				query: url.search,
 				version: request.headers.get("X-Phala-Version"),
 			});
+			if (url.pathname.endsWith("/gpu-status")) {
+				if (url.pathname.includes("cpu-only"))
+					return Response.json({ detail: "Not found" }, { status: 404 });
+				return Response.json({
+					observed: [{ slot: "0000:01:00.0", cc_mode: "on" }],
+				});
+			}
 			return Response.json({
 				id: "cvm-123",
 				name: "my-app",
@@ -114,5 +121,17 @@ describe("CVM detail HTTP requests", () => {
 			expect(result.stdout).toContain("Compose:");
 			expect(result.stdout).toContain("example/image:latest");
 		}
+	});
+	test("gpu-status makes a separate request and reports CPU 404", async () => {
+		requests.length = 0;
+		const gpu = await run("cvms", "gpu-status", "my-app", "--json");
+		expect(gpu.exit).toBe(0);
+		expect(JSON.parse(gpu.stdout).observed).toEqual([
+			{ slot: "0000:01:00.0", cc_mode: "on" },
+		]);
+		expect(requests[0]?.path).toBe("/api/v1/cvms/my-app/gpu-status");
+		const cpu = await run("cvms", "gpu-status", "cpu-only", "--json");
+		expect(cpu.exit).toBe(1);
+		expect(JSON.parse(cpu.stdout).success).toBe(false);
 	});
 });

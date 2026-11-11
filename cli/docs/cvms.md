@@ -74,6 +74,16 @@ Get detailed information about a specific CVM. Use `--api-version 2026-11-11` to
 
 ---
 
+### cvms gpu-status
+
+Get observed GPU confidential-computing modes from the CVM node. CPU-only CVMs return a 404 error. The result contains `observed`, an array of GPU slots and their `cc_mode`, or null when unavailable.
+
+    phala cvms gpu-status [cvm-id] [--json] [--interactive]
+
+    $ phala cvms gpu-status my-app --json
+
+---
+
 ### cvms start
 
 Start a stopped CVM.
