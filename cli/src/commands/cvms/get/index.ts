@@ -1,14 +1,14 @@
-import chalk from "chalk";
-import { safeGetCvmInfo } from "@phala/cloud";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
 import { CLOUD_URL } from "@/src/utils/constants";
 import { logger } from "@/src/utils/logger";
+import { safeGetCvmInfo } from "@phala/cloud";
+import chalk from "chalk";
 import {
+	type CvmsGetCommandInput,
 	cvmsGetCommandMeta,
 	cvmsGetCommandSchema,
-	type CvmsGetCommandInput,
 } from "./command";
 
 async function runCvmsGetCommand(
@@ -26,7 +26,12 @@ async function runCvmsGetCommand(
 		const spinner = logger.startSpinner("Fetching CVM details");
 
 		const client = await getClient(context);
-		const result = await safeGetCvmInfo(client, context.cvmId);
+		const result = await safeGetCvmInfo(
+			client,
+			input.includeCompose
+				? { ...context.cvmId, include_compose: true }
+				: context.cvmId,
+		);
 
 		spinner.stop(true);
 
@@ -75,6 +80,14 @@ async function runCvmsGetCommand(
 			"Dstack Image": cvm.os?.name,
 			"App URL": `${CLOUD_URL}/dashboard/cvms/app_${cvm.app_id}`,
 		});
+
+		if (input.includeCompose && cvm.compose_file !== undefined) {
+			const compose =
+				typeof cvm.compose_file === "string"
+					? cvm.compose_file
+					: JSON.stringify(cvm.compose_file, null, 2);
+			context.stdout.write(`\nCompose:\n${compose}\n`);
+		}
 
 		return 0;
 	} catch (error) {

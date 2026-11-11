@@ -44,7 +44,7 @@ List CVMs in your workspace with filtering and pagination.
 
 ### cvms get
 
-Get detailed information about a specific CVM.
+Get detailed information about a specific CVM. Use `--api-version 2026-11-11` to request the newer detail format. Compose is omitted by default; request it explicitly with `--include-compose`.
 
 #### Usage
 
@@ -62,6 +62,7 @@ Get detailed information about a specific CVM.
 |------|---------|-------------|
 | `--json` / `-j` | false | JSON output |
 | `--interactive` / `-i` | false | Interactive mode |
+| `--include-compose` | false | Include the compose configuration |
 
 #### Examples
 
@@ -69,6 +70,7 @@ Get detailed information about a specific CVM.
     $ phala cvms get app_abc123
     $ phala cvms get --json
     $ phala cvms get --interactive
+    $ phala cvms get my-app --api-version 2026-11-11 --include-compose --json
 
 ---
 
