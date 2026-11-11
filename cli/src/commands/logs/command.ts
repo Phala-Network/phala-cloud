@@ -89,7 +89,7 @@ export const logsCommandMeta: CommandMeta = {
 	],
 	examples: [
 		{
-			name: "Container stdout",
+			name: "All container channels",
 			value: "phala logs my-service",
 		},
 		{

@@ -1990,7 +1990,7 @@ func TestInvalidContainerNameRejectedBeforeRequest(t *testing.T) {
 
 func TestContainerNameMatchesGatewayRule(t *testing.T) {
 	client, rec := newLogTestClient(t, func(n int, w http.ResponseWriter, r *http.Request) {})
-	for _, name := range []string{".app", "-x", "_x", "a..b", "..", strings.Repeat("a", 129)} {
+	for _, name := range []string{".app", "-x", "_x", "a..b", "..", "/app", strings.Repeat("a", 129)} {
 		_, err := client.FetchCVMLogEntries(context.Background(), "app_test", LogSource{Type: "container", Name: name}, nil)
 		if err == nil || !strings.Contains(err.Error(), "invalid container name") {
 			t.Fatalf("%q: got %v", name, err)
@@ -2003,7 +2003,7 @@ func TestContainerNameMatchesGatewayRule(t *testing.T) {
 	if rec.infoCalls() != 0 || rec.count() != 0 {
 		t.Fatalf("requests were made: info=%d logs=%d", rec.infoCalls(), rec.count())
 	}
-	for _, name := range []string{"a" + strings.Repeat("b", 127), "/web-1.v2_x", "9", "a.b.c"} {
+	for _, name := range []string{"a" + strings.Repeat("b", 127), "web-1.v2_x", "9", "a.b.c"} {
 		if _, err := containerSlug(name); err != nil {
 			t.Fatalf("%q must be valid: %v", name, err)
 		}
@@ -2099,7 +2099,7 @@ func TestContainerResolutionErrors(t *testing.T) {
 	_, errs := client.FollowCVMLogs(context.Background(), "app_test", LogSource{Type: "container", Name: "abc"}, nil)
 	apiErr := asAPIError(t, <-errs)
 	if apiErr.ErrorCode != "ERR-17-001" || apiErr.StatusCode != 0 ||
-		!strings.Contains(apiErr.Message, "web") || !strings.Contains(apiErr.Message, "worker") {
+		apiErr.Message != "Ambiguous container prefix 'abc': web, worker" {
 		t.Fatalf("ambiguous prefix = %+v", apiErr)
 	}
 	if calls != 0 {

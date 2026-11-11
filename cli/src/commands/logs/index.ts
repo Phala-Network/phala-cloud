@@ -314,7 +314,7 @@ async function runContainerMode(
 		const filteredEntries = entries.filter((e) =>
 			e.channel === "stderr"
 				? outputConfig.includeStderr
-				: e.channel === "stdin" || outputConfig.includeStdout,
+				: outputConfig.includeStdout,
 		);
 		const combined = filteredEntries.map((entry) => entry.message).join("");
 

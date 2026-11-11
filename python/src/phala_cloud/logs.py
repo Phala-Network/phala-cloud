@@ -14,7 +14,7 @@ import threading
 import time
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Generator, Iterator
 from contextlib import asynccontextmanager, contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import Any, Generic, Literal, Protocol, TypedDict, TypeVar, cast
 
 import httpx
@@ -111,7 +111,8 @@ def _reconnect_delay(delay: float, started_at: float) -> float:
 
 
 def _backoff_delay(attempt: int) -> float:
-    return min(0.25 * 2 ** (attempt - 1), 5.0)
+    # Clamp before the power so a long run of retries never overflows.
+    return min(0.25 * 2 ** (min(max(attempt, 1), 6) - 1), 5.0)
 
 
 class LogAccessError(ResourceError):
@@ -511,13 +512,12 @@ def _node_endpoint_lookup(cvm_id: str, channel: CvmLogChannel) -> _Lookup:
 
 
 def _safe_container_slug(name: str) -> str:
-    slug = name[1:] if name.startswith("/") else name
-    if not _CONTAINER_NAME_RE.fullmatch(slug) or ".." in slug:
+    if not _CONTAINER_NAME_RE.fullmatch(name) or ".." in name:
         raise _client_error(
             f"Invalid container name '{name}'. Use 1-128 letters, digits, '_', '.', and '-', "
             "starting with a letter or digit, without '..'."
         )
-    return slug
+    return name
 
 
 def _join_container_log_url(base: str, name: str, auth_query: str | None) -> str:
@@ -539,81 +539,62 @@ def _container_slug(container: dict[str, Any]) -> str | None:
     return str(container_id) if container_id else None
 
 
-@dataclass(frozen=True)
-class _ResolvedContainer:
-    slug: str
-    # Signed URL from the composition response that resolved the name; usable only
-    # in that same lookup round, since it expires.
-    log_endpoint: str | None = None
-
-
-def _resolve_container(
-    cvm_id: str, composition: dict[str, Any], name: str | None, match_prefix: bool
-) -> _ResolvedContainer:
+def _resolve_container(composition: dict[str, Any], name: str | None, match_prefix: bool) -> str:
+    """Resolve the container slug: exact name first, then a unique ID prefix, else default."""
     containers: list[dict[str, Any]] = composition.get("containers") or []
     composition_error = composition.get("error")
     if not (isinstance(composition_error, str) and composition_error):
         composition_error = None
     not_found = LogAccessError("Container not found", code="ERR-17-007")
 
-    def resolved(container: dict[str, Any], slug: str | None) -> _ResolvedContainer:
-        if not slug:
-            raise not_found
-        endpoint = container.get("log_endpoint")
-        return _ResolvedContainer(slug, str(endpoint) if endpoint else None)
+    def slug_of(container: dict[str, Any]) -> str:
+        return _container_slug(container) or name or "app"
 
     if name:
         names = {name, f"/{name}"}
         exact = [c for c in containers if names & set(_container_names(c))]
         if exact:
-            container = next((c for c in exact if c.get("log_endpoint")), exact[0])
-            return resolved(container, name.removeprefix("/"))
+            return name
         if match_prefix:
             prefixed = [c for c in containers if str(c.get("id") or "").startswith(name)]
             if len(prefixed) > 1:
-                labels = ", ".join(_container_slug(c) or "" for c in prefixed)
+                labels = ", ".join(slug_of(c) for c in prefixed)
                 raise _client_error(f"Ambiguous container prefix '{name}': {labels}")
             if prefixed:
-                return resolved(prefixed[0], _container_slug(prefixed[0]))
-        if containers:
-            raise not_found
-        if composition_error:
+                return slug_of(prefixed[0])
+        if not containers and composition_error:
             raise LogAccessError(composition_error)
-        # Nothing listed (the guest may not report yet): trust the caller's name.
-        return _ResolvedContainer(name.removeprefix("/"))
+        raise not_found
 
     if composition_error:
         raise LogAccessError(composition_error)
     if not containers:
         raise not_found
-    container = next((c for c in containers if c.get("log_endpoint")), containers[0])
-    return resolved(container, _container_slug(container))
+    return slug_of(containers[0])
 
 
-def _container_url(cvm_id: str, info: dict[str, Any], container: _ResolvedContainer) -> str:
+def _container_url(cvm_id: str, info: dict[str, Any], slug: str) -> str:
     logs = info.get("logs") or {}
     base = logs.get("container_log_base")
-    if base:
-        return _join_container_log_url(base, container.slug, logs.get("auth_query"))
-    if container.log_endpoint:
-        return container.log_endpoint
-    raise LogAccessError(f"No log endpoints available for CVM '{cvm_id}'")
+    if not base:
+        raise LogAccessError(f"No log endpoints available for CVM '{cvm_id}'")
+    return _join_container_log_url(base, slug, logs.get("auth_query"))
 
 
 def _container_endpoint_lookup(
     cvm_id: str,
     name: str | None,
     match_prefix: bool,
-    resolved: _ResolvedContainer | None = None,
-) -> Generator[str, Any, tuple[str, _ResolvedContainer]]:
+    slug: str | None = None,
+) -> Generator[str, Any, tuple[str, str]]:
     """One CVM-info lookup; composition only when the container is not resolved yet."""
     info = yield f"/cvms/{cvm_id}"
     if isinstance(info, dict) and info.get("public_logs") is False:
         raise _container_logs_disabled()
-    if resolved is None:
+    if slug is None:
         composition = yield f"/cvms/{cvm_id}/composition"
-        resolved = _resolve_container(cvm_id, composition, name, match_prefix)
-    return _container_url(cvm_id, info, resolved), resolved
+        slug = _resolve_container(composition, name, match_prefix)
+    return _container_url(cvm_id, info, slug), slug
 
 
 def _run_lookup(lookup: _Lookup, api_get: SyncApiGet) -> str:
@@ -788,7 +769,7 @@ class _ContainerFollowPlan:
         self._text = text
         self._cursor = _Cursor()
         self._first_200_second: int | None = None
-        self._container: _ResolvedContainer | None = None
+        self._container: str | None = None
 
     def _reconnect_since(self) -> int | None:
         if self._cursor.since is not None:
@@ -797,11 +778,10 @@ class _ContainerFollowPlan:
         return self._since if self._since is not None else self._first_200_second
 
     def lookup(self) -> _Lookup:
-        endpoint, resolved = yield from _container_endpoint_lookup(
+        # Resolve the name once per follow; later rounds only refresh the signed URL.
+        endpoint, self._container = yield from _container_endpoint_lookup(
             self._cvm_id, self._name, self._match_prefix, self._container
         )
-        # Resolve the name once per follow; later rounds only refresh the signed URL.
-        self._container = replace(resolved, log_endpoint=None)
         accepted = self._first_200_second is not None
         return _build_log_url(
             endpoint,

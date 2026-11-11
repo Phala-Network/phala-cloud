@@ -194,11 +194,10 @@ func isTextFormat(opts *LogsOptions) bool {
 
 // containerSlug validates a container name before any request is made.
 func containerSlug(name string) (string, error) {
-	slug := strings.TrimPrefix(name, "/")
-	if !containerNameChars.MatchString(slug) || strings.Contains(slug, "..") {
+	if !containerNameChars.MatchString(name) || strings.Contains(name, "..") {
 		return "", errLogValidation("invalid container name %q; use 1-128 letters, digits, '_', '.', or '-', starting with a letter or digit, without '..'", name)
 	}
-	return slug, nil
+	return name, nil
 }
 
 func validateLogSource(source LogSource) error {
@@ -568,7 +567,7 @@ func (c *Client) resolveContainer(ctx context.Context, cvmID, name string) (*con
 	for _, item := range containers {
 		for _, n := range item.Names {
 			if n == name || n == "/"+name {
-				target.slug = strings.TrimPrefix(name, "/")
+				target.slug = name
 				return target, nil
 			}
 		}
@@ -590,7 +589,7 @@ func (c *Client) resolveContainer(ctx context.Context, cvmID, name string) (*con
 		for _, item := range prefixed {
 			labels = append(labels, item.slug())
 		}
-		return nil, errLogValidation("ambiguous container prefix %q matches: %s", name, strings.Join(labels, ", "))
+		return nil, errLogValidation("Ambiguous container prefix '%s': %s", name, strings.Join(labels, ", "))
 	}
 }
 

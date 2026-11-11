@@ -140,6 +140,10 @@ class LogServer:
         return httpx.MockTransport(self.handler)
 
 
+# The real backoff, kept before the autouse fixture below replaces it.
+REAL_BACKOFF_DELAY = logs._backoff_delay
+
+
 @pytest.fixture(autouse=True)
 def backoffs(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     """Record every backoff attempt number and skip the real wait."""
@@ -801,17 +805,18 @@ def test_follow_resolves_container_once_then_only_refreshes_info(
 
 
 @pytest.mark.parametrize("mode", MODES)
-def test_reconnect_without_log_base_does_not_reuse_signed_endpoint(
-    mode: str, clock: FakeClock
-) -> None:
+def test_missing_log_base_is_an_error_on_fetch_and_follow(mode: str, clock: FakeClock) -> None:
+    # The composition still lists a signed log_endpoint; it must not be used.
     detail = {**DETAIL, "logs": {"serial": NODE_SERIAL_URL}}
-    server = LogServer([body(record("one\n")), body(record("two\n"))], clock, detail=detail)
-    items, error = run_follow(server, mode, source=CONTAINER)
-    assert items == [{"channel": "stdout", "message": "one\n"}]
-    assert isinstance(error, LogAccessError)
-    assert "No log endpoints available" in str(error)
-    assert server.log_calls[0].startswith(CONTAINER_URL)
-    assert len(server.log_calls) == 1
+    server = LogServer([], clock, detail=detail)
+    with pytest.raises(LogAccessError) as err:
+        run_fetch(server, mode, source=CONTAINER)
+    _items, error = run_follow(server, mode, source=CONTAINER)
+    for value in (err.value, error):
+        assert isinstance(value, LogAccessError)
+        assert str(value) == "No log endpoints available for CVM 'app_test'"
+        assert value.http_status is None
+    assert server.log_calls == []
 
 
 # --- guest records and channels ---------------------------------------------
@@ -1006,7 +1011,7 @@ def test_signed_query_is_appended_raw(mode: str, clock: FakeClock) -> None:
 
 
 @pytest.mark.parametrize("mode", MODES)
-def test_container_log_base_fallback(mode: str, clock: FakeClock) -> None:
+def test_container_url_is_built_from_log_base(mode: str, clock: FakeClock) -> None:
     detail = {
         **DETAIL,
         "logs": {
@@ -1014,7 +1019,12 @@ def test_container_log_base_fallback(mode: str, clock: FakeClock) -> None:
             "auth_query": SIGNED_QUERY,
         },
     }
-    composition = {"containers": None, "error": None}
+    # The composition log_endpoint is ignored; the URL comes from the CVM info.
+    composition = {
+        "containers": [
+            {"id": "0123abcd", "names": ["/web.1"], "log_endpoint": "https://other.example/x"}
+        ]
+    }
     server = LogServer([body("ok\n")], clock, detail=detail, composition=composition)
     run_fetch(server, mode, source={"type": "container", "name": "web.1"}, format="text")
     assert server.log_calls == [
@@ -1022,10 +1032,54 @@ def test_container_log_base_fallback(mode: str, clock: FakeClock) -> None:
     ]
 
 
+def test_backoff_delay_saturates_without_overflow() -> None:
+    assert REAL_BACKOFF_DELAY(1) == 0.25
+    assert REAL_BACKOFF_DELAY(5) == 4.0
+    assert REAL_BACKOFF_DELAY(2000) == 5.0
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_exact_name_match_uses_the_callers_name(mode: str, clock: FakeClock) -> None:
+    detail = {
+        **DETAIL,
+        "logs": {
+            "container_log_base": "https://cloud-logs.example/logs/123/container/",
+            "auth_query": SIGNED_QUERY,
+        },
+    }
+    # The caller names the container by its second name; that name is used as given.
+    composition = {"containers": [{"id": "0123abcd", "names": ["/primary", "/alias"]}]}
+    server = LogServer([body("ok\n")], clock, detail=detail, composition=composition)
+    run_fetch(server, mode, source={"type": "container", "name": "alias"}, format="text")
+    assert server.log_calls == [
+        f"https://cloud-logs.example/logs/123/container/alias?{SIGNED_QUERY}&format=text"
+    ]
+
+
+@pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize("composition", [{"containers": None, "error": None}, {"containers": []}])
+def test_named_container_with_empty_composition_is_not_found(
+    mode: str, composition: dict[str, Any], clock: FakeClock
+) -> None:
+    server = LogServer([], clock, composition=composition)
+    source: logs.CvmLogSource = {"type": "container", "name": "web.1"}
+    with pytest.raises(LogAccessError) as err:
+        run_fetch(server, mode, source=source)
+    _items, error = run_follow(server, mode, source=source)
+    for value in (err.value, error):
+        assert isinstance(value, LogAccessError)
+        assert value.code == "ERR-17-007"
+        assert str(value) == "Container not found"
+    assert server.log_calls == []
+
+
 @pytest.mark.parametrize("mode", MODES)
 @pytest.mark.parametrize(
     "name",
-    ["-app", ".app", "_app", "a" * 129, "a b", "a/b", "app\n", "\u00e9t\u00e9", "a..b", "app.."],
+    [
+        *["-app", ".app", "_app", "/app", "a" * 129, "a b", "a/b"],
+        *["app\n", "\u00e9t\u00e9", "a..b", "app.."],
+    ],
 )
 def test_container_name_rule_matches_gateway(mode: str, name: str, clock: FakeClock) -> None:
     server = LogServer([], clock)
@@ -1038,7 +1092,7 @@ def test_container_name_rule_matches_gateway(mode: str, name: str, clock: FakeCl
 
 
 @pytest.mark.parametrize("mode", MODES)
-@pytest.mark.parametrize("name", ["a", "0app", "web.1", "a.b.c", "my_app-2", "/app", "a" * 128])
+@pytest.mark.parametrize("name", ["a", "0app", "web.1", "a.b.c", "my_app-2", "a" * 128])
 def test_container_name_rule_accepts_valid_names(mode: str, name: str, clock: FakeClock) -> None:
     composition = {
         "containers": [

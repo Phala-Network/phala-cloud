@@ -92,7 +92,11 @@ def test_caller_user_agent_overrides_case_insensitive(header_name: str) -> None:
 
 _LOG_DETAIL = {
     "public_logs": True,
-    "logs": {"serial": "https://cloud-logs.example/logs/1/node/serial?uid=7&exp=1&kid=k&sig=s"},
+    "logs": {
+        "serial": "https://cloud-logs.example/logs/1/node/serial?uid=7&exp=1&kid=k&sig=s",
+        "container_log_base": "https://cloud-logs.example/logs/1/container",
+        "auth_query": "uid=7&exp=1&kid=k&sig=s",
+    },
 }
 _LOG_COMPOSITION = {
     "containers": [

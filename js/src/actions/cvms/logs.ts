@@ -80,26 +80,6 @@ interface CvmCompositionResponse {
   error?: string | null;
 }
 
-const LOG_ERROR_HTTP_STATUS: Record<string, number> = {
-  "ERR-17-001": 400,
-  "ERR-17-002": 401,
-  "ERR-17-003": 401,
-  "ERR-17-004": 404,
-  "ERR-17-005": 409,
-  "ERR-17-006": 409,
-  "ERR-17-007": 404,
-  "ERR-17-008": 502,
-  "ERR-17-009": 502,
-  "ERR-17-010": 504,
-  "ERR-17-011": 429,
-  "ERR-17-012": 503,
-  "ERR-17-013": 404,
-};
-
-function logErrorHttpStatus(code: string): number | undefined {
-  return LOG_ERROR_HTTP_STATUS[code];
-}
-
 /** Structured log-gateway error. Extends ResourceError so callers can use the SDK error hierarchy. */
 export class LogAccessError extends ResourceError {
   readonly code?: string;
@@ -107,6 +87,8 @@ export class LogAccessError extends ResourceError {
   readonly suggestions: string[];
   /** True when the error was parsed from a 200 stream body, not an HTTP status. */
   readonly fromStreamBody: boolean;
+  /** Gateway in-stream error (retried like a network failure). */
+  readonly gatewayStream: boolean;
 
   constructor(options: {
     message: string;
@@ -114,6 +96,7 @@ export class LogAccessError extends ResourceError {
     httpStatus?: number;
     suggestions?: readonly string[];
     fromStreamBody?: boolean;
+    gatewayStream?: boolean;
     requestId?: string;
     details?: ResourceError["structuredDetails"];
     links?: ResourceError["links"];
@@ -121,7 +104,9 @@ export class LogAccessError extends ResourceError {
     const details = options.message;
     const status = options.fromStreamBody
       ? 0
-      : (options.httpStatus ?? (options.code ? logErrorHttpStatus(options.code) : undefined) ?? 0);
+      : options.httpStatus && options.httpStatus > 0
+        ? options.httpStatus
+        : 0;
     super(details, {
       status,
       statusText: "",
@@ -133,9 +118,13 @@ export class LogAccessError extends ResourceError {
     });
     this.name = "LogAccessError";
     this.code = options.code;
-    this.httpStatus = status === 0 ? undefined : status || undefined;
+    this.httpStatus =
+      options.fromStreamBody || !options.httpStatus || options.httpStatus <= 0
+        ? undefined
+        : options.httpStatus;
     this.suggestions = options.suggestions ? [...options.suggestions] : [];
     this.fromStreamBody = options.fromStreamBody === true;
+    this.gatewayStream = options.gatewayStream === true;
   }
 }
 
@@ -253,7 +242,11 @@ function throwTextStreamError(line: string): void {
   const code = match?.[1];
   const message = match?.[2];
   if (code && message !== undefined) {
-    throw new LogAccessError({ code, message, httpStatus: 0 });
+    throw new LogAccessError({
+      code,
+      message,
+      gatewayStream: true,
+    });
   }
 }
 
@@ -436,7 +429,7 @@ function parseStructuredLogLineToEntry(line: string): StructuredLogEntry | null 
       code: parsed.error_code,
       message:
         typeof parsed.message === "string" ? parsed.message : "The log stream ended with an error.",
-      httpStatus: 0,
+      gatewayStream: true,
       suggestions: Array.isArray(parsed.suggestions)
         ? parsed.suggestions.filter((item): item is string => typeof item === "string")
         : [],
@@ -560,7 +553,9 @@ export async function getCvmLogEndpoint(
   const info = await getCvmInfoLogs(client, cvmId, signal);
   const endpoint = info.logs?.[channel];
   if (!endpoint) {
-    throw new Error(`No ${channel} log endpoint available for CVM '${cvmId}'`);
+    throw new LogAccessError({
+      message: `No ${channel} log endpoint available for CVM '${cvmId}'`,
+    });
   }
   return endpoint;
 }
@@ -672,12 +667,15 @@ async function resolveContainerSlug(
 
   if (containerName) {
     const exact = containers.filter((item) => exactContainerNameMatch(item, containerName));
-    if (exact[0]) return containerSlug(exact[0], containerName);
+    if (exact[0]) return containerName;
     if (matchContainerIdPrefix) {
       const prefixed = containers.filter((item) => item.id.startsWith(containerName));
       if (prefixed.length > 1) {
-        const labels = prefixed.map((item) => item.names[0] ?? item.id).join(", ");
-        throw clientValidationError(`Ambiguous container prefix '${containerName}': ${labels}`);
+        throw clientValidationError(
+          `Ambiguous container prefix '${containerName}': ${prefixed
+            .map((item) => item.names[0]?.replace(/^\//, "") ?? item.id)
+            .join(", ")}`,
+        );
       }
       if (prefixed[0]) return containerSlug(prefixed[0], containerName);
     }
@@ -694,26 +692,31 @@ async function resolveContainerSlug(
     throw new LogAccessError({ message: compositionError });
   }
   if (!containers.length) {
-    throw new Error(`No containers found for CVM '${cvmId}'`);
+    throw new LogAccessError({ code: "ERR-17-007", message: "Container not found" });
   }
   const fallback = containers[0];
-  if (!fallback) throw new Error(`No containers found for CVM '${cvmId}'`);
+  if (!fallback) {
+    throw new LogAccessError({ code: "ERR-17-007", message: "Container not found" });
+  }
   return containerSlug(fallback, "app");
 }
 
-async function containerLogUrlFromInfo(
+async function loadCvmLogInfo(
   client: Client,
   id: CvmIdInput | string,
-  slug: string,
   signal?: AbortSignal,
-): Promise<string> {
+): Promise<CvmInfoWithLogs> {
   const info = await getCvmInfoLogs(client, resolveCvmId(id), signal);
   if (info.public_logs === false) {
     throw containerLogsDisabledError();
   }
+  return info;
+}
+
+function urlFromLogInfo(info: CvmInfoWithLogs, slug: string, cvmId: string): string {
   const base = info.logs?.container_log_base ?? null;
   if (!base) {
-    throw new Error(`No log endpoints available for CVM '${resolveCvmId(id)}'`);
+    throw new LogAccessError({ message: `No log endpoints available for CVM '${cvmId}'` });
   }
   return joinContainerLogUrl(base, slug, info.logs?.auth_query);
 }
@@ -725,6 +728,7 @@ async function getContainerLogEndpoint(
   matchContainerIdPrefix = true,
   signal?: AbortSignal,
 ): Promise<string> {
+  const info = await loadCvmLogInfo(client, id, signal);
   const slug = await resolveContainerSlug(
     client,
     id,
@@ -732,7 +736,7 @@ async function getContainerLogEndpoint(
     matchContainerIdPrefix,
     signal,
   );
-  return containerLogUrlFromInfo(client, id, slug, signal);
+  return urlFromLogInfo(info, slug, resolveCvmId(id));
 }
 
 function waitForReconnect(signal: AbortSignal | undefined, delayMs: number): Promise<void> {
@@ -832,6 +836,9 @@ async function followLogRequests(
         throw error;
       }
       emptyEnds = 0;
+      if (deliveredThisConnection) {
+        expiredRetries = 0;
+      }
       if (error instanceof LogAccessError && error.code === "ERR-17-003") {
         expiredRetries += 1;
         if (expiredRetries > 3) throw error;
@@ -840,17 +847,11 @@ async function followLogRequests(
 
       const status = getErrorHttpStatus(retryError);
       const code = retryError instanceof LogAccessError ? retryError.code : undefined;
-      const retryableCodes = new Set([
-        "ERR-17-008",
-        "ERR-17-009",
-        "ERR-17-010",
-        "ERR-17-011",
-        "ERR-17-012",
-      ]);
+      const gatewayStream = retryError instanceof LogAccessError && retryError.gatewayStream;
       if (code === "ERR-17-002") {
         // Refetch on the next loop via resolveUrl; counts as a failure below.
       } else if (
-        retryableCodes.has(code ?? "") ||
+        gatewayStream ||
         status === 429 ||
         (status !== undefined && status >= 500) ||
         retryError instanceof TypeError ||
@@ -1024,16 +1025,20 @@ export async function streamContainerLogsEntries(
   let replayCounts = new Map<string, number>();
   let firstRequest = true;
   let first200Second: number | undefined;
-  const slug = await resolveContainerSlug(
-    client,
-    id,
-    options.container,
-    options.matchContainerIdPrefix ?? true,
-    abort,
-  );
+  let slug: string | undefined;
 
   const buildRequestUrl = async (): Promise<string> => {
-    const baseUrl = await containerLogUrlFromInfo(client, id, slug, abort);
+    const info = await loadCvmLogInfo(client, id, abort);
+    if (slug === undefined) {
+      slug = await resolveContainerSlug(
+        client,
+        id,
+        options.container,
+        options.matchContainerIdPrefix ?? true,
+        abort,
+      );
+    }
+    const baseUrl = urlFromLogInfo(info, slug, resolveCvmId(id));
     const tail = firstRequest ? options.tail : "all";
     replayCounts = new Map(cursor.boundaryCounts);
     return buildLogUrl(baseUrl, {
@@ -1165,17 +1170,21 @@ export async function streamContainerLogs(
     let replayCounts = new Map<string, number>();
     let firstRequest = true;
     let first200Second: number | undefined;
-    const slug = await resolveContainerSlug(
-      client,
-      id,
-      options.container,
-      options.matchContainerIdPrefix ?? true,
-      abort,
-    );
+    let slug: string | undefined;
     await followLogRequests(
       client,
       async () => {
-        const baseUrl = await containerLogUrlFromInfo(client, id, slug, abort);
+        const info = await loadCvmLogInfo(client, id, abort);
+        if (slug === undefined) {
+          slug = await resolveContainerSlug(
+            client,
+            id,
+            options.container,
+            options.matchContainerIdPrefix ?? true,
+            abort,
+          );
+        }
+        const baseUrl = urlFromLogInfo(info, slug, resolveCvmId(id));
         const tail = firstRequest ? options.tail : "all";
         replayCounts = new Map(cursor.boundaryCounts);
         return buildLogUrl(baseUrl, {

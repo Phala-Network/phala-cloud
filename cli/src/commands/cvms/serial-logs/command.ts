@@ -56,7 +56,9 @@ export const cvmsSerialLogsCommandMeta: CommandMeta = {
 
 export const cvmsSerialLogsCommandSchema = z.object({
 	cvmId: z.string().optional(),
-	tail: z.union([z.literal("all"), z.coerce.number().int().nonnegative()]).optional(),
+	tail: z
+		.union([z.literal("all"), z.coerce.number().int().nonnegative()])
+		.optional(),
 	follow: z.boolean().default(false),
 	timestamps: z.boolean().default(false),
 	json: z.boolean().default(false),

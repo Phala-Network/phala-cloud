@@ -254,7 +254,7 @@ Fetch logs from a CVM. Default: container logs.
 | `-i, --interactive` | false | Interactive mode |
 
 **Log sources:**
-- Default: Docker container stdout
+- Default: all container channels (stdout/console/stdin to stdout, stderr to stderr)
 - `--serial`: VM serial console — boot messages, kernel, docker-compose output
 - `--cvm-stdout`: CVM-level stdout
 - `--cvm-stderr`: CVM-level stderr

@@ -338,7 +338,8 @@ describe("CVM log access", { timeout: 20_000 }, () => {
       code: "ERR-17-006",
       httpStatus: 409,
     });
-    expect(get).toHaveBeenCalledTimes(2);
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(String(get.mock.calls[0]?.[0])).not.toContain("/composition");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -869,8 +870,8 @@ describe("CVM log access", { timeout: 20_000 }, () => {
       if (String(path).endsWith("/composition")) {
         return {
           containers: [
-            { id: "abc1", names: ["/a"], log_endpoint: "https://x/a" },
-            { id: "abc2", names: ["/b"], log_endpoint: "https://x/b" },
+            { id: "abc1", names: ["/web"], log_endpoint: "https://x/a" },
+            { id: "abc2", names: ["/worker"], log_endpoint: "https://x/b" },
           ],
         };
       }
@@ -881,6 +882,136 @@ describe("CVM log access", { timeout: 20_000 }, () => {
         container: "abc",
         matchContainerIdPrefix: true,
       }),
-    ).rejects.toMatchObject({ code: "ERR-17-001" });
+    ).rejects.toMatchObject({
+      code: "ERR-17-001",
+      httpStatus: undefined,
+      message: "Ambiguous container prefix 'abc': web, worker",
+    });
   });
+
+  test("HTTP 409 ERR-17-005 on follow stops after one request", async () => {
+    const client = mockClient();
+    fetchImplementation = async () =>
+      jsonResponse({ error_code: "ERR-17-005", message: "CVM is not running" }, 409);
+    const error = await streamCvmChannelLogs(client, "app_test", "serial", () => {}).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    expect(error).toMatchObject({ code: "ERR-17-005", httpStatus: 409 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("rejects a leading slash in a caller container name", async () => {
+    const client = mockClient();
+    await expect(
+      fetchCvmLogs(client, "app_test", { type: "container", name: "/app" }),
+    ).rejects.toMatchObject({ code: "ERR-17-001" });
+    expect(client.get).not.toHaveBeenCalled();
+  });
+
+  test("follow retries a 503 on the first composition lookup", async () => {
+    const client = {
+      get: vi.fn(async (path: string) => {
+        if (String(path).endsWith("/composition")) {
+          throw Object.assign(new Error("temporary composition failure"), { status: 503 });
+        }
+        return detail;
+      }),
+      config: { version: "2026-06-23" },
+    } as unknown as Client;
+    const error = await streamContainerLogsEntries(client, "app_test", () => {}).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    expect(error).toMatchObject({ status: 503 });
+    expect(
+      vi.mocked(client.get).mock.calls.filter(([path]) => String(path).endsWith("/composition")),
+    ).toHaveLength(5);
+  });
+
+  test("public_logs false is raised before a composition guest-unreachable error", async () => {
+    for (const format of ["ndjson", "text"] as const) {
+      const client = {
+        get: vi.fn(async (path: string) => {
+          if (String(path).endsWith("/composition")) {
+            return { containers: null, error: "guest unreachable" };
+          }
+          return { ...detail, public_logs: false };
+        }),
+        config: { version: "2026-06-23" },
+      } as unknown as Client;
+      await expect(
+        fetchCvmLogs(client, "app_test", { type: "container" }, { format }),
+      ).rejects.toMatchObject({ code: "ERR-17-006" });
+      expect(
+        vi.mocked(client.get).mock.calls.some(([path]) => String(path).endsWith("/composition")),
+      ).toBe(false);
+    }
+  });
+
+  test("expiredRetries resets after a connection that delivered records", async () => {
+    const client = mockClient();
+    const controller = new AbortController();
+    let n = 0;
+    const output: string[] = [];
+    fetchImplementation = async () => {
+      n += 1;
+      if (n <= 3 || n === 5) {
+        return jsonResponse({ error_code: "ERR-17-003", message: "expired" }, 401);
+      }
+      if (n === 4) return new Response("recovered\n[error] ERR-17-008 stream failed\n");
+      return new Response("next\n");
+    };
+    await streamCvmChannelLogs(
+      client,
+      "app_test",
+      "serial",
+      (data) => {
+        output.push(data);
+        if (data === "next\n") controller.abort();
+      },
+      {},
+      controller.signal,
+    );
+    expect(output.some((line) => line.includes("recovered"))).toBe(true);
+    expect(output).toContain("next\n");
+  });
+
+  test("empty composition list is ERR-17-007 without HTTP status", async () => {
+    const client = {
+      get: vi.fn(async () => ({ containers: [] })),
+      config: { version: "2026-06-23" },
+    } as unknown as Client;
+    await expect(fetchContainerLogsEntries(client, "app_test")).rejects.toMatchObject({
+      name: "LogAccessError",
+      code: "ERR-17-007",
+      httpStatus: undefined,
+    });
+  });
+
+  test("client validation errors have no HTTP status", async () => {
+    const client = mockClient();
+    const error = await fetchCvmLogs(client, "app_test", {
+      type: "container",
+      name: "app/foo",
+    }).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    expect(error).toMatchObject({ code: "ERR-17-001" });
+    expect(error).toBeInstanceOf(LogAccessError);
+    expect((error as LogAccessError).httpStatus).toBeUndefined();
+    expect((error as LogAccessError).status).toBe(0);
+    expect(client.get).not.toHaveBeenCalled();
+  });
+
+  test("non-2xx log GET including 3xx is an error", async () => {
+    const client = mockClient();
+    fetchImplementation = async () => new Response("moved", { status: 302, statusText: "Found" });
+    await expect(fetchCvmChannelLogs(client, "app_test", "serial")).rejects.toMatchObject({
+      httpStatus: 302,
+      message: "HTTP 302",
+    });
+  });
+
 });

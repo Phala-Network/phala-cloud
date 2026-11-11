@@ -456,27 +456,4 @@ describe("CVM log access client", () => {
 		// 1 composition at start + 1 CVM-info per connection attempt.
 		expect(clientGet).toHaveBeenCalledTimes(5);
 	});
-
-	test("midstream 4xx error is surfaced with its message and suggestions and not retried", async () => {
-		fetchImplementation = async () =>
-			ndjsonResponse([
-				{
-					error_code: "ERR-17-007",
-					message: "Container missing",
-					suggestions: ["Choose another container"],
-				},
-			]);
-
-		const error = await streamContainerLogsEntries("app_test", () => {}).then(
-			() => undefined,
-			(reason: unknown) => reason,
-		);
-		expect(error).toBeInstanceOf(LogAccessError);
-		expect(error).toMatchObject({
-			code: "ERR-17-007",
-			suggestions: ["Choose another container"],
-			message: expect.stringContaining("Container missing"),
-		});
-		expect(fetchMock).toHaveBeenCalledTimes(1);
-	});
 });

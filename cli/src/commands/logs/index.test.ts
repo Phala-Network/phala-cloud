@@ -309,6 +309,32 @@ describe("logs command", () => {
 		expect(result.cvm_id).toBe("app_abc123");
 	});
 
+	test("--stderr --json includes only stderr", async () => {
+		mockFetchContainerLogsEntries.mockResolvedValue([
+			{ channel: "stdin", message: "in\n" },
+			{ channel: "stderr", message: "err\n" },
+			{ channel: "stdout", message: "out\n" },
+		]);
+		const successData: unknown[] = [];
+		const code = await logsCommand.run(
+			{
+				...defaultInput,
+				containerName: "my-service",
+				json: true,
+				stderr: true,
+			},
+			makeContext({
+				cvmId: { id: "app_abc123" },
+				stdout: fakeStdout as unknown as NodeJS.WriteStream,
+				stderr: fakeStderr as unknown as NodeJS.WriteStream,
+				success: (data: unknown) => successData.push(data),
+			}),
+		);
+		expect(code).toBe(0);
+		const result = successData[0] as { logs?: string };
+		expect(result.logs).toBe("err\n");
+	});
+
 	test("rejects --json with --follow", async () => {
 		const failMessages: string[] = [];
 		const code = await logsCommand.run(
