@@ -30,7 +30,6 @@ func TestAPIError_Error(t *testing.T) {
 		{
 			name: "in-stream guest",
 			err: APIError{
-				StatusCode:     502,
 				ErrorCode:      "ERR-17-009",
 				Message:        "Docker responded with status code 501: configured logging driver does not support reading",
 				fromStreamBody: true,

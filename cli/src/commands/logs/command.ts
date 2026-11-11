@@ -37,9 +37,15 @@ export const logsCommandMeta: CommandMeta = {
 		},
 		{
 			name: "stderr",
-			description: "Include container stderr (container mode only)",
+			description: "Show only stderr",
 			type: "boolean",
 			target: "stderr",
+		},
+		{
+			name: "stdout",
+			description: "Show only stdout, console, and stdin",
+			type: "boolean",
+			target: "stdout",
 		},
 		{
 			name: "tail",
@@ -83,12 +89,16 @@ export const logsCommandMeta: CommandMeta = {
 	],
 	examples: [
 		{
-			name: "Container stdout",
+			name: "All container channels",
 			value: "phala logs my-service",
 		},
 		{
-			name: "Container stderr",
+			name: "Container stderr only",
 			value: "phala logs my-service --stderr",
+		},
+		{
+			name: "Container stdout, console, and stdin only",
+			value: "phala logs my-service --stdout",
 		},
 		{
 			name: "Follow container logs",
@@ -128,9 +138,19 @@ export const logsCommandSchema = z.object({
 	cvmStdout: z.boolean().default(false),
 	cvmStderr: z.boolean().default(false),
 	stderr: z.boolean().default(false),
+	stdout: z.boolean().default(false),
 	since: z.string().optional(),
 	until: z.string().optional(),
-	tail: z.union([z.literal("all"), z.coerce.number().int().nonnegative()]).optional(),
+	tail: z
+		.union([
+			z.literal("all"),
+			z.coerce
+				.number()
+				.int()
+				.min(0)
+				.max(10000, { message: "--tail must be 0–10000 or all" }),
+		])
+		.optional(),
 	follow: z.boolean().default(false),
 	timestamps: z.boolean().default(false),
 	json: z.boolean().default(false),

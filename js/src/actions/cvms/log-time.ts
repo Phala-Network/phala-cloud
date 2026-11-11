@@ -5,7 +5,7 @@ const DURATION_SECONDS: Record<string, number> = {
   d: 24 * 60 * 60,
 };
 
-function parseRfc3339(value: string): number | undefined {
+function parseRfc3339(value: string): { seconds: number; fractionNonZero: boolean } | undefined {
   const match =
     /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|([+-])(\d{2}):(\d{2}))$/.exec(
       value,
@@ -40,21 +40,25 @@ function parseRfc3339(value: string): number | undefined {
     return undefined;
   }
 
-  const fractionalMilliseconds = fraction ? Number(`0.${fraction}`) * 1000 : 0;
   const offset = sign === "+" ? 1 : sign === "-" ? -1 : 0;
-  const offsetMilliseconds = offset * (offsetHour * 60 + offsetMinute) * 60_000;
+  const offsetSeconds = offset * (offsetHour * 60 + offsetMinute) * 60;
   const date = new Date(0);
   date.setUTCFullYear(year, month - 1, day);
   date.setUTCHours(hour, minute, second, 0);
-  return date.getTime() + fractionalMilliseconds - offsetMilliseconds;
+  const seconds = Math.floor(date.getTime() / 1000) - offsetSeconds;
+  const fractionNonZero = Boolean(fraction && /[1-9]/.test(fraction));
+  return { seconds, fractionNonZero };
 }
 
-function parseLogTime(value: string, nowMs: number): number {
+function resolveLogInstant(value: string | number, nowMs: number, ceil: boolean): number {
+  if (typeof value === "number") {
+    return ceil ? Math.ceil(value) : Math.floor(value);
+  }
   if (/^-?\d+$/.test(value)) {
     const seconds = Number(value);
     const milliseconds = seconds * 1000;
     if (Number.isSafeInteger(seconds) && Number.isSafeInteger(milliseconds)) {
-      return milliseconds;
+      return seconds;
     }
   }
 
@@ -69,12 +73,14 @@ function parseLogTime(value: string, nowMs: number): number {
     const duration = Number(relative[1]) * (DURATION_SECONDS[unit] ?? 0);
     const milliseconds = nowMs - duration * 1000;
     if (Number.isFinite(milliseconds) && Number.isSafeInteger(Math.floor(milliseconds / 1000))) {
-      return milliseconds;
+      return ceil ? Math.ceil(milliseconds / 1000) : Math.floor(milliseconds / 1000);
     }
   }
 
   const rfc3339 = parseRfc3339(value);
-  if (rfc3339 !== undefined) return rfc3339;
+  if (rfc3339 !== undefined) {
+    return ceil && rfc3339.fractionNonZero ? rfc3339.seconds + 1 : rfc3339.seconds;
+  }
 
   throw new Error(
     `Invalid log time '${value}'. Use RFC3339, Unix seconds, or a relative duration such as 10m.`,
@@ -87,18 +93,8 @@ export function resolveLogTimeWindow(
   until: string | number | undefined,
   nowMs: number = Date.now(),
 ): { since?: number; until?: number } {
-  const resolvedSince =
-    since === undefined
-      ? undefined
-      : typeof since === "number"
-        ? Math.floor(since)
-        : Math.floor(parseLogTime(since, nowMs) / 1000);
-  const resolvedUntil =
-    until === undefined
-      ? undefined
-      : typeof until === "number"
-        ? Math.ceil(until)
-        : Math.ceil(parseLogTime(until, nowMs) / 1000);
+  const resolvedSince = since === undefined ? undefined : resolveLogInstant(since, nowMs, false);
+  const resolvedUntil = until === undefined ? undefined : resolveLogInstant(until, nowMs, true);
   if (
     (resolvedSince !== undefined && !Number.isSafeInteger(resolvedSince)) ||
     (resolvedUntil !== undefined && !Number.isSafeInteger(resolvedUntil))

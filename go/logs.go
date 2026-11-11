@@ -28,7 +28,7 @@ const (
 type LogSource struct {
 	Type    string        // "node" or "container"
 	Channel CVMLogChannel // node channel
-	Name    string        // container name
+	Name    string        // container name or container ID prefix
 }
 
 // LogsOptions are the shared display parameters.
@@ -37,8 +37,10 @@ type LogsOptions struct {
 	Since      any // RFC3339, unix seconds, or <n>[smhd]
 	Until      any
 	Timestamps bool
-	ANSI       bool
-	Format     string // "text" or "ndjson"
+	// ANSI keeps ANSI escape sequences. When false they are stripped from
+	// delivered output on every path, including NDJSON messages.
+	ANSI   bool
+	Format string // "text" or "ndjson"
 }
 
 // LogEntry is one container NDJSON record.
@@ -47,35 +49,126 @@ type LogEntry struct {
 	Message string `json:"message"`
 }
 
-var logErrorStatus = map[string]int{
-	"ERR-17-001": 400, "ERR-17-002": 401, "ERR-17-003": 401, "ERR-17-004": 404,
-	"ERR-17-005": 409, "ERR-17-006": 409, "ERR-17-007": 404, "ERR-17-008": 502,
-	"ERR-17-009": 502, "ERR-17-010": 504, "ERR-17-011": 429, "ERR-17-012": 503,
-	"ERR-17-013": 404,
+// cvmLogsInfoAPIVersion is the API version that introduced CVMInfo.logs.
+const cvmLogsInfoAPIVersion = "2026-01-21"
+
+const emptyStreamEndMessage = "log stream keeps ending without new output; the container may have stopped"
+
+// emptyStreamQuiet is how long an idle 200 must last before a clean EOF is
+// treated as a quiet container (reconnect immediately) rather than a stop.
+const emptyStreamQuiet = 10 * time.Second
+
+const (
+	maxFollowFailures   = 5
+	maxFollowEmptyEnds  = 5
+	maxFollowExpiredURL = 3
+)
+
+// followMinConnectionInterval is the minimum time between the starts of two
+// consecutive follow connections. The VMM node endpoint can answer 200 with a
+// single plain-text error line and end at once; that counts as delivered output,
+// so without this floor follow would reconnect in a hot loop.
+var followMinConnectionInterval = time.Second
+
+// followNow is the clock used by follow; tests replace it.
+var followNow = time.Now
+
+var (
+	textStreamError = regexp.MustCompile(`^\[error\] (ERR-17-\d{3}) (.*)$`)
+	timestampPrefix = regexp.MustCompile(`(?s)^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})) (.*)$`)
+	// ansiEscape matches OSC (ESC ] ... BEL or ESC \, e.g. OSC 8 hyperlinks),
+	// CSI (ESC [ params intermediates final, including private modes such as
+	// ESC[?25l), and the remaining ESC sequences (ESC intermediates final).
+	ansiEscape         = regexp.MustCompile(`\x1b(?:\][^\x07\x1b]*(?:\x07|\x1b\\)|\[[0-?]*[ -/]*[@-~]|[ -/]*[0-~])`)
+	containerNameChars = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+)
+
+func validLogChannel(channel string) bool {
+	return channel == "stdout" || channel == "stderr" || channel == "stdin" || channel == "console"
 }
 
-var textStreamError = regexp.MustCompile(`^\[error\] (ERR-17-\d{3}) (.*)$`)
-var timestampPrefix = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})) (.*)$`)
+func isHeartbeat(content string) bool {
+	return content == "[vmm heartbeat]" || content == "[teepod heartbeat]"
+}
 
-func buildLogURL(base string, opts map[string]string) string {
-	u, err := url.Parse(base)
-	if err != nil {
+func applyANSIPolicy(text string, keep bool) string {
+	if keep {
+		return text
+	}
+	return ansiEscape.ReplaceAllString(text, "")
+}
+
+func sendValue[T any](ctx context.Context, ch chan<- T, v T) error {
+	select {
+	case ch <- v:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// logQuery is the gateway query string. The gateway rejects any '%' in the
+// request target, so parameters are appended raw, never re-encoded.
+type logQuery struct {
+	since      *int64
+	until      *int64
+	follow     bool
+	tail       string
+	timestamps bool
+	ansi       bool
+	format     string
+}
+
+func (q logQuery) apply(base string) string {
+	var params []string
+	if q.since != nil {
+		params = append(params, "since="+strconv.FormatInt(*q.since, 10))
+	}
+	if q.until != nil {
+		params = append(params, "until="+strconv.FormatInt(*q.until, 10))
+	}
+	if q.follow {
+		params = append(params, "follow=true")
+	}
+	if q.tail != "" {
+		params = append(params, "tail="+q.tail)
+	}
+	if q.timestamps {
+		params = append(params, "timestamps=true")
+	}
+	// The gateway accepts ansi only with format=text (node streams are text).
+	if q.ansi && (q.format == "" || q.format == "text") {
+		params = append(params, "ansi=true")
+	}
+	if q.format != "" {
+		params = append(params, "format="+q.format)
+	}
+	if len(params) == 0 {
 		return base
 	}
-	q := u.Query()
-	for k, v := range opts {
-		if v != "" {
-			q.Set(k, v)
-		}
+	sep := "?"
+	if strings.Contains(base, "?") {
+		sep = "&"
 	}
-	u.RawQuery = q.Encode()
-	return u.String()
+	return base + sep + strings.Join(params, "&")
+}
+
+func tailValue(v any) string {
+	switch t := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return t
+	case int:
+		return strconv.Itoa(t)
+	case int64:
+		return strconv.FormatInt(t, 10)
+	default:
+		return fmt.Sprint(t)
+	}
 }
 
 func assertNodeLogOptions(opts *LogsOptions) error {
-	if opts == nil {
-		return nil
-	}
 	var unsupported []string
 	if opts.Timestamps {
 		unsupported = append(unsupported, "timestamps")
@@ -90,9 +183,55 @@ func assertNodeLogOptions(opts *LogsOptions) error {
 		unsupported = append(unsupported, "format=ndjson")
 	}
 	if len(unsupported) > 0 {
-		return fmt.Errorf("%s not supported for serial/stdout/stderr logs", strings.Join(unsupported, ", "))
+		return errLogValidation("%s not supported for serial/stdout/stderr logs", strings.Join(unsupported, ", "))
 	}
 	return nil
+}
+
+func isTextFormat(opts *LogsOptions) bool {
+	return strings.EqualFold(opts.Format, "text")
+}
+
+// containerSlug validates a container name before any request is made.
+func containerSlug(name string) (string, error) {
+	if !containerNameChars.MatchString(name) || strings.Contains(name, "..") {
+		return "", errLogValidation("invalid container name %q; use 1-128 letters, digits, '_', '.', or '-', starting with a letter or digit, without '..'", name)
+	}
+	return name, nil
+}
+
+func validateLogSource(source LogSource) error {
+	if source.Type == "container" && source.Name != "" {
+		_, err := containerSlug(source.Name)
+		return err
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Errors
+// ---------------------------------------------------------------------------
+
+// errLogValidation is a client-side validation error: ERR-17-001 without an
+// HTTP status, raised before any request.
+func errLogValidation(format string, args ...any) error {
+	return &APIError{ErrorCode: "ERR-17-001", Message: fmt.Sprintf(format, args...)}
+}
+
+// assertEntriesRequest validates the *Entries APIs: container source, NDJSON.
+func assertEntriesRequest(api string, source LogSource, opts *LogsOptions) error {
+	if source.Type != "container" {
+		return errLogValidation("%s supports container logs only", api)
+	}
+	if opts.Format != "" && !strings.EqualFold(opts.Format, "ndjson") {
+		return errLogValidation("%s requires format=ndjson", api)
+	}
+	return nil
+}
+
+// errContainerNotFound is raised when no container in the composition matches.
+func errContainerNotFound() error {
+	return &APIError{ErrorCode: "ERR-17-007", Message: "Container not found"}
 }
 
 func errContainerLogsDisabled() error {
@@ -103,130 +242,460 @@ func errContainerLogsDisabled() error {
 	}
 }
 
-func tailValue(v any) string {
-	if v == nil {
-		return ""
-	}
-	switch t := v.(type) {
-	case string:
-		return t
-	case int:
-		return strconv.Itoa(t)
-	case int64:
-		return strconv.FormatInt(t, 10)
-	default:
-		return fmt.Sprint(t)
-	}
+func errGuestAgent(message string) error {
+	return &APIError{ErrorCode: "ERR-17-009", Message: message, fromStreamBody: true}
 }
 
-// cvmLogsInfoAPIVersion is the API version that introduced CVMInfo.logs.
-const cvmLogsInfoAPIVersion = "2026-01-21"
-
-func (c *Client) apiGetJSON(ctx context.Context, path string, dest any) error {
-	return c.doJSON(ctx, "GET", path, nil, dest)
+func errInvalidLogRecord() error {
+	return &APIError{Message: "Invalid NDJSON log record.", fromStreamBody: true}
 }
 
-func (c *Client) nodeLogURL(ctx context.Context, cvmID string, channel CVMLogChannel) (string, error) {
-	var info struct {
-		Logs map[string]*string `json:"logs"`
+// gatewayStreamError is a gateway error line or record read from a 200 body.
+// Follow treats it as a retryable failure; callers receive the inner *APIError.
+type gatewayStreamError struct{ apiErr *APIError }
+
+func (e *gatewayStreamError) Error() string { return e.apiErr.Error() }
+func (e *gatewayStreamError) Unwrap() error { return e.apiErr }
+
+func publicLogError(err error) error {
+	var gw *gatewayStreamError
+	if errors.As(err, &gw) {
+		return gw.apiErr
 	}
-	if err := c.doJSONVersioned(ctx, "GET", cvmPath(cvmID), cvmLogsInfoAPIVersion, nil, &info); err != nil {
-		return "", err
-	}
-	if info.Logs == nil || info.Logs[string(channel)] == nil || *info.Logs[string(channel)] == "" {
-		return "", fmt.Errorf("phala: no %s log endpoint available for CVM %s", channel, cvmID)
-	}
-	return *info.Logs[string(channel)], nil
+	return err
 }
 
-func (c *Client) assertContainerLogsEnabled(ctx context.Context, cvmID string) error {
-	var info struct {
-		PublicLogs *bool `json:"public_logs"`
+// applyErrorEnvelope copies the structured envelope fields onto e, ignoring
+// fields whose shape does not match.
+func applyErrorEnvelope(e *APIError, fields map[string]json.RawMessage) {
+	if v, ok := fields["error_code"]; ok {
+		_ = json.Unmarshal(v, &e.ErrorCode)
 	}
-	if err := c.doJSONVersioned(ctx, "GET", cvmPath(cvmID), cvmLogsInfoAPIVersion, nil, &info); err != nil {
-		return err
+	if v, ok := fields["message"]; ok {
+		_ = json.Unmarshal(v, &e.Message)
 	}
-	if info.PublicLogs != nil && !*info.PublicLogs {
-		return errContainerLogsDisabled()
-	}
-	return nil
-}
-
-func (c *Client) containerLogURL(ctx context.Context, cvmID, name string) (string, error) {
-	var composition struct {
-		Containers []struct {
-			ID          string   `json:"id"`
-			Names       []string `json:"names"`
-			LogEndpoint *string  `json:"log_endpoint"`
-		} `json:"containers"`
-	}
-	if err := c.apiGetJSON(ctx, cvmPath(cvmID, "composition"), &composition); err != nil {
-		return "", err
-	}
-	containers := composition.Containers
-	if name != "" {
-		filtered := containers[:0]
-		for _, item := range containers {
-			matched := false
-			for _, n := range item.Names {
-				if n == name || n == "/"+name {
-					matched = true
-					break
-				}
-			}
-			if !matched && strings.HasPrefix(item.ID, name) {
-				matched = true
-			}
-			if matched {
-				filtered = append(filtered, item)
-			}
-		}
-		containers = filtered
-	}
-	for _, item := range containers {
-		if item.LogEndpoint != nil && *item.LogEndpoint != "" {
-			return *item.LogEndpoint, nil
+	if v, ok := fields["details"]; ok {
+		var details []ErrorDetail
+		if json.Unmarshal(v, &details) == nil {
+			e.Details = details
 		}
 	}
-	return "", fmt.Errorf("phala: no log endpoints available for CVM %s", cvmID)
+	if v, ok := fields["suggestions"]; ok {
+		var suggestions []string
+		if json.Unmarshal(v, &suggestions) == nil {
+			e.Suggestions = suggestions
+		}
+	}
+	if v, ok := fields["links"]; ok {
+		var links []ErrorLink
+		if json.Unmarshal(v, &links) == nil {
+			e.Links = links
+		}
+	}
+	if v, ok := fields["request_id"]; ok {
+		_ = json.Unmarshal(v, &e.RequestID)
+	}
 }
 
 func parseLogAccessError(resp *http.Response) error {
 	body, _ := io.ReadAll(resp.Body)
-	var envelope struct {
-		ErrorCode   string   `json:"error_code"`
-		Message     string   `json:"message"`
-		Suggestions []string `json:"suggestions"`
+	apiErr := &APIError{StatusCode: resp.StatusCode, Body: string(body), Headers: resp.Header}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(body, &fields) == nil {
+		applyErrorEnvelope(apiErr, fields)
 	}
-	_ = json.Unmarshal(body, &envelope)
-	msg := envelope.Message
-	if msg == "" {
-		msg = fmt.Sprintf("HTTP %d", resp.StatusCode)
+	if apiErr.Message == "" {
+		apiErr.Message = fmt.Sprintf("HTTP %d", resp.StatusCode)
 	}
-	return &APIError{
-		StatusCode:  resp.StatusCode,
-		Message:     msg,
-		ErrorCode:   envelope.ErrorCode,
-		Suggestions: envelope.Suggestions,
-		Body:        string(body),
+	return apiErr
+}
+
+// textLineError returns the error carried by a text log line, if any:
+// a gateway "[error] ERR-17-0xx ..." line or, when checkGuest is set, a guest
+// {"error":"..."} record at the start of the line (possibly glued to the next record).
+func textLineError(content string, checkGuest bool) error {
+	if m := textStreamError.FindStringSubmatch(strings.TrimSpace(content)); m != nil {
+		return &gatewayStreamError{&APIError{ErrorCode: m[1], Message: m[2]}}
+	}
+	if checkGuest {
+		if msg, ok := guestRecordPrefix(content); ok {
+			return errGuestAgent(msg)
+		}
+	}
+	return nil
+}
+
+// guestRecordPrefix reports whether text starts with a guest agent error
+// record ({"error":"..."} without channel/message).
+func guestRecordPrefix(text string) (string, bool) {
+	trimmed := strings.TrimLeft(text, " \t\r\n")
+	if !strings.HasPrefix(trimmed, "{") {
+		return "", false
+	}
+	var fields map[string]json.RawMessage
+	if json.NewDecoder(strings.NewReader(trimmed)).Decode(&fields) != nil {
+		return "", false
+	}
+	return guestRecordMessage(fields)
+}
+
+func guestRecordMessage(fields map[string]json.RawMessage) (string, bool) {
+	raw, ok := fields["error"]
+	if !ok {
+		return "", false
+	}
+	if _, has := fields["channel"]; has {
+		return "", false
+	}
+	if _, has := fields["message"]; has {
+		return "", false
+	}
+	var msg string
+	if json.Unmarshal(raw, &msg) != nil {
+		return "", false
+	}
+	return msg, true
+}
+
+// parseLogRecord classifies one NDJSON value: a log entry, a guest error
+// record (stop), or a gateway error record (retryable).
+func parseLogRecord(raw json.RawMessage) (LogEntry, error) {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil || fields == nil {
+		return LogEntry{}, errInvalidLogRecord()
+	}
+	if msg, ok := guestRecordMessage(fields); ok {
+		return LogEntry{}, errGuestAgent(msg)
+	}
+	if _, ok := fields["error_code"]; ok {
+		apiErr := &APIError{}
+		applyErrorEnvelope(apiErr, fields)
+		if apiErr.Message == "" {
+			apiErr.Message = "The log stream ended with an error."
+		}
+		return LogEntry{}, &gatewayStreamError{apiErr}
+	}
+	var entry LogEntry
+	chRaw, okCh := fields["channel"]
+	msgRaw, okMsg := fields["message"]
+	if !okCh || !okMsg || json.Unmarshal(chRaw, &entry.Channel) != nil || json.Unmarshal(msgRaw, &entry.Message) != nil {
+		return LogEntry{}, errInvalidLogRecord()
+	}
+	if !validLogChannel(entry.Channel) {
+		return LogEntry{}, errInvalidLogRecord()
+	}
+	return entry, nil
+}
+
+// decodeLogRecords streams NDJSON values from body (a JSON stream decoder, so a
+// record glued to the next one on the same line still parses) and calls onEntry
+// for each log entry. A clean EOF returns nil.
+func decodeLogRecords(body io.Reader, onEntry func(LogEntry) error) error {
+	dec := json.NewDecoder(body)
+	for {
+		var raw json.RawMessage
+		if err := dec.Decode(&raw); err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			var syntaxErr *json.SyntaxError
+			if errors.As(err, &syntaxErr) {
+				return errInvalidLogRecord()
+			}
+			return err
+		}
+		entry, err := parseLogRecord(raw)
+		if err != nil {
+			return err
+		}
+		if err := onEntry(entry); err != nil {
+			return err
+		}
 	}
 }
 
-func logHTTPDo(ctx context.Context, rawURL string) (*http.Response, error) {
+// readLines calls onLine for each line of body with its line ending kept.
+// A final line without a newline is delivered only on a clean EOF; a partial
+// line cut by a read error is dropped (the reconnect replays it).
+func readLines(body io.Reader, onLine func(string) error) error {
+	r := bufio.NewReader(body)
+	for {
+		line, err := r.ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return err
+		}
+		if line != "" {
+			if lerr := onLine(line); lerr != nil {
+				return lerr
+			}
+		}
+		if err != nil {
+			return nil
+		}
+	}
+}
+
+func trimLineEnding(line string) string {
+	return strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+}
+
+// parseTS splits "RFC3339Nano<space>rest" into the unix second and rest.
+func parseTS(message string) (int64, string, bool) {
+	match := timestampPrefix.FindStringSubmatch(message)
+	if match == nil {
+		return 0, "", false
+	}
+	t, err := time.Parse(time.RFC3339Nano, match[1])
+	if err != nil {
+		return 0, "", false
+	}
+	return t.Unix(), match[2], true
+}
+
+// ---------------------------------------------------------------------------
+// URL resolution
+// ---------------------------------------------------------------------------
+
+type cvmLogInfo struct {
+	PublicLogs *bool              `json:"public_logs"`
+	Logs       map[string]*string `json:"logs"`
+}
+
+func (i *cvmLogInfo) logURL(key string) string {
+	if i.Logs == nil || i.Logs[key] == nil {
+		return ""
+	}
+	return *i.Logs[key]
+}
+
+func (c *Client) getCVMLogInfo(ctx context.Context, cvmID string) (*cvmLogInfo, error) {
+	var info cvmLogInfo
+	if err := c.doJSONVersioned(ctx, "GET", cvmPath(cvmID), cvmLogsInfoAPIVersion, nil, &info); err != nil {
+		return nil, err
+	}
+	return &info, nil
+}
+
+func (c *Client) nodeLogURL(ctx context.Context, cvmID string, channel CVMLogChannel) (string, error) {
+	info, err := c.getCVMLogInfo(ctx, cvmID)
+	if err != nil {
+		return "", err
+	}
+	u := info.logURL(string(channel))
+	if u == "" {
+		return "", fmt.Errorf("phala: no %s log endpoint available for CVM %s", channel, cvmID)
+	}
+	return u, nil
+}
+
+type compositionContainer struct {
+	ID    string   `json:"id"`
+	Names []string `json:"names"`
+}
+
+func (item compositionContainer) slug() string {
+	if len(item.Names) > 0 {
+		return strings.TrimPrefix(item.Names[0], "/")
+	}
+	return item.ID
+}
+
+func joinContainerLogURL(base, name, authQuery string) (string, error) {
+	slug, err := containerSlug(name)
+	if err != nil {
+		return "", err
+	}
+	u := strings.TrimSuffix(base, "/") + "/" + slug
+	if authQuery == "" {
+		return u, nil
+	}
+	if strings.Contains(u, "?") {
+		return u + "&" + authQuery, nil
+	}
+	return u + "?" + authQuery, nil
+}
+
+// containerTarget is a container resolved once per fetch or follow. Every
+// connection builds {container_log_base}/{slug}?{auth_query} from a fresh CVM
+// info lookup; the composition is never re-queried.
+type containerTarget struct {
+	cvmID string
+	slug  string
+	// info is the lookup made during resolution, used by the first connection.
+	info *cvmLogInfo
+}
+
+// containerLogInfo looks up the CVM log URLs and enforces the Public Logs setting.
+func (c *Client) containerLogInfo(ctx context.Context, cvmID string) (*cvmLogInfo, error) {
+	info, err := c.getCVMLogInfo(ctx, cvmID)
+	if err != nil {
+		return nil, err
+	}
+	if info.PublicLogs != nil && !*info.PublicLogs {
+		return nil, errContainerLogsDisabled()
+	}
+	return info, nil
+}
+
+// resolveContainer checks Public Logs, then resolves the container from the
+// composition: an exact name first, else a unique container ID prefix, else
+// the first container when no name is given.
+func (c *Client) resolveContainer(ctx context.Context, cvmID, name string) (*containerTarget, error) {
+	info, err := c.containerLogInfo(ctx, cvmID)
+	if err != nil {
+		return nil, err
+	}
+	var composition struct {
+		Containers []compositionContainer `json:"containers"`
+		Error      *string                `json:"error"`
+	}
+	if err := c.doJSON(ctx, "GET", cvmPath(cvmID, "composition"), nil, &composition); err != nil {
+		return nil, err
+	}
+	containers := composition.Containers
+	if len(containers) == 0 && composition.Error != nil && *composition.Error != "" {
+		return nil, &APIError{Message: *composition.Error}
+	}
+	target := &containerTarget{cvmID: cvmID, info: info}
+	if name == "" {
+		if len(containers) == 0 {
+			return nil, errContainerNotFound()
+		}
+		target.slug = containers[0].slug()
+		return target, nil
+	}
+	for _, item := range containers {
+		for _, n := range item.Names {
+			if n == name || n == "/"+name {
+				target.slug = name
+				return target, nil
+			}
+		}
+	}
+	var prefixed []compositionContainer
+	for _, item := range containers {
+		if strings.HasPrefix(item.ID, name) {
+			prefixed = append(prefixed, item)
+		}
+	}
+	switch len(prefixed) {
+	case 0:
+		return nil, errContainerNotFound()
+	case 1:
+		target.slug = prefixed[0].slug()
+		return target, nil
+	default:
+		labels := make([]string, 0, len(prefixed))
+		for _, item := range prefixed {
+			labels = append(labels, item.slug())
+		}
+		return nil, errLogValidation("Ambiguous container prefix '%s': %s", name, strings.Join(labels, ", "))
+	}
+}
+
+// logURL builds a freshly signed URL for the next connection: one CVM info
+// lookup per connection (the first reuses the resolution lookup).
+func (t *containerTarget) logURL(ctx context.Context, c *Client) (string, error) {
+	info := t.info
+	t.info = nil
+	if info == nil {
+		var err error
+		if info, err = c.containerLogInfo(ctx, t.cvmID); err != nil {
+			return "", err
+		}
+	}
+	base := info.logURL("container_log_base")
+	if base == "" {
+		return "", fmt.Errorf("phala: no container log endpoint available for CVM %s", t.cvmID)
+	}
+	return joinContainerLogURL(base, t.slug, info.logURL("auth_query"))
+}
+
+// lazyContainerTarget resolves the container on the first connection attempt,
+// so transient lookup failures there follow the follow retry rules.
+type lazyTarget struct {
+	c      *Client
+	cvmID  string
+	name   string
+	target *containerTarget
+}
+
+func (c *Client) lazyContainerTarget(cvmID, name string) *lazyTarget {
+	return &lazyTarget{c: c, cvmID: cvmID, name: name}
+}
+
+func (l *lazyTarget) url(ctx context.Context) (string, error) {
+	if l.target == nil {
+		target, err := l.c.resolveContainer(ctx, l.cvmID, l.name)
+		if err != nil {
+			return "", err
+		}
+		l.target = target
+	}
+	return l.target.logURL(ctx, l.c)
+}
+
+// containerLogURL resolves the container and returns a signed URL (one-shot fetch).
+func (c *Client) containerLogURL(ctx context.Context, cvmID, name string) (string, error) {
+	target, err := c.resolveContainer(ctx, cvmID, name)
+	if err != nil {
+		return "", err
+	}
+	return target.logURL(ctx, c)
+}
+
+// logHTTPDo GETs a presigned log-gateway URL using the client's Transport and
+// User-Agent (including WithUserAgent / a User-Agent header override).
+// API credentials are not sent: the URL is already signed.
+// stream=true clones the client with Timeout=0 so the 60s API timeout cannot
+// cut a long-lived follow; cancellation still comes from ctx.
+func (c *Client) logHTTPDo(ctx context.Context, rawURL string, stream bool) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, err
 	}
-	return (&http.Client{}).Do(req)
+	req.Header.Set("User-Agent", c.userAgent)
+	for k, v := range c.headers {
+		if strings.EqualFold(k, "User-Agent") {
+			req.Header.Set("User-Agent", v)
+		}
+	}
+	hc := c.httpClient
+	if stream && hc != nil && hc.Timeout > 0 {
+		copy := *hc
+		copy.Timeout = 0
+		hc = &copy
+	}
+	return hc.Do(req)
 }
 
-// FetchCVMLogs fetches a one-shot log snapshot.
+// fetchLogBody performs a one-shot log request and returns the open 200 response.
+func (c *Client) fetchLogBody(ctx context.Context, rawURL string) (*http.Response, error) {
+	resp, err := c.logHTTPDo(ctx, rawURL, false)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		defer resp.Body.Close()
+		return nil, parseLogAccessError(resp)
+	}
+	return resp, nil
+}
+
+// ---------------------------------------------------------------------------
+// Fetch
+// ---------------------------------------------------------------------------
+
+// FetchCVMLogs fetches a one-shot log snapshot as text.
 func (c *Client) FetchCVMLogs(ctx context.Context, cvmID string, source LogSource, opts *LogsOptions) (string, error) {
 	if opts == nil {
 		opts = &LogsOptions{}
 	}
+	if err := validateLogSource(source); err != nil {
+		return "", err
+	}
 	if source.Type == "container" {
-		if strings.EqualFold(opts.Format, "text") {
+		if isTextFormat(opts) {
 			return c.fetchContainerText(ctx, cvmID, source, opts)
 		}
 		entryOpts := *opts
@@ -237,11 +706,7 @@ func (c *Client) FetchCVMLogs(ctx context.Context, cvmID string, source LogSourc
 		}
 		var b strings.Builder
 		for _, entry := range entries {
-			if entry.Message == "" {
-				b.WriteByte('\n')
-			} else {
-				b.WriteString(entry.Message)
-			}
+			b.WriteString(entry.Message)
 		}
 		return b.String(), nil
 	}
@@ -252,23 +717,28 @@ func (c *Client) FetchCVMLogs(ctx context.Context, cvmID string, source LogSourc
 	if err != nil {
 		return "", err
 	}
-	params := map[string]string{}
-	if t := tailValue(opts.Tail); t != "" {
-		params["tail"] = t
-	}
-	if opts.ANSI {
-		params["ansi"] = "true"
-	}
-	resp, err := logHTTPDo(ctx, buildLogURL(base, params))
+	q := logQuery{tail: tailValue(opts.Tail), ansi: opts.ANSI}
+	resp, err := c.fetchLogBody(ctx, q.apply(base))
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		return "", parseLogAccessError(resp)
+	var b strings.Builder
+	err = readLines(resp.Body, func(line string) error {
+		content := trimLineEnding(line)
+		if isHeartbeat(content) {
+			return nil
+		}
+		if lerr := textLineError(content, false); lerr != nil {
+			return lerr
+		}
+		b.WriteString(applyANSIPolicy(line, opts.ANSI))
+		return nil
+	})
+	if err != nil {
+		return "", publicLogError(err)
 	}
-	body, err := io.ReadAll(resp.Body)
-	return string(body), err
+	return b.String(), nil
 }
 
 // FetchCVMLogEntries fetches container logs as NDJSON entries.
@@ -276,629 +746,537 @@ func (c *Client) FetchCVMLogEntries(ctx context.Context, cvmID string, source Lo
 	if opts == nil {
 		opts = &LogsOptions{}
 	}
-	format := opts.Format
-	if format == "" {
-		format = "ndjson"
-	}
-	if !strings.EqualFold(format, "ndjson") {
-		return nil, fmt.Errorf("phala: FetchCVMLogEntries requires format=ndjson")
-	}
-	if err := c.assertContainerLogsEnabled(ctx, cvmID); err != nil {
+	if err := assertEntriesRequest("FetchCVMLogEntries", source, opts); err != nil {
 		return nil, err
 	}
-	base, err := c.containerLogURL(ctx, cvmID, source.Name)
-	if err != nil {
+	if err := validateLogSource(source); err != nil {
 		return nil, err
 	}
 	times, err := resolveLogTimeWindow(opts.Since, opts.Until, time.Now())
 	if err != nil {
 		return nil, err
 	}
-	params := map[string]string{"format": "ndjson"}
-	if t := tailValue(opts.Tail); t != "" {
-		params["tail"] = t
+	base, err := c.containerLogURL(ctx, cvmID, source.Name)
+	if err != nil {
+		return nil, err
 	}
-	if times.Since != nil {
-		params["since"] = strconv.FormatInt(*times.Since, 10)
+	q := logQuery{
+		since: times.Since, until: times.Until, tail: tailValue(opts.Tail),
+		timestamps: opts.Timestamps, format: "ndjson",
 	}
-	if times.Until != nil {
-		params["until"] = strconv.FormatInt(*times.Until, 10)
-	}
-	if opts.Timestamps {
-		params["timestamps"] = "true"
-	}
-	if opts.ANSI {
-		params["ansi"] = "true"
-	}
-	resp, err := logHTTPDo(ctx, buildLogURL(base, params))
+	resp, err := c.fetchLogBody(ctx, q.apply(base))
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		return nil, parseLogAccessError(resp)
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	return parseNDJSON(string(body))
-}
-
-func parseNDJSON(text string) ([]LogEntry, error) {
 	var entries []LogEntry
-	for _, line := range strings.Split(text, "\n") {
-		entry, err := parseNDJSONLine(line)
-		if err != nil {
-			return nil, err
-		}
-		if entry != nil {
-			entries = append(entries, *entry)
-		}
+	err = decodeLogRecords(resp.Body, func(entry LogEntry) error {
+		entry.Message = applyANSIPolicy(entry.Message, opts.ANSI)
+		entries = append(entries, entry)
+		return nil
+	})
+	if err != nil {
+		return nil, publicLogError(err)
 	}
 	return entries, nil
 }
 
-const emptyStreamEndMessage = "log stream keeps ending without new output; the container may have stopped"
-
-func guestAgentErrorMessage(text string) string {
-	trimmed := strings.TrimSpace(text)
-	if trimmed == "" {
-		return ""
+func (c *Client) fetchContainerText(ctx context.Context, cvmID string, source LogSource, opts *LogsOptions) (string, error) {
+	times, err := resolveLogTimeWindow(opts.Since, opts.Until, time.Now())
+	if err != nil {
+		return "", err
 	}
-	var parsed map[string]any
-	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
-		return ""
+	base, err := c.containerLogURL(ctx, cvmID, source.Name)
+	if err != nil {
+		return "", err
 	}
-	errMsg, ok := parsed["error"].(string)
-	if !ok || errMsg == "" {
-		return ""
+	q := logQuery{
+		since: times.Since, until: times.Until, tail: tailValue(opts.Tail),
+		timestamps: opts.Timestamps, ansi: opts.ANSI, format: "text",
 	}
-	_, hasChannel := parsed["channel"]
-	_, hasMessage := parsed["message"]
-	if hasChannel || hasMessage {
-		return ""
+	resp, err := c.fetchLogBody(ctx, q.apply(base))
+	if err != nil {
+		return "", err
 	}
-	return errMsg
-}
-
-func errGuestAgent(message string) error {
-	return &APIError{
-		StatusCode:     logErrorStatus["ERR-17-009"],
-		ErrorCode:      "ERR-17-009",
-		Message:        message,
-		fromStreamBody: true,
-	}
-}
-
-func parseNDJSONLine(line string) (*LogEntry, error) {
-	trimmed := strings.TrimSpace(line)
-	if trimmed == "" {
-		return nil, nil
-	}
-	if msg := guestAgentErrorMessage(trimmed); msg != "" {
-		return nil, errGuestAgent(msg)
-	}
-	var parsed map[string]any
-	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
-		return nil, &APIError{Message: "Invalid NDJSON log record."}
-	}
-	if code, ok := parsed["error_code"].(string); ok {
-		msg, _ := parsed["message"].(string)
-		if msg == "" {
-			msg = "The log stream ended with an error."
+	defer resp.Body.Close()
+	var b strings.Builder
+	atBodyStart := true
+	err = readLines(resp.Body, func(line string) error {
+		// Mid-stream text lines may legitimately be {"error":...} JSON; only the
+		// start of the body can carry the guest agent error record.
+		if lerr := textLineError(trimLineEnding(line), atBodyStart); lerr != nil {
+			return lerr
 		}
-		status := logErrorStatus[code]
-		return nil, &APIError{StatusCode: status, Message: msg, ErrorCode: code}
+		atBodyStart = false
+		b.WriteString(applyANSIPolicy(line, opts.ANSI))
+		return nil
+	})
+	if err != nil {
+		return "", publicLogError(err)
 	}
-	channel, _ := parsed["channel"].(string)
-	message, _ := parsed["message"].(string)
-	if (channel != "stdout" && channel != "stderr") || message == "" && parsed["message"] == nil {
-		if channel != "stdout" && channel != "stderr" {
-			return nil, &APIError{Message: "Invalid NDJSON log record."}
-		}
-	}
-	if _, ok := parsed["message"].(string); !ok {
-		return nil, &APIError{Message: "Invalid NDJSON log record."}
-	}
-	return &LogEntry{Channel: channel, Message: message}, nil
+	return b.String(), nil
 }
 
-// FollowCVMLogs follows a log stream until ctx is cancelled.
+// ---------------------------------------------------------------------------
+// Follow
+// ---------------------------------------------------------------------------
+
+// FollowCVMLogs follows a log stream as text chunks until ctx is cancelled, the
+// stream stops, or the caller's until window is reached. Both channels are
+// closed when following ends; a terminal error is sent on the error channel.
 func (c *Client) FollowCVMLogs(ctx context.Context, cvmID string, source LogSource, opts *LogsOptions) (<-chan string, <-chan error) {
 	lines := make(chan string)
 	errs := make(chan error, 1)
 	go func() {
 		defer close(lines)
 		defer close(errs)
-		if source.Type == "container" {
-			var err error
-			if opts != nil && strings.EqualFold(opts.Format, "text") {
-				err = c.followContainerText(ctx, cvmID, source, opts, lines)
-			} else {
-				err = c.followContainer(ctx, cvmID, source, opts, lines)
-			}
-			if err != nil && !errors.Is(err, context.Canceled) {
-				errs <- err
-			}
-			return
-		}
-		err := c.followNode(ctx, cvmID, source.Channel, opts, lines)
-		if err != nil && !errors.Is(err, context.Canceled) {
-			errs <- err
-		}
+		emit := func(s string) error { return sendValue(ctx, lines, s) }
+		reportFollowError(errs, c.followText(ctx, cvmID, source, opts, emit))
 	}()
 	return lines, errs
 }
 
-func (c *Client) followNode(ctx context.Context, cvmID string, channel CVMLogChannel, opts *LogsOptions, lines chan<- string) error {
+// FollowCVMLogEntries follows container logs as NDJSON entries with the same
+// reconnect and stop rules as FollowCVMLogs. Node sources are not supported.
+func (c *Client) FollowCVMLogEntries(ctx context.Context, cvmID string, source LogSource, opts *LogsOptions) (<-chan LogEntry, <-chan error) {
+	entries := make(chan LogEntry)
+	errs := make(chan error, 1)
+	go func() {
+		defer close(entries)
+		defer close(errs)
+		if opts == nil {
+			opts = &LogsOptions{}
+		}
+		if err := assertEntriesRequest("FollowCVMLogEntries", source, opts); err != nil {
+			errs <- err
+			return
+		}
+		emit := func(e LogEntry) error { return sendValue(ctx, entries, e) }
+		reportFollowError(errs, c.followContainerEntries(ctx, cvmID, source, opts, emit))
+	}()
+	return entries, errs
+}
+
+func reportFollowError(errs chan<- error, err error) {
+	if err != nil && !errors.Is(err, context.Canceled) {
+		errs <- publicLogError(err)
+	}
+}
+
+func (c *Client) followText(ctx context.Context, cvmID string, source LogSource, opts *LogsOptions, emit func(string) error) error {
 	if opts == nil {
 		opts = &LogsOptions{}
+	}
+	if err := validateLogSource(source); err != nil {
+		return err
+	}
+	if source.Type == "container" {
+		if isTextFormat(opts) {
+			return c.followContainerText(ctx, cvmID, source, opts, emit)
+		}
+		return c.followContainerEntries(ctx, cvmID, source, opts, func(e LogEntry) error {
+			return emit(e.Message)
+		})
 	}
 	if err := assertNodeLogOptions(opts); err != nil {
 		return err
 	}
-	first := true
-	failureCount := 0
-	expiredRetries := 0
+	return c.followNode(ctx, cvmID, source.Channel, opts, emit)
+}
+
+// followPlan describes one kind of follow stream for runFollow.
+type followPlan struct {
+	// requestURL resolves a fresh signed URL and builds the query for the next connection.
+	requestURL func(ctx context.Context) (string, error)
+	// accepted runs after each HTTP 200.
+	accepted func()
+	// consume reads one 200 body, counting delivered records.
+	consume func(ctx context.Context, body io.Reader, delivered *int) error
+	// stopOnEmptyEnds stops after repeated quick clean ends (container streams).
+	stopOnEmptyEnds bool
+	// windowDone reports that the caller's until window has been reached.
+	windowDone func() bool
+}
+
+type followAction int
+
+const (
+	followStop followAction = iota
+	followFailure
+	followExpiredURL
+)
+
+func classifyFollowError(err error) followAction {
+	var gw *gatewayStreamError
+	if errors.As(err, &gw) {
+		return followFailure
+	}
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		return followFailure // network or read error
+	}
+	switch {
+	case apiErr.fromStreamBody || apiErr.StatusCode == 0:
+		return followStop
+	case apiErr.ErrorCode == "ERR-17-003":
+		return followExpiredURL
+	case apiErr.ErrorCode == "ERR-17-002",
+		apiErr.ErrorCode == "ERR-17-011",
+		apiErr.StatusCode == http.StatusTooManyRequests,
+		apiErr.StatusCode >= 500:
+		return followFailure
+	default:
+		return followStop
+	}
+}
+
+// classifyLookupError decides whether a failed URL lookup (CVM info or
+// composition) is retried: network errors, HTTP 5xx and 429 count as failures;
+// everything else (Public Logs off, missing container, invalid input) stops.
+func classifyLookupError(err error) followAction {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return followFailure
+	}
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && (apiErr.StatusCode >= 500 || apiErr.StatusCode == http.StatusTooManyRequests) {
+		return followFailure
+	}
+	return followStop
+}
+
+// runFollow implements the shared reconnect rules: every connection resolves a
+// fresh URL (lookup failures follow classifyLookupError); failures back off 250 ms doubling to 5 s and give up after 5 in a
+// row; a connection that delivered records resets the failure counter even if
+// it later fails; quick clean ends without output back off and, for container
+// streams, stop after 5 in a row.
+func (c *Client) runFollow(ctx context.Context, plan followPlan) error {
+	failures, expired, emptyEnds := 0, 0, 0
+	var lastStart time.Time
 	for {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		base, err := c.nodeLogURL(ctx, cvmID, channel)
-		if err != nil {
+		if err := ctx.Err(); err != nil {
 			return err
 		}
-		tail := tailValue(opts.Tail)
-		if !first {
-			tail = "0"
-		}
-		first = false
-		params := map[string]string{"follow": "true"}
-		if tail != "" {
-			params["tail"] = tail
-		}
-		if opts.ANSI {
-			params["ansi"] = "true"
-		}
-		resp, err := logHTTPDo(ctx, buildLogURL(base, params))
-		if err != nil {
-			failureCount++
-			if failureCount >= 5 {
-				return err
-			}
-			if err := waitBackoff(ctx, failureCount); err != nil {
-				return err
-			}
-			continue
-		}
-		if resp.StatusCode >= 400 {
-			apiErr := parseLogAccessError(resp)
-			resp.Body.Close()
-			var typed *APIError
-			if errors.As(apiErr, &typed) && typed.ErrorCode == "ERR-17-003" {
-				expiredRetries++
-				if expiredRetries > 3 {
-					return apiErr
-				}
-				_, _ = c.nodeLogURL(ctx, cvmID, channel)
-				continue
-			}
-			if typed != nil && typed.StatusCode < 500 {
-				return apiErr
-			}
-			failureCount++
-			if failureCount >= 5 {
-				return apiErr
-			}
-			if err := waitBackoff(ctx, failureCount); err != nil {
-				return err
-			}
-			continue
-		}
-		failureCount = 0
-		err = scanNodeBody(resp.Body, lines)
-		resp.Body.Close()
-		expiredRetries = 0
-		if err != nil {
-			var typed *APIError
-			if errors.As(err, &typed) && typed.ErrorCode == "ERR-17-003" {
-				expiredRetries++
-				if expiredRetries > 3 {
-					return err
-				}
-				continue
-			}
-			if errors.As(err, &typed) {
+		if !lastStart.IsZero() {
+			if err := waitDuration(ctx, followMinConnectionInterval-time.Since(lastStart)); err != nil {
 				return err
 			}
 		}
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-	}
-}
-
-func scanNodeBody(body io.Reader, lines chan<- string) error {
-	scanner := bufio.NewScanner(body)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for scanner.Scan() {
-		content := scanner.Text()
-		if content == "[vmm heartbeat]" || content == "[teepod heartbeat]" {
-			continue
-		}
-		if match := textStreamError.FindStringSubmatch(content); match != nil {
-			return &APIError{ErrorCode: match[1], Message: match[2], StatusCode: logErrorStatus[match[1]]}
-		}
-		lines <- content + "\n"
-	}
-	return scanner.Err()
-}
-
-func (c *Client) fetchContainerText(ctx context.Context, cvmID string, source LogSource, opts *LogsOptions) (string, error) {
-	if err := c.assertContainerLogsEnabled(ctx, cvmID); err != nil {
-		return "", err
-	}
-	base, err := c.containerLogURL(ctx, cvmID, source.Name)
-	if err != nil {
-		return "", err
-	}
-	times, err := resolveLogTimeWindow(opts.Since, opts.Until, time.Now())
-	if err != nil {
-		return "", err
-	}
-	params := map[string]string{"format": "text"}
-	if t := tailValue(opts.Tail); t != "" {
-		params["tail"] = t
-	}
-	if times.Since != nil {
-		params["since"] = strconv.FormatInt(*times.Since, 10)
-	}
-	if times.Until != nil {
-		params["until"] = strconv.FormatInt(*times.Until, 10)
-	}
-	if opts.Timestamps {
-		params["timestamps"] = "true"
-	}
-	if opts.ANSI {
-		params["ansi"] = "true"
-	}
-	resp, err := logHTTPDo(ctx, buildLogURL(base, params))
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		return "", parseLogAccessError(resp)
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	text := string(body)
-	if msg := guestAgentErrorMessage(text); msg != "" {
-		return "", errGuestAgent(msg)
-	}
-	return text, nil
-}
-
-func (c *Client) followContainerText(ctx context.Context, cvmID string, source LogSource, opts *LogsOptions, lines chan<- string) error {
-	if opts == nil {
-		opts = &LogsOptions{}
-	}
-	times, err := resolveLogTimeWindow(opts.Since, opts.Until, time.Now())
-	if err != nil {
-		return err
-	}
-	if err := c.assertContainerLogsEnabled(ctx, cvmID); err != nil {
-		return err
-	}
-	first := true
-	failureCount := 0
-	expiredRetries := 0
-	emptyEnds := 0
-	for {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		base, err := c.containerLogURL(ctx, cvmID, source.Name)
-		if err != nil {
-			return err
-		}
-		params := map[string]string{"follow": "true", "format": "text"}
-		if first {
-			if t := tailValue(opts.Tail); t != "" {
-				params["tail"] = t
-			}
-			first = false
-		}
-		if times.Since != nil {
-			params["since"] = strconv.FormatInt(*times.Since, 10)
-		}
-		if times.Until != nil {
-			params["until"] = strconv.FormatInt(*times.Until, 10)
-		}
-		if opts.Timestamps {
-			params["timestamps"] = "true"
-		}
-		resp, err := logHTTPDo(ctx, buildLogURL(base, params))
-		if err != nil {
-			failureCount++
-			if failureCount >= 5 {
-				return err
-			}
-			if err := waitBackoff(ctx, failureCount); err != nil {
-				return err
-			}
-			continue
-		}
-		if resp.StatusCode >= 400 {
-			apiErr := parseLogAccessError(resp)
-			resp.Body.Close()
-			var typed *APIError
-			if errors.As(apiErr, &typed) && typed.ErrorCode == "ERR-17-003" {
-				expiredRetries++
-				if expiredRetries > 3 {
-					return apiErr
-				}
-				if err := c.assertContainerLogsEnabled(ctx, cvmID); err != nil {
-					return err
-				}
-				continue
-			}
-			if typed != nil && typed.StatusCode < 500 {
-				return apiErr
-			}
-			failureCount++
-			if failureCount >= 5 {
-				return apiErr
-			}
-			continue
-		}
-		failureCount = 0
-		delivered, err := scanContainerText(resp.Body, lines)
-		resp.Body.Close()
-		if err != nil {
-			return err
-		}
-		expiredRetries = 0
-		if delivered {
-			emptyEnds = 0
-			continue
-		}
-		emptyEnds++
-		if emptyEnds >= 5 {
-			return &APIError{Message: emptyStreamEndMessage, fromStreamBody: true}
-		}
-		if err := waitBackoff(ctx, emptyEnds); err != nil {
-			return err
-		}
-	}
-}
-
-func scanContainerText(body io.Reader, lines chan<- string) (bool, error) {
-	scanner := bufio.NewScanner(body)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	delivered := false
-	for scanner.Scan() {
-		content := scanner.Text()
-		if msg := guestAgentErrorMessage(content); msg != "" {
-			return delivered, errGuestAgent(msg)
-		}
-		lines <- content + "\n"
-		delivered = true
-	}
-	if err := scanner.Err(); err != nil {
-		return delivered, err
-	}
-	return delivered, nil
-}
-
-func (c *Client) followContainer(ctx context.Context, cvmID string, source LogSource, opts *LogsOptions, lines chan<- string) error {
-	if opts == nil {
-		opts = &LogsOptions{}
-	}
-	times, err := resolveLogTimeWindow(opts.Since, opts.Until, time.Now())
-	if err != nil {
-		return err
-	}
-	if err := c.assertContainerLogsEnabled(ctx, cvmID); err != nil {
-		return err
-	}
-	var since *int64 = times.Since
-	var boundarySecond *int64
-	boundaryCounts := map[string]int{}
-	first := true
-	failureCount := 0
-	expiredRetries := 0
-	emptyEnds := 0
-	for {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		base, err := c.containerLogURL(ctx, cvmID, source.Name)
-		if err != nil {
-			return err
-		}
-		params := map[string]string{"follow": "true", "timestamps": "true", "format": "ndjson"}
-		if first {
-			if t := tailValue(opts.Tail); t != "" {
-				params["tail"] = t
-			}
-			first = false
-		}
-		if since != nil {
-			params["since"] = strconv.FormatInt(*since, 10)
-		}
-		if times.Until != nil {
-			params["until"] = strconv.FormatInt(*times.Until, 10)
-		}
-		replayCounts := copyCounts(boundaryCounts)
-		resp, err := logHTTPDo(ctx, buildLogURL(base, params))
-		if err != nil {
-			failureCount++
-			if failureCount >= 5 {
-				return err
-			}
-			if err := waitBackoff(ctx, failureCount); err != nil {
-				return err
-			}
-			continue
-		}
-		if resp.StatusCode >= 400 {
-			apiErr := parseLogAccessError(resp)
-			resp.Body.Close()
-			var typed *APIError
-			if errors.As(apiErr, &typed) && typed.ErrorCode == "ERR-17-003" {
-				expiredRetries++
-				if expiredRetries > 3 {
-					return apiErr
-				}
-				if err := c.assertContainerLogsEnabled(ctx, cvmID); err != nil {
-					return err
-				}
-				continue
-			}
-			if typed != nil && typed.StatusCode < 500 {
-				return apiErr
-			}
-			failureCount++
-			if failureCount >= 5 {
-				return apiErr
-			}
-			continue
-		}
-		failureCount = 0
+		lastStart = time.Now()
 		delivered := 0
-		err = scanContainerBody(resp.Body, opts.Timestamps, &since, &boundarySecond, boundaryCounts, replayCounts, lines, &delivered)
-		resp.Body.Close()
-		if err != nil {
-			return err
+		rawURL, err := plan.requestURL(ctx)
+		lookupFailed := err != nil
+		var resp *http.Response
+		if !lookupFailed {
+			resp, err = c.logHTTPDo(ctx, rawURL, true)
 		}
-		expiredRetries = 0
-		if delivered > 0 {
-			emptyEnds = 0
-			continue
-		}
-		emptyEnds++
-		if emptyEnds >= 5 {
-			return &APIError{Message: emptyStreamEndMessage, fromStreamBody: true}
-		}
-		if err := waitBackoff(ctx, emptyEnds); err != nil {
-			return err
-		}
-	}
-}
-
-func scanContainerBody(
-	body io.Reader,
-	includeTimestamps bool,
-	since **int64,
-	boundarySecond **int64,
-	boundaryCounts, replayCounts map[string]int,
-	lines chan<- string,
-	delivered *int,
-) error {
-	scanner := bufio.NewScanner(body)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for scanner.Scan() {
-		entry, err := parseNDJSONLine(scanner.Text())
-		if err != nil {
-			return err
-		}
-		if entry == nil {
-			continue
-		}
-		second, rest, ok := parseTS(entry.Message)
-		out := entry.Message
-		if !includeTimestamps && ok {
-			out = rest
-		}
-		if !ok {
-			lines <- out
-			*delivered++
-			continue
-		}
-		key := entry.Channel + "\x00" + entry.Message
-		if *boundarySecond != nil && second < **boundarySecond {
-			lines <- out
-			*delivered++
-			continue
-		}
-		if *boundarySecond != nil && second == **boundarySecond {
-			if replayCounts[key] > 0 {
-				replayCounts[key]--
-				continue
-			}
-		} else if *boundarySecond == nil || second > **boundarySecond {
-			v := second
-			*boundarySecond = &v
-			for k := range boundaryCounts {
-				delete(boundaryCounts, k)
+		if !lookupFailed && err == nil {
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				err = parseLogAccessError(resp)
+				resp.Body.Close()
+			} else {
+				plan.accepted()
+				connectedAt := followNow()
+				err = plan.consume(ctx, resp.Body, &delivered)
+				resp.Body.Close()
+				if err == nil {
+					expired = 0
+					if delivered > 0 {
+						failures, emptyEnds = 0, 0
+					}
+					if plan.windowDone != nil && plan.windowDone() {
+						return nil
+					}
+					if delivered > 0 {
+						continue
+					}
+					if followNow().Sub(connectedAt) >= emptyStreamQuiet {
+						emptyEnds = 0
+						continue
+					}
+					emptyEnds++
+					if plan.stopOnEmptyEnds && emptyEnds >= maxFollowEmptyEnds {
+						return &APIError{Message: emptyStreamEndMessage, fromStreamBody: true}
+					}
+					if err := waitBackoff(ctx, emptyEnds); err != nil {
+						return err
+					}
+					continue
+				}
 			}
 		}
-		if *since == nil || second > **since {
-			v := second
-			*since = &v
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
 		}
-		boundaryCounts[key]++
-		lines <- out
-		*delivered++
-	}
-	return scanner.Err()
-}
-
-func trimOneTrailingNL(s string) (string, string) {
-	if strings.HasSuffix(s, "\r\n") {
-		return s[:len(s)-2], "\r\n"
-	}
-	if strings.HasSuffix(s, "\n") {
-		return s[:len(s)-1], "\n"
-	}
-	return s, ""
-}
-
-func parseTS(message string) (int64, string, bool) {
-	core, nl := trimOneTrailingNL(message)
-	match := timestampPrefix.FindStringSubmatch(core)
-	if match == nil {
-		return 0, "", false
-	}
-	stamp := match[1]
-	for _, layout := range []string{
-		time.RFC3339Nano,
-		time.RFC3339,
-		"2006-01-02T15:04:05.999999999Z",
-		"2006-01-02T15:04:05Z",
-	} {
-		if t, err := time.Parse(layout, stamp); err == nil {
-			return t.Unix(), match[2] + nl, true
+		emptyEnds = 0
+		action := classifyFollowError(err)
+		if lookupFailed {
+			action = classifyLookupError(err)
+		}
+		switch action {
+		case followStop:
+			return err
+		case followExpiredURL:
+			expired++
+			if expired > maxFollowExpiredURL {
+				return err
+			}
+		case followFailure:
+			if delivered > 0 {
+				failures, expired = 0, 0
+			}
+			failures++
+			if failures >= maxFollowFailures {
+				return err
+			}
+			if err := waitBackoff(ctx, failures); err != nil {
+				return err
+			}
 		}
 	}
-	return 0, "", false
 }
 
-func copyCounts(in map[string]int) map[string]int {
-	out := make(map[string]int, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
+func (c *Client) followNode(ctx context.Context, cvmID string, channel CVMLogChannel, opts *LogsOptions, emit func(string) error) error {
+	accepted := false
+	return c.runFollow(ctx, followPlan{
+		requestURL: func(ctx context.Context) (string, error) {
+			base, err := c.nodeLogURL(ctx, cvmID, channel)
+			if err != nil {
+				return "", err
+			}
+			q := logQuery{follow: true, tail: tailValue(opts.Tail), ansi: opts.ANSI}
+			if accepted {
+				q.tail = "0"
+			}
+			return q.apply(base), nil
+		},
+		accepted: func() { accepted = true },
+		consume: func(ctx context.Context, body io.Reader, delivered *int) error {
+			return readLines(body, func(line string) error {
+				content := trimLineEnding(line)
+				if isHeartbeat(content) {
+					return nil
+				}
+				if err := textLineError(content, false); err != nil {
+					return err
+				}
+				if err := emit(applyANSIPolicy(line, opts.ANSI)); err != nil {
+					return err
+				}
+				*delivered++
+				return nil
+			})
+		},
+	})
 }
 
-func minInt(a, b int) int {
-	if a < b {
-		return a
+// followCursor tracks the container reconnect position: the last timestamp
+// second and how many identical records of that second were delivered, so a
+// reconnect with since=<second> can skip them.
+type followCursor struct {
+	callerTail     string
+	callerSince    *int64
+	until          *int64
+	since          *int64
+	first200       *int64
+	boundarySecond *int64
+	boundaryCounts map[string]int
+	replayCounts   map[string]int
+}
+
+func newFollowCursor(opts *LogsOptions, times logTimeWindow) *followCursor {
+	return &followCursor{
+		callerTail:     tailValue(opts.Tail),
+		callerSince:    times.Since,
+		until:          times.Until,
+		boundaryCounts: map[string]int{},
 	}
-	return b
+}
+
+// query returns the tail/since for the next connection and starts a replay window.
+func (c *followCursor) query(q logQuery) logQuery {
+	c.replayCounts = make(map[string]int, len(c.boundaryCounts))
+	for k, v := range c.boundaryCounts {
+		c.replayCounts[k] = v
+	}
+	q.until = c.until
+	if c.first200 == nil {
+		q.tail = c.callerTail
+		q.since = c.callerSince
+		return q
+	}
+	q.tail = "all"
+	q.since = c.reconnectSince()
+	return q
+}
+
+// reconnectSince is the last delivered timestamp second; before any timestamped
+// record it is the caller's since if set, else the second of the first HTTP 200.
+func (c *followCursor) reconnectSince() *int64 {
+	if c.since != nil {
+		return c.since
+	}
+	if c.callerSince != nil {
+		return c.callerSince
+	}
+	return c.first200
+}
+
+func (c *followCursor) accepted() {
+	if c.first200 == nil {
+		v := followNow().Unix()
+		c.first200 = &v
+	}
+}
+
+// admit reports whether a timestamped record should be delivered.
+func (c *followCursor) admit(second int64, key string) bool {
+	switch {
+	case c.boundarySecond != nil && second < *c.boundarySecond:
+		return true
+	case c.boundarySecond != nil && second == *c.boundarySecond:
+		if c.replayCounts[key] > 0 {
+			c.replayCounts[key]--
+			return false
+		}
+	default:
+		v := second
+		c.boundarySecond = &v
+		clear(c.boundaryCounts)
+	}
+	if c.since == nil || second > *c.since {
+		v := second
+		c.since = &v
+	}
+	c.boundaryCounts[key]++
+	return true
+}
+
+func (c *followCursor) windowDone() bool {
+	if c.until == nil {
+		return false
+	}
+	if c.since != nil && *c.since >= *c.until {
+		return true
+	}
+	return followNow().Unix() >= *c.until
+}
+
+func (c *Client) followContainerText(ctx context.Context, cvmID string, source LogSource, opts *LogsOptions, emit func(string) error) error {
+	times, err := resolveLogTimeWindow(opts.Since, opts.Until, time.Now())
+	if err != nil {
+		return err
+	}
+	cur := newFollowCursor(opts, times)
+	target := c.lazyContainerTarget(cvmID, source.Name)
+	return c.runFollow(ctx, followPlan{
+		requestURL: func(ctx context.Context) (string, error) {
+			base, err := target.url(ctx)
+			if err != nil {
+				return "", err
+			}
+			q := cur.query(logQuery{follow: true, timestamps: true, ansi: opts.ANSI, format: "text"})
+			return q.apply(base), nil
+		},
+		accepted: cur.accepted,
+		consume: func(ctx context.Context, body io.Reader, delivered *int) error {
+			atBodyStart := true
+			return readLines(body, func(line string) error {
+				content := trimLineEnding(line)
+				// Only the start of the body can carry the guest agent error record.
+				if err := textLineError(content, atBodyStart); err != nil {
+					return err
+				}
+				atBodyStart = false
+				out := line
+				if second, rest, ok := parseTS(line); ok {
+					if !cur.admit(second, content) {
+						return nil
+					}
+					if !opts.Timestamps {
+						out = rest
+					}
+				}
+				if err := emit(applyANSIPolicy(out, opts.ANSI)); err != nil {
+					return err
+				}
+				*delivered++
+				return nil
+			})
+		},
+		stopOnEmptyEnds: true,
+		windowDone:      cur.windowDone,
+	})
+}
+
+func (c *Client) followContainerEntries(ctx context.Context, cvmID string, source LogSource, opts *LogsOptions, emit func(LogEntry) error) error {
+	if err := validateLogSource(source); err != nil {
+		return err
+	}
+	times, err := resolveLogTimeWindow(opts.Since, opts.Until, time.Now())
+	if err != nil {
+		return err
+	}
+	cur := newFollowCursor(opts, times)
+	target := c.lazyContainerTarget(cvmID, source.Name)
+	return c.runFollow(ctx, followPlan{
+		requestURL: func(ctx context.Context) (string, error) {
+			base, err := target.url(ctx)
+			if err != nil {
+				return "", err
+			}
+			q := cur.query(logQuery{follow: true, timestamps: true, format: "ndjson"})
+			return q.apply(base), nil
+		},
+		accepted: cur.accepted,
+		consume: func(ctx context.Context, body io.Reader, delivered *int) error {
+			return decodeLogRecords(body, func(entry LogEntry) error {
+				out := entry.Message
+				if second, rest, ok := parseTS(entry.Message); ok {
+					if !cur.admit(second, entry.Channel+"\x00"+entry.Message) {
+						return nil
+					}
+					if !opts.Timestamps {
+						out = rest
+					}
+				}
+				if err := emit(LogEntry{Channel: entry.Channel, Message: applyANSIPolicy(out, opts.ANSI)}); err != nil {
+					return err
+				}
+				*delivered++
+				return nil
+			})
+		},
+		stopOnEmptyEnds: true,
+		windowDone:      cur.windowDone,
+	})
+}
+
+func backoffDelay(attempt int) time.Duration {
+	const maxDelay = 5 * time.Second
+	if attempt < 1 {
+		attempt = 1
+	}
+	if attempt > 6 {
+		return maxDelay
+	}
+	return min(250*time.Millisecond<<(attempt-1), maxDelay)
 }
 
 func waitBackoff(ctx context.Context, attempt int) error {
-	d := time.Duration(minInt(250<<uint(attempt-1), 5000)) * time.Millisecond
+	return waitDuration(ctx, backoffDelay(attempt))
+}
+
+func waitDuration(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return ctx.Err()
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(d):
+	case <-timer.C:
 		return nil
 	}
 }

@@ -16,8 +16,10 @@ export async function checkAndWarnIfLogsDisabled(
 		const result = await safeGetCvmInfo(client, { id: appId });
 		if (result.success && result.data.public_logs === false) {
 			logger.warn("Logs are disabled for this CVM (public_logs=false).");
-			logger.warn("To enable logs, run:");
-			logger.warn(`  phala deploy --cvm-id ${appId} --public-logs`);
+			logger.warn("Enable Public Logs in the dashboard (CVM settings).");
+			logger.warn(
+				"A CLI update of this setting also updates the CVM and restarts it.",
+			);
 			return true;
 		}
 	} catch (e) {
@@ -34,6 +36,7 @@ export interface LogsHandlerConfig<TOptions> {
 		onData: (data: string) => void,
 		options: TOptions,
 		signal?: AbortSignal,
+		context?: CommandContext,
 	) => Promise<void>;
 }
 
@@ -97,9 +100,10 @@ export function createLogsHandler<TInput extends BaseLogsInput, TOptions>(
 				try {
 					await config.streamLogs(
 						appId,
-						(data) => process.stdout.write(data),
+						(data) => context.stdout.write(data),
 						options,
 						abortController.signal,
+						context,
 					);
 				} catch (error) {
 					if ((error as Error).name === "AbortError") {
@@ -129,7 +133,7 @@ export function createLogsHandler<TInput extends BaseLogsInput, TOptions>(
 			}
 
 			if (logs.length > 0) {
-				console.log(logs);
+				context.stdout.write(logs);
 			} else {
 				const logsDisabled = await checkAndWarnIfLogsDisabled(appId, context);
 				if (!logsDisabled) {

@@ -85,19 +85,21 @@ class _BaseConfig:
 
     @property
     def request_headers(self) -> dict[str, str]:
-        result: dict[str, str] = {
-            "X-Phala-Version": self.version,
-            "Content-Type": "application/json",
-            "User-Agent": default_user_agent(),
-        }
-        result.update(self.headers)
+        headers = httpx.Headers(
+            {
+                "X-Phala-Version": self.version,
+                "Content-Type": "application/json",
+                "User-Agent": default_user_agent(),
+            }
+        )
+        headers.update(self.headers)
         if not self.use_cookie_auth and self.api_key:
-            result["X-API-Key"] = self.api_key
+            headers["X-API-Key"] = self.api_key
         elif not self.use_cookie_auth and self.bearer_token:
-            result["Authorization"] = f"Bearer {self.bearer_token}"
+            headers["Authorization"] = f"Bearer {self.bearer_token}"
         if self.workspace and self.workspace.strip():
-            result["X-Phala-Workspace"] = self.workspace.strip()
-        return result
+            headers["X-Phala-Workspace"] = self.workspace.strip()
+        return {key: headers[key] for key in headers}
 
     def merged_headers(self, additional: Mapping[str, str] | None = None) -> httpx.Headers:
         headers = httpx.Headers(self.request_headers)

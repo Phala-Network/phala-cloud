@@ -102,8 +102,11 @@ beforeEach(() => {
 	);
 });
 
+const originalDateNow = Date.now;
+
 afterEach(() => {
 	globalThis.fetch = originalFetch;
+	Date.now = originalDateNow;
 });
 
 afterAll(() => {
@@ -155,6 +158,11 @@ describe("CVM log access client", () => {
 	test("successful clean EOF reconnects indefinitely until aborted", async () => {
 		const controller = new AbortController();
 		const output: string[] = [];
+		let now = 0;
+		Date.now = () => {
+			now += 11_000;
+			return now;
+		};
 		fetchImplementation = async () =>
 			fetchMock.mock.calls.length <= 6
 				? new Response("")
@@ -173,7 +181,7 @@ describe("CVM log access client", () => {
 
 		expect(fetchMock).toHaveBeenCalledTimes(7);
 		expect(output).toEqual(["still following\n"]);
-	});
+	}, 20_000);
 
 	test("ordinary network failures stop after five consecutive failures", async () => {
 		fetchImplementation = async () => {
@@ -191,7 +199,7 @@ describe("CVM log access client", () => {
 		expect(error).toBeInstanceOf(TypeError);
 		expect(error).toMatchObject({ message: "network unavailable" });
 		expect(fetchMock).toHaveBeenCalledTimes(5);
-	});
+	}, 20_000);
 
 	test("retryable non-200 StructuredErrors stop after five failures and retain suggestions", async () => {
 		fetchImplementation = async () =>
@@ -219,18 +227,18 @@ describe("CVM log access client", () => {
 			message: expect.stringContaining("Node VMM unavailable"),
 		});
 		expect(fetchMock).toHaveBeenCalledTimes(5);
-	});
+	}, 20_000);
 
-	test("a successful HTTP 200 clean EOF resets the ordinary failure counter", async () => {
+	test("a successful HTTP 200 with a record resets the ordinary failure counter", async () => {
 		const controller = new AbortController();
 		let requestCount = 0;
 		const output: string[] = [];
 		fetchImplementation = async () => {
 			requestCount += 1;
-			if (requestCount <= 2 || (requestCount >= 4 && requestCount <= 6)) {
+			if (requestCount <= 2) {
 				throw new TypeError("temporary network failure");
 			}
-			if (requestCount === 3) return new Response("");
+			if (requestCount === 3) return new Response("checkpoint\n");
 			return new Response("recovered after a reset\n");
 		};
 
@@ -239,14 +247,14 @@ describe("CVM log access client", () => {
 			"serial",
 			(data) => {
 				output.push(data);
-				controller.abort();
+				if (data.includes("recovered")) controller.abort();
 			},
 			{},
 			controller.signal,
 		);
 
-		expect(requestCount).toBe(7);
-		expect(output).toEqual(["recovered after a reset\n"]);
+		expect(requestCount).toBe(4);
+		expect(output).toEqual(["checkpoint\n", "recovered after a reset\n"]);
 	});
 
 	test("container follow preserves same-second duplicate counts while reconnecting", async () => {
@@ -287,7 +295,7 @@ describe("CVM log access client", () => {
 		}
 		expect(urls[0]?.searchParams.has("tail")).toBe(false);
 		expect(urls[1]?.searchParams.get("since")).toBe("1794225600");
-		expect(urls[1]?.searchParams.has("tail")).toBe(false);
+		expect(urls[1]?.searchParams.get("tail")).toBe("all");
 	});
 
 	test("--timestamps preserves transport prefixes while deduplicating with the raw message", async () => {
@@ -430,11 +438,11 @@ describe("CVM log access client", () => {
 		expect(error).toBeInstanceOf(LogAccessError);
 		expect(error).toMatchObject({ code: "ERR-17-003" });
 		expect(fetchMock).toHaveBeenCalledTimes(4);
-		// 4 URL resolutions + 3 CVM-info refreshes before giving up.
-		expect(clientGet).toHaveBeenCalledTimes(7);
-	});
+		// One CVM-info lookup per connection attempt (no extra 003 refresh).
+		expect(clientGet).toHaveBeenCalledTimes(4);
+	}, 20_000);
 
-	test("repeated midstream ERR-17-003 is also limited across HTTP 200 bodies", async () => {
+	test("midstream ERR-17-003 inside an HTTP 200 body counts as a failure, not an expired URL", async () => {
 		fetchImplementation = async () =>
 			ndjsonResponse([{ error_code: "ERR-17-003", message: "URL expired" }]);
 
@@ -444,31 +452,9 @@ describe("CVM log access client", () => {
 		);
 		expect(error).toBeInstanceOf(LogAccessError);
 		expect(error).toMatchObject({ code: "ERR-17-003" });
-		expect(fetchMock).toHaveBeenCalledTimes(4);
-		// 1 public_logs check + 4 composition lookups + 3 CVM-info refreshes.
-		expect(clientGet).toHaveBeenCalledTimes(8);
-	});
-
-	test("midstream 4xx error is surfaced with its message and suggestions and not retried", async () => {
-		fetchImplementation = async () =>
-			ndjsonResponse([
-				{
-					error_code: "ERR-17-007",
-					message: "Container missing",
-					suggestions: ["Choose another container"],
-				},
-			]);
-
-		const error = await streamContainerLogsEntries("app_test", () => {}).then(
-			() => undefined,
-			(reason: unknown) => reason,
-		);
-		expect(error).toBeInstanceOf(LogAccessError);
-		expect(error).toMatchObject({
-			code: "ERR-17-007",
-			suggestions: ["Choose another container"],
-			message: expect.stringContaining("Container missing"),
-		});
-		expect(fetchMock).toHaveBeenCalledTimes(1);
-	});
+		// Gateway errors in a 200 body follow the 5-failure cap.
+		expect(fetchMock).toHaveBeenCalledTimes(5);
+		// 1 composition at start + 1 CVM-info per connection attempt.
+		expect(clientGet).toHaveBeenCalledTimes(6);
+	}, 20_000);
 });

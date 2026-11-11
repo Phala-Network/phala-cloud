@@ -25,16 +25,15 @@ function writeLogEntry(
 	config: { includeStdout: boolean; includeStderr: boolean },
 	context: Pick<CommandContext, "stdout" | "stderr">,
 ): void {
-	const message = entry.message === "" ? "\n" : entry.message;
-	if (entry.channel === "stdout") {
-		if (config.includeStdout) {
-			context.stdout.write(message);
+	const message = entry.message;
+	if (entry.channel === "stderr") {
+		if (config.includeStderr) {
+			context.stderr.write(message);
 		}
 		return;
 	}
-
-	if (config.includeStderr) {
-		context.stderr.write(message);
+	if (config.includeStdout) {
+		context.stdout.write(message);
 	}
 }
 
@@ -102,9 +101,14 @@ async function runLogsCommand(
 		return 1;
 	}
 
-	if (input.stderr && hasCvmFlag) {
+	if (input.stdout && input.stderr) {
+		context.fail("--stdout and --stderr cannot be used together");
+		return 1;
+	}
+
+	if ((input.stdout || input.stderr) && hasCvmFlag) {
 		context.fail(
-			"--stderr is only valid in container mode, not with CVM flags",
+			"--stdout and --stderr are only valid in container mode, not with CVM flags",
 		);
 		return 1;
 	}
@@ -261,8 +265,8 @@ async function runContainerMode(
 	timeWindow: LogTimeWindow,
 ): Promise<number> {
 	const outputConfig = {
-		includeStdout: true,
-		includeStderr: input.stderr,
+		includeStdout: !input.stderr,
+		includeStderr: !input.stdout,
 	};
 
 	const options: ContainerLogsOptions = {
@@ -271,7 +275,7 @@ async function runContainerMode(
 		until: timeWindow.until,
 		tail: input.tail,
 		timestamps: input.timestamps,
-		matchContainerIdPrefix: false,
+		matchContainerIdPrefix: true,
 	};
 
 	try {
@@ -312,16 +316,14 @@ async function runContainerMode(
 				? outputConfig.includeStderr
 				: outputConfig.includeStdout,
 		);
-		const combined = filteredEntries
-			.map((entry) => (entry.message === "" ? "\n" : entry.message))
-			.join("");
+		const combined = filteredEntries.map((entry) => entry.message).join("");
 
 		if (input.json) {
 			context.success({ logs: combined, cvm_id: appId });
 			return 0;
 		}
 
-		if (combined.length > 0) {
+		if (filteredEntries.length > 0) {
 			for (const entry of filteredEntries) {
 				writeLogEntry(entry, outputConfig, context);
 			}
