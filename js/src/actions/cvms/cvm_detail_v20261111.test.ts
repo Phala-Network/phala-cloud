@@ -18,8 +18,17 @@ describe("CVM compose opt-in", () => {
 });
 
 describe("2026-11-11 CVM detail schema", () => {
+  it("requires integer MB and preserves both memory fields", () => {
+    const detail = { id: "cvm-123", name: "example", status: "running", gateway: {} };
+    const resource = { memory_in_mb: 4096, memory_in_gb: 4 };
+    expect(CvmInfoDetailV20261111Schema.parse({ ...detail, resource }).resource).toEqual(resource);
+    expect(CvmInfoDetailV20261111Schema.parse({ ...detail, resource: { memory_in_mb: 4096 } }).resource).toEqual({ memory_in_mb: 4096 });
+    for (const memory_in_mb of [undefined, null, 1.5]) {
+      expect(() => CvmInfoDetailV20261111Schema.parse({ ...detail, resource: { memory_in_mb } })).toThrow();
+    }
+  });
   it("preserves GPU details including a null product ID", () => {
-    const detail = { id: "cvm-123", name: "example", status: "running", resource: {}, gateway: {} };
+    const detail = { id: "cvm-123", name: "example", status: "running", resource: { memory_in_mb: 4096 }, gateway: {} };
     for (const product_id of ["H100", null]) {
       const gpu = { product_id, gpus: 2, cc_mode: { expected: "devtools" } };
       expect(CvmInfoDetailV20261111Schema.parse({ ...detail, gpu }).gpu).toEqual(gpu);
@@ -32,7 +41,7 @@ describe("2026-11-11 CVM detail schema", () => {
       id: "cvm-123",
       name: "example",
       status: "running",
-      resource: {},
+      resource: { memory_in_mb: 4096 },
       gateway: {},
       dapp_dashboard_url: null,
       syslog_endpoint: "https://example.test/syslog",

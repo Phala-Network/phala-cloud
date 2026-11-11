@@ -228,6 +228,9 @@ export const CvmInfoDetailV20260522Schema = CvmInfoV20260522Schema.extend({
 export type CvmInfoDetailV20260522 = z.infer<typeof CvmInfoDetailV20260522Schema>;
 
 export const CvmInfoDetailV20261111Schema = CvmInfoDetailV20260522Schema.extend({
+  resource: CvmResourceInfoV20260121Schema.extend({
+    memory_in_mb: z.number().int(),
+  }),
   gpu: z
     .object({
       product_id: z.string().nullable(),
@@ -238,7 +241,13 @@ export const CvmInfoDetailV20261111Schema = CvmInfoDetailV20260522Schema.extend(
   dapp_dashboard_url: z.string().nullable().optional(),
   syslog_endpoint: z.string().nullable().optional(),
 });
-export type CvmInfoDetailV20261111 = z.infer<typeof CvmInfoDetailV20261111Schema>;
+type CvmInfoDetailV20261111Inferred = z.infer<typeof CvmInfoDetailV20261111Schema>;
+export type CvmInfoDetailV20261111 = Omit<CvmInfoDetailV20261111Inferred, "resource"> & {
+  resource: Omit<CvmInfoDetailV20261111Inferred["resource"], "memory_in_gb"> & {
+    /** @deprecated Use memory_in_mb instead. */
+    memory_in_gb?: number | null;
+  };
+};
 
 export const PaginatedCvmInfosV20260121Schema = z.object({
   items: z.array(CvmInfoV20260121Schema),
