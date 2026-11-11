@@ -43,7 +43,7 @@ beforeAll(() => {
 				app_id: "abc",
 				status,
 				in_progress: false,
-				resource: {},
+				resource: { memory_in_mb: 4096 },
 				gateway: {},
 			});
 		},

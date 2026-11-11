@@ -65,7 +65,7 @@ export const profileOption: CommandOption = {
 
 export const apiVersionOption: CommandOption = {
 	name: "api-version",
-	description: "API version to use (e.g. 2026-01-21, 2026-05-22, 2026-06-23)",
+	description: "API version to use (e.g. 2026-06-23, 2026-11-11)",
 	type: "string",
 	target: "apiVersion",
 	group: "advanced",

@@ -68,21 +68,21 @@ async function run(...args: string[]) {
 describe("CVM detail HTTP requests", () => {
 	test("default version and explicit compose opt-in", async () => {
 		requests.length = 0;
-		const old = await run("cvms", "get", "my-app", "--json");
+		const old = await run(
+			"cvms",
+			"get",
+			"my-app",
+			"--api-version",
+			"2026-06-23",
+			"--json",
+		);
 		expect(old.exit).toBe(0);
 		expect(requests[0]).toEqual({
 			path: "/api/v1/cvms/my-app",
 			query: "",
 			version: "2026-06-23",
 		});
-		const detail = await run(
-			"cvms",
-			"get",
-			"my-app",
-			"--api-version",
-			"2026-11-11",
-			"--json",
-		);
+		const detail = await run("cvms", "get", "my-app", "--json");
 		expect(detail.exit).toBe(0);
 		expect(requests[1]).toEqual({
 			path: "/api/v1/cvms/my-app",

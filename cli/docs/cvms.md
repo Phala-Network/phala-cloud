@@ -44,7 +44,7 @@ List CVMs in your workspace with filtering and pagination.
 
 ### cvms get
 
-Get detailed information about a specific CVM. Use `--api-version 2026-11-11` to request the newer detail format. Compose is omitted by default; request it explicitly with `--include-compose`.
+Get detailed information about a specific CVM. API version `2026-11-11` is used by default. Compose is omitted by default; request it explicitly with `--include-compose`.
 
 #### Usage
 
