@@ -1,3 +1,11 @@
+## [0.6.0](https://github.com/Phala-Network/phala-cloud/compare/go/v0.5.4...go/v0.6.0) (2026-11-12)
+
+### feat
+
+* **sdk:** default to the 2026-11-11 API version ([5bbe768](https://github.com/Phala-Network/phala-cloud/commit/5bbe7682d2a5d35e6ce736e8d3ca0ca75374564f))
+* **sdk:** return CVM detail without compose_file by default and add an IncludeCompose opt-in via GetCVMInfoWithOptions ([2609c6a](https://github.com/Phala-Network/phala-cloud/commit/2609c6af1f98cafb51f66787a726c38e9b040672))
+* **sdk:** expose the exact MemoryInMB value on the CVM resource ([2609c6a](https://github.com/Phala-Network/phala-cloud/commit/2609c6af1f98cafb51f66787a726c38e9b040672))
+* **sdk:** add the GetCVMGPUStatus method and GPU fields on CVM info ([2609c6a](https://github.com/Phala-Network/phala-cloud/commit/2609c6af1f98cafb51f66787a726c38e9b040672))
 ## [0.5.4](https://github.com/Phala-Network/phala-cloud/compare/go/v0.5.3...go/v0.5.4) (2026-11-11)
 
 ### fix
