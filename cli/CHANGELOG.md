@@ -1,3 +1,15 @@
+## [1.2.7](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.6...cli-v1.2.7) (2026-11-12)
+
+### feat
+
+* **cli:** add CVM compose opt-in ([a868a75](https://github.com/Phala-Network/phala-cloud/commit/a868a75166c013b9da0273d227213c98100db386))
+* **cli:** add CVM GPU status command ([70f8d6d](https://github.com/Phala-Network/phala-cloud/commit/70f8d6d7dc684a2e25188bdd7b549fc56fffaa10))
+* **cli:** default to the 2026-11-11 API version ([fb6d232](https://github.com/Phala-Network/phala-cloud/commit/fb6d232d8ea8d0ee90a220fa026485b6b92a271c))
+* **cli:** display exact CVM memory in MB ([3b2f0a4](https://github.com/Phala-Network/phala-cloud/commit/3b2f0a4e6262a8d151c51620bc726f7aba78ffc7))
+
+### fix
+
+* **cli:** adapt to the 2026-11-11 SDK default version type ([0297e5d](https://github.com/Phala-Network/phala-cloud/commit/0297e5d20c059905b7ff349846d7384c994fb6b0))
 ## [1.2.6](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.5...cli-v1.2.6) (2026-11-11)
 
 ### fix
