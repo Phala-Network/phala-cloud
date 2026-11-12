@@ -79,6 +79,7 @@ const CvmKmsInfoV20260121BaseSchema = z.object({
   deployer_address: z.string().nullable().optional(),
   rpc_endpoint: z.string().nullable().optional(),
   encrypted_env_pubkey: z.string().nullable().optional(),
+  k256_pubkey: z.string().nullable().optional(),
 });
 
 export const CvmKmsInfoV20260121Schema = CvmKmsInfoV20260121BaseSchema.transform((data) => {
