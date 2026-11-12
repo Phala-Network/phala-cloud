@@ -1,8 +1,22 @@
-import { describe, expect, mock, spyOn, test } from "bun:test";
+import { afterAll, describe, expect, mock, spyOn, test } from "bun:test";
 import type { CommandContext } from "@/src/core/types";
 import { logger } from "@/src/utils/logger";
 
-const cloud = await import(`${require.resolve("@phala/cloud")}?detail-test`);
+// mock.module registrations persist process-wide in bun and interleave with
+// other test files' top-level awaits. Load real instances through unique
+// specifiers, spread them into every mock so partial replacements from other
+// files cannot win, and restore the real modules afterwards, as
+// instances/add/index.test.ts does.
+const realCloud = await import(
+	`${require.resolve("@phala/cloud")}?detail-commands-real`
+);
+const realClient = await import(
+	`${require.resolve("@/src/lib/client")}?detail-commands-real`
+);
+const realLogger = await import(
+	`${require.resolve("@/src/utils/logger")}?detail-commands-real`
+);
+
 const getInfo = mock(async (_client: unknown, _request: unknown) => ({
 	success: true as const,
 	data: {
@@ -16,11 +30,22 @@ const gpuStatus = mock(async (_client: unknown, _request: unknown) => ({
 	observed: [{ slot: "0000:01:00.0", cc_mode: "on" }],
 }));
 mock.module("@phala/cloud", () => ({
-	...cloud,
+	...realCloud,
 	safeGetCvmInfo: getInfo,
 	getCvmGpuStatus: gpuStatus,
 }));
-mock.module("@/src/lib/client", () => ({ getClient: async () => ({}) }));
+mock.module("@/src/lib/client", () => ({
+	...realClient,
+	getClient: async () => ({}),
+}));
+mock.module("@/src/utils/logger", () => ({ ...realLogger }));
+
+afterAll(() => {
+	mock.module("@phala/cloud", () => ({ ...realCloud }));
+	mock.module("@/src/lib/client", () => ({ ...realClient }));
+	mock.module("@/src/utils/logger", () => ({ ...realLogger }));
+});
+
 const { cvmsGetCommand } = await import("./get");
 const { cvmsGpuStatusCommand } = await import("./gpu-status");
 
