@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { buildCommandSchemaInput } from "@/src/core/input-builder";
 import { parseCommandArguments } from "@/src/core/parser";
 import { CommandRegistry } from "@/src/core/registry";
@@ -8,6 +8,16 @@ import {
 	cvmsReplicateCommandSchema,
 } from "../../cvms/replicate/command";
 import { instancesAddCommandMeta, instancesAddCommandSchema } from "./command";
+
+const realCloud = await import(
+	`${require.resolve("@phala/cloud")}?instances-add-real`
+);
+const realClient = await import(
+	`${require.resolve("@/src/lib/client")}?instances-add-real`
+);
+const realLogger = await import(
+	`${require.resolve("@/src/utils/logger")}?instances-add-real`
+);
 
 class MockResourceError extends Error {}
 
@@ -52,6 +62,7 @@ mock.module("@phala/cloud", () => ({
 }));
 
 mock.module("@/src/lib/client", () => ({
+	...realClient,
 	getClient: mock(() => Promise.resolve({ post: mockPost })),
 }));
 
@@ -65,6 +76,12 @@ mock.module("@/src/utils/logger", () => ({
 		logDetailedError: noop,
 	},
 }));
+
+afterAll(() => {
+	mock.module("@phala/cloud", () => ({ ...realCloud }));
+	mock.module("@/src/lib/client", () => ({ ...realClient }));
+	mock.module("@/src/utils/logger", () => ({ ...realLogger }));
+});
 
 const { instancesAddCommand } = await import("./index");
 const { cvmsReplicateCommand } = await import("../../cvms/replicate/index");

@@ -96,7 +96,12 @@ beforeAll(async () => {
 					name: "my-app",
 					app_id: APP_ID,
 					status: "running",
-					resource: { vcpu: 2, memory_in_gb: 4, disk_in_gb: 20 },
+					resource: {
+						vcpu: 2,
+						memory_in_gb: 4,
+						memory_in_mb: 4096,
+						disk_in_gb: 20,
+					},
 					gateway: {},
 				});
 			}
@@ -288,7 +293,12 @@ describe("phala cvms upgrade edge cases", () => {
 						name: "my-app",
 						app_id: APP_ID,
 						status: "running",
-						resource: { vcpu: 2, memory_in_gb: 4, disk_in_gb: 20 },
+						resource: {
+							vcpu: 2,
+							memory_in_gb: 4,
+							memory_in_mb: 4096,
+							disk_in_gb: 20,
+						},
 						gateway: {},
 						kms_info: { encrypted_env_pubkey: "11".repeat(32) },
 					})

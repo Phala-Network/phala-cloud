@@ -1,14 +1,22 @@
-import { z } from "zod";
-import type { CommandMeta } from "@/src/core/types";
-import { cvmIdArgument, interactiveOption } from "@/src/core/common-flags";
 import { jsonOption } from "@/src/commands/status/command";
+import { cvmIdArgument, interactiveOption } from "@/src/core/common-flags";
+import type { CommandMeta } from "@/src/core/types";
+import { z } from "zod";
 
 export const cvmsGetCommandMeta: CommandMeta = {
 	name: "get",
 	description: "Get details of a CVM",
 	stability: "unstable",
 	arguments: [cvmIdArgument],
-	options: [jsonOption, interactiveOption],
+	options: [
+		jsonOption,
+		interactiveOption,
+		{
+			name: "include-compose",
+			type: "boolean",
+			description: "Include the compose configuration",
+		},
+	],
 	examples: [
 		{
 			name: "Get CVM interactively",
@@ -32,6 +40,7 @@ export const cvmsGetCommandMeta: CommandMeta = {
 export const cvmsGetCommandSchema = z.object({
 	cvmId: z.string().optional(),
 	json: z.boolean().default(false),
+	includeCompose: z.boolean().default(false),
 	interactive: z.boolean().default(false),
 });
 

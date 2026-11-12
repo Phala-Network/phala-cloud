@@ -87,7 +87,7 @@ function getPreparePayload(error: ResourceError): PreparePayload | null {
 }
 
 async function loadEncryptedEnv(
-	client: Client<"2026-06-23">,
+	client: Client<"2026-11-11">,
 	sourceCvm: Parameters<typeof getEncryptPubkey>[1],
 	envFile?: string,
 ): Promise<string | undefined> {
