@@ -1,6 +1,6 @@
 {
 	"name": "phala",
-	"version": "1.2.6",
+	"version": "1.3.0",
 	"description": "CLI for Managing Phala Cloud Services",
 	"author": {
 		"name": "Phala Network",
