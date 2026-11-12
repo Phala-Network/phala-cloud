@@ -143,7 +143,8 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
         if path.endswith("/state"):
             return httpx.Response(200, json={"status": "running"})
         return httpx.Response(
-            200, json={"id": "1", "name": "n", "status": "running", "resource": {}}
+            200,
+            json={"id": "1", "name": "n", "status": "running", "resource": {"memory_in_mb": 1024}},
         )
     if method == "POST" and path.endswith("/start"):
         return httpx.Response(200, json={"id": "cvm_1", "name": "n", "status": "running"})

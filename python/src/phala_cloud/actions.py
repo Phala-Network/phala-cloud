@@ -11,10 +11,12 @@ if TYPE_CHECKING:
         CommitCvmUpdateRequest,
         CommitCvmUpdateResult,
         CvmIdRequest,
+        CvmInfoResult,
         CvmSshKeysResponse,
         PhalaCloud,
         UpdateCvmSshKeysRequest,
     )
+    from .models.cvms import CvmGpuStatus
     from .result import SafeResult
 
 __all__ = [
@@ -56,6 +58,8 @@ __all__ = [
     "safe_get_workspace_quotas",
     "get_cvm_info",
     "safe_get_cvm_info",
+    "get_cvm_gpu_status",
+    "safe_get_cvm_gpu_status",
     "provision_cvm",
     "safe_provision_cvm",
     "commit_cvm_provision",
@@ -420,12 +424,76 @@ def safe_get_workspace_quotas(client: Any, *args: Any, **kwargs: Any) -> Any:
     return client.safe_get_workspace_quotas(*args, **kwargs)
 
 
-def get_cvm_info(client: Any, *args: Any, **kwargs: Any) -> Any:
-    return client.get_cvm_info(*args, **kwargs)
+@overload
+def get_cvm_info(
+    client: PhalaCloud, request: CvmIdRequest | Mapping[str, object]
+) -> CvmInfoResult: ...
 
 
-def safe_get_cvm_info(client: Any, *args: Any, **kwargs: Any) -> Any:
-    return client.safe_get_cvm_info(*args, **kwargs)
+@overload
+def get_cvm_info(
+    client: AsyncPhalaCloud, request: CvmIdRequest | Mapping[str, object]
+) -> Awaitable[CvmInfoResult]: ...
+
+
+def get_cvm_info(
+    client: PhalaCloud | AsyncPhalaCloud, request: CvmIdRequest | Mapping[str, object]
+) -> CvmInfoResult | Awaitable[CvmInfoResult]:
+    return client.get_cvm_info(request)
+
+
+@overload
+def safe_get_cvm_info(
+    client: PhalaCloud, request: CvmIdRequest | Mapping[str, object]
+) -> SafeResult[CvmInfoResult]: ...
+
+
+@overload
+def safe_get_cvm_info(
+    client: AsyncPhalaCloud, request: CvmIdRequest | Mapping[str, object]
+) -> Awaitable[SafeResult[CvmInfoResult]]: ...
+
+
+def safe_get_cvm_info(
+    client: PhalaCloud | AsyncPhalaCloud, request: CvmIdRequest | Mapping[str, object]
+) -> SafeResult[CvmInfoResult] | Awaitable[SafeResult[CvmInfoResult]]:
+    return client.safe_get_cvm_info(request)
+
+
+@overload
+def get_cvm_gpu_status(
+    client: PhalaCloud, request: CvmIdRequest | Mapping[str, object]
+) -> CvmGpuStatus: ...
+
+
+@overload
+def get_cvm_gpu_status(
+    client: AsyncPhalaCloud, request: CvmIdRequest | Mapping[str, object]
+) -> Awaitable[CvmGpuStatus]: ...
+
+
+def get_cvm_gpu_status(
+    client: PhalaCloud | AsyncPhalaCloud, request: CvmIdRequest | Mapping[str, object]
+) -> CvmGpuStatus | Awaitable[CvmGpuStatus]:
+    return client.get_cvm_gpu_status(request)
+
+
+@overload
+def safe_get_cvm_gpu_status(
+    client: PhalaCloud, request: CvmIdRequest | Mapping[str, object]
+) -> SafeResult[CvmGpuStatus]: ...
+
+
+@overload
+def safe_get_cvm_gpu_status(
+    client: AsyncPhalaCloud, request: CvmIdRequest | Mapping[str, object]
+) -> Awaitable[SafeResult[CvmGpuStatus]]: ...
+
+
+def safe_get_cvm_gpu_status(
+    client: PhalaCloud | AsyncPhalaCloud, request: CvmIdRequest | Mapping[str, object]
+) -> SafeResult[CvmGpuStatus] | Awaitable[SafeResult[CvmGpuStatus]]:
+    return client.safe_get_cvm_gpu_status(request)
 
 
 def provision_cvm(client: Any, *args: Any, **kwargs: Any) -> Any:

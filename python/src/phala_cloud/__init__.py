@@ -2,6 +2,7 @@ from . import error_codes
 from .action_responses import (
     AppLaunchTokenResponse,
     CvmAnnotationsResponse,
+    CvmInfoResponseV20261111,
     CvmInitScript,
     CvmInitScriptsResponse,
     CvmUserConfigResponse,
@@ -9,9 +10,11 @@ from .action_responses import (
 from .actions import *  # noqa: F403
 from .actions import (
     commit_cvm_update,
+    get_cvm_gpu_status,
     get_cvm_ssh_keys,
     revoke_current_api_token,
     safe_commit_cvm_update,
+    safe_get_cvm_gpu_status,
     safe_get_cvm_ssh_keys,
     safe_revoke_current_api_token,
     safe_update_cvm_ssh_keys,
@@ -40,8 +43,10 @@ from .full_client import (
     CommitCvmUpdateResult,
     CreateAppInstanceRequest,
     CvmIdRequest,
+    CvmInfoResult,
     CvmSshKey,
     CvmSshKeysResponse,
+    GetCvmInfoRequest,
     PhalaCloud,
     ReplicateCvmRequest,
     SetAppLaunchTokenRequest,
@@ -57,7 +62,16 @@ from .logs import (
     resolve_log_time_window,
 )
 from .models import *  # noqa: F403
-from .models import CheckAppIsAllowedRequest, CheckCvmIsAllowedRequest
+from .models import (
+    CheckAppIsAllowedRequest,
+    CheckCvmIsAllowedRequest,
+    CvmGpuCcMode,
+    CvmGpuInfo,
+    CvmGpuObserved,
+    CvmGpuStatus,
+    CvmInfoDetailV20261111,
+    CvmResourceV20261111,
+)
 from .result import SafeResult
 from .utils import (
     MAX_INIT_SCRIPTS,
@@ -95,6 +109,17 @@ __all__ = [
     "safe_commit_cvm_update",
     "CreateAppInstanceRequest",
     "CvmIdRequest",
+    "CvmInfoResult",
+    "GetCvmInfoRequest",
+    "CvmInfoResponseV20261111",
+    "CvmInfoDetailV20261111",
+    "CvmResourceV20261111",
+    "CvmGpuCcMode",
+    "CvmGpuInfo",
+    "CvmGpuObserved",
+    "CvmGpuStatus",
+    "get_cvm_gpu_status",
+    "safe_get_cvm_gpu_status",
     "CvmSshKey",
     "CvmSshKeysResponse",
     "UpdateCvmSshKeysRequest",

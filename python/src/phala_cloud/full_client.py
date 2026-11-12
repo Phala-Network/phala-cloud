@@ -79,6 +79,8 @@ from .models.cvms import (
     CheckCvmIsAllowedRequest,
     ComposePatch,
     CvmAvailableOSImage,
+    CvmGpuStatus,
+    CvmInfoDetailV20261111,
     CvmInfoV20260121,
     CvmInfoV20260522,
     CvmStatus,
@@ -279,6 +281,13 @@ class NextAppIdsRequest(BaseModel):
 
 class StatusBatchRequest(_AliasModel):
     vm_uuids: list[str] = Field(alias="vmUuids")
+
+
+CvmInfoResult = CvmInfoResponseV20260121 | CvmInfoResponseV20260522 | CvmInfoDetailV20261111
+
+
+class GetCvmInfoRequest(CvmIdRequest):
+    include_compose: bool | None = None
 
 
 class RestartCvmRequest(CvmIdRequest):
@@ -636,7 +645,11 @@ class _ExtMixin:
             return CvmInitScriptsResponse
         if m == "POST" and re.fullmatch(r"/apps/[^/]+/launch-token", path):
             return AppLaunchTokenResponse
+        if m == "GET" and re.fullmatch(r"/cvms/[^/]+/gpu-status", path):
+            return CvmGpuStatus
         if m == "GET" and re.fullmatch(r"/cvms/[^/]+", path):
+            if version >= "2026-11-11":
+                return CvmInfoDetailV20261111
             return self._v20260121_model(CvmInfoResponseV20260121, CvmInfoResponseV20260522)
         if m == "GET" and re.fullmatch(r"/kms/on-chain/[^/]+", path):
             return GetKmsOnChainDetailResponse
@@ -847,12 +860,24 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     ) -> SafeResult[Any]:
         return self.safe(self.get_workspace_quotas, request)
 
-    def get_cvm_info(self, request: CvmIdRequest | Mapping[str, Any]) -> Any:
-        cvm_id = CvmIdRequest.model_validate(request).resolved
-        return self._loose_validate(self.get(f"/cvms/{cvm_id}"))
+    def get_cvm_info(self, request: CvmIdRequest | Mapping[str, Any]) -> CvmInfoResult:
+        req = GetCvmInfoRequest.model_validate(request, from_attributes=True)
+        params = {} if req.include_compose is None else {"include_compose": req.include_compose}
+        return self._loose_validate(self.get(f"/cvms/{req.resolved}", params=params or None))
 
-    def safe_get_cvm_info(self, request: CvmIdRequest | Mapping[str, Any]) -> SafeResult[Any]:
+    def safe_get_cvm_info(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmInfoResult]:
         return self.safe(self.get_cvm_info, request)
+
+    def get_cvm_gpu_status(self, request: CvmIdRequest | Mapping[str, Any]) -> CvmGpuStatus:
+        cvm_id = CvmIdRequest.model_validate(request).resolved
+        return self.get(f"/cvms/{cvm_id}/gpu-status")
+
+    def safe_get_cvm_gpu_status(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmGpuStatus]:
+        return self.safe(self.get_cvm_gpu_status, request)
 
     def provision_cvm(self, request: CvmCreationRequest | Mapping[str, Any]) -> Any:
         """Prepare a CVM creation (phase 1 of the two-phase create).
@@ -1899,12 +1924,24 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
     ) -> SafeResult[Any]:
         return await self.safe(self.get_workspace_quotas, request)
 
-    async def get_cvm_info(self, request: CvmIdRequest | Mapping[str, Any]) -> Any:
-        cvm_id = CvmIdRequest.model_validate(request).resolved
-        return self._loose_validate(await self.get(f"/cvms/{cvm_id}"))
+    async def get_cvm_info(self, request: CvmIdRequest | Mapping[str, Any]) -> CvmInfoResult:
+        req = GetCvmInfoRequest.model_validate(request, from_attributes=True)
+        params = {} if req.include_compose is None else {"include_compose": req.include_compose}
+        return self._loose_validate(await self.get(f"/cvms/{req.resolved}", params=params or None))
 
-    async def safe_get_cvm_info(self, request: CvmIdRequest | Mapping[str, Any]) -> SafeResult[Any]:
+    async def safe_get_cvm_info(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmInfoResult]:
         return await self.safe(self.get_cvm_info, request)
+
+    async def get_cvm_gpu_status(self, request: CvmIdRequest | Mapping[str, Any]) -> CvmGpuStatus:
+        cvm_id = CvmIdRequest.model_validate(request).resolved
+        return await self.get(f"/cvms/{cvm_id}/gpu-status")
+
+    async def safe_get_cvm_gpu_status(
+        self, request: CvmIdRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmGpuStatus]:
+        return await self.safe(self.get_cvm_gpu_status, request)
 
     async def provision_cvm(self, request: CvmCreationRequest | Mapping[str, Any]) -> Any:
         """Prepare a CVM creation (phase 1 of the two-phase create).
