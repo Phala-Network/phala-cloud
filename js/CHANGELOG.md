@@ -1,3 +1,18 @@
+## [0.7.0](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.4...js-v0.7.0) (2026-11-12)
+
+### feat
+
+* **sdk:** default to the 2026-11-11 API version ([083be99](https://github.com/Phala-Network/phala-cloud/commit/083be9930d6761c03090c24544b3e7004c36d8a5))
+* **sdk:** activate the 2026-11-11 API version ([dda4bcc](https://github.com/Phala-Network/phala-cloud/commit/dda4bcc14743d2cc931f3e2c00f9fc1eb4b8c5a8))
+* **sdk:** add CVM GPU status actions ([8528bd0](https://github.com/Phala-Network/phala-cloud/commit/8528bd09301005a3bfbd5effed65215964eb0aae))
+* **sdk:** prepare GPU fields for versioned CVM detail ([4fb94b5](https://github.com/Phala-Network/phala-cloud/commit/4fb94b513fc07e521f01043dab371a4d9922a61f))
+* **sdk:** preserve exact CVM memory in MB; memory_in_gb is deprecated in the JS types ([3b14547](https://github.com/Phala-Network/phala-cloud/commit/3b14547a82b8ed88dd8b41e6f2e48ddd852a0075))
+* **sdk:** return CVM detail without compose_file by default and add an include_compose opt-in ([5eb3617](https://github.com/Phala-Network/phala-cloud/commit/5eb3617dac08d78326c62a09127640a57f00f9ce))
+
+### fix
+
+* **sdk:** resolve SDK version for source consumers ([caee54d](https://github.com/Phala-Network/phala-cloud/commit/caee54d444018a59da8753caf5d5fd3d22eee0a5))
+* **sdk:** adapt to the 2026-11-11 SDK default version type ([0297e5d](https://github.com/Phala-Network/phala-cloud/commit/0297e5d20c059905b7ff349846d7384c994fb6b0))
 ## [0.6.4](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.3...js-v0.6.4) (2026-11-11)
 
 ### fix
