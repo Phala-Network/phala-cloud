@@ -1,3 +1,11 @@
+## [0.5.0](https://github.com/Phala-Network/phala-cloud/compare/python-v0.4.4...python-v0.5.0) (2026-11-12)
+
+### feat
+
+* **sdk:** default to the 2026-11-11 API version ([303d8be](https://github.com/Phala-Network/phala-cloud/commit/303d8bed31968e0312028704d92f005d541f9a4c))
+* **sdk:** return CVM detail without compose_file by default and add an include_compose opt-in ([08ff934](https://github.com/Phala-Network/phala-cloud/commit/08ff934611ce8e2ed4c460a82170a6896a3d3052))
+* **sdk:** expose the exact memory_in_mb value on the 2026-11-11 CVM resource model ([08ff934](https://github.com/Phala-Network/phala-cloud/commit/08ff934611ce8e2ed4c460a82170a6896a3d3052))
+* **sdk:** add get_cvm_gpu_status / safe_get_cvm_gpu_status actions and client methods ([08ff934](https://github.com/Phala-Network/phala-cloud/commit/08ff934611ce8e2ed4c460a82170a6896a3d3052))
 ## [0.4.4](https://github.com/Phala-Network/phala-cloud/compare/python-v0.4.3...python-v0.4.4) (2026-11-11)
 
 ### fix
