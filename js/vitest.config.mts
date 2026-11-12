@@ -1,15 +1,6 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "path";
 import { defineConfig } from "vitest/config";
 
-const pkg = JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf8")) as {
-  version: string;
-};
-
 export default defineConfig({
-  define: {
-    __SDK_VERSION__: JSON.stringify(pkg.version),
-  },
   test: {
     // Load environment variables from .env.test or other specified env file
     env: {

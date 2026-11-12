@@ -6,8 +6,6 @@
  * types based on the client's API version.
  */
 
-import type { CurrentUserV20260121 } from "../credentials/current_user_v20260121";
-import type { CurrentUserV20251028 } from "../credentials/current_user_v20251028";
 import type {
   AppCvmsBatchIsAllowedResponseV20260121,
   AppCvmsBatchIsAllowedResponseV20260522,
@@ -21,6 +19,10 @@ import type {
   IsAllowedResultV20260522,
 } from "../actions/cvms/check_cvm_is_allowed";
 import type {
+  CommitCvmProvisionV20260121,
+  CommitCvmProvisionV20260522,
+} from "../actions/cvms/commit_cvm_provision";
+import type {
   InstanceIdRefreshResultV20260121,
   InstanceIdRefreshResultV20260522,
 } from "../actions/cvms/refresh_cvm_instance_id";
@@ -28,10 +30,8 @@ import type {
   RefreshCvmInstanceIdsResponseV20260121,
   RefreshCvmInstanceIdsResponseV20260522,
 } from "../actions/cvms/refresh_cvm_instance_ids";
-import type {
-  CommitCvmProvisionV20260121,
-  CommitCvmProvisionV20260522,
-} from "../actions/cvms/commit_cvm_provision";
+import type { CurrentUserV20251028 } from "../credentials/current_user_v20251028";
+import type { CurrentUserV20260121 } from "../credentials/current_user_v20260121";
 import type {
   DstackAppListResponseV20251028,
   DstackAppWithCvmResponseV20251028,
@@ -43,15 +43,16 @@ import type {
   DstackAppWithCvmResponseV20260522,
 } from "./app_info_v20260121";
 import type { ApiVersion } from "./client";
+import type { VMForVersion } from "./cvm_info";
 import type {
   CvmDetailV20251028,
   CvmInfoV20251028,
   PaginatedCvmInfosV20251028,
 } from "./cvm_info_v20251028";
-import type { VMForVersion } from "./cvm_info";
 import type {
   CvmInfoDetailV20260121,
   CvmInfoDetailV20260522,
+  CvmInfoDetailV20261111,
   CvmInfoV20260121,
   CvmInfoV20260522,
   PaginatedCvmInfosV20260121,
@@ -61,7 +62,10 @@ import type {
 /**
  * Maps API version to the auth/me response type
  */
-export type GetCurrentUserResponse<V extends ApiVersion> = V extends "2026-05-22" | "2026-06-23"
+export type GetCurrentUserResponse<V extends ApiVersion> = V extends
+  | "2026-05-22"
+  | "2026-06-23"
+  | "2026-11-11"
   ? CurrentUserV20260121
   : V extends "2026-01-21"
     ? CurrentUserV20260121
@@ -72,7 +76,10 @@ export type GetCurrentUserResponse<V extends ApiVersion> = V extends "2026-05-22
 /**
  * Maps API version to the paginated CVM list response type
  */
-export type GetCvmListResponse<V extends ApiVersion> = V extends "2026-05-22" | "2026-06-23"
+export type GetCvmListResponse<V extends ApiVersion> = V extends
+  | "2026-05-22"
+  | "2026-06-23"
+  | "2026-11-11"
   ? PaginatedCvmInfosV20260522
   : V extends "2026-01-21"
     ? PaginatedCvmInfosV20260121
@@ -83,18 +90,23 @@ export type GetCvmListResponse<V extends ApiVersion> = V extends "2026-05-22" | 
 /**
  * Maps API version to the CVM info detail response type
  */
-export type GetCvmInfoResponse<V extends ApiVersion> = V extends "2026-05-22" | "2026-06-23"
-  ? CvmInfoDetailV20260522
-  : V extends "2026-01-21"
-    ? CvmInfoDetailV20260121
-    : V extends "2025-10-28"
-      ? CvmDetailV20251028
-      : CvmInfoDetailV20260121;
+export type GetCvmInfoResponse<V extends ApiVersion> = V extends "2026-11-11"
+  ? CvmInfoDetailV20261111
+  : V extends "2026-05-22" | "2026-06-23"
+    ? CvmInfoDetailV20260522
+    : V extends "2026-01-21"
+      ? CvmInfoDetailV20260121
+      : V extends "2025-10-28"
+        ? CvmDetailV20251028
+        : CvmInfoDetailV20260121;
 
 /**
  * Maps API version to the app list response type
  */
-export type GetAppListResponse<V extends ApiVersion> = V extends "2026-05-22" | "2026-06-23"
+export type GetAppListResponse<V extends ApiVersion> = V extends
+  | "2026-05-22"
+  | "2026-06-23"
+  | "2026-11-11"
   ? DstackAppListResponseV20260522
   : V extends "2026-01-21"
     ? DstackAppListResponseV20260121
@@ -105,7 +117,10 @@ export type GetAppListResponse<V extends ApiVersion> = V extends "2026-05-22" | 
 /**
  * Maps API version to the app info response type
  */
-export type GetAppInfoResponse<V extends ApiVersion> = V extends "2026-05-22" | "2026-06-23"
+export type GetAppInfoResponse<V extends ApiVersion> = V extends
+  | "2026-05-22"
+  | "2026-06-23"
+  | "2026-11-11"
   ? DstackAppWithCvmResponseV20260522
   : V extends "2026-01-21"
     ? DstackAppWithCvmResponseV20260121
@@ -116,7 +131,10 @@ export type GetAppInfoResponse<V extends ApiVersion> = V extends "2026-05-22" | 
 /**
  * Maps API version to the app CVMs list response type
  */
-export type GetAppCvmsResponse<V extends ApiVersion> = V extends "2026-05-22" | "2026-06-23"
+export type GetAppCvmsResponse<V extends ApiVersion> = V extends
+  | "2026-05-22"
+  | "2026-06-23"
+  | "2026-11-11"
   ? CvmInfoV20260522[]
   : V extends "2026-01-21"
     ? CvmInfoV20260121[]

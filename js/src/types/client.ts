@@ -1,16 +1,16 @@
-import { z } from "zod";
 import type { FetchOptions, FetchRequest } from "ofetch";
+import { z } from "zod";
 import type { PhalaCloudError } from "../utils/errors";
 
 /**
  * Supported API versions
  */
-export type ApiVersion = "2025-10-28" | "2026-01-21" | "2026-05-22" | "2026-06-23";
+export type ApiVersion = "2025-10-28" | "2026-01-21" | "2026-05-22" | "2026-06-23" | "2026-11-11";
 
 /**
  * Default API version (latest stable)
  */
-export type DefaultApiVersion = "2026-06-23";
+export type DefaultApiVersion = "2026-11-11";
 
 /**
  * Full HTTP response including status, headers, and parsed body

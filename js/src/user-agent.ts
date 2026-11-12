@@ -1,3 +1,5 @@
+import { sdkVersion } from "./version";
+
 /**
  * Runtime view used to build the default User-Agent. Tests pass a stub;
  * production uses globalThis.
@@ -47,7 +49,7 @@ export function defaultUserAgent(
     return undefined;
   }
 
-  const product = "phala-cloud-sdk-js/" + __SDK_VERSION__;
+  const product = "phala-cloud-sdk-js/" + sdkVersion;
   const token = runtimeToken(runtime);
   return token ? `${product} ${token}` : product;
 }
