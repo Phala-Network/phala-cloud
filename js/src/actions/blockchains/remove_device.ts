@@ -251,7 +251,7 @@ export async function removeDevice<T extends z.ZodTypeAny | false | undefined = 
   }
 
   // Resolve the contract generation and, on epoch-aware contracts, the rows to write
-  const writePlan = await resolveAppEpochWritePlan(publicClient, contractAddress, epoch);
+  const writePlan = await resolveAppEpochWritePlan(publicClient, contractAddress, epoch, "remove");
   const writtenEpochs: EpochsWritten | undefined = epochsWritten(writePlan);
 
   const removeDeviceOperation = async (clients: NetworkClients): Promise<Hash> => {

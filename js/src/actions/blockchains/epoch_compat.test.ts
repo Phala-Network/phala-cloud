@@ -39,6 +39,8 @@ interface ReaderOptions {
   /** Which generation the mocked contract reports. */
   generation: "legacy" | "epoch" | "silent";
   currentAppEpoch?: number;
+  /** Chain id reported by the client; the probe cache is keyed by it. */
+  chainId?: number;
   allowAnyDevice?: boolean;
   deviceAllowed?: boolean;
   composeHashAllowed?: boolean;
@@ -82,7 +84,13 @@ function createPublicClientMock(options: ReaderOptions) {
     }
   });
 
-  return { readContract } as unknown as PublicClient & { readContract: typeof readContract };
+  const client = { readContract } as unknown as PublicClient & {
+    readContract: typeof readContract;
+  };
+  if (options.chainId !== undefined) {
+    Object.assign(client, { chain: { id: options.chainId } });
+  }
+  return client;
 }
 
 function readCallsOf(publicClient: PublicClient, functionName: string): ReadCall[] {
@@ -224,6 +232,74 @@ describe("resolveAppEpochPlan", () => {
     });
   });
 
+  it("scopes the verdict cache by chain id: same address on two chains probes twice", async () => {
+    const baseClient = createPublicClientMock({ generation: "legacy", chainId: 8453 });
+    const ethClient = createPublicClientMock({ generation: "epoch", currentAppEpoch: 2, chainId: 1 });
+
+    await expect(resolveAppEpochPlan(baseClient, APP_ADDRESS)).resolves.toEqual({
+      kind: "legacy",
+    });
+    await expect(resolveAppEpochPlan(ethClient, APP_ADDRESS)).resolves.toEqual({
+      kind: "epoch",
+      currentAppEpoch: 2,
+    });
+
+    // The legacy verdict costs two probe reads (epoch marker, then legacy
+    // marker); the epoch verdict stops after the first marker. Both chains
+    // probed independently — a shared cache entry would have skipped one.
+    expect(readCallsOf(baseClient, "supportsInterface")).toHaveLength(2);
+    expect(readCallsOf(ethClient, "supportsInterface")).toHaveLength(1);
+  });
+
+  it("picks up a legacy → epoch proxy upgrade after the legacy verdict expires", async () => {
+    vi.useFakeTimers();
+    try {
+      const upgraded = { generation: "legacy" as "legacy" | "epoch", currentAppEpoch: 1 };
+      const publicClient = createPublicClientMock({
+        get generation() {
+          return upgraded.generation;
+        },
+        currentAppEpoch: 1,
+      });
+
+      await expect(resolveAppEpochPlan(publicClient, APP_ADDRESS)).resolves.toEqual({
+        kind: "legacy",
+      });
+
+      // The proxy is upgraded: the same address now answers as epoch-aware.
+      upgraded.generation = "epoch";
+
+      // Within the TTL the stale legacy verdict is still served…
+      await expect(resolveAppEpochPlan(publicClient, APP_ADDRESS)).resolves.toEqual({
+        kind: "legacy",
+      });
+
+      // …and after it the contract is re-probed.
+      vi.setSystemTime(Date.now() + 6 * 60 * 1000);
+      await expect(resolveAppEpochPlan(publicClient, APP_ADDRESS)).resolves.toEqual({
+        kind: "epoch",
+        currentAppEpoch: 1,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("never expires an epoch verdict: generations only move legacy → epoch", async () => {
+    vi.useFakeTimers();
+    try {
+      const publicClient = createPublicClientMock({ generation: "epoch", currentAppEpoch: 0 });
+
+      await resolveAppEpochPlan(publicClient, APP_ADDRESS);
+      vi.setSystemTime(Date.now() + 60 * 60 * 1000);
+      await resolveAppEpochPlan(publicClient, APP_ADDRESS);
+
+      expect(readCallsOf(publicClient, "supportsInterface")).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("forgets verdicts when the cache is cleared", async () => {
     const publicClient = createPublicClientMock({ generation: "epoch", currentAppEpoch: 0 });
 
@@ -278,6 +354,28 @@ describe("resolveAppEpochWritePlan", () => {
       fromEpoch: 4,
       toEpoch: 5,
     });
+  });
+
+  it("removals default to every writable epoch, history included", async () => {
+    const publicClient = createPublicClientMock({ generation: "epoch", currentAppEpoch: 4 });
+
+    // The contract still authorizes any epoch ≤ current, so a removal that
+    // skipped history would leave the value fetchable at older epochs.
+    await expect(
+      resolveAppEpochWritePlan(publicClient, APP_ADDRESS, undefined, "remove"),
+    ).resolves.toEqual({
+      kind: "epochs",
+      fromEpoch: 0,
+      toEpoch: 5,
+    });
+  });
+
+  it("an explicit epoch scopes even a removal to that epoch", async () => {
+    const publicClient = createPublicClientMock({ generation: "epoch", currentAppEpoch: 4 });
+
+    await expect(
+      resolveAppEpochWritePlan(publicClient, APP_ADDRESS, 2, "remove"),
+    ).resolves.toEqual({ kind: "epoch", epoch: 2 });
   });
 
   it("writes exactly the requested epoch", async () => {

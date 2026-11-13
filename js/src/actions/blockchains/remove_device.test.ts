@@ -152,18 +152,20 @@ describe("removeDevice", () => {
     expect(writeContract).not.toHaveBeenCalled();
   });
 
-  it("writes the current and next epoch when no epoch is requested", async () => {
+  it("revokes every writable epoch, history included, when no epoch is requested", async () => {
     useGeneration({ generation: "epoch", currentAppEpoch: 3 });
 
     const result = await removeDevice(request);
 
+    // The contract authorizes any epoch ≤ current: a removal must cover the
+    // historical rows too, or the device stays fetchable at older epochs.
     expect(writeContract).toHaveBeenCalledWith(
       expect.objectContaining({
         functionName: "removeDeviceAtEpochs",
-        args: [3n, 4n, DEVICE_ID_HEX],
+        args: [0n, 4n, DEVICE_ID_HEX],
       }),
     );
-    expect(result.epochsWritten).toEqual([3, 4]);
+    expect(result.epochsWritten).toEqual([0, 4]);
   });
 
   it("writes exactly the requested epoch", async () => {

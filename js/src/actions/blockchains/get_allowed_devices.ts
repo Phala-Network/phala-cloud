@@ -40,6 +40,11 @@ export type GetAllowedDevicesRequest = {
   appAddress: Address;
   /** Candidate device IDs to check against the on-chain allowlist. */
   deviceIds: string[];
+  /**
+   * Read the allowlist at this app epoch instead of the current one. Only
+   * meaningful on epoch-aware contracts; ignored on legacy contracts.
+   */
+  epoch?: number;
   publicClient?: PublicClient;
 };
 
@@ -90,7 +95,14 @@ async function readDeviceRows(
 export async function getAllowedDevices(
   request: GetAllowedDevicesRequest,
 ): Promise<GetAllowedDevices> {
-  const { chain, rpcUrl, appAddress, deviceIds, publicClient: providedPublicClient } = request;
+  const {
+    chain,
+    rpcUrl,
+    appAddress,
+    deviceIds,
+    epoch,
+    publicClient: providedPublicClient,
+  } = request;
 
   const contractAddress = (appAddress.startsWith("0x") ? appAddress : `0x${appAddress}`) as Address;
 
@@ -132,7 +144,12 @@ export async function getAllowedDevices(
     devices = [];
   } else {
     const epochPlan = await resolveAppEpochPlan(publicClient, contractAddress);
-    const allowedFlags = await readDeviceRows(publicClient, contractAddress, epochPlan, deviceIds);
+    // An explicit epoch override reads that row instead of the current one.
+    const readPlan: AppEpochPlan =
+      epochPlan.kind === "epoch" && epoch !== undefined
+        ? { kind: "epoch", currentAppEpoch: epoch }
+        : epochPlan;
+    const allowedFlags = await readDeviceRows(publicClient, contractAddress, readPlan, deviceIds);
 
     devices = deviceIds
       .map((deviceId, i) => ({

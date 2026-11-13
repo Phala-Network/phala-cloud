@@ -60,8 +60,11 @@ export type AppEpochPlan = { kind: "legacy" } | { kind: "epoch"; currentAppEpoch
  *
  * - `legacy` — epoch-less setter on a contract without epochs;
  * - `epoch` — `…AtEpoch(epoch, value)`, the caller named the epoch;
- * - `epochs` — `…AtEpochs(fromEpoch, toEpoch, value)`, the default
- *   `[currentAppEpoch, currentAppEpoch + 1]` range.
+ * - `epochs` — `…AtEpochs(fromEpoch, toEpoch, value)`, the default range:
+ *   `[currentAppEpoch, currentAppEpoch + 1]` for additions, and
+ *   `[0, currentAppEpoch + 1]` for removals — the contract still authorizes
+ *   any epoch ≤ current (`appEpoch > currentAppEpoch` is the only bound), so
+ *   a removal that skips historical epochs leaves the old rows fetchable.
  */
 export type AppEpochWritePlan =
   | { readonly kind: "legacy" }
@@ -77,13 +80,29 @@ export type AppPolicyWriteContext = {
 };
 
 /**
- * Probe verdicts, keyed by lowercased contract address.
+ * Probe verdicts, keyed by chain id and lowercased contract address.
  *
- * Only the generation is cached: `currentAppEpoch` is a moving policy fact and
- * is re-read on every resolve, so a cached plan can never write or read a stale
- * epoch after `advanceAppEpoch`.
+ * Two facts shape the cache:
+ *
+ * - Only the generation is cached: `currentAppEpoch` is a moving policy fact
+ *   and is re-read on every resolve, so a cached plan can never write or read
+ *   a stale epoch after `advanceAppEpoch`.
+ * - An `"epoch"` verdict is permanent (upgrades only go legacy → epoch), but a
+ *   `"legacy"` verdict expires after {@link LEGACY_VERDICT_TTL_MS} so a proxy
+ *   upgrade is picked up by long-lived processes without a restart.
  */
-const generationCache = new Map<string, AppContractGeneration>();
+const LEGACY_VERDICT_TTL_MS = 5 * 60 * 1000;
+
+type CachedGeneration = {
+  readonly generation: AppContractGeneration;
+  readonly expiresAt: number;
+};
+
+const generationCache = new Map<string, CachedGeneration>();
+
+function generationCacheKey(publicClient: PublicClient, contractAddress: Address): string {
+  return `${publicClient.chain?.id ?? "unknown"}:${contractAddress.toLowerCase()}`;
+}
 
 /** Drop cached probe verdicts; meant for tests and long-lived processes. */
 export function clearAppEpochProbeCache(): void {
@@ -182,12 +201,19 @@ export async function resolveAppEpochPlan(
   publicClient: PublicClient,
   appContractAddress: Address,
 ): Promise<AppEpochPlan> {
-  const cacheKey = appContractAddress.toLowerCase();
+  const cacheKey = generationCacheKey(publicClient, appContractAddress);
 
-  let generation = generationCache.get(cacheKey);
+  const cached = generationCache.get(cacheKey);
+  let generation =
+    cached && (cached.generation === "epoch" || cached.expiresAt > Date.now())
+      ? cached.generation
+      : undefined;
   if (generation === undefined) {
     generation = await probeGeneration(publicClient, appContractAddress);
-    generationCache.set(cacheKey, generation);
+    generationCache.set(cacheKey, {
+      generation,
+      expiresAt: Date.now() + LEGACY_VERDICT_TTL_MS,
+    });
   }
 
   if (generation === "legacy") return { kind: "legacy" };
@@ -220,14 +246,22 @@ function requireWritableEpoch(
  * - legacy contract — the epoch-less setter; an explicit `epoch` is an error
  *   because the contract cannot express it;
  * - epoch-aware contract with `epoch` — write exactly that epoch;
- * - epoch-aware contract without `epoch` — write `[currentAppEpoch,
- *   currentAppEpoch + 1]`, because rows are not inherited across epochs and the
- *   contract caps writes at `currentAppEpoch + 1`.
+ * - epoch-aware contract without `epoch` — additions write
+ *   `[currentAppEpoch, currentAppEpoch + 1]` (the contract caps writes at
+ *   `currentAppEpoch + 1`), removals write `[0, currentAppEpoch + 1]` because
+ *   the contract still authorizes every epoch ≤ current, so skipping history
+ *   would leave the revoked value fetchable at older epochs.
+ *
+ * The plan is computed from a `currentAppEpoch` read taken before signing. An
+ * `advanceAppEpoch` landing between the read and execution is not detectable
+ * on-chain (historical epochs stay writable), so the guarantee is "current
+ * and next as of planning time", not as of execution.
  */
 export async function resolveAppEpochWritePlan(
   publicClient: PublicClient,
   appContractAddress: Address,
   requestedEpoch?: number,
+  change: "add" | "remove" = "add",
 ): Promise<AppEpochWritePlan> {
   const plan = await resolveAppEpochPlan(publicClient, appContractAddress);
 
@@ -244,7 +278,7 @@ export async function resolveAppEpochWritePlan(
   if (requestedEpoch === undefined) {
     return {
       kind: "epochs",
-      fromEpoch: plan.currentAppEpoch,
+      fromEpoch: change === "remove" ? 0 : plan.currentAppEpoch,
       toEpoch: plan.currentAppEpoch + 1,
     };
   }
