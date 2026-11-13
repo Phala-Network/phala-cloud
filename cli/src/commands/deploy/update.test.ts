@@ -12,14 +12,12 @@ import {
 	describe,
 	expect,
 	mock,
-	spyOn,
 	test,
 } from "bun:test";
 import os from "node:os";
 import path from "node:path";
 import fs from "fs-extra";
 import type { CommandContext } from "@/src/core/types";
-import { logger } from "@/src/utils/logger";
 
 // Other test files replace @phala/cloud and @/src/lib/client with
 // mock.module, and bun keeps module mocks for the rest of the process. Load
@@ -507,28 +505,50 @@ describe("phala deploy --cvm-id", () => {
 		expect(recallDevOsMode(VM_UUID)).toBe("dev-box");
 	});
 
-	test("says so when the deployed compose cannot be read", async () => {
-		// No compose in the payload, but the server says the CVM has SSH: the
-		// CLI must not silently treat that as "SSH should be off".
+	test("refuses an update it cannot decide, instead of dropping SSH", async () => {
+		// No compose in the payload, but the server says the CVM has SSH: the CLI
+		// must not treat "unknown" as "SSH is off" and send a compose without the
+		// dev box.
 		respond = (method, urlPath) =>
 			method === "GET" && /^\/api\/v1\/cvms\/[^/]+$/.test(urlPath)
 				? Response.json(cvmInfo({ enabled_ssh_access: true }))
 				: undefined;
-		const warn = spyOn(logger, "warn").mockImplementation(() => {});
-		try {
-			const { exitCode, failure } = await deploy({});
 
-			expect(failure).toBeUndefined();
-			expect(exitCode).toBe(0);
-			expect(warn).toHaveBeenCalledWith(
-				expect.stringContaining(
-					"cannot tell whether that comes from a dev box",
-				),
-			);
-			expect(updateRequest().body?.docker_compose_file).toBe(COMPOSE);
-		} finally {
-			warn.mockRestore();
-		}
+		const { exitCode, failure } = await deploy({});
+
+		expect(exitCode).toBe(1);
+		expect((failure as Error).message).toContain(
+			"cannot tell whether that comes from a dev box",
+		);
+		expect(requests.some((request) => request.method === "PATCH")).toBe(false);
+
+		// An explicit choice gets through.
+		requests = [];
+		const retry = await deploy({ devOs: false });
+		expect(retry.exitCode).toBe(0);
+		expect(updateRequest().body?.docker_compose_file).toBe(COMPOSE);
+	});
+
+	test("keeps a dev box the local compose already carries", async () => {
+		// The CVM has a hand-written dev box (custom volume names) and so does the
+		// compose on disk: carrying it over must not stack a second box on it.
+		const localPath = path.join(tmpDir, "dev-box-compose.yml");
+		await fs.writeFile(localPath, DEPLOYED_DEV_BOX);
+		respond = (method, urlPath) =>
+			method === "GET" && /^\/api\/v1\/cvms\/[^/]+$/.test(urlPath)
+				? Response.json(
+						cvmInfo({
+							compose_file: { docker_compose_file: DEPLOYED_DEV_BOX },
+						}),
+					)
+				: undefined;
+
+		const { exitCode, failure } = await deploy({ compose: localPath });
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(updateRequest().body?.docker_compose_file).toBe(DEPLOYED_DEV_BOX);
+		expect(recallDevOsMode(VM_UUID)).toBe("dev-box");
 	});
 
 	test("rejects --init-script file paths on update before any request", async () => {

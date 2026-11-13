@@ -353,16 +353,69 @@ function hasDevBoxMarkers(service: YamlMapping): boolean {
 	);
 }
 
-/** The keys a service declares in `environment`, in list or mapping form. */
-function environmentKeys(service: YamlMapping): string[] {
+/**
+ * The whole `SSH_AUTHORIZED_KEYS` value, when it passes the platform keys
+ * through: `$DSTACK_AUTHORIZED_KEYS`, `${DSTACK_AUTHORIZED_KEYS}`, or either
+ * default form (`${DSTACK_AUTHORIZED_KEYS:-...}` / `${DSTACK_AUTHORIZED_KEYS-...}`).
+ *
+ * Anchored on purpose, and deliberately narrow — it mirrors the launch form's
+ * `bindsAuthorizedKeys`:
+ * - `:+` / `+` substitute an *alternate* value when the variable is set, so
+ *   `${DSTACK_AUTHORIZED_KEYS:+x}` hands sshd `x` instead of the keys;
+ * - `:?` / `?` substitute the error text, with the same effect;
+ * - `$${...}` is compose's escape for a literal `$`, so nothing is expanded;
+ * - any prefix or suffix (`prefix${...}`, `${...}suffix`) makes the variable
+ *   part of a larger string, which is not a key list any more.
+ */
+const AUTHORIZED_KEYS_REFERENCE =
+	/^\$(?:DSTACK_AUTHORIZED_KEYS|\{DSTACK_AUTHORIZED_KEYS(?::?-.*)?\})$/;
+
+/**
+ * A service's `environment`, in list or mapping form, as name/value pairs.
+ *
+ * The value is null when the entry only names a variable (`KEY:` in a mapping,
+ * a bare `KEY` in a list), which compose fills from the host environment — no
+ * binding of its own.
+ */
+function serviceEnvironment(
+	service: YamlMapping,
+): Array<{ name: string; value: string | null }> {
 	const environment = service.environment;
 	const mapping = asMapping(environment);
-	if (mapping) return Object.keys(mapping);
+	if (mapping) {
+		return Object.entries(mapping).map(([name, value]) => ({
+			name: name.trim(),
+			value: typeof value === "string" ? value.trim() : null,
+		}));
+	}
 	if (!Array.isArray(environment)) return [];
 	return environment.map((entry) => {
 		const text = typeof entry === "string" ? entry : "";
-		return text.split("=")[0].trim();
+		const separator = text.indexOf("=");
+		if (separator < 0) return { name: text.trim(), value: null };
+		return {
+			name: text.slice(0, separator).trim(),
+			value: text.slice(separator + 1).trim(),
+		};
 	});
+}
+
+/**
+ * Whether the dev box's env actually delivers the platform's key variable.
+ *
+ * The name alone is not a binding: `SSH_AUTHORIZED_KEYS=` and
+ * `SSH_AUTHORIZED_KEYS=${SOME_OTHER_VAR}` both declare it and hand sshd
+ * nothing, so a service carrying either is not the box this platform relies on
+ * — it is refused, never skipped as if it were canonical. The whole value has
+ * to be the variable; see `AUTHORIZED_KEYS_REFERENCE`.
+ */
+function bindsAuthorizedKeys(service: YamlMapping): boolean {
+	return serviceEnvironment(service).some(
+		(entry) =>
+			entry.name === DEV_BOX_ENV_KEY &&
+			entry.value !== null &&
+			AUTHORIZED_KEYS_REFERENCE.test(entry.value),
+	);
 }
 
 /** A service's volume mounts, short (`src:dst[:opts]`) or long syntax. */
@@ -393,9 +446,9 @@ function serviceMounts(service: YamlMapping): Array<{
  * Whether a service is the dev box the platform can rely on.
  *
  * The marks: the exact image this CLI injects, all four markers, nothing that
- * replaces or delays the entrypoint (`command`, `profiles`, `entrypoint`), the
- * `SSH_AUTHORIZED_KEYS` key the entrypoint merges (its value is the user's, so
- * only the name is compared), and every mount the SSH server reads keys from.
+ * replaces or delays the entrypoint (`command`, `profiles`, `entrypoint`), an
+ * `SSH_AUTHORIZED_KEYS` value that is the platform variable and nothing else
+ * (see `bindsAuthorizedKeys`), and every mount the SSH server reads keys from.
  *
  * The launch form's `isPlatformDevBox` checks the same fields but treats an
  * empty `entrypoint` as unset; compose does not, so this one does not either.
@@ -409,7 +462,7 @@ export function isCanonicalDevBoxService(service: unknown): boolean {
 	for (const field of DEV_BOX_DISQUALIFYING_FIELDS) {
 		if (!isBlank(mapping[field])) return false;
 	}
-	if (!environmentKeys(mapping).includes(DEV_BOX_ENV_KEY)) return false;
+	if (!bindsAuthorizedKeys(mapping)) return false;
 	const mounts = serviceMounts(mapping);
 	return DEV_BOX_REQUIRED_MOUNTS.every(([source, target]) =>
 		mounts.some((mount) => mount.source === source && mount.target === target),

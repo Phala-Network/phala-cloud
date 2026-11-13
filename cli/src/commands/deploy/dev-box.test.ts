@@ -14,6 +14,7 @@ import {
 	composeHasDevBoxMarkers,
 	findOsImage,
 	injectDevBoxService,
+	isCanonicalDevBoxService,
 	parseImageVersion,
 	resolveDevOsPlan,
 } from "./dev-box";
@@ -797,6 +798,95 @@ services:
 	test("does not treat unrelated JSON as a dev box", () => {
 		expect(composeHasDevBoxMarkers(JSON.stringify({ name: "raw" }))).toBe(
 			false,
+		);
+	});
+});
+
+/**
+ * The env binding, not the env name: the dev box only delivers the platform's
+ * keys when the whole value is `DSTACK_AUTHORIZED_KEYS` itself, which is what
+ * the launch form's `bindsAuthorizedKeys` requires too.
+ */
+describe("dev-box SSH_AUTHORIZED_KEYS binding", () => {
+	/** A canonical dev box whose `environment` is the argument. */
+	function service(environment: unknown) {
+		return {
+			image: DEV_BOX_IMAGE,
+			privileged: true,
+			pid: "host",
+			network_mode: "host",
+			uts: "host",
+			environment,
+			volumes: [
+				"/:/host:rslave",
+				"ssh-host-keys:/etc/ssh/host-keys",
+				"home:/root",
+			],
+		};
+	}
+
+	test.each([
+		["list, braced", ["SSH_AUTHORIZED_KEYS=${DSTACK_AUTHORIZED_KEYS}"]],
+		["list, bare", ["SSH_AUTHORIZED_KEYS=$DSTACK_AUTHORIZED_KEYS"]],
+		[
+			"list, default when unset or empty",
+			["SSH_AUTHORIZED_KEYS=${DSTACK_AUTHORIZED_KEYS:-fallback}"],
+		],
+		[
+			"map, default when unset",
+			{ SSH_AUTHORIZED_KEYS: "${DSTACK_AUTHORIZED_KEYS-fallback}" },
+		],
+	])("accepts %s", (_label, environment) => {
+		expect(isCanonicalDevBoxService(service(environment))).toBe(true);
+	});
+
+	test.each([
+		[
+			"the alternate value form",
+			["SSH_AUTHORIZED_KEYS=${DSTACK_AUTHORIZED_KEYS:+not-a-key}"],
+		],
+		[
+			"the bare alternate form",
+			["SSH_AUTHORIZED_KEYS=${DSTACK_AUTHORIZED_KEYS+x}"],
+		],
+		[
+			"the error form",
+			["SSH_AUTHORIZED_KEYS=${DSTACK_AUTHORIZED_KEYS:?missing}"],
+		],
+		[
+			"the bare error form",
+			["SSH_AUTHORIZED_KEYS=${DSTACK_AUTHORIZED_KEYS?missing}"],
+		],
+		["the escaped literal", ["SSH_AUTHORIZED_KEYS=$${DSTACK_AUTHORIZED_KEYS}"]],
+		["a prefix", ["SSH_AUTHORIZED_KEYS=key-${DSTACK_AUTHORIZED_KEYS}"]],
+		["a suffix", ["SSH_AUTHORIZED_KEYS=${DSTACK_AUTHORIZED_KEYS}-end"]],
+		["an empty value", ["SSH_AUTHORIZED_KEYS="]],
+		["another variable", ["SSH_AUTHORIZED_KEYS=${SOME_OTHER_VAR}"]],
+		["a list entry with no binding", ["SSH_AUTHORIZED_KEYS"]],
+		["a map entry with no value", { SSH_AUTHORIZED_KEYS: null }],
+	])("rejects %s", (_label, environment) => {
+		expect(isCanonicalDevBoxService(service(environment))).toBe(false);
+	});
+
+	test("a non-canonical binding is refused, not skipped as a dev box", () => {
+		const compose = `services:
+  ssh:
+    image: ${DEV_BOX_IMAGE}
+    privileged: true
+    pid: host
+    network_mode: host
+    uts: host
+    environment:
+      - SSH_AUTHORIZED_KEYS=\${DSTACK_AUTHORIZED_KEYS:+not-a-key}
+    volumes:
+      - /:/host:rslave
+      - ssh-host-keys:/etc/ssh/host-keys
+      - home:/root
+`;
+
+		expect(composeHasDevBox(compose)).toBe(false);
+		expect(() => injectDevBoxService(compose)).toThrow(
+			/uses the dev-box image but is not configured as the dev box/,
 		);
 	});
 });

@@ -383,6 +383,35 @@ describe("phala deploy (create)", () => {
 		expect(body.prefer_dev).toBe(false);
 	});
 
+	test("refuses --dev-os when the compose only carries the markers", async () => {
+		const markedPath = path.join(tmpDir, "marked-compose.yml");
+		await fs.writeFile(
+			markedPath,
+			`services:
+  app:
+    image: nginx
+    privileged: true
+    pid: host
+    network_mode: host
+    uts: host
+`,
+		);
+
+		const { exitCode, failure } = await deploy({
+			compose: markedPath,
+			devOs: true,
+			image: "dstack-0.6.0",
+		});
+
+		// An explicit --dev-os asks for a usable dev box: a service that only
+		// carries the markers is reported, never accepted as if SSH were there.
+		expect(exitCode).toBe(1);
+		expect((failure as Error).message).toContain(
+			"which Phala Cloud reads as the dev box",
+		);
+		expect(requests.some((request) => request.method === "POST")).toBe(false);
+	});
+
 	test("does not inject a local key into a 0.6 dev box", async () => {
 		const { exitCode, failure } = await deploy({
 			compose: composePath,

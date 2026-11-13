@@ -501,31 +501,46 @@ type DevOsStateChange =
 	| { readonly kind: "remember"; readonly mode: DevOsMode }
 	| { readonly kind: "forget" };
 
+/**
+ * Where a dev box decision came from.
+ *
+ * `flag` is an explicit `--dev-os` and is always authored strictly. `carried`
+ * means the CVM already had the dev box according to its record or its deployed
+ * compose: the payload keeps whatever it already carries, because the user did
+ * not ask for a second box this time.
+ */
+type DevOsOrigin = "flag" | "carried";
+
 /** What the dev OS step decided, and what to record once it succeeded. */
 interface DevOsResolution {
 	/** How this deployment satisfies `--dev-os`, when it does. */
 	readonly plan?: DevOsPlan;
 	/** The state write to commit once the deployment has been applied. */
 	readonly stateChange?: DevOsStateChange;
+	/** Where the plan came from; decides whether authoring is strict. */
+	readonly origin?: DevOsOrigin;
 }
 
 /**
  * The compose a deployment sends: the caller's payload, plus the dev box when
  * the resolved mode asks for it.
  *
- * Idempotent: a payload the backend already reads as a dev box (the four
- * markers) comes back unchanged, whoever wrote it and whatever the service is
- * called. Adding the canonical box beside a hand-written one would only put two
- * containers on the host's port 22.
+ * Always the strict injector, never a marker shortcut. A request that names
+ * `--dev-os` asks for a dev box this platform can rely on, and a compose that
+ * merely carries the four markers on something else (`network_mode: host` on an
+ * nginx, a `command: sleep`, a `profiles` list, a service using the dev-box
+ * image without its mounts) must be reported, not accepted as if SSH were
+ * already provided. `composeHasDevBoxMarkers` is the backend's SSH verdict and
+ * is used for the key channel, never to skip authoring.
+ *
+ * Idempotent for the canonical box itself: re-running it returns the payload
+ * unchanged with `added: false`.
  */
 export function composeForDevOs(
 	composeYaml: string,
 	devOsMode: DevOsMode | undefined,
 ): { compose: string; added: boolean } {
 	if (devOsMode !== "dev-box") return { compose: composeYaml, added: false };
-	if (composeHasDevBoxMarkers(composeYaml)) {
-		return { compose: composeYaml, added: false };
-	}
 	const compose = injectDevBoxService(composeYaml);
 	return { compose, added: compose !== composeYaml };
 }
@@ -638,7 +653,10 @@ async function resolveDevOsTarget(
 			logger.info(
 				`Re-using the dev OS setting recorded for this CVM (${recorded}).`,
 			);
-			return { plan: { mode: recorded, image: options.image } };
+			return {
+				plan: { mode: recorded, image: options.image },
+				origin: "carried",
+			};
 		}
 		if (target.compose !== undefined) {
 			if (!composeHasDevBoxMarkers(target.compose)) return {};
@@ -648,11 +666,14 @@ async function resolveDevOsTarget(
 			return {
 				plan: { mode: "dev-box", image: options.image },
 				stateChange: { kind: "remember", mode: "dev-box" },
+				origin: "carried",
 			};
 		}
 		if (target.sshAccessEnabled === true) {
-			logger.warn(
-				"This CVM has SSH access and Phala Cloud did not return its compose, so the CLI cannot tell whether that comes from a dev box. Pass --dev-os to keep the dev box, or --no-dev-os to drop it.",
+			// Unknown is not "off": the CVM has SSH access and the server did not
+			// say how, so sending a compose without a dev box could remove it.
+			throw new Error(
+				"This CVM has SSH access and Phala Cloud did not return its compose, so the CLI cannot tell whether that comes from a dev box. Pass --dev-os to keep the dev box, or --no-dev-os to drop it, then retry the update.",
 			);
 		}
 		return {};
@@ -662,7 +683,11 @@ async function resolveDevOsTarget(
 	const identifier = requireDevOsImage(options.image);
 	const catalog = await listOsImageCatalog(client);
 	const plan = resolveDevOsPlan(identifier, catalog);
-	return { plan, stateChange: { kind: "remember", mode: plan.mode } };
+	return {
+		plan,
+		stateChange: { kind: "remember", mode: plan.mode },
+		origin: "flag",
+	};
 }
 
 /**
@@ -1930,7 +1955,14 @@ export async function runDeploy(
 					"--dev-os cannot add the dev-box service to an --app-compose payload. Add it to that file's docker_compose_file yourself.",
 				);
 			} else {
-				const prepared = composeForDevOs(composeSource, devOsMode);
+				// A carried dev box is the user's own: keep the payload as it is when
+				// it already ships one, so the update never stacks a second container
+				// on port 22. An explicit flag is always authored strictly.
+				const keepCarried =
+					devOs.origin === "carried" && composeHasDevBoxMarkers(composeSource);
+				const prepared = keepCarried
+					? { compose: composeSource, added: false }
+					: composeForDevOs(composeSource, devOsMode);
 				docker_compose_yml = prepared.compose;
 				logger.info(
 					prepared.added

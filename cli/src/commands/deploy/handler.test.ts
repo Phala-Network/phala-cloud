@@ -1204,14 +1204,47 @@ describe("deploy --dev-os compose preparation", () => {
 		).toContain("dev-box:");
 	});
 
-	test("leaves a compose the backend already reads as a dev box alone", () => {
-		// Hand-written, with custom volume names: not the shape the CLI injects,
-		// but the markers are what the backend reads, so a second box would only
-		// fight over port 22.
-		const prepared = composeForDevOs(CUSTOM_VOLUME_DEV_BOX, "dev-box");
-
-		expect(prepared.added).toBe(false);
-		expect(prepared.compose).toBe(CUSTOM_VOLUME_DEV_BOX);
+	test.each([
+		[
+			"the markers on another image",
+			`services:
+  app:
+    image: nginx
+    privileged: true
+    pid: host
+    network_mode: host
+    uts: host
+`,
+		],
+		[
+			"a dev box whose entrypoint runs something else",
+			`services:
+  app:
+    image: nginx
+    privileged: true
+    pid: host
+    network_mode: host
+    uts: host
+    command: ["sleep", "infinity"]
+`,
+		],
+		[
+			"a dev box parked behind a profile",
+			`services:
+  app:
+    image: nginx
+    privileged: true
+    pid: host
+    network_mode: host
+    uts: host
+    profiles: [debug]
+`,
+		],
+		["the dev-box image without its mounts", CUSTOM_VOLUME_DEV_BOX],
+	])("refuses --dev-os when %s is not a usable dev box", (_label, compose) => {
+		// An explicit --dev-os asks for a dev box; a payload that only carries
+		// the markers is reported, never accepted as if SSH were already there.
+		expect(() => composeForDevOs(compose, "dev-box")).toThrow();
 	});
 
 	test("adds nothing when the mode is not the dev box", () => {
