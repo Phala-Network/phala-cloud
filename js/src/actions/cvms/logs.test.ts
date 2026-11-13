@@ -81,6 +81,152 @@ afterEach(() => {
 });
 
 describe("CVM log access", { timeout: 20_000 }, () => {
+  test("long idle read failures do not exhaust the follow budget", async () => {
+    const controller = new AbortController();
+    const output: string[] = [];
+    let elapsed = 0;
+    const now = Date.now.bind(Date);
+    vi.spyOn(Date, "now").mockImplementation(() => now() + elapsed);
+    let clock = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => (clock += 2000));
+    fetchImplementation = async () => {
+      if (fetchMock.mock.calls.length > 5) return new Response("recovered\n");
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          async pull(stream) {
+            await new Promise((resolve) => setTimeout(resolve, 1));
+            elapsed += 125_000;
+            stream.error(new TypeError("terminated"));
+          },
+        }),
+      );
+    };
+    await streamCvmChannelLogs(
+      mockClient(),
+      "app_test",
+      "serial",
+      (data) => {
+        output.push(data);
+        controller.abort();
+      },
+      {},
+      controller.signal,
+    );
+    expect(output).toEqual(["recovered\n"]);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  test.each(["text", "ndjson", "entries"] as const)(
+    "%s retries interrupted initial history without replacing the filter",
+    async (mode) => {
+      const controller = new AbortController();
+      const output: string[] = [];
+      const record =
+        mode === "text"
+          ? "2026-11-09T12:00:00Z historical\n"
+          : JSON.stringify({
+              channel: "stdout",
+              message: "2026-11-09T12:00:00Z historical\n",
+            }) + "\n";
+      fetchImplementation = async () => {
+        if (fetchMock.mock.calls.length > 1) return new Response(record);
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(stream) {
+              stream.enqueue(new TextEncoder().encode(record.slice(0, 15)));
+              stream.error(
+                Object.assign(new Error("connection reset"), {
+                  code: "ECONNRESET",
+                }),
+              );
+            },
+          }),
+        );
+      };
+      const receive = (message: string) => {
+        output.push(message);
+        controller.abort();
+      };
+      const options = { tail: 1000, since: 1794220000 };
+      if (mode === "entries") {
+        await streamContainerLogsEntries(
+          mockClient(),
+          "app_test",
+          (entry) => receive(entry.message),
+          options,
+          controller.signal,
+        );
+      } else {
+        await streamContainerLogs(
+          mockClient(),
+          "app_test",
+          receive,
+          { ...options, format: mode },
+          controller.signal,
+        );
+      }
+      expect(output).toEqual(["historical\n"]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const retry = new URL(String(fetchMock.mock.calls[1]?.[0]));
+      expect(retry.searchParams.get("tail")).toBe("1000");
+      expect(retry.searchParams.get("since")).toBe("1794220000");
+    },
+  );
+
+  test("node follow survives five quick clean empty responses", async () => {
+    const controller = new AbortController();
+    const output: string[] = [];
+    fetchImplementation = async () =>
+      new Response(fetchMock.mock.calls.length > 5 ? "recovered\n" : "");
+    await streamCvmChannelLogs(
+      mockClient(),
+      "app_test",
+      "serial",
+      (line) => {
+        output.push(line);
+        controller.abort();
+      },
+      {},
+      controller.signal,
+    );
+    expect(output).toEqual(["recovered\n"]);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  test("a past until does not turn long no-progress failures into infinite retries", async () => {
+    let elapsed = 0;
+    const now = Date.now.bind(Date);
+    vi.spyOn(Date, "now").mockImplementation(() => now() + elapsed);
+    let clock = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => (clock += 2000));
+    fetchImplementation = async () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          async pull(stream) {
+            await new Promise((resolve) => setTimeout(resolve, 1));
+            elapsed += 125_000;
+            stream.error(new TypeError("terminated"));
+          },
+        }),
+      );
+    await expect(
+      streamContainerLogsEntries(mockClient(), "app_test", () => {}, {
+        until: 1,
+      }),
+    ).rejects.toThrow("terminated");
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  test("callback TypeError is not mistaken for a network failure", async () => {
+    fetchImplementation = async () => new Response("record\n");
+    await expect(
+      streamCvmChannelLogs(mockClient(), "app_test", "serial", () => {
+        throw new TypeError("callback failed");
+      }),
+    ).rejects.toThrow("callback failed");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   test("node follow reconnects with tail=0 and drops only exact heartbeat lines", async () => {
     const client = mockClient();
     const controller = new AbortController();

@@ -389,12 +389,154 @@ def test_long_idle_eof_keeps_following(mode: str, clock: FakeClock, backoffs: li
 
 
 @pytest.mark.parametrize("mode", MODES)
-def test_tail_0_quiet_reconnect_uses_first_200_second(mode: str, clock: FakeClock) -> None:
-    server = LogServer(
-        [http_error(503, "ERR-17-012"), body(), body(record("later\n"))],
+@pytest.mark.parametrize("fmt", [None, "text"])
+def test_regression_idle_incomplete_chunked_reconnects(
+    mode: str, fmt: str | None, clock: FakeClock
+) -> None:
+    class Incomplete(_Body):
+        def _end(self) -> None:
+            self._clock.monotonic += 125
+            self._clock.wall += 125
+            raise httpx.RemoteProtocolError("incomplete chunked read")
+
+    class IncompleteServer(LogServer):
+        def handler(self, request: httpx.Request) -> httpx.Response:
+            response = super().handler(request)
+            if len(self.log_calls) <= 6:
+                response.stream = Incomplete(body(), clock)
+            return response
+
+    marker = "recovery marker\n"
+    server = IncompleteServer(
+        [body()] * 6 + [body(marker if fmt == "text" else record(marker))], clock
+    )
+    items, error = run_follow(server, mode, source=CONTAINER, format=fmt, limit=1)
+    assert error is None
+    assert items == ([marker] if fmt == "text" else [{"channel": "stdout", "message": marker}])
+    assert len(server.log_calls) == 7
+
+
+@pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize("scenario", ["history", "truncated", "progress"])
+def test_regression_past_until_keeps_retry_budget(
+    mode: str, scenario: str, clock: FakeClock
+) -> None:
+    history = record(stamp(1, "history\n"))
+    broken = body(idle_seconds=11, read_error=True)
+    if scenario == "history":
+        replies = [broken, body(history)]
+    elif scenario == "truncated":
+        replies = [broken] * 5
+    else:
+        replies = [broken] * 4 + [body(history, idle_seconds=11, read_error=True)] + [broken] * 4
+    server = LogServer(replies, clock)
+    items, error = run_follow(server, mode, source=CONTAINER, until=BASE_SECOND - 1)
+    if scenario == "history":
+        assert error is None
+        assert items == [{"channel": "stdout", "message": "history\n"}]
+        assert len(server.log_calls) == 2
+    else:
+        assert isinstance(error, httpx.ReadError)
+        expected = [{"channel": "stdout", "message": "history\n"}] if scenario == "progress" else []
+        assert items == expected
+        assert len(server.log_calls) == (9 if scenario == "progress" else 5)
+
+
+@pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize("fmt", [None, "text"])
+def test_regression_interrupted_initial_history_preserves_tail(
+    mode: str, fmt: str | None, clock: FakeClock
+) -> None:
+    history = stamp(1, "history\n")
+    live = stamp(2, "live\n")
+    payload = history + live if fmt == "text" else record(history) + record(live)
+    server = LogServer([body(payload[:10], read_error=True), body(payload)], clock)
+    items, error = run_follow(server, mode, source=CONTAINER, format=fmt, tail=25, limit=2)
+    assert error is None
+    assert [item if isinstance(item, str) else item["message"] for item in items] == [
+        "history\n",
+        "live\n",
+    ]
+    assert all("tail=25" in url and "since=" not in url for url in server.log_calls)
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_target_expiry_between_healthy_idle_streams_and_cursor_recovery(
+    mode: str, clock: FakeClock
+) -> None:
+    expired = http_error(401, "ERR-17-003", "URL expired")
+    first = record(stamp(1, "same\n"))
+    marker = record(stamp(2, "marker\n"))
+
+    class RotatingServer(LogServer):
+        def api_get(self, path: str) -> dict[str, object]:
+            if path.endswith("/composition"):
+                return super().api_get(path)
+            self.api_calls.append(path)
+            return {
+                **DETAIL,
+                "logs": {**DETAIL["logs"], "auth_query": f"sig={len(self.api_calls)}"},
+            }
+
+    server = RotatingServer(
+        [body(first, read_error=True)]
+        + [reply for _ in range(5) for reply in (expired, body(idle_seconds=11, read_error=True))]
+        + [expired, body(first + marker)],
         clock,
     )
-    items, error = run_follow(server, mode, source=CONTAINER, tail=0, limit=1)
+    items, error = run_follow(server, mode, source=CONTAINER, limit=2)
+    assert error is None
+    assert [item["message"] for item in items] == ["same\n", "marker\n"]
+    assert len({url.split("sig=")[1].split("&")[0] for url in server.log_calls}) == 13
+    assert all(f"since={BASE_SECOND + 1}" in url for url in server.log_calls[1:])
+
+
+@pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize("slow", ["lookup", "response"])
+def test_target_slow_unaccepted_requests_do_not_reset_failure_budget(
+    mode: str, slow: str, clock: FakeClock
+) -> None:
+    class SlowServer(LogServer):
+        def api_get(self, path: str) -> object:
+            if slow == "lookup":
+                clock.monotonic += 11
+            return super().api_get(path)
+
+        def handler(self, request: httpx.Request) -> httpx.Response:
+            if slow == "response":
+                clock.monotonic += 11
+            return super().handler(request)
+
+    server = SlowServer([http_error(503, "ERR-17-012")] * 5, clock)
+    items, error = run_follow(server, mode, source=NODE)
+    assert items == []
+    assert isinstance(error, LogAccessError)
+    assert error.http_status == 503
+    assert len(server.log_calls) == 5
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_target_active_abrupt_closures_recover(mode: str, clock: FakeClock) -> None:
+    server = LogServer(
+        [body(record(stamp(n, f"line {n}\n")), read_error=True) for n in range(7)]
+        + [body(record(stamp(7, "marker\n")))],
+        clock,
+    )
+    items, error = run_follow(server, mode, source=CONTAINER, limit=8)
+    assert error is None
+    assert [item["message"] for item in items] == [f"line {n}\n" for n in range(7)] + ["marker\n"]
+
+
+@pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize("tail", [0, "0"])
+def test_tail_0_quiet_reconnect_uses_first_200_second(
+    mode: str, tail: int | str, clock: FakeClock
+) -> None:
+    server = LogServer(
+        [http_error(503, "ERR-17-012"), body(read_error=True), body(record("later\n"))],
+        clock,
+    )
+    items, error = run_follow(server, mode, source=CONTAINER, tail=tail, limit=1)
     assert error is None
     assert items == [{"channel": "stdout", "message": "later\n"}]
     # The caller's tail is kept until a 200 is accepted.

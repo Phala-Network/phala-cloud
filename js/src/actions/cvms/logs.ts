@@ -161,6 +161,35 @@ function buildLogUrl(
   return params.length > 0 ? `${baseUrl}${sep}${params.join("&")}` : baseUrl;
 }
 
+class LogTransportError {
+  constructor(readonly original: unknown) {}
+}
+
+async function transportRequest<T>(request: () => Promise<T>): Promise<T> {
+  try {
+    return await request();
+  } catch (error) {
+    const code =
+      typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+    if (
+      error instanceof TypeError ||
+      error instanceof UnknownError ||
+      (typeof code === "string" &&
+        [
+          "ECONNRESET",
+          "ECONNREFUSED",
+          "EPIPE",
+          "ETIMEDOUT",
+          "ENETUNREACH",
+          "EHOSTUNREACH",
+        ].includes(code))
+    ) {
+      throw new LogTransportError(error);
+    }
+    throw error;
+  }
+}
+
 async function streamResponse(
   response: Response,
   onData: (data: string) => void,
@@ -176,7 +205,7 @@ async function streamResponse(
   let delivered = false;
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await transportRequest(() => reader.read());
       buffer += decoder.decode(value, { stream: !done });
       let newline = buffer.indexOf("\n");
       while (newline >= 0) {
@@ -503,7 +532,7 @@ async function streamNdjsonEntriesResponse(
   let finished = false;
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await transportRequest(() => reader.read());
       buffer += decoder.decode(value, { stream: !done });
       for (;;) {
         const taken = takeJsonObject(buffer);
@@ -690,23 +719,35 @@ async function resolveContainerSlug(
       if (prefixed[0]) return containerSlug(prefixed[0], containerName);
     }
     if (containers.length > 0) {
-      throw new LogAccessError({ code: "ERR-17-007", message: "Container not found" });
+      throw new LogAccessError({
+        code: "ERR-17-007",
+        message: "Container not found",
+      });
     }
     if (compositionError) {
       throw new LogAccessError({ message: compositionError });
     }
-    throw new LogAccessError({ code: "ERR-17-007", message: "Container not found" });
+    throw new LogAccessError({
+      code: "ERR-17-007",
+      message: "Container not found",
+    });
   }
 
   if (compositionError) {
     throw new LogAccessError({ message: compositionError });
   }
   if (!containers.length) {
-    throw new LogAccessError({ code: "ERR-17-007", message: "Container not found" });
+    throw new LogAccessError({
+      code: "ERR-17-007",
+      message: "Container not found",
+    });
   }
   const fallback = containers[0];
   if (!fallback) {
-    throw new LogAccessError({ code: "ERR-17-007", message: "Container not found" });
+    throw new LogAccessError({
+      code: "ERR-17-007",
+      message: "Container not found",
+    });
   }
   return containerSlug(fallback, "app");
 }
@@ -726,7 +767,9 @@ async function loadCvmLogInfo(
 function urlFromLogInfo(info: CvmInfoWithLogs, slug: string, cvmId: string): string {
   const base = info.logs?.container_log_base ?? null;
   if (!base) {
-    throw new LogAccessError({ message: `No log endpoints available for CVM '${cvmId}'` });
+    throw new LogAccessError({
+      message: `No log endpoints available for CVM '${cvmId}'`,
+    });
   }
   return joinContainerLogUrl(base, slug, info.logs?.auth_query);
 }
@@ -808,16 +851,17 @@ async function followLogRequests(
     const markDelivered = () => {
       deliveredThisConnection = true;
     };
+    let connectedAt: number | undefined;
     try {
-      const url = await resolveUrl();
+      const url = await transportRequest(resolveUrl);
       if (signal?.aborted) return;
-      const response = await logFetch(client, url, signal);
+      const response = await transportRequest(() => logFetch(client, url, signal));
       if (!response.ok) await throwResponseError(response);
       onConnected?.();
-      const connectedAt = Date.now();
+      connectedAt = Date.now();
       const delivered = (await consume(response, markDelivered)) ?? deliveredThisConnection;
       expiredRetries = 0;
-      if (delivered) {
+      if (delivered || (Date.now() - connectedAt >= EMPTY_STREAM_QUIET_MS && !shouldStop?.())) {
         failureCount = 0;
       }
       if (shouldStop?.()) return;
@@ -841,12 +885,17 @@ async function followLogRequests(
         return;
       }
 
-      const retryError = error;
+      const retryError = error instanceof LogTransportError ? error.original : error;
       if (error instanceof LogAccessError && error.fromStreamBody) {
         throw error;
       }
       emptyEnds = 0;
-      if (deliveredThisConnection) {
+      const healthyTransport =
+        error instanceof LogTransportError &&
+        connectedAt !== undefined &&
+        Date.now() - connectedAt >= EMPTY_STREAM_QUIET_MS &&
+        !shouldStop?.();
+      if (deliveredThisConnection || healthyTransport) {
         expiredRetries = 0;
       }
       if (error instanceof LogAccessError && !error.gatewayStream && error.code === "ERR-17-003") {
@@ -864,15 +913,14 @@ async function followLogRequests(
         gatewayStream ||
         status === 429 ||
         (status !== undefined && status >= 500) ||
-        retryError instanceof TypeError ||
-        retryError instanceof UnknownError
+        error instanceof LogTransportError
       ) {
         // retry as a failure below
       } else {
         throw retryError;
       }
 
-      if (deliveredThisConnection) {
+      if (deliveredThisConnection || healthyTransport) {
         failureCount = 0;
       }
       failureCount += 1;
@@ -954,7 +1002,10 @@ export async function streamCvmChannelLogs(
 export async function fetchContainerLogsEntries(
   client: Client<ApiVersion>,
   id: CvmIdInput | string,
-  options: CvmLogsOptions & { container?: string; matchContainerIdPrefix?: boolean } = {},
+  options: CvmLogsOptions & {
+    container?: string;
+    matchContainerIdPrefix?: boolean;
+  } = {},
 ): Promise<CvmLogEntry[]> {
   throwIfAborted(options.signal);
   assertContainerNameOption(options.container);
@@ -983,7 +1034,10 @@ export async function fetchContainerLogsEntries(
 export async function fetchContainerLogs(
   client: Client<ApiVersion>,
   id: CvmIdInput | string,
-  options: CvmLogsOptions & { container?: string; matchContainerIdPrefix?: boolean } = {},
+  options: CvmLogsOptions & {
+    container?: string;
+    matchContainerIdPrefix?: boolean;
+  } = {},
 ): Promise<string> {
   throwIfAborted(options.signal);
   assertContainerNameOption(options.container);
@@ -1020,7 +1074,10 @@ export async function streamContainerLogsEntries(
   client: Client<ApiVersion>,
   id: CvmIdInput | string,
   onEntry: (entry: CvmLogEntry) => void,
-  options: CvmLogsOptions & { container?: string; matchContainerIdPrefix?: boolean } = {},
+  options: CvmLogsOptions & {
+    container?: string;
+    matchContainerIdPrefix?: boolean;
+  } = {},
   signal?: AbortSignal,
 ): Promise<void> {
   const abort = signal ?? options.signal;
@@ -1049,10 +1106,11 @@ export async function streamContainerLogsEntries(
       );
     }
     const baseUrl = urlFromLogInfo(info, slug, resolveCvmId(id));
-    const tail = firstRequest ? options.tail : "all";
+    const replayHistory = firstRequest && cursor.since === undefined;
+    const tail = replayHistory ? options.tail : "all";
     replayCounts = new Map(cursor.boundaryCounts);
     return buildLogUrl(baseUrl, {
-      since: firstRequest
+      since: replayHistory
         ? times.since
         : reconnectSinceValue(cursor.since, first200Second, times.since),
       until: times.until,
@@ -1104,13 +1162,14 @@ export async function streamContainerLogsEntries(
         markDelivered();
         onEntry(formatFollowContainerEntry(entry, options.timestamps ?? false, options.ansi));
       });
+      firstRequest = false;
       return delivered;
     },
     abort,
     undefined,
     true,
     () => {
-      firstRequest = false;
+      if (String(options.tail) === "0") firstRequest = false;
       if (first200Second === undefined) first200Second = Math.floor(Date.now() / 1000);
     },
     () => untilReached(times.until, cursor.since),
@@ -1130,7 +1189,7 @@ async function streamContainerText(
   let delivered = false;
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await transportRequest(() => reader.read());
       buffer += decoder.decode(value, { stream: !done });
       let newline = buffer.indexOf("\n");
       while (newline >= 0) {
@@ -1164,7 +1223,10 @@ export async function streamContainerLogs(
   client: Client<ApiVersion>,
   id: CvmIdInput | string,
   onData: (data: string) => void,
-  options: CvmLogsOptions & { container?: string; matchContainerIdPrefix?: boolean } = {},
+  options: CvmLogsOptions & {
+    container?: string;
+    matchContainerIdPrefix?: boolean;
+  } = {},
   signal?: AbortSignal,
 ): Promise<void> {
   if (options.format === "text") {
@@ -1195,10 +1257,11 @@ export async function streamContainerLogs(
           );
         }
         const baseUrl = urlFromLogInfo(info, slug, resolveCvmId(id));
-        const tail = firstRequest ? options.tail : "all";
+        const replayHistory = firstRequest && cursor.since === undefined;
+        const tail = replayHistory ? options.tail : "all";
         replayCounts = new Map(cursor.boundaryCounts);
         return buildLogUrl(baseUrl, {
-          since: firstRequest
+          since: replayHistory
             ? times.since
             : reconnectSinceValue(cursor.since, first200Second, times.since),
           until: times.until,
@@ -1259,13 +1322,14 @@ export async function streamContainerLogs(
           },
           options.ansi,
         );
+        firstRequest = false;
         return delivered;
       },
       abort,
       undefined,
       true,
       () => {
-        firstRequest = false;
+        if (String(options.tail) === "0") firstRequest = false;
         if (first200Second === undefined) first200Second = Math.floor(Date.now() / 1000);
       },
       () => untilReached(times.until, cursor.since),
@@ -1314,7 +1378,10 @@ export async function* followCvmLogs(
   const abort = new AbortController();
   if (options.signal) {
     if (options.signal.aborted) abort.abort();
-    else options.signal.addEventListener("abort", () => abort.abort(), { once: true });
+    else
+      options.signal.addEventListener("abort", () => abort.abort(), {
+        once: true,
+      });
   }
   const signal = abort.signal;
 

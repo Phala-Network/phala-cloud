@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -798,11 +799,11 @@ func TestFollowIgnoresClientRequestTimeout(t *testing.T) {
 		}
 	}
 	cancel()
+	collectFollow(t, lines, errs, 2*time.Second)
 }
 
 func TestQuietTail0ReconnectUsesFirst200Since(t *testing.T) {
-	followNow = func() time.Time { return time.Unix(1794225600, 0) }
-	defer func() { followNow = time.Now }()
+	stubFollowNow(t, func() time.Time { return time.Unix(1794225600, 0) })
 	var queries []string
 	var n int
 	logs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -841,6 +842,7 @@ func TestQuietTail0ReconnectUsesFirst200Since(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("timeout")
 	}
+	collectFollow(t, lines, errs, 2*time.Second)
 	if len(queries) < 2 {
 		t.Fatalf("queries = %v", queries)
 	}
@@ -1126,6 +1128,201 @@ func TestFollowFailureResetsEmptyEndCounter(t *testing.T) {
 	}
 }
 
+// Regression: an interrupted first replay must retain the requested history.
+func TestFollowInterruptedInitialHistory(t *testing.T) {
+	for _, mode := range []string{"text", "ndjson", "entries"} {
+		t.Run(mode, func(t *testing.T) {
+			client, rec := newLogTestClient(t, func(n int, w http.ResponseWriter, r *http.Request) {
+				write := func(message string) {
+					if mode == "text" {
+						_, _ = io.WriteString(w, message)
+					} else {
+						_, _ = io.WriteString(w, ndjsonRecord("stdout", message))
+					}
+				}
+				if n == 1 {
+					if mode == "text" {
+						_, _ = io.WriteString(w, "1970-01-01T00:01:40Z hist")
+					} else {
+						_, _ = io.WriteString(w, `{"channel":"stdout","message":"1970-01-01T00:01:40Z hist`)
+					}
+					abortConnection(w)
+					return
+				}
+				// Apply the actual requested since to the old historical record.
+				since, _ := strconv.ParseInt(r.URL.Query().Get("since"), 10, 64)
+				if since <= 100 {
+					write("1970-01-01T00:01:40Z history\n")
+				}
+				write("2026-11-09T12:00:00Z live\n")
+			})
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var messages <-chan string
+			var errs <-chan error
+			if mode == "entries" {
+				entries, e := client.FollowCVMLogEntries(ctx, "app_test", containerSource, &LogsOptions{Tail: 12})
+				out := make(chan string)
+				go func() {
+					defer close(out)
+					for entry := range entries {
+						out <- entry.Message
+					}
+				}()
+				messages, errs = out, e
+			} else {
+				messages, errs = client.FollowCVMLogs(ctx, "app_test", containerSource, &LogsOptions{Tail: 12, Format: mode})
+			}
+			for _, want := range []string{"history\n", "live\n"} {
+				select {
+				case got := <-messages:
+					if got != want {
+						t.Fatalf("got %q, want %q", got, want)
+					}
+				case err := <-errs:
+					t.Fatalf("follow stopped: %v", err)
+				case <-time.After(5 * time.Second):
+					t.Fatal("timeout")
+				}
+			}
+			cancel()
+			collectFollow(t, messages, errs, 2*time.Second)
+			queries, _ := rec.snapshot()
+			if len(queries) != 2 || !strings.Contains(queries[1], "tail=12") || strings.Contains(queries[1], "since=") {
+				t.Fatalf("queries = %v", queries)
+			}
+		})
+	}
+}
+
+// Regression: incomplete chunked HTTP bodies after long idle periods must reconnect.
+func TestFollowLongIdleUnexpectedEOFRecovers(t *testing.T) {
+	var mu sync.Mutex
+	clock := time.Unix(1794225600, 0)
+	stubFollowNow(t, func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		clock = clock.Add(11 * time.Second)
+		return clock
+	})
+	client, rec := newLogTestClient(t, func(n int, w http.ResponseWriter, r *http.Request) {
+		if n <= 7 {
+			abortConnection(w)
+			return
+		}
+		_, _ = io.WriteString(w, ndjsonRecord("stdout", "2026-11-09T12:00:00Z recovery marker\n"))
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	lines, errs := client.FollowCVMLogs(ctx, "app_test", containerSource, nil)
+	select {
+	case line := <-lines:
+		if line != "recovery marker\n" {
+			t.Fatalf("line = %q", line)
+		}
+	case err := <-errs:
+		t.Fatalf("idle transport closures stopped follow: %v", err)
+	case <-time.After(15 * time.Second):
+		t.Fatal("timeout")
+	}
+	cancel()
+	collectFollow(t, lines, errs, 2*time.Second)
+	if rec.count() != 8 {
+		t.Fatalf("connections = %d, want 8", rec.count())
+	}
+}
+
+// Regression: node follow shares the long-idle transport recovery policy.
+func TestFollowNodeLongIdleUnexpectedEOFRecovers(t *testing.T) {
+	var mu sync.Mutex
+	clock := time.Unix(1794225600, 0)
+	stubFollowNow(t, func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		clock = clock.Add(11 * time.Second)
+		return clock
+	})
+	client, rec := newLogTestClient(t, func(n int, w http.ResponseWriter, r *http.Request) {
+		if n <= 6 {
+			abortConnection(w)
+			return
+		}
+		_, _ = io.WriteString(w, "node recovered\n")
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	lines, errs := client.FollowCVMLogs(ctx, "app_test", serialSource, nil)
+	select {
+	case line := <-lines:
+		if line != "node recovered\n" {
+			t.Fatalf("line = %q", line)
+		}
+	case err := <-errs:
+		t.Fatalf("follow stopped: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout")
+	}
+	cancel()
+	collectFollow(t, lines, errs, 2*time.Second)
+	if rec.count() != 7 {
+		t.Fatalf("connections = %d", rec.count())
+	}
+}
+
+// Regression: a passed until window must not make idle transport failures unbounded.
+func TestFollowLongIdleReadErrorAfterUntilIsBounded(t *testing.T) {
+	var mu sync.Mutex
+	clock := time.Unix(1794225600, 0)
+	stubFollowNow(t, func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		clock = clock.Add(11 * time.Second)
+		return clock
+	})
+	client, rec := newLogTestClient(t, func(n int, w http.ResponseWriter, r *http.Request) {
+		abortConnection(w)
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+	defer cancel()
+	lines, errs := client.FollowCVMLogs(ctx, "app_test", containerSource, &LogsOptions{Until: int64(1794225601)})
+	_, err := collectFollow(t, lines, errs, 7*time.Second)
+	if !errors.Is(err, io.ErrUnexpectedEOF) || rec.count() != 5 {
+		t.Fatalf("error = %v, connections = %d, want unexpected EOF after 5", err, rec.count())
+	}
+}
+
+// Regression: a complete HTTP body containing incomplete JSON is not a transport failure.
+func TestFollowLongIdleIncompleteJSONIsBounded(t *testing.T) {
+	for _, mode := range []string{"text", "entries"} {
+		t.Run(mode, func(t *testing.T) {
+			var mu sync.Mutex
+			clock := time.Unix(1794225600, 0)
+			stubFollowNow(t, func() time.Time {
+				mu.Lock()
+				defer mu.Unlock()
+				clock = clock.Add(11 * time.Second)
+				return clock
+			})
+			client, rec := newLogTestClient(t, func(n int, w http.ResponseWriter, r *http.Request) {
+				_, _ = io.WriteString(w, `{"channel":"stdout","message":`)
+			})
+			ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+			defer cancel()
+			var err error
+			if mode == "entries" {
+				items, errs := client.FollowCVMLogEntries(ctx, "app_test", containerSource, nil)
+				_, err = collectFollow(t, items, errs, 7*time.Second)
+			} else {
+				items, errs := client.FollowCVMLogs(ctx, "app_test", containerSource, &LogsOptions{Format: "ndjson"})
+				_, err = collectFollow(t, items, errs, 7*time.Second)
+			}
+			if !errors.Is(err, io.ErrUnexpectedEOF) || rec.count() != 5 {
+				t.Fatalf("error = %v, connections = %d, want unexpected EOF after 5", err, rec.count())
+			}
+		})
+	}
+}
+
 func TestFollowLongIdleEOFKeepsFollowing(t *testing.T) {
 	var mu sync.Mutex
 	clock := time.Unix(1794225600, 0)
@@ -1155,6 +1352,7 @@ func TestFollowLongIdleEOFKeepsFollowing(t *testing.T) {
 		t.Fatal("timeout")
 	}
 	cancel()
+	collectFollow(t, lines, errs, 2*time.Second)
 	if rec.count() != 8 {
 		t.Fatalf("connections = %d, want 8", rec.count())
 	}
@@ -1184,6 +1382,7 @@ func TestQuietTail0TextReconnectUsesFirst200Since(t *testing.T) {
 		t.Fatal("timeout")
 	}
 	cancel()
+	collectFollow(t, lines, errs, 2*time.Second)
 	queries, _ := rec.snapshot()
 	if !strings.Contains(queries[0], "tail=0") || strings.Contains(queries[0], "since=") {
 		t.Fatalf("first query %q", queries[0])
@@ -1216,6 +1415,7 @@ func TestReconnectBeforeTimestampKeepsCallerSince(t *testing.T) {
 		t.Fatal("timeout")
 	}
 	cancel()
+	collectFollow(t, lines, errs, 2*time.Second)
 	queries, _ := rec.snapshot()
 	if !strings.Contains(queries[0], "since=100") || !strings.Contains(queries[1], "since=100&") ||
 		!strings.Contains(queries[1], "tail=all") {
@@ -1403,6 +1603,208 @@ func TestFollow429IsRetried(t *testing.T) {
 	cancel()
 	if rec.count() < 3 {
 		t.Fatalf("connections = %d", rec.count())
+	}
+}
+
+// Target behavior: an accepted signed URL stays open through expiry, then a
+// rejected stale signature is refreshed without losing or duplicating records.
+func TestFollowSignedURLRotation(t *testing.T) {
+	for _, mode := range []string{"text", "ndjson", "entries"} {
+		t.Run(mode, func(t *testing.T) {
+			firstRead := make(chan struct{})
+			var mu sync.Mutex
+			var signatures []string
+			logs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				sig := r.URL.Query().Get("sig")
+				mu.Lock()
+				signatures = append(signatures, sig)
+				mu.Unlock()
+				if sig == "2" {
+					w.WriteHeader(http.StatusUnauthorized)
+					_, _ = io.WriteString(w, `{"error_code":"ERR-17-003","message":"expired"}`)
+					return
+				}
+				write := func(msg string) {
+					if mode == "text" {
+						_, _ = io.WriteString(w, msg)
+					} else {
+						_, _ = io.WriteString(w, ndjsonRecord("stdout", msg))
+					}
+				}
+				if sig == "1" {
+					write("2026-11-09T12:00:00Z boundary\n")
+					w.(http.Flusher).Flush()
+					<-firstRead // The signature expires while this accepted response remains open.
+					write("2026-11-09T12:00:00Z same-second\n")
+					abortConnection(w)
+					return
+				}
+				write("2026-11-09T12:00:00Z boundary\n")
+				write("2026-11-09T12:00:00Z same-second\n")
+				write("2026-11-09T12:00:00Z fresh\n")
+			}))
+			defer logs.Close()
+			var info int
+			api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.HasSuffix(r.URL.Path, "/composition") {
+					_, _ = io.WriteString(w, `{"containers":[{"id":"c1","names":["/app"]}]}`)
+					return
+				}
+				info++
+				base := logs.URL + "/logs/123/container"
+				auth := fmt.Sprintf("sig=%d", info)
+				_ = json.NewEncoder(w).Encode(struct {
+					PublicLogs bool       `json:"public_logs"`
+					Logs       CVMLogURLs `json:"logs"`
+				}{
+					PublicLogs: true,
+					Logs:       CVMLogURLs{ContainerLogBase: &base, AuthQuery: &auth},
+				})
+			}))
+			defer api.Close()
+			client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			messages := make(chan string)
+			var errs <-chan error
+			if mode == "entries" {
+				entries, e := client.FollowCVMLogEntries(ctx, "app_test", containerSource, nil)
+				errs = e
+				go func() {
+					defer close(messages)
+					for entry := range entries {
+						messages <- entry.Message
+					}
+				}()
+			} else {
+				lines, e := client.FollowCVMLogs(ctx, "app_test", containerSource, &LogsOptions{Format: mode})
+				errs = e
+				go func() {
+					defer close(messages)
+					for line := range lines {
+						messages <- line
+					}
+				}()
+			}
+			for i, want := range []string{"boundary\n", "same-second\n", "fresh\n"} {
+				select {
+				case got := <-messages:
+					if got != want {
+						t.Fatalf("message %d = %q, want %q", i, got, want)
+					}
+					if i == 0 {
+						close(firstRead)
+					}
+				case err := <-errs:
+					t.Fatalf("follow stopped: %v", err)
+				case <-time.After(5 * time.Second):
+					t.Fatal("timeout")
+				}
+			}
+			cancel()
+			for range messages {
+			}
+			for err := range errs {
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if fmt.Sprint(signatures) != "[1 2 3]" {
+				t.Fatalf("signatures = %v", signatures)
+			}
+		})
+	}
+}
+
+// Invariant: quiet successful sessions clear old signed-URL expiry rejections.
+func TestFollowLongIdleFailuresResetExpiredURLBudget(t *testing.T) {
+	var mu sync.Mutex
+	clock := time.Unix(1794225600, 0)
+	stubFollowNow(t, func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		clock = clock.Add(11 * time.Second)
+		return clock
+	})
+	client, rec := newLogTestClient(t, func(n int, w http.ResponseWriter, r *http.Request) {
+		if n == 13 {
+			_, _ = io.WriteString(w, ndjsonRecord("stdout", "2026-11-09T12:00:00Z recovered\n"))
+		} else if n%2 == 0 {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, `{"error_code":"ERR-17-003","message":"expired"}`)
+		} else {
+			abortConnection(w)
+		}
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	lines, errs := client.FollowCVMLogs(ctx, "app_test", containerSource, nil)
+	select {
+	case line := <-lines:
+		if line != "recovered\n" {
+			t.Fatalf("line = %q", line)
+		}
+	case err := <-errs:
+		t.Fatalf("follow stopped: %v", err)
+	case <-time.After(6 * time.Second):
+		t.Fatal("timeout")
+	}
+	cancel()
+	collectFollow(t, lines, errs, 2*time.Second)
+	if rec.count() != 13 {
+		t.Fatalf("connections = %d, want 13", rec.count())
+	}
+}
+
+// Invariant: time spent in metadata or rejected responses is not stream health.
+func TestFollowSlowLookupAndRejectionDoNotResetExpiredBudget(t *testing.T) {
+	var mu sync.Mutex
+	clock := time.Unix(1794225600, 0)
+	advance := func() {
+		mu.Lock()
+		clock = clock.Add(11 * time.Second)
+		mu.Unlock()
+	}
+	stubFollowNow(t, func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		return clock
+	})
+	var calls int
+	logs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls%2 == 1 {
+			advance()
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, `{"error_code":"ERR-17-003","message":"expired"}`)
+			return
+		}
+		abortConnection(w) // Accepted and immediately fails, despite the slow lookup.
+	}))
+	defer logs.Close()
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/composition") {
+			_, _ = io.WriteString(w, `{"containers":[{"id":"c1","names":["/app"]}]}`)
+			return
+		}
+		advance()
+		_ = json.NewEncoder(w).Encode(containerInfo(logs.URL))
+	}))
+	defer api.Close()
+	client, err := NewClient(WithAPIKey("k"), WithBaseURL(api.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines, errs := client.FollowCVMLogs(context.Background(), "app_test", containerSource, nil)
+	_, err = collectFollow(t, lines, errs, 8*time.Second)
+	apiErr := asAPIError(t, err)
+	if apiErr.ErrorCode != "ERR-17-003" || calls != 7 {
+		t.Fatalf("error = %v, calls = %d", err, calls)
 	}
 }
 
