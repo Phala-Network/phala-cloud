@@ -173,14 +173,44 @@ describe("injectDevBoxService", () => {
 		const compose = `services:
   ssh:
     image: ghcr.io/dstack-tee/dstack-dev-box:0.6.0
-    privileged: "true"
+    privileged: true
     network_mode: 'host'
-    pid: host
+    pid: "host"
     uts: host
 `;
 
 		expect(composeHasDevBox(compose)).toBe(true);
 		expect(injectDevBoxService(compose)).toBe(compose);
+	});
+
+	test("does not count a quoted privileged value, which is a string", () => {
+		const compose = `services:
+  ssh:
+    image: ${DEV_BOX_IMAGE}
+    privileged: "true"
+    pid: host
+    network_mode: host
+    uts: host
+`;
+
+		expect(composeHasDevBox(compose)).toBe(false);
+		expect(() => injectDevBoxService(compose)).toThrow(
+			/uses the dev-box image but is not configured as the dev box/,
+		);
+	});
+
+	test("does not read a quoted privileged value as a dev-box marker on another image", () => {
+		const compose = `services:
+  wireguard:
+    image: linuxserver/wireguard
+    privileged: "true"
+    pid: host
+    network_mode: host
+    uts: host
+`;
+
+		expect(composeHasDevBox(compose)).toBe(false);
+		expect(injectDevBoxService(compose)).toContain("  dev-box:\n");
 	});
 
 	test("rejects the dev-box image without the dev-box markers", () => {

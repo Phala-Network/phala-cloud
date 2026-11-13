@@ -20,6 +20,10 @@
  * Marks a service as the dev box. The backend detects the dev box from these
  * four keys alone, so the CLI refuses to author anything it would read
  * differently.
+ *
+ * `privileged` is the one YAML boolean among them: only the bare `true` token
+ * counts, never the quoted string `"true"`. The other three are the string
+ * `host`, which the two quoting styles share.
  */
 const DEV_BOX_MARKERS: ReadonlyArray<readonly [string, string]> = [
 	["privileged", "true"],
@@ -169,6 +173,9 @@ interface BlockSpan {
 
 interface ServiceBlock extends BlockSpan {
 	readonly name: string;
+	/** Property values exactly as written, quotes included. */
+	readonly rawProperties: ReadonlyMap<string, string>;
+	/** Property values with one layer of quotes removed. */
 	readonly properties: ReadonlyMap<string, string>;
 }
 
@@ -250,17 +257,21 @@ function readProperties(
 	lines: string[],
 	span: { from: number; to: number },
 	indent: number | undefined,
-): Map<string, string> {
-	const properties = new Map<string, string>();
-	if (indent === undefined) return properties;
+): { raw: Map<string, string>; unquoted: Map<string, string> } {
+	const raw = new Map<string, string>();
+	const unquoted = new Map<string, string>();
+	if (indent === undefined) return { raw, unquoted };
 	for (let i = span.from; i < span.to; i += 1) {
 		if (!isContentLine(lines[i]) || indentOf(lines[i]) !== indent) continue;
 		const match = PROPERTY.exec(lines[i].trim());
 		if (!match) continue;
 		const [, name, value] = match;
-		if (!properties.has(name)) properties.set(name, unquote(value.trim()));
+		if (raw.has(name)) continue;
+		const asWritten = value.trim();
+		raw.set(name, asWritten);
+		unquoted.set(name, unquote(asWritten));
 	}
-	return properties;
+	return { raw, unquoted };
 }
 
 function listServices(lines: string[], services: BlockSpan): ServiceBlock[] {
@@ -280,23 +291,44 @@ function listServices(lines: string[], services: BlockSpan): ServiceBlock[] {
 				? (starts[position + 1] as number)
 				: services.endIndex;
 		const propertyIndent = shallowestIndent(lines, start + 1, endIndex);
+		const { raw, unquoted } = readProperties(
+			lines,
+			{ from: start + 1, to: endIndex },
+			propertyIndent,
+		);
 		return {
 			name: PROPERTY.exec(lines[start].trim())?.[1] ?? lines[start].trim(),
 			keyIndex: start,
 			endIndex,
 			childIndent: propertyIndent,
-			properties: readProperties(
-				lines,
-				{ from: start + 1, to: endIndex },
-				propertyIndent,
-			),
+			rawProperties: raw,
+			properties: unquoted,
 		};
 	});
 }
 
+/**
+ * Whether a service carries one dev-box marker.
+ *
+ * `privileged` is compared against the text as written: the flag is a YAML
+ * boolean, so only the bare `true` token turns it on and `privileged: "true"`
+ * is a string that the backend's detector does not count either. The namespace
+ * markers are strings, so one layer of quotes is removed first: `pid: host`
+ * and `pid: "host"` are the same YAML scalar.
+ */
+function markerMatches(
+	service: ServiceBlock,
+	key: string,
+	value: string,
+): boolean {
+	return key === "privileged"
+		? service.rawProperties.get(key) === value
+		: service.properties.get(key) === value;
+}
+
 function hasDevBoxMarkers(service: ServiceBlock): boolean {
-	return DEV_BOX_MARKERS.every(
-		([key, value]) => service.properties.get(key) === value,
+	return DEV_BOX_MARKERS.every(([key, value]) =>
+		markerMatches(service, key, value),
 	);
 }
 
@@ -426,7 +458,7 @@ function addDevBoxVolumes(lines: string[]): string[] {
 		lines,
 		{ from: volumes.keyIndex + 1, to: volumes.endIndex },
 		volumes.childIndent,
-	);
+	).raw;
 	const conflict = DEV_BOX_VOLUME_NAMES.find((name) => declared.has(name));
 	if (conflict !== undefined) {
 		throw new Error(
@@ -449,9 +481,9 @@ function addDevBoxVolumes(lines: string[]): string[] {
  * Return the compose with the canonical dev box service added.
  *
  * Idempotent: a compose that already carries a canonical dev box (the dev-box
- * image with `privileged`, `pid`, `network_mode` and `uts` set to their dev-box
- * values) is returned untouched. Anything the CLI would have to overwrite or
- * guess about throws instead.
+ * image with `privileged: true`, `pid`, `network_mode` and `uts` set to `host`)
+ * is returned untouched. Anything the CLI would have to overwrite or guess
+ * about throws instead.
  */
 export function injectDevBoxService(composeYaml: string): string {
 	const { lines, eol } = splitLines(composeYaml);
