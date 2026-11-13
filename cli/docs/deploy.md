@@ -21,7 +21,7 @@ Creates a new CVM by default. If `--cvm-id` is provided or `phala.toml` contains
 | `-e, --env <value>` | | Environment variable (KEY=VALUE) or path to .env file. Repeatable |
 | `--kms <type>` | phala | KMS type: phala, ethereum/eth, or base |
 | `--wait` | false | Wait for the deployment to finish and fail if it failed. New CVM: wait until it is running. Update (`--cvm-id`): wait until the CVM is running again, or stays stopped if it was not running before the update |
-| `--dev-os` | false | Use development OS image (requires SSH key) |
+| `--dev-os` | false | Enable SSH access. Needs `--image`: on dstack 0.6+ it adds a `dev-box` service to the compose, below 0.6 it deploys the dev variant of that release. An update re-adds the dev box |
 | `--public-logs` | true | Make CVM logs publicly accessible |
 | `--no-public-logs` | | Disable public log access |
 | `--public-sysinfo` | true | Make CVM system info publicly accessible |
@@ -86,7 +86,9 @@ A flag you leave out keeps the CVM's current value. In particular, an update wit
 
 `--listed` / `--no-listed` changes the Trust Center listing through its own request, sent only after the update is accepted (or, for on-chain KMS, after it is confirmed or committed with `--commit`). It is not sent with `--prepare-only`. The listing applies to the whole app, and its endpoint needs an API key or a login session: GitHub Actions OIDC tokens are not accepted for it.
 
-These flags set how a CVM is created and cannot be changed afterwards: `--name`, `--region`, `--node`, `--custom-app-id`, `--nonce`, `--key-provider-mode`, `--dev-os` / `--no-dev-os`, `--ssh-pubkey`, `--fs`, `--skip-gateway`, `--kms`, `--kms-id`, `--kms-contract`, `--kms-contract-id`, `--experimental-key-provider-type`, `--runner`, `--app-compose`, `--launch-token` and `--generate-launch-token`. An update that passes any of them fails before any request is sent.
+These flags set how a CVM is created and cannot be changed afterwards: `--name`, `--region`, `--node`, `--custom-app-id`, `--nonce`, `--key-provider-mode`, `--ssh-pubkey`, `--fs`, `--skip-gateway`, `--kms`, `--kms-id`, `--kms-contract`, `--kms-contract-id`, `--experimental-key-provider-type`, `--runner`, `--app-compose`, `--launch-token` and `--generate-launch-token`. An update that passes any of them fails before any request is sent.
+
+`--dev-os` is not in that list: it also applies to an update, because the dev box is added to the payload a deployment sends and never to the compose file on disk. The CLI records how `--dev-os` was satisfied for a CVM (dstack 0.6+ dev box, or a pre-0.6 dev image) in `~/.phala-cloud/state.json`, keyed by the CVM's `vm_uuid` — the one id a create and an update agree on, however you spell the `--cvm-id`. An update without the flag repeats that choice; the record is written only after the API accepts the change, so a failed deploy leaves it untouched. Pass `--dev-os` to set it explicitly on an update (with `--image`, so the dstack release is known) or `--no-dev-os` to drop it, which removes the record once the update is applied.
 
 ## Raw app compose
 
@@ -100,7 +102,7 @@ These flags set how a CVM is created and cannot be changed afterwards: `--name`,
 
 By default, deploy leaves the pre-launch script field out of the request. When creating a CVM, Phala Cloud then uses its official default script; when updating one, the current script is kept (see [Updating an existing CVM](#updating-an-existing-cvm)). Use `--pre-launch-script <path>` to supply a script. If that file is empty, the field is still omitted: a new CVM gets the default script, and an updated CVM keeps its current script. To explicitly deploy with no pre-launch script, use `--no-pre-launch-script`; it cannot be combined with `--pre-launch-script`.
 
-When creating a CVM with `--no-pre-launch-script`, deploy skips automatic local SSH key injection into `DSTACK_AUTHORIZED_KEYS` unless you explicitly pass `--dev-os` or `--ssh-pubkey`. `--no-dev-os` always disables injection. The platform pre-launch script normally installs this key, so without it the variable only adds an unused entry to `allowed_envs`.
+When creating a CVM with `--no-pre-launch-script`, deploy skips automatic local SSH key injection into `DSTACK_AUTHORIZED_KEYS` unless you explicitly pass `--ssh-pubkey`. `--no-dev-os` always disables injection. The platform pre-launch script normally installs this key, so without it the variable only adds an unused entry to `allowed_envs`.
 
 ```bash
 $ phala deploy --no-pre-launch-script
@@ -169,10 +171,67 @@ $ phala deploy -n my-production-app
 $ phala deploy --disk-size 100G
 ```
 
-### Deploy with dev OS image and SSH access
+### Deploy with SSH access
+
+`--dev-os` needs `--image`, because the dstack release of that image decides
+how SSH is set up. Run `phala os-images` to list the available images. Deploy
+fails instead of guessing when the image is missing or unknown.
+
+On dstack 0.6 and newer there is no dev OS image. `--dev-os` instead adds a
+`dev-box` service to your compose: a privileged container that runs sshd on port
+22 and shares the host's PID, network and UTS namespaces, so `phala ssh` and
+`phala cp` keep working through `<app-id>-22.<gateway>`. The service mounts two
+named volumes, `ssh-host-keys` and `home`, which keep host keys and `/root`
+across redeploys; `docker_cleanup` prunes volumes and wipes both, so it cannot
+be combined with SSH access. The CLI refuses compose files it would have to
+overwrite: a service already using the dev-box image, a service named `dev-box`
+that is something else, the four dev-box keys on another service, or a top-level
+volume named `ssh-host-keys` or `home`. A compose that already declares a
+usable dev box — the image this CLI injects, the four keys, the
+`SSH_AUTHORIZED_KEYS` template and the host, host-keys and home mounts, with no
+`command`, `profiles` or `entrypoint` replacing the server — is left untouched,
+whichever way it is written (anchors, merge keys, flow mappings and inline
+comments included). Compose files the CLI cannot read as YAML are refused
+instead of extended, so a file never ends up with two dev boxes.
+
+Below 0.6 sshd lives in the image, so `--dev-os` deploys the dev variant of the
+release you named. The backend ignores `prefer_dev` when the request names an
+image, and a production image of that release would deploy a CVM without sshd:
+the CLI resolves the variant from the OS image catalog and fails, listing the
+catalog, when that release has none.
+
+The dev box only ever exists in what the CLI sends, never in your compose file.
+A create therefore records how `--dev-os` was satisfied in
+`~/.phala-cloud/state.json`, keyed by the CVM's `vm_uuid`, and a later update
+without the flag re-adds the dev box, so a redeploy keeps SSH access.
+`--dev-os` on an update sets the choice explicitly (it needs `--image`, so the
+release is known), and `--no-dev-os` drops it and clears the record. Records
+are committed only after the API accepts the change: a failed deploy never
+changes what the next one does.
+
+A missing record is not read as "turn SSH off". When the CVM was deployed from
+another machine, or before this CLI kept records, the update asks the deployed
+compose instead: a dev box there is kept (and recorded), and when the server
+does not return the compose while reporting SSH access, the CLI says so and
+asks you to pass `--dev-os` or `--no-dev-os` rather than silently dropping it.
+
+The SSH key channel follows the backend's own rule: any service carrying the
+four dev-box markers (`privileged: true` and `pid`, `network_mode`, `uts` set to
+`host`) is a dev box, whatever image, volume names or environment you gave it.
+A dev box written by hand with its own volumes, or one inside an `--app-compose`
+file, therefore also stops the CLI from reading a local key into
+`DSTACK_AUTHORIZED_KEYS`; only an explicit `--ssh-pubkey` is sent, and revoking
+a key removes it.
+
+SSH keys reach a 0.6 CVM two ways. Your account keys are the managed channel:
+Phala Cloud writes them into the CVM's `user_config` on every boot, so
+`phala ssh-keys add` plus a restart is enough, and revoking a key removes it.
+`--ssh-pubkey` is the other channel and only applies when you pass it: the key
+goes into the dev box's environment, frozen at deploy time, so revoking it in
+the account does not remove it from the container.
 
 ```bash
-$ phala deploy --dev-os --ssh-pubkey ~/.ssh/id_ed25519.pub
+$ phala deploy --dev-os --image dstack-0.6.0
 ```
 
 ### Deploy with Ethereum KMS

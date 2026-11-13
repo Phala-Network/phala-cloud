@@ -6,10 +6,14 @@ on:
     paths:
       - 'cli/**'
       - 'js/**'
+      - 'package.json'
+      - 'bun.lock'
   push:
     paths:
       - 'cli/**'
       - 'js/**'
+      - 'package.json'
+      - 'bun.lock'
 
 jobs:
   cli-checks:

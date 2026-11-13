@@ -5,7 +5,7 @@
  * proper handling of --dev-os / --no-dev-os flags.
  */
 
-import { describe, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import os from "node:os";
 import path from "node:path";
 import fs from "fs-extra";
@@ -16,11 +16,15 @@ import { logger } from "@/src/utils/logger";
 import { deployCommandMeta, deployCommandSchema } from "./command";
 import {
 	applyForceStopOption,
+	assertUpdatableOptions,
 	buildProvisionPayload,
 	buildUpdatePatchBody,
+	composeForDevOs,
 	readSshPubkey,
+	resolveSshKeyChannel,
 	runDeploy,
 } from "./handler";
+import { composeHasDevBox } from "./dev-box";
 
 describe("deploy node selection", () => {
 	test("parses --node and no longer exposes --node-id", () => {
@@ -37,6 +41,206 @@ describe("deploy node selection", () => {
 		expect(
 			deployCommandMeta.options?.some((option) => option.name === "node-id"),
 		).toBe(false);
+	});
+});
+
+/** The backend's dev box, written by hand with its own volume names. */
+const CUSTOM_VOLUME_DEV_BOX = `services:
+  app:
+    image: nginx
+  ssh:
+    image: ghcr.io/dstack-tee/dstack-dev-box:sha-7725235@sha256:0dc661ea51fcbd70007d117b9e60883d9a96bac510a80683f5bdd6b7947b0291
+    privileged: true
+    pid: host
+    network_mode: host
+    uts: host
+    environment:
+      - MY_KEYS=\${DSTACK_AUTHORIZED_KEYS}
+    volumes:
+      - /:/host:rslave
+      - my-host-keys:/etc/ssh/host-keys
+      - my-home:/root
+volumes:
+  my-host-keys:
+  my-home:
+`;
+
+describe("deploy --dev-os SSH key channels", () => {
+	const sshPubkey = "ssh-ed25519 AAAA local@example";
+
+	async function withTempHome(
+		run: (homeDir: string) => Promise<void>,
+		hasLocalKey: boolean,
+	) {
+		const tempDir = await fs.mkdtemp(path.join(import.meta.dir, ".ssh-key-"));
+		const homedir = spyOn(os, "homedir").mockReturnValue(tempDir);
+		const info = spyOn(logger, "info").mockImplementation(() => {});
+		const warn = spyOn(logger, "warn").mockImplementation(() => {});
+		try {
+			if (hasLocalKey) {
+				await fs.outputFile(
+					path.join(tempDir, ".ssh", "id_ed25519.pub"),
+					sshPubkey,
+				);
+			}
+			await run(tempDir);
+		} finally {
+			homedir.mockRestore();
+			info.mockRestore();
+			warn.mockRestore();
+			await fs.remove(tempDir);
+		}
+	}
+
+	test("does not pick up a local key for a 0.6 dev box", async () => {
+		await withTempHome(async () => {
+			expect(await readSshPubkey({ devOs: true }, "dev-box")).toBeUndefined();
+			expect(
+				await readSshPubkey({ devOs: true, image: "dstack-0.6.0" }, "dev-box"),
+			).toBeUndefined();
+		}, true);
+	});
+
+	test("does not fail when a 0.6 dev box has no local key", async () => {
+		await withTempHome(async () => {
+			expect(await readSshPubkey({ devOs: true }, "dev-box")).toBeUndefined();
+		}, false);
+	});
+
+	test("injects an explicit --ssh-pubkey into a 0.6 dev box", async () => {
+		await withTempHome(async (homeDir) => {
+			const keyPath = path.join(homeDir, "explicit.pub");
+			await fs.outputFile(keyPath, `${sshPubkey}\n`);
+
+			expect(
+				await readSshPubkey({ devOs: true, sshPubkey: keyPath }, "dev-box"),
+			).toBe(sshPubkey);
+		}, true);
+	});
+
+	test("still requires a key for a dev OS image below 0.6", async () => {
+		await withTempHome(async () => {
+			let failure: unknown;
+			try {
+				await readSshPubkey(
+					{ devOs: true, image: "dstack-0.5.7" },
+					"dev-image",
+				);
+			} catch (error) {
+				failure = error;
+			}
+			expect((failure as Error).message).toContain(
+				"SSH public key is required for a dev OS image",
+			);
+		}, false);
+	});
+
+	test("reads the local key for a dev OS image below 0.6", async () => {
+		await withTempHome(async () => {
+			expect(
+				await readSshPubkey(
+					{ devOs: true, image: "dstack-0.5.7" },
+					"dev-image",
+				),
+			).toBe(sshPubkey);
+		}, true);
+	});
+
+	const HAND_WRITTEN_DEV_BOX = `services:
+  app:
+    image: nginx
+  ssh:
+    image: ghcr.io/dstack-tee/dstack-dev-box:sha-7725235@sha256:0dc661ea51fcbd70007d117b9e60883d9a96bac510a80683f5bdd6b7947b0291
+    privileged: true
+    pid: host
+    network_mode: host
+    uts: host
+    environment:
+      - SSH_AUTHORIZED_KEYS=\${DSTACK_AUTHORIZED_KEYS}
+    volumes:
+      - /:/host:rslave
+      - ssh-host-keys:/etc/ssh/host-keys
+      - home:/root
+volumes:
+  ssh-host-keys:
+  home:
+`;
+
+	test("treats a hand-written dev box with custom volumes as the dev-box channel", async () => {
+		// The backend grants SSH access on the four markers alone, so this is the
+		// dev-box channel even though it is not the shape the CLI injects.
+		expect(composeHasDevBox(CUSTOM_VOLUME_DEV_BOX)).toBe(false);
+
+		const channel = resolveSshKeyChannel(undefined, CUSTOM_VOLUME_DEV_BOX);
+		expect(channel).toBe("dev-box");
+		await withTempHome(async () => {
+			expect(
+				await readSshPubkey({ image: "dstack-0.6.0" }, channel),
+			).toBeUndefined();
+		}, true);
+	});
+
+	test("unwraps an --app-compose document before deciding the channel", async () => {
+		const payload = JSON.stringify({
+			name: "raw",
+			docker_compose_file: HAND_WRITTEN_DEV_BOX,
+		});
+
+		const channel = resolveSshKeyChannel(undefined, payload);
+		expect(channel).toBe("dev-box");
+		await withTempHome(async () => {
+			expect(
+				await readSshPubkey({ image: "dstack-0.6.0" }, channel),
+			).toBeUndefined();
+		}, true);
+	});
+
+	test("treats a hand-written dev box as the dev-box channel without --dev-os", async () => {
+		// `--image` 0.6 with the user's own dev-box service and no `--dev-os`: the
+		// compose still sends keys through user_config, so a frozen env copy would
+		// survive a revocation.
+		const channel = resolveSshKeyChannel(undefined, HAND_WRITTEN_DEV_BOX);
+		expect(channel).toBe("dev-box");
+		await withTempHome(async () => {
+			expect(
+				await readSshPubkey({ image: "dstack-0.6.0" }, channel),
+			).toBeUndefined();
+		}, true);
+	});
+
+	test("keeps the legacy env path for a dev OS image, dev box or not", async () => {
+		expect(resolveSshKeyChannel("dev-image", HAND_WRITTEN_DEV_BOX)).toBe(
+			"dev-image",
+		);
+		await withTempHome(async () => {
+			expect(
+				await readSshPubkey(
+					{ devOs: true, image: "dstack-0.5.7" },
+					resolveSshKeyChannel("dev-image", HAND_WRITTEN_DEV_BOX),
+				),
+			).toBe(sshPubkey);
+		}, true);
+	});
+
+	test("reads the local key when the compose carries no dev box", async () => {
+		const channel = resolveSshKeyChannel(
+			undefined,
+			"services:\n  app:\n    image: nginx\n",
+		);
+		expect(channel).toBe("none");
+		await withTempHome(async () => {
+			expect(await readSshPubkey({}, channel)).toBe(sshPubkey);
+		}, true);
+	});
+
+	test("takes the dev-box channel from the flag even when the compose is opaque", () => {
+		// `--app-compose` is a whole-document payload the line parser cannot read.
+		expect(
+			resolveSshKeyChannel(
+				"dev-box",
+				'{"docker_compose_file": "services: {}"}',
+			),
+		).toBe("dev-box");
 	});
 });
 
@@ -206,9 +410,10 @@ describe("buildProvisionPayload", () => {
 	};
 
 	describe("prefer_dev flag handling (--dev-os / --no-dev-os)", () => {
-		test("should set prefer_dev to true when devOs is true (--dev-os)", () => {
+		test("should select a dev image below dstack 0.6 (--dev-os)", () => {
 			const options = {
 				devOs: true,
+				image: "dstack-0.5.7",
 			};
 
 			const payload = buildProvisionPayload(
@@ -217,9 +422,35 @@ describe("buildProvisionPayload", () => {
 				defaultDockerCompose,
 				defaultEnvs,
 				defaultPrivacySettings,
+				undefined,
+				undefined,
+				undefined,
+				"dev-image",
 			);
 
 			expect(payload.prefer_dev).toBe(true);
+		});
+
+		test("should not select a dev image from dstack 0.6 on (--dev-os)", () => {
+			const options = {
+				devOs: true,
+				image: "dstack-0.6.0",
+			};
+
+			const payload = buildProvisionPayload(
+				options,
+				defaultName,
+				defaultDockerCompose,
+				defaultEnvs,
+				defaultPrivacySettings,
+				undefined,
+				undefined,
+				undefined,
+				"dev-box",
+			);
+
+			// 0.6+ has no dev image: the dev-box service carries SSH instead.
+			expect(payload.prefer_dev).toBe(false);
 		});
 
 		test("should set prefer_dev to false when devOs is false (--no-dev-os)", () => {
@@ -294,6 +525,10 @@ describe("buildProvisionPayload", () => {
 				defaultDockerCompose,
 				defaultEnvs,
 				defaultPrivacySettings,
+				undefined,
+				undefined,
+				undefined,
+				"dev-image",
 			);
 
 			expect(payload.instance_type).toBe("tdx.small");
@@ -485,6 +720,7 @@ describe("buildProvisionPayload", () => {
 			const options = {
 				kms: "base",
 				devOs: true,
+				image: "dstack-0.5.7",
 			};
 
 			const payload = buildProvisionPayload(
@@ -493,6 +729,10 @@ describe("buildProvisionPayload", () => {
 				defaultDockerCompose,
 				defaultEnvs,
 				defaultPrivacySettings,
+				undefined,
+				undefined,
+				undefined,
+				"dev-image",
 			);
 
 			expect(payload.kms).toBe("BASE");
@@ -947,5 +1187,87 @@ describe("buildProvisionPayload", () => {
 			).toBe(true);
 			expect(payload.listed).toBe(false);
 		});
+	});
+});
+
+describe("deploy --dev-os compose preparation", () => {
+	const LOCAL_COMPOSE = "services:\n  app:\n    image: nginx\n";
+
+	test("adds the canonical dev box to a compose without one", () => {
+		const prepared = composeForDevOs(LOCAL_COMPOSE, "dev-box");
+
+		expect(prepared.added).toBe(true);
+		expect(prepared.compose).toContain("dev-box:");
+		expect(
+			buildUpdatePatchBody({ uuid: "cvm-1" }, prepared.compose)
+				.docker_compose_file,
+		).toContain("dev-box:");
+	});
+
+	test.each([
+		[
+			"the markers on another image",
+			`services:
+  app:
+    image: nginx
+    privileged: true
+    pid: host
+    network_mode: host
+    uts: host
+`,
+		],
+		[
+			"a dev box whose entrypoint runs something else",
+			`services:
+  app:
+    image: nginx
+    privileged: true
+    pid: host
+    network_mode: host
+    uts: host
+    command: ["sleep", "infinity"]
+`,
+		],
+		[
+			"a dev box parked behind a profile",
+			`services:
+  app:
+    image: nginx
+    privileged: true
+    pid: host
+    network_mode: host
+    uts: host
+    profiles: [debug]
+`,
+		],
+		["the dev-box image without its mounts", CUSTOM_VOLUME_DEV_BOX],
+	])("refuses --dev-os when %s is not a usable dev box", (_label, compose) => {
+		// An explicit --dev-os asks for a dev box; a payload that only carries
+		// the markers is reported, never accepted as if SSH were already there.
+		expect(() => composeForDevOs(compose, "dev-box")).toThrow();
+	});
+
+	test("adds nothing when the mode is not the dev box", () => {
+		expect(composeForDevOs(LOCAL_COMPOSE, "dev-image")).toEqual({
+			compose: LOCAL_COMPOSE,
+			added: false,
+		});
+		expect(composeForDevOs(LOCAL_COMPOSE, undefined)).toEqual({
+			compose: LOCAL_COMPOSE,
+			added: false,
+		});
+	});
+
+	test("applying the dev box twice is idempotent", () => {
+		const once = composeForDevOs(LOCAL_COMPOSE, "dev-box");
+		const twice = composeForDevOs(once.compose, "dev-box");
+
+		expect(twice.added).toBe(false);
+		expect(twice.compose).toBe(once.compose);
+	});
+
+	test("--dev-os is no longer create-only", () => {
+		expect(() => assertUpdatableOptions({ devOs: true })).not.toThrow();
+		expect(() => assertUpdatableOptions({ devOs: false })).not.toThrow();
 	});
 });

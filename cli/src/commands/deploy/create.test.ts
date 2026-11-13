@@ -33,6 +33,7 @@ afterAll(() => {
 	mock.module("@/src/lib/client", () => previousClient);
 });
 const { runDeploy } = await import("./handler");
+const { recallDevOsMode } = await import("./dev-os-selection");
 
 type Recorded = {
 	method: string;
@@ -47,6 +48,48 @@ const APP_COMPOSE = JSON.stringify({
 	secure_time: true,
 });
 const LAUNCH_TOKEN = "t".repeat(32);
+
+const OS_IMAGES = {
+	items: [
+		{
+			name: "dstack-0.6.0",
+			slug: "dstack-0.6.0",
+			version: "0.6.0",
+			os_image_hash: "aa".repeat(32),
+			is_dev: false,
+			requires_gpu: false,
+		},
+		{
+			name: "prod-0.5.7",
+			slug: "dstack-0.5.7",
+			version: "0.5.7",
+			os_image_hash: "bb".repeat(32),
+			is_dev: false,
+			requires_gpu: false,
+		},
+		{
+			name: "dev-0.5.7",
+			slug: "dstack-dev-0.5.7",
+			version: "0.5.7",
+			os_image_hash: "cc".repeat(32),
+			is_dev: true,
+			requires_gpu: false,
+		},
+		{
+			// A release with no dev variant at all.
+			name: "prod-0.5.4",
+			slug: "dstack-0.5.4",
+			version: "0.5.4",
+			os_image_hash: "dd".repeat(32),
+			is_dev: false,
+			requires_gpu: false,
+		},
+	],
+	total: 2,
+	page: 1,
+	page_size: 100,
+	pages: 1,
+};
 
 const CREATED_CVM = {
 	id: "cvm_1",
@@ -70,6 +113,7 @@ let server: ReturnType<typeof Bun.serve>;
 let requests: Recorded[] = [];
 let tmpDir: string;
 let composePath: string;
+let previousCloudDir: string | undefined;
 let appComposePath: string;
 let stdout = "";
 // Per-test response for GET requests (CVM info, operations); defaults to 404.
@@ -94,11 +138,18 @@ beforeAll(async () => {
 							token: "prepare-token",
 						});
 			}
+			if (req.method === "GET" && url.pathname === "/api/v1/os-images") {
+				return Response.json(OS_IMAGES);
+			}
 			if (req.method === "GET" && respondGet) return respondGet(url.pathname);
 			return Response.json({ detail: "unexpected" }, { status: 404 });
 		},
 	});
 	tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "phala-deploy-create-"));
+	// `--dev-os` creates record their choice in the CLI state file; keep the
+	// developer's real one out of these tests.
+	previousCloudDir = process.env.PHALA_CLOUD_DIR;
+	process.env.PHALA_CLOUD_DIR = tmpDir;
 	composePath = path.join(tmpDir, "docker-compose.yml");
 	appComposePath = path.join(tmpDir, "app-compose.json");
 	await fs.writeFile(composePath, COMPOSE);
@@ -106,6 +157,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+	if (previousCloudDir === undefined) {
+		process.env.PHALA_CLOUD_DIR = undefined;
+	} else {
+		process.env.PHALA_CLOUD_DIR = previousCloudDir;
+	}
 	server.stop(true);
 	await fs.remove(tmpDir);
 });
@@ -299,6 +355,167 @@ describe("phala deploy (create)", () => {
 		expect(composeFile.runner).toBe("bash");
 		expect(composeFile.bash_script).toBe(COMPOSE);
 		expect("docker_compose_file" in composeFile).toBe(false);
+	});
+
+	test("injects the dev-box service when --dev-os targets dstack 0.6+", async () => {
+		const pubkeyPath = path.join(tmpDir, "id_ed25519.pub");
+		await fs.writeFile(pubkeyPath, "ssh-ed25519 AAAA test@example\n");
+
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			devOs: true,
+			image: "dstack-0.6.0",
+			sshPubkey: pubkeyPath,
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		const body = prepareRequest().body as Record<string, unknown>;
+		const composeFile = body.compose_file as Record<string, unknown>;
+		const compose = composeFile.docker_compose_file as string;
+		expect(compose).toContain(`${COMPOSE}  dev-box:`);
+		expect(compose).toContain(
+			"- SSH_AUTHORIZED_KEYS=${DSTACK_AUTHORIZED_KEYS}",
+		);
+		expect(compose).toContain("volumes:\n  ssh-host-keys:\n  home:");
+		// The dev box reads the key through the env var, which must be allowed.
+		expect(composeFile.allowed_envs).toEqual(["DSTACK_AUTHORIZED_KEYS"]);
+		expect(body.prefer_dev).toBe(false);
+	});
+
+	test("refuses --dev-os when the compose only carries the markers", async () => {
+		const markedPath = path.join(tmpDir, "marked-compose.yml");
+		await fs.writeFile(
+			markedPath,
+			`services:
+  app:
+    image: nginx
+    privileged: true
+    pid: host
+    network_mode: host
+    uts: host
+`,
+		);
+
+		const { exitCode, failure } = await deploy({
+			compose: markedPath,
+			devOs: true,
+			image: "dstack-0.6.0",
+		});
+
+		// An explicit --dev-os asks for a usable dev box: a service that only
+		// carries the markers is reported, never accepted as if SSH were there.
+		expect(exitCode).toBe(1);
+		expect((failure as Error).message).toContain(
+			"which Phala Cloud reads as the dev box",
+		);
+		expect(requests.some((request) => request.method === "POST")).toBe(false);
+	});
+
+	test("does not inject a local key into a 0.6 dev box", async () => {
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			devOs: true,
+			image: "dstack-0.6.0",
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		const body = prepareRequest().body as Record<string, unknown>;
+		const composeFile = body.compose_file as Record<string, unknown>;
+		// Keys travel through user_config: the backend authorizes every account
+		// key when the request carries no ssh_key_ids.
+		expect(composeFile.allowed_envs).toEqual([]);
+		expect("ssh_key_ids" in body).toBe(false);
+	});
+
+	test("records the dev OS choice so a later update keeps the dev box", async () => {
+		const pubkeyPath = path.join(tmpDir, "id_ed25519.pub");
+		await fs.writeFile(pubkeyPath, "ssh-ed25519 AAAA test@example\n");
+
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			devOs: true,
+			image: "dstack-0.6.0",
+			sshPubkey: pubkeyPath,
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		// Keyed by the server's vm_uuid, and the compose file on disk is
+		// untouched: the record is what an update has to work from.
+		expect(recallDevOsMode(CREATED_CVM.vm_uuid)).toBe("dev-box");
+		expect(await fs.readFile(composePath, "utf8")).toBe(COMPOSE);
+	});
+
+	test("requires a pinned image for --dev-os", async () => {
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			devOs: true,
+		});
+
+		expect(exitCode).toBe(1);
+		expect((failure as Error).message).toContain(
+			"--dev-os needs an explicit OS image",
+		);
+		expect(requests).toEqual([]);
+	});
+
+	test("rejects an OS image that is not in the catalog", async () => {
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			devOs: true,
+			image: "my-custom-image",
+		});
+
+		expect(exitCode).toBe(1);
+		expect((failure as Error).message).toContain(
+			"is not in the OS image catalog",
+		);
+	});
+
+	test("deploys the dev image for --dev-os below dstack 0.6", async () => {
+		const pubkeyPath = path.join(tmpDir, "legacy_dev.pub");
+		await fs.writeFile(pubkeyPath, "ssh-ed25519 AAAA legacy@example\n");
+
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			devOs: true,
+			image: "dstack-0.5.7",
+			sshPubkey: pubkeyPath,
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		const body = prepareRequest().body as Record<string, unknown>;
+		// The backend ignores prefer_dev when the request names an image, so
+		// sending the production slug would deploy a CVM with no sshd.
+		expect(body.image).toBe("dstack-dev-0.5.7");
+		expect(body.prefer_dev).toBe(true);
+		const composeFile = body.compose_file as Record<string, unknown>;
+		expect(composeFile.docker_compose_file).toBe(COMPOSE);
+	});
+
+	test("refuses a pre-0.6 production image with no dev variant", async () => {
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			devOs: true,
+			image: "dstack-0.5.4",
+		});
+
+		expect(exitCode).toBe(1);
+		expect((failure as Error).message).toContain('no dev variant of "0.5.4"');
+	});
+
+	test("leaves the compose alone with --no-dev-os", async () => {
+		const { exitCode } = await deploy({ compose: composePath, devOs: false });
+
+		expect(exitCode).toBe(0);
+		const composeFile = prepareRequest().body?.compose_file as Record<
+			string,
+			unknown
+		>;
+		expect(composeFile.docker_compose_file).toBe(COMPOSE);
 	});
 
 	test("sends --app-compose as compose_file_raw and prints the issued launch token", async () => {

@@ -105,6 +105,12 @@ export const CvmDetailV20251028Schema = z.object({
   public_logs: z.boolean().optional().default(false),
   public_tcbinfo: z.boolean().optional(),
   managed_env: z.boolean().optional().default(false),
+  enabled_ssh_access: z
+    .boolean()
+    .optional()
+    .describe(
+      "True when this CVM has SSH dev access: a dev OS image, or a dev-box service in its docker-compose.",
+    ),
   dapp_dashboard_url: z.string().optional().nullable(),
   /** Presigned serial log URL; expires shortly after it is issued. */
   syslog_endpoint: z

@@ -54,6 +54,8 @@ import {
 	safeGetCurrentUser,
 	safeGetCvmInfo,
 	safeGetCvmList,
+	safeGetOsImages,
+	safeListSshKeys,
 	safePatchCvm,
 	safeProvisionCvm,
 	safeUpdateCvmVisibility,
@@ -67,6 +69,20 @@ import {
 	readInitScriptFiles,
 	unknownInitScriptSlugMessage,
 } from "@/src/lib/init-script-files";
+import {
+	type DevOsMode,
+	type DevOsPlan,
+	type OsImageCatalogEntry,
+	composeHasDevBoxMarkers,
+	injectDevBoxService,
+	requireDevOsImage,
+	resolveDevOsPlan,
+} from "./dev-box";
+import {
+	forgetDevOsMode,
+	recallDevOsMode,
+	rememberDevOsMode,
+} from "./dev-os-selection";
 import { runTwoPhaseComposeUpdate } from "@/src/lib/on-chain-update";
 import type { DeployCommandInput } from "./command";
 
@@ -164,7 +180,8 @@ const CREATE_ONLY_FLAGS: ReadonlyArray<readonly [keyof Options, string]> = [
 	["customAppId", "--custom-app-id"],
 	["nonce", "--nonce"],
 	["keyProviderMode", "--key-provider-mode"],
-	["devOs", "--dev-os"],
+	// --dev-os is *not* here: a dev box lives only in the payload, never in the
+	// compose file on disk, so an update has to be able to re-add it.
 	["sshPubkey", "--ssh-pubkey"],
 	["fs", "--fs"],
 	["skipGateway", "--skip-gateway"],
@@ -461,6 +478,244 @@ async function readAppComposeFile(appComposePath: string): Promise<string> {
 	return fs.readFileSync(appComposePath, "utf8");
 }
 
+const OS_IMAGE_CATALOG_PAGE_SIZE = 100;
+
+/** Every enabled OS image, walking the catalog's pages. */
+async function listOsImageCatalog(
+	client: CliApiClient,
+): Promise<OsImageCatalogEntry[]> {
+	const entries: OsImageCatalogEntry[] = [];
+	for (let page = 1; ; page += 1) {
+		const result = await safeGetOsImages(client, {
+			page,
+			page_size: OS_IMAGE_CATALOG_PAGE_SIZE,
+		});
+		if (!result.success) throw result.error;
+		entries.push(...result.data.items);
+		if (page >= result.data.pages) return entries;
+	}
+}
+
+/** A state write the CLI commits only after the deployment has been applied. */
+type DevOsStateChange =
+	| { readonly kind: "remember"; readonly mode: DevOsMode }
+	| { readonly kind: "forget" };
+
+/**
+ * Where a dev box decision came from.
+ *
+ * `flag` is an explicit `--dev-os` and is always authored strictly. `carried`
+ * means the CVM already had the dev box according to its record or its deployed
+ * compose: the payload keeps whatever it already carries, because the user did
+ * not ask for a second box this time.
+ */
+type DevOsOrigin = "flag" | "carried";
+
+/** What the dev OS step decided, and what to record once it succeeded. */
+interface DevOsResolution {
+	/** How this deployment satisfies `--dev-os`, when it does. */
+	readonly plan?: DevOsPlan;
+	/** The state write to commit once the deployment has been applied. */
+	readonly stateChange?: DevOsStateChange;
+	/** Where the plan came from; decides whether authoring is strict. */
+	readonly origin?: DevOsOrigin;
+}
+
+/**
+ * The compose a deployment sends: the caller's payload, plus the dev box when
+ * the resolved mode asks for it.
+ *
+ * Always the strict injector, never a marker shortcut. A request that names
+ * `--dev-os` asks for a dev box this platform can rely on, and a compose that
+ * merely carries the four markers on something else (`network_mode: host` on an
+ * nginx, a `command: sleep`, a `profiles` list, a service using the dev-box
+ * image without its mounts) must be reported, not accepted as if SSH were
+ * already provided. `composeHasDevBoxMarkers` is the backend's SSH verdict and
+ * is used for the key channel, never to skip authoring.
+ *
+ * Idempotent for the canonical box itself: re-running it returns the payload
+ * unchanged with `added: false`.
+ */
+export function composeForDevOs(
+	composeYaml: string,
+	devOsMode: DevOsMode | undefined,
+): { compose: string; added: boolean } {
+	if (devOsMode !== "dev-box") return { compose: composeYaml, added: false };
+	const compose = injectDevBoxService(composeYaml);
+	return { compose, added: compose !== composeYaml };
+}
+
+/**
+ * The CVM an update targets, in the terms the dev OS record needs.
+ *
+ * `vmUuid` is the key the record is stored under: the user may name the same
+ * CVM as a UUID, a 40-character app id or `app_...`, and only the server can
+ * tell those are one CVM, so the id is resolved before anything is recalled.
+ *
+ * `compose` and `sshAccessEnabled` are how a dev box the record does not know
+ * about is recognised — a CVM deployed from another machine, or before this CLI
+ * kept a record, still has SSH access worth keeping.
+ */
+export interface UpdateTarget {
+	/** The identifier the caller used, normalized by `CvmIdSchema`. */
+	readonly id: string;
+	/** The server's canonical id for this CVM; the dev OS record key. */
+	readonly vmUuid: string;
+	/** The CVM as the API returned it. */
+	readonly cvm: unknown;
+	/** The compose the CVM currently runs, when the server returns one. */
+	readonly compose?: string;
+	/** The server's own verdict on whether this CVM has SSH access. */
+	readonly sshAccessEnabled?: boolean;
+}
+
+function readMapping(value: unknown): Record<string, unknown> | undefined {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) {
+		return undefined;
+	}
+	return value as Record<string, unknown>;
+}
+
+/** The compose a CVM detail payload carries, in either shape the API allows. */
+function readDeployedCompose(cvm: unknown): string | undefined {
+	const composeFile = readMapping(cvm)?.compose_file;
+	const record = readMapping(composeFile);
+	if (record) {
+		const compose = record.docker_compose_file;
+		return typeof compose === "string" ? compose : undefined;
+	}
+	return typeof composeFile === "string" ? composeFile : undefined;
+}
+
+/**
+ * Resolve the CVM an update targets, once, before the payload is built.
+ *
+ * Not an extra round trip: `updateCvm` needs the same record for the runner and
+ * the KMS key, and used to fetch it itself.
+ */
+async function fetchUpdateTarget(
+	client: CliApiClient,
+	id: string,
+): Promise<UpdateTarget> {
+	const result = await safeGetCvmInfo(client, { id });
+	if (!result.success) throw result.error;
+
+	const cvm = result.data;
+	const record = readMapping(cvm);
+	const vmUuid = record?.vm_uuid;
+	const sshAccess = record?.enabled_ssh_access;
+	const resolvedUuid =
+		typeof vmUuid === "string" && vmUuid.length > 0 ? vmUuid : undefined;
+	if (!resolvedUuid) {
+		logger.warn(
+			"Phala Cloud did not return this CVM's vm_uuid, so the dev OS setting is recorded under the identifier you passed. Pass --dev-os on the next update if this CVM uses a dev box.",
+		);
+	}
+
+	return {
+		id,
+		vmUuid: resolvedUuid ?? id,
+		cvm,
+		compose: readDeployedCompose(cvm),
+		sshAccessEnabled: typeof sshAccess === "boolean" ? sshAccess : undefined,
+	};
+}
+
+/**
+ * How `--dev-os` is satisfied for this deployment.
+ *
+ * The dstack release of the requested image decides it, resolved against the OS
+ * image catalog. `resolveDevOsPlan` refuses to guess, so an unpinned image or
+ * one the catalog does not know fails here instead of deploying a CVM with the
+ * wrong SSH setup.
+ *
+ * An update without the flag reuses the choice recorded for the CVM, and when
+ * there is no record it asks the deployed compose rather than assuming SSH
+ * should go away: the dev box only ever existed in a payload, never in the
+ * compose file on disk, so the record can be missing for a CVM that still has
+ * one.
+ *
+ * Records are only *planned* here; `commitDevOsState` writes them once the API
+ * accepted the change, so a failed deployment leaves them untouched.
+ */
+async function resolveDevOsTarget(
+	client: CliApiClient,
+	options: Options,
+	target: UpdateTarget | undefined,
+): Promise<DevOsResolution> {
+	if (options.devOs === false) {
+		return target ? { stateChange: { kind: "forget" } } : {};
+	}
+	if (options.devOs === undefined) {
+		if (!target) return {};
+		const recorded = recallDevOsMode(target.vmUuid);
+		if (recorded !== undefined) {
+			logger.info(
+				`Re-using the dev OS setting recorded for this CVM (${recorded}).`,
+			);
+			return {
+				plan: { mode: recorded, image: options.image },
+				origin: "carried",
+			};
+		}
+		if (target.compose !== undefined) {
+			if (!composeHasDevBoxMarkers(target.compose)) return {};
+			logger.info(
+				"The deployed compose carries a dev box; keeping it on this update.",
+			);
+			return {
+				plan: { mode: "dev-box", image: options.image },
+				stateChange: { kind: "remember", mode: "dev-box" },
+				origin: "carried",
+			};
+		}
+		if (target.sshAccessEnabled === true) {
+			// Unknown is not "off": the CVM has SSH access and the server did not
+			// say how, so sending a compose without a dev box could remove it.
+			throw new Error(
+				"This CVM has SSH access and Phala Cloud did not return its compose, so the CLI cannot tell whether that comes from a dev box. Pass --dev-os to keep the dev box, or --no-dev-os to drop it, then retry the update.",
+			);
+		}
+		return {};
+	}
+	// Validate before the catalog request so an unusable invocation fails
+	// without touching the network.
+	const identifier = requireDevOsImage(options.image);
+	const catalog = await listOsImageCatalog(client);
+	const plan = resolveDevOsPlan(identifier, catalog);
+	return {
+		plan,
+		stateChange: { kind: "remember", mode: plan.mode },
+		origin: "flag",
+	};
+}
+
+/**
+ * Write a dev OS state change once the deployment that decided it succeeded.
+ *
+ * The record is keyed by the server's `vm_uuid`: a create and an update can only
+ * agree on that id, whatever form the caller used.
+ */
+function commitDevOsState(
+	vmUuid: string | undefined,
+	change: DevOsStateChange | undefined,
+): void {
+	if (!change) return;
+	if (!vmUuid) {
+		if (change.kind === "remember") {
+			logger.warn(
+				"Could not record the dev OS setting: the API did not return the CVM's vm_uuid. Pass --dev-os on the next update.",
+			);
+		}
+		return;
+	}
+	if (change.kind === "remember") {
+		rememberDevOsMode(vmUuid, change.mode);
+	} else {
+		forgetDevOsMode(vmUuid);
+	}
+}
+
 const validatePrivateKey = async (
 	options: Options,
 	chainId: string | number | undefined,
@@ -650,13 +905,56 @@ const resolveEnvVars = async (
 };
 
 /**
- * Read SSH public key from file
- * - --dev-os: SSH public key is required
- * - --no-dev-os: Never inject an SSH public key
- * - Neither flag: Try to read public key unless --no-pre-launch-script is set
+ * Where the SSH keys of a deployment come from.
+ *
+ * The dev box reads them from `user_config`, which provision fills with the
+ * account's keys; a dev OS image below dstack 0.6 (or anything else) can only
+ * take them from `DSTACK_AUTHORIZED_KEYS`.
+ */
+export type SshKeyChannel = "dev-image" | "dev-box" | "none";
+
+/**
+ * Decide the key channel from the payload that will actually be sent.
+ *
+ * The rule is the backend's own (`teehouse/cvms/dev_box.py`): any service with
+ * the four markers is a dev box, whatever its image, volume names, environment
+ * or whether the CLI would have written it that way. A key read from disk only
+ * reaches `DSTACK_AUTHORIZED_KEYS`, which is frozen at deploy time and outlives
+ * a revocation, so the markers — not the stricter canonical check, which only
+ * decides whether injection can be skipped — decide this.
+ *
+ * `--app-compose` passes a whole AppCompose JSON document; the markers are read
+ * from the compose inside it. A pre-0.6 dev image keeps the legacy env path,
+ * flag or not.
+ */
+export function resolveSshKeyChannel(
+	devOsMode: DevOsMode | undefined,
+	payload: string,
+): SshKeyChannel {
+	if (devOsMode === "dev-image") return "dev-image";
+	if (devOsMode === "dev-box" || composeHasDevBoxMarkers(payload)) {
+		return "dev-box";
+	}
+	return "none";
+}
+
+/**
+ * Read the SSH public key that goes into `DSTACK_AUTHORIZED_KEYS`.
+ *
+ * - `none`: `--no-dev-os`, or no dev release in play; a local key is used
+ *   unless `--no-pre-launch-script` asks for none
+ * - `dev-image`: a dev OS image (dstack 0.5 and older) with sshd built in; a
+ *   key is required and only the env var can carry it
+ * - `dev-box`: the compose ships the dev box, which reads keys from
+ *   `user_config`; only an explicit `--ssh-pubkey` is injected into the env,
+ *   see below for why
+ *
+ * @param channel - where this deployment's SSH keys come from, as decided by
+ * the final compose rather than the flag
  */
 export const readSshPubkey = async (
 	options: Options,
+	channel: SshKeyChannel = "none",
 ): Promise<string | undefined> => {
 	let sshPubkeyPath = options.sshPubkey;
 
@@ -668,6 +966,17 @@ export const readSshPubkey = async (
 
 	// --no-dev-os: never inject SSH key
 	if (options.devOs === false) {
+		return undefined;
+	}
+
+	// The dev box merges two key channels, and the managed one —
+	// `user_config.ssh_authorized_keys`, which provision fills with every
+	// account key when the request carries no ssh_key_ids — is the one that
+	// follows the platform key management. A key read from disk would only land
+	// in the container environment, where it is frozen at deploy time and
+	// survives revoking the key in the account. So never pick up a local key
+	// here; the user has to name one explicitly.
+	if (channel === "dev-box" && !options.sshPubkey) {
 		return undefined;
 	}
 
@@ -698,11 +1007,11 @@ export const readSshPubkey = async (
 
 		// If still no key found
 		if (!sshPubkeyPath) {
-			// --dev-os requires SSH public key
-			if (options.devOs) {
+			// A dev OS image (dstack 0.5 and older) can only take keys from here.
+			if (channel === "dev-image") {
 				throw new Error(
 					dedent(`
-						SSH public key is required for dev images but not found.
+						SSH public key is required for a dev OS image but not found.
 
 						Searched for:
 						  - ~/.ssh/id_rsa.pub
@@ -742,6 +1051,25 @@ export const readSshPubkey = async (
 		);
 	}
 };
+
+/**
+ * Point out that a dev-box deployment with no account SSH key and no
+ * `--ssh-pubkey` produces a CVM nobody can log into.
+ *
+ * Provision authorizes every account key into `user_config` when the request
+ * carries no `ssh_key_ids`, which is exactly the channel the dev box reads, so
+ * an empty account means an empty authorized_keys. This is a hint, never a
+ * failure: keys added later reach the CVM on its next boot.
+ */
+async function warnWhenAccountHasNoSshKeys(
+	client: CliApiClient,
+): Promise<void> {
+	const result = await safeListSshKeys(client);
+	if (!result.success || result.data.length > 0) return;
+	logger.warn(
+		"This account has no SSH keys. The dev box authorizes your account keys into the CVM, so add one with `phala ssh-keys add` and restart the CVM, or no SSH login will succeed.",
+	);
+}
 
 const validateCpuMemoryDiskSize = async (options: Options) => {
 	let vcpu = DEFAULT_VCPU;
@@ -860,6 +1188,9 @@ function buildComposeFile(
  * Build provision payload from options
  * All parameters are optional - backend will auto-match resources
  * @param preResolvedKmsSelection - Optional pre-resolved KMS selection to avoid duplicate calls/warnings
+ * @param devOsMode - How `--dev-os` was resolved against the OS image catalog;
+ *   undefined when the flag is absent. Required for the flag, because
+ *   `prefer_dev` must be false when the dev box already carries SSH.
  */
 export const buildProvisionPayload = (
 	options: Options,
@@ -870,6 +1201,7 @@ export const buildProvisionPayload = (
 	preResolvedKmsSelection?: ReturnType<typeof resolveKmsSelection>,
 	preLaunchScriptContent?: string,
 	initScriptContents?: string[],
+	devOsMode?: DevOsMode,
 ) => {
 	const payload: ProvisionCvmRequest = options.appCompose
 		? // The file is the whole app compose; the API parses it.
@@ -954,11 +1286,14 @@ export const buildProvisionPayload = (
 	}
 
 	// Add prefer_dev flag based on --dev-os / --no-dev-os
-	// For on-chain KMS (ETHEREUM/BASE), default to non-dev since dev images may not be available
+	// For on-chain KMS (ETHEREUM/BASE), default to non-dev since dev images may not be available.
+	// dstack 0.6+ has no dev image at all: there `--dev-os` injected the
+	// dev-box service into the compose, so the release image is the right one
+	// and prefer_dev must stay false.
 	const isOnchainKms = kmsType === "ETHEREUM" || kmsType === "BASE";
-	if (options.devOs === true) {
-		payload.prefer_dev = true;
-	} else if (options.devOs === false || isOnchainKms) {
+	if (options.devOs !== undefined) {
+		payload.prefer_dev = devOsMode === "dev-image";
+	} else if (isOnchainKms) {
 		payload.prefer_dev = false;
 	}
 	// If devOs is undefined and not on-chain KMS, don't add prefer_dev (let backend auto-select)
@@ -1032,6 +1367,8 @@ const deployNewCvm = async (
 	projectConfig: PrivacyConfig | undefined,
 	preLaunchScriptContent: string | undefined,
 	initScriptContents: string[],
+	devOsMode: DevOsMode | undefined,
+	sshKeyChannel: SshKeyChannel,
 	context: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
 ) => {
 	// Resolve KMS selection once at the start to avoid duplicate calls and warnings
@@ -1040,13 +1377,23 @@ const deployNewCvm = async (
 	const name = await validateName(validatedOptions);
 
 	// Read SSH public key and add to environment variables
-	const sshPubkey = await readSshPubkey(validatedOptions);
+	const sshPubkey = await readSshPubkey(validatedOptions, sshKeyChannel);
+	const usesDevBox = sshKeyChannel === "dev-box";
 	const envsWithSshKey = [...(envs || [])];
 	if (sshPubkey) {
 		envsWithSshKey.push({
 			key: "DSTACK_AUTHORIZED_KEYS",
 			value: sshPubkey,
 		});
+	}
+	if (usesDevBox) {
+		if (sshPubkey) {
+			logger.warn(
+				"The key from --ssh-pubkey is frozen into DSTACK_AUTHORIZED_KEYS at deploy time. Revoking it with `phala ssh-keys revoke` does not remove it from the dev-box container; restart with a compose that drops the variable for that.",
+			);
+		} else {
+			await warnWhenAccountHasNoSshKeys(client);
+		}
 	}
 
 	// Resolve privacy settings based on options, phala.toml, and dev mode
@@ -1064,6 +1411,7 @@ const deployNewCvm = async (
 		kmsSelection,
 		preLaunchScriptContent,
 		initScriptContents,
+		devOsMode,
 	);
 
 	logger.info(`Provisioning CVM ${name}...`);
@@ -1233,6 +1581,10 @@ const deployNewCvm = async (
 			);
 		}
 	}
+
+	return {
+		vmUuid: typeof cvm.vm_uuid === "string" ? cvm.vm_uuid : undefined,
+	};
 };
 
 /**
@@ -1261,23 +1613,27 @@ async function applyListedAfterUpdate(
 	);
 }
 
+/**
+ * Apply an update.
+ *
+ * Returns whether the change is in effect: `--prepare-only` on an on-chain CVM
+ * stops at the registration step, and the dev OS record must not be written
+ * until the compose actually lands.
+ */
 const updateCvm = async (
 	validatedOptions: Options,
 	docker_compose_yml: string,
 	envs: EnvVar[] | undefined,
 	client: CliApiClient,
 	stdout: NodeJS.WriteStream,
-	context?: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
-	preLaunchScriptContent?: string,
-) => {
-	const cvm_result = await safeGetCvmInfo(client, {
-		id: validatedOptions.uuid,
-	});
-	if (!cvm_result.success) {
-		throw cvm_result.error;
-	}
+	context:
+		| Pick<CommandContext, "env" | "projectConfig" | "globalOptions">
+		| undefined,
+	preLaunchScriptContent: string | undefined,
+	target: UpdateTarget,
+): Promise<boolean> => {
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
-	const cvm = cvm_result.data as any;
+	const cvm = target.cvm as any;
 
 	// Encrypt env vars before patching (backend stores the full body in Redis for two-phase).
 	// getEncryptPubkey handles current (kms_info.*) and legacy top-level shapes.
@@ -1329,7 +1685,7 @@ const updateCvm = async (
 		} else {
 			logger.warn(msg);
 		}
-		return;
+		return true;
 	}
 
 	const outcome = await runTwoPhaseComposeUpdate({
@@ -1385,7 +1741,8 @@ const updateCvm = async (
 		stdout,
 	});
 	if (!("correlationId" in outcome)) {
-		return;
+		// --prepare-only on an on-chain CVM: registered, not applied yet.
+		return false;
 	}
 	correlationId = outcome.correlationId;
 
@@ -1441,6 +1798,7 @@ const updateCvm = async (
 	} else {
 		stdout.write("CVM updated successfully!\n");
 	}
+	return true;
 };
 
 /**
@@ -1547,12 +1905,89 @@ export async function runDeploy(
 			interactive: input.interactive,
 		});
 
-		const docker_compose_yml = input.appCompose
+		const composeSource = input.appCompose
 			? await readAppComposeFile(input.appCompose)
 			: await readDockerComposeFile({
 					dockerComposePath: dockerComposePath,
 					interactive: input.interactive,
 				});
+
+		// Resolve the CVM id here, once, for the dev OS record and everything
+		// below. An update also needs the server's view of the CVM: the canonical
+		// vm_uuid the record is keyed by, and the compose it currently runs.
+		const uuid = context.cvmId
+			? CvmIdSchema.parse(context.cvmId).cvmId
+			: undefined;
+		const updateTarget = uuid
+			? await fetchUpdateTarget(client, uuid)
+			: undefined;
+
+		// The dev OS mode decides the payload: below dstack 0.6 it picks the dev
+		// image, on 0.6 and newer it adds the dev box service to the compose.
+		const devOs = await resolveDevOsTarget(client, input, updateTarget);
+		const devOsPlan = devOs.plan;
+		const devOsMode = devOsPlan?.mode;
+
+		// Below dstack 0.6 the plan also picks the image: the backend ignores
+		// prefer_dev when the request names one, so a production image of a
+		// release that has a dev variant deploys a CVM without sshd.
+		const devOsImage =
+			devOsPlan?.image !== undefined && devOsPlan.image !== input.image
+				? devOsPlan.image
+				: undefined;
+		const deployInput: Options = devOsImage
+			? { ...input, image: devOsImage }
+			: input;
+		if (devOsImage) {
+			logger.info(
+				`--dev-os selected the dev OS image ${devOsImage} for this dstack release.`,
+			);
+		}
+
+		let docker_compose_yml = composeSource;
+		// The SSH server ships as an extra service in the compose instead of a dev
+		// OS image. Inject it before the payload size check so the limit covers
+		// what is actually sent.
+		if (devOsMode === "dev-box") {
+			if (input.appCompose) {
+				// --app-compose is an opaque whole-document payload the API parses.
+				logger.warn(
+					"--dev-os cannot add the dev-box service to an --app-compose payload. Add it to that file's docker_compose_file yourself.",
+				);
+			} else {
+				// A carried dev box is the user's own: keep the payload as it is when
+				// it already ships one, so the update never stacks a second container
+				// on port 22. An explicit flag is always authored strictly.
+				const keepCarried =
+					devOs.origin === "carried" && composeHasDevBoxMarkers(composeSource);
+				const prepared = keepCarried
+					? { compose: composeSource, added: false }
+					: composeForDevOs(composeSource, devOsMode);
+				docker_compose_yml = prepared.compose;
+				logger.info(
+					prepared.added
+						? "Added the dev-box SSH service to the compose file (dstack 0.6+ has no dev image)."
+						: "The compose already carries the dev-box SSH service.",
+				);
+			}
+		}
+
+		// The key channel follows the final payload, not the flag: a dev box the
+		// user wrote by hand (whatever its image, volume names or env) joins the
+		// same channel as an injected one, and a key frozen into the env there
+		// would outlive a revocation. `--app-compose` JSON is unwrapped first.
+		const sshKeyChannel = resolveSshKeyChannel(devOsMode, docker_compose_yml);
+
+		// What a create records once the CVM exists. The dev box lives only in
+		// the payload, so repeating the choice is the only way a later update
+		// keeps SSH access; a payload the backend does not read as a dev box (an
+		// opaque --app-compose without one) is not recorded.
+		const createDevOsState: DevOsStateChange | undefined =
+			devOsMode === "dev-image"
+				? { kind: "remember", mode: devOsMode }
+				: devOsMode === "dev-box" && composeHasDevBoxMarkers(docker_compose_yml)
+					? { kind: "remember", mode: devOsMode }
+					: undefined;
 
 		// Read pre-launch script file if provided
 		let preLaunchScriptContent: string | undefined;
@@ -1584,11 +2019,11 @@ export async function runDeploy(
 
 		// Build options with env_file from phala.toml as fallback
 		const optionsWithEnvFile: Options = {
-			...input,
+			...deployInput,
 			// If no env specified and phala.toml has env_file, use it
 			env:
-				input.env && input.env.length > 0
-					? input.env
+				deployInput.env && deployInput.env.length > 0
+					? deployInput.env
 					: context.projectConfig.env_file
 						? [context.projectConfig.env_file]
 						: undefined,
@@ -1604,22 +2039,17 @@ export async function runDeploy(
 			console.log("[DEBUG] input.cvmId:", input.cvmId);
 		}
 
-		const uuid = context.cvmId
-			? CvmIdSchema.parse(context.cvmId).cvmId
-			: undefined;
-
 		if (input.debug) {
 			console.log("[DEBUG] resolved uuid:", uuid);
 			console.log("[DEBUG] isUpdate:", !!uuid);
 		}
 
-		const isUpdate = !!uuid;
-		if (isUpdate) {
+		if (updateTarget) {
 			// Update the existing CVM
-			await updateCvm(
+			const applied = await updateCvm(
 				{
-					...input,
-					uuid,
+					...deployInput,
+					uuid: updateTarget.id,
 				},
 				docker_compose_yml,
 				envs,
@@ -1627,11 +2057,16 @@ export async function runDeploy(
 				context.stdout,
 				context,
 				preLaunchScriptContent,
+				updateTarget,
 			);
+			// Only an applied update changes what a later update should do.
+			if (applied) {
+				commitDevOsState(updateTarget.vmUuid, devOs.stateChange);
+			}
 		} else {
 			// Deploy a new CVM
-			await deployNewCvm(
-				input,
+			const created = await deployNewCvm(
+				deployInput,
 				docker_compose_yml,
 				envs ?? [],
 				client,
@@ -1640,8 +2075,11 @@ export async function runDeploy(
 				context.projectConfig,
 				preLaunchScriptContent,
 				initScriptContents,
+				devOsMode,
+				sshKeyChannel,
 				context,
 			);
+			commitDevOsState(created.vmUuid, createDevOsState);
 		}
 		return 0;
 	} catch (error) {

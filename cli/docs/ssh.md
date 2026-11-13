@@ -2,6 +2,14 @@
 
 Connect to a CVM via SSH through the Phala Cloud gateway.
 
+## Prerequisites
+
+The CVM has to serve SSH: either a dev OS image (dstack 0.5 and older) or a
+`dev-box` container declared in its compose (dstack 0.6 and newer, added by
+`phala deploy --dev-os`). The CLI connects to `<app-id>-22.<gateway>`, and the
+dev box listens on port 22. On a CVM with neither, the CLI warns and the
+connection usually fails.
+
 ## Usage
 
     phala ssh [cvm-id] [options] [-- ssh-options]

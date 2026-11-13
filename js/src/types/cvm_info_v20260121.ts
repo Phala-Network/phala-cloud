@@ -194,6 +194,12 @@ export const CvmInfoV20260121Schema = z.object({
   gateway_enabled: z.boolean().optional(),
   secure_time: z.boolean().optional(),
   managed_env: z.boolean().optional().default(false),
+  enabled_ssh_access: z
+    .boolean()
+    .optional()
+    .describe(
+      "True when this CVM has SSH dev access: a dev OS image, or a dev-box service in its docker-compose.",
+    ),
   listed: z.boolean().optional().default(false),
   storage_fs: z.string().optional(),
   workspace: WorkspaceRefSchema.nullable().optional(),

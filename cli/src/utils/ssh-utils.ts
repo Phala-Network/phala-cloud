@@ -137,6 +137,27 @@ export function isDevImage(baseImage: string | null | undefined): boolean {
 	return baseImage.toLowerCase().includes("dev");
 }
 
+/** What a CVM reports about its own SSH surface. */
+export interface SshAccessInfo {
+	baseImage?: string | null | undefined;
+	isDevImage?: boolean | undefined;
+	/** API field: this CVM is recorded as having SSH dev access. */
+	enabledSshAccess?: boolean | undefined;
+}
+
+/**
+ * Whether a CVM can serve SSH at all.
+ *
+ * Up to dstack 0.5.x the dev OS image carried sshd itself. dstack 0.6 has no
+ * dev image: sshd runs in the `dev-box` container the app compose declares,
+ * which the API records as `enabled_ssh_access`. Either signal is enough, and
+ * a CVM with neither is worth warning about.
+ */
+export function hasSshAccess(info: SshAccessInfo): boolean {
+	if (info.enabledSshAccess === true) return true;
+	return (info.isDevImage ?? isDevImage(info.baseImage)) === true;
+}
+
 function resolveGatewayDomain(cvm: unknown): string | undefined {
 	if (!cvm || typeof cvm !== "object") {
 		return undefined;
@@ -189,6 +210,12 @@ function resolveBaseImageAndDevFlag(cvm: unknown): {
 	}
 
 	return {};
+}
+
+function resolveEnabledSshAccess(cvm: unknown): boolean {
+	if (!cvm || typeof cvm !== "object") return false;
+	const value = (cvm as { enabled_ssh_access?: unknown }).enabled_ssh_access;
+	return value === true;
 }
 
 function resolveInstanceId(
@@ -246,6 +273,7 @@ export async function fetchCvmInfo<V extends ApiVersion>(
 		status: cvm.status,
 		baseImage,
 		isDevImage: isDev,
+		enabledSshAccess: resolveEnabledSshAccess(cvm),
 	};
 }
 

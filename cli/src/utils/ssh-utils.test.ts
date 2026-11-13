@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
 	buildSshOptions,
+	hasSshAccess,
 	formatOpensslProxyArg,
 	resolveHttpsProxy,
 	sshKeyFingerprint,
@@ -209,5 +210,44 @@ describe("formatOpensslProxyArg", () => {
 				true,
 			),
 		).toBe("proxy.corp.example:3128");
+	});
+});
+
+describe("hasSshAccess", () => {
+	test("accepts a dev image", () => {
+		expect(hasSshAccess({ baseImage: "dstack-dev-0.5.7" })).toBe(true);
+		expect(hasSshAccess({ baseImage: "prod-0.6.0", isDevImage: true })).toBe(
+			true,
+		);
+	});
+
+	test("accepts a release image whose compose carries the dev box", () => {
+		expect(
+			hasSshAccess({
+				baseImage: "dstack-0.6.3",
+				isDevImage: false,
+				enabledSshAccess: true,
+			}),
+		).toBe(true);
+	});
+
+	test("rejects a release image without a dev box", () => {
+		expect(
+			hasSshAccess({
+				baseImage: "dstack-0.6.3",
+				isDevImage: false,
+				enabledSshAccess: false,
+			}),
+		).toBe(false);
+		expect(hasSshAccess({ baseImage: undefined })).toBe(false);
+	});
+
+	test("trusts an explicit is_dev flag over the image name", () => {
+		expect(hasSshAccess({ baseImage: "prod-0.5.7", isDevImage: true })).toBe(
+			true,
+		);
+		expect(
+			hasSshAccess({ baseImage: "dstack-dev-0.5.7", isDevImage: false }),
+		).toBe(false);
 	});
 });
