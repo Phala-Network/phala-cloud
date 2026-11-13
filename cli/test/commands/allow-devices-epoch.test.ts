@@ -8,6 +8,17 @@ const TX_HASH = `0x${"ab".repeat(32)}`;
 
 // Toggle whether the mocked chain reports the queried devices as allowed.
 let mockDevicesAllowed = true;
+// The backend allowlist view, replaceable per test.
+let mockAllowlistDevices: { device_id: string; status: string; node_name?: string }[] =
+	[];
+
+// Capture the interactive prompt's choices; auto-select everything offered.
+const promptMock = mock((questions: { choices?: { value: string }[] }[]) =>
+	Promise.resolve({
+		selected: (questions[0]?.choices ?? []).map((choice) => choice.value),
+	}),
+);
+mock.module("inquirer", () => ({ default: { prompt: promptMock } }));
 
 const getAllowedDevicesMock = mock((args: Record<string, unknown>) =>
 	Promise.resolve({
@@ -47,7 +58,7 @@ mock.module("@phala/cloud", () => ({
 				is_onchain_kms: true,
 				chain_id: 8453,
 				app_contract_address: APP_CONTRACT,
-				devices: [],
+				devices: mockAllowlistDevices,
 			},
 		}),
 	),
@@ -98,6 +109,8 @@ describe("allow-devices --epoch threading", () => {
 		getAllowedDevicesMock.mockClear();
 		addDeviceMock.mockClear();
 		removeDeviceMock.mockClear();
+		promptMock.mockClear();
+		mockAllowlistDevices = [];
 	});
 
 	test("add --epoch --wait verifies the allowlist at the requested epoch", async () => {
@@ -166,6 +179,41 @@ describe("allow-devices --epoch threading", () => {
 			);
 		} finally {
 			mockDevicesAllowed = true;
+		}
+	});
+
+	test("remove -i --epoch offers devices the backend already reports as removed", async () => {
+		// The device is removed at the current epoch (backend view) but still
+		// allowed at epoch 1 — it must remain an interactive removal candidate
+		// for `--epoch 1`, or the historical row can never be revoked from the CLI.
+		mockAllowlistDevices = [{ device_id: DEVICE_ID, status: "removed" }];
+		mockDevicesAllowed = true;
+		try {
+			const code = await allowDevicesRemoveCommand.run(
+				allowDevicesRemoveSchema.parse({
+					cvm: "app_test",
+					interactive: true,
+					epoch: 1,
+					privateKey: `0x${"22".repeat(32)}`,
+				}),
+				makeContext(),
+			);
+
+			expect(code).toBe(0);
+			const questions = promptMock.mock.calls[0]?.[0] as {
+				choices: { value: string }[];
+			}[];
+			expect(questions[0]?.choices.map((choice) => choice.value)).toContain(
+				DEVICE_ID,
+			);
+			expect(getAllowedDevicesMock).toHaveBeenCalledWith(
+				expect.objectContaining({ epoch: 1, deviceIds: [DEVICE_ID] }),
+			);
+			expect(removeDeviceMock).toHaveBeenCalledWith(
+				expect.objectContaining({ deviceId: DEVICE_ID, epoch: 1 }),
+			);
+		} finally {
+			mockAllowlistDevices = [];
 		}
 	});
 });

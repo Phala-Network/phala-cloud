@@ -1005,9 +1005,15 @@ async function runRemove(
 		let deviceIds: `0x${string}`[];
 
 		if (input.interactive && !input.deviceId) {
-			let allowedDevices = allowlist.devices.filter(
-				(d) => d.status === "allowed",
-			);
+			// With --epoch the target epoch may hold devices the backend's
+			// current-epoch view already reports as removed, so start from every
+			// known device and let the on-chain read at that epoch decide.
+			// Without --epoch the backend's current status is the right filter.
+			const candidatePool =
+				input.epoch !== undefined
+					? allowlist.devices
+					: allowlist.devices.filter((d) => d.status === "allowed");
+			let allowedDevices = candidatePool;
 			// With --epoch the backend list reflects the current epoch; re-check
 			// the candidates on-chain at the requested epoch.
 			if (input.epoch !== undefined) {
