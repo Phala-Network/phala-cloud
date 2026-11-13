@@ -42,7 +42,7 @@ const DEV_BOX_MARKERS: ReadonlyArray<readonly [string, boolean | string]> = [
 
 export const DEV_BOX_SERVICE_NAME = "dev-box";
 const DEV_BOX_IMAGE_REPOSITORY = "ghcr.io/dstack-tee/dstack-dev-box";
-export const DEV_BOX_IMAGE = `${DEV_BOX_IMAGE_REPOSITORY}:latest`;
+export const DEV_BOX_IMAGE = `${DEV_BOX_IMAGE_REPOSITORY}:sha-7725235@sha256:0dc661ea51fcbd70007d117b9e60883d9a96bac510a80683f5bdd6b7947b0291`;
 
 /**
  * The image references a compose must use to count as the CLI's dev box.

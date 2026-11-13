@@ -743,7 +743,7 @@ describe("composeHasDevBoxMarkers", () => {
   app:
     image: nginx
   ssh:
-    image: ghcr.io/dstack-tee/dstack-dev-box:latest
+    image: ghcr.io/dstack-tee/dstack-dev-box:sha-7725235@sha256:0dc661ea51fcbd70007d117b9e60883d9a96bac510a80683f5bdd6b7947b0291
     privileged: true
     pid: host
     network_mode: host
@@ -782,7 +782,7 @@ describe("composeHasDevBoxMarkers", () => {
 services:
   ssh:
     <<: *box
-    image: ghcr.io/dstack-tee/dstack-dev-box:latest
+    image: ghcr.io/dstack-tee/dstack-dev-box:sha-7725235@sha256:0dc661ea51fcbd70007d117b9e60883d9a96bac510a80683f5bdd6b7947b0291
 `;
 		expect(composeHasDevBoxMarkers(compose)).toBe(true);
 	});
