@@ -80,7 +80,10 @@ export type AppPolicyWriteContext = {
 };
 
 /**
- * Probe verdicts, keyed by chain id and lowercased contract address.
+ * Probe verdicts are cached per `(chainId, address)`; the chain id comes from
+ * the client's configured chain or `eth_chainId`. When neither is available
+ * the verdict is not cached at all — an "unknown" bucket would leak verdicts
+ * across networks.
  *
  * Two facts shape the cache:
  *
@@ -100,8 +103,23 @@ type CachedGeneration = {
 
 const generationCache = new Map<string, CachedGeneration>();
 
-function generationCacheKey(publicClient: PublicClient, contractAddress: Address): string {
-  return `${publicClient.chain?.id ?? "unknown"}:${contractAddress.toLowerCase()}`;
+function generationCacheKey(chainId: number | undefined, contractAddress: Address): string {
+  return `${chainId ?? "unknown"}:${contractAddress.toLowerCase()}`;
+}
+
+/**
+ * The network the client talks to: the configured chain, or `eth_chainId`
+ * when the client was built without one. Returns `undefined` when the network
+ * cannot be determined — callers must skip caching then, because an
+ * unidentified `unknown:address` bucket would share verdicts across networks.
+ */
+async function resolveChainId(publicClient: PublicClient): Promise<number | undefined> {
+  if (publicClient.chain?.id !== undefined) return publicClient.chain.id;
+  try {
+    return await publicClient.getChainId();
+  } catch {
+    return undefined;
+  }
 }
 
 /** Drop cached probe verdicts; meant for tests and long-lived processes. */
@@ -201,19 +219,25 @@ export async function resolveAppEpochPlan(
   publicClient: PublicClient,
   appContractAddress: Address,
 ): Promise<AppEpochPlan> {
-  const cacheKey = generationCacheKey(publicClient, appContractAddress);
+  const chainId = await resolveChainId(publicClient);
+  // Without a reliable chain identity the verdict must not be shared across
+  // clients: an "unknown" bucket would leak verdicts across networks.
+  const cacheable = chainId !== undefined;
+  const cacheKey = generationCacheKey(chainId, appContractAddress);
 
-  const cached = generationCache.get(cacheKey);
+  const cached = cacheable ? generationCache.get(cacheKey) : undefined;
   let generation =
     cached && (cached.generation === "epoch" || cached.expiresAt > Date.now())
       ? cached.generation
       : undefined;
   if (generation === undefined) {
     generation = await probeGeneration(publicClient, appContractAddress);
-    generationCache.set(cacheKey, {
-      generation,
-      expiresAt: Date.now() + LEGACY_VERDICT_TTL_MS,
-    });
+    if (cacheable) {
+      generationCache.set(cacheKey, {
+        generation,
+        expiresAt: Date.now() + LEGACY_VERDICT_TTL_MS,
+      });
+    }
   }
 
   if (generation === "legacy") return { kind: "legacy" };

@@ -57,9 +57,10 @@ import {
  *
  * The contract generation is probed before writing. On a contract without app
  * epochs the epoch-less `removeDevice` setter is used and `epoch` must be
- * omitted. On an epoch-aware contract, `epoch` pins the write to that epoch, and
- * an omitted `epoch` writes `[currentAppEpoch, currentAppEpoch + 1]` because
- * allowlist rows are not inherited across epochs. The written rows are reported
+ * omitted. On an epoch-aware contract, `epoch` pins the revocation to that
+ * epoch, and an omitted `epoch` revokes `[0, currentAppEpoch + 1]` because
+ * allowlist rows are not inherited across epochs and the contract still
+ * authorizes historical epochs. The written rows are reported
  * as `epochsWritten`.
  */
 
@@ -106,9 +107,9 @@ export type RemoveDeviceRequest = {
   appAddress: Address;
   deviceId: string;
   /**
-   * App epoch to write, on epoch-aware contracts. Omit to write
-   * `[currentAppEpoch, currentAppEpoch + 1]`. Unsupported (and rejected) on
-   * contracts that predate app epochs.
+   * App epoch to revoke, on epoch-aware contracts. Omit to revoke every
+   * writable epoch, `[0, currentAppEpoch + 1]`, including history.
+   * Unsupported (and rejected) on contracts that predate app epochs.
    */
   epoch?: number;
   privateKey?: Hex;

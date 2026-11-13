@@ -84,7 +84,10 @@ function createPublicClientMock(options: ReaderOptions) {
     }
   });
 
-  const client = { readContract } as unknown as PublicClient & {
+  const client = {
+    readContract,
+    getChainId: vi.fn(async () => options.chainId ?? 8453),
+  } as unknown as PublicClient & {
     readContract: typeof readContract;
   };
   if (options.chainId !== undefined) {
@@ -283,6 +286,22 @@ describe("resolveAppEpochPlan", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("does not cache when the network identity is unknown", async () => {
+    const epochClient = createPublicClientMock({ generation: "epoch", currentAppEpoch: 0 });
+    // No configured chain and no eth_chainId answer: nothing may be cached,
+    // or the verdict would leak into an "unknown" bucket shared by networks.
+    (epochClient as { getChainId: () => Promise<number> }).getChainId = vi.fn(
+      async () => {
+        throw new Error("no chain id");
+      },
+    );
+
+    await resolveAppEpochPlan(epochClient, APP_ADDRESS);
+    await resolveAppEpochPlan(epochClient, APP_ADDRESS);
+
+    expect(readCallsOf(epochClient, "supportsInterface")).toHaveLength(2);
   });
 
   it("never expires an epoch verdict: generations only move legacy → epoch", async () => {
