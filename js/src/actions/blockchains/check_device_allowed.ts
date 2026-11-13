@@ -1,12 +1,16 @@
 import { type Chain, type Address, type PublicClient, createPublicClient, http } from "viem";
 import { asHex } from "../../utils";
 import { dstackAppAbi } from "./abi/dstack_app";
+import { resolveAppEpochPlan } from "./epoch_compat";
 
 /**
  * Check whether a specific device is allowed by a DstackApp contract.
  *
- * Reads the `allowAnyDevice()` flag first; if false, checks
- * `allowedDeviceIds(deviceId)`.
+ * Reads the `allowAnyDevice()` flag first; if false, checks the device row.
+ * The row read is epoch-aware: contracts without app epochs use the
+ * `allowedDeviceIds(deviceId)` getter, epoch-aware contracts use
+ * `allowedDeviceIdsAtEpoch(currentAppEpoch, deviceId)` because the plain getter
+ * only ever reports epoch-0 rows.
  *
  * @group Actions
  * @since 0.6.0
@@ -56,7 +60,19 @@ export async function checkDeviceAllowed(request: CheckDeviceAllowedRequest): Pr
 
   if (allowAny) return true;
 
-  // Check specific device
+  // Check the device row at the active epoch
+  const epochPlan = await resolveAppEpochPlan(publicClient, contractAddress);
+
+  if (epochPlan.kind === "epoch") {
+    const allowedAtEpoch = await publicClient.readContract({
+      address: contractAddress,
+      abi: dstackAppAbi,
+      functionName: "allowedDeviceIdsAtEpoch",
+      args: [BigInt(epochPlan.currentAppEpoch), deviceIdHex],
+    });
+    return allowedAtEpoch as boolean;
+  }
+
   const allowed = await publicClient.readContract({
     address: contractAddress,
     abi: dstackAppAbi,

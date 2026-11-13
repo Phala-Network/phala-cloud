@@ -25,6 +25,13 @@ import {
   type TransactionOptions,
 } from "../../utils";
 import { dstackAppAbi } from "./abi/dstack_app";
+import {
+  type EpochsWritten,
+  EpochsWrittenSchema,
+  epochsWritten,
+  resolveAppEpochWritePlan,
+  writeDeviceAllowlist,
+} from "./epoch_compat";
 
 /**
  * Remove a device from a DstackApp contract's allowlist.
@@ -45,6 +52,15 @@ import { dstackAppAbi } from "./abi/dstack_app";
  *   privateKey: "0x...",
  * })
  * ```
+ *
+ * ## Epoch handling
+ *
+ * The contract generation is probed before writing. On a contract without app
+ * epochs the epoch-less `removeDevice` setter is used and `epoch` must be
+ * omitted. On an epoch-aware contract, `epoch` pins the write to that epoch, and
+ * an omitted `epoch` writes `[currentAppEpoch, currentAppEpoch + 1]` because
+ * allowlist rows are not inherited across epochs. The written rows are reported
+ * as `epochsWritten`.
  */
 
 // ── Request ────────────────────────────────────────────────────────
@@ -55,6 +71,7 @@ const RemoveDeviceRequestSchema = z
     rpcUrl: z.string().optional(),
     appAddress: z.string(),
     deviceId: z.string(),
+    epoch: z.number().int().optional(),
     privateKey: z.string().optional(),
     walletClient: z.unknown().optional(),
     publicClient: z.unknown().optional(),
@@ -88,6 +105,12 @@ export type RemoveDeviceRequest = {
   rpcUrl?: string;
   appAddress: Address;
   deviceId: string;
+  /**
+   * App epoch to write, on epoch-aware contracts. Omit to write
+   * `[currentAppEpoch, currentAppEpoch + 1]`. Unsupported (and rejected) on
+   * contracts that predate app epochs.
+   */
+  epoch?: number;
   privateKey?: Hex;
   walletClient?: WalletClient;
   publicClient?: PublicClient;
@@ -110,6 +133,8 @@ export const RemoveDeviceSchema = z
     transactionHash: z.string(),
     blockNumber: z.bigint().optional(),
     gasUsed: z.bigint().optional(),
+    /** Epoch rows written, absent when the contract has no app epochs. */
+    epochsWritten: EpochsWrittenSchema.optional(),
   })
   .passthrough();
 
@@ -140,6 +165,7 @@ export async function removeDevice<T extends z.ZodTypeAny | false | undefined = 
     rpcUrl,
     appAddress,
     deviceId,
+    epoch,
     privateKey,
     walletClient: providedWalletClient,
     publicClient: providedPublicClient,
@@ -224,15 +250,22 @@ export async function removeDevice<T extends z.ZodTypeAny | false | undefined = 
     }
   }
 
+  // Resolve the contract generation and, on epoch-aware contracts, the rows to write
+  const writePlan = await resolveAppEpochWritePlan(publicClient, contractAddress, epoch);
+  const writtenEpochs: EpochsWritten | undefined = epochsWritten(writePlan);
+
   const removeDeviceOperation = async (clients: NetworkClients): Promise<Hash> => {
-    return clients.walletClient.writeContract({
-      address: contractAddress,
-      abi: dstackAppAbi,
-      functionName: "removeDevice",
-      args: [deviceIdHex],
-      account: clients.walletClient.account || clients.address,
-      chain: (chain as Chain) || null,
-    });
+    return writeDeviceAllowlist(
+      {
+        walletClient: clients.walletClient,
+        address: contractAddress,
+        account: clients.walletClient.account || clients.address,
+        chain: (chain as Chain) || null,
+      },
+      "remove",
+      writePlan,
+      deviceIdHex,
+    );
   };
 
   const transactionResult = retryOptions
@@ -263,6 +296,7 @@ export async function removeDevice<T extends z.ZodTypeAny | false | undefined = 
     transactionHash: transactionResult.receipt.transactionHash,
     blockNumber: transactionResult.receipt.blockNumber,
     gasUsed: transactionResult.receipt.gasUsed,
+    epochsWritten: writtenEpochs,
   };
 
   if (parameters?.schema === false) {

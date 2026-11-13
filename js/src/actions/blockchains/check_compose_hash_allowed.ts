@@ -1,11 +1,15 @@
 import { type Chain, type Address, type PublicClient, createPublicClient, http } from "viem";
 import { asHex } from "../../utils";
 import { dstackAppAbi } from "./abi/dstack_app";
+import { resolveAppEpochPlan } from "./epoch_compat";
 
 /**
  * Check whether a specific compose hash is allowed by a DstackApp contract.
  *
- * Reads the `allowedComposeHashes(hash)` mapping on-chain.
+ * The row read is epoch-aware: contracts without app epochs use the
+ * `allowedComposeHashes(hash)` getter, epoch-aware contracts use
+ * `allowedComposeHashesAtEpoch(currentAppEpoch, hash)` because the plain getter
+ * only ever reports epoch-0 rows.
  *
  * @group Actions
  * @since 0.7.0
@@ -47,6 +51,18 @@ export async function checkComposeHashAllowed(
         if (!chain) throw new Error("Chain is required when publicClient is not provided");
         return createPublicClient({ chain, transport: http(rpcUrl) });
       })();
+
+  const epochPlan = await resolveAppEpochPlan(publicClient, contractAddress);
+
+  if (epochPlan.kind === "epoch") {
+    const allowedAtEpoch = await publicClient.readContract({
+      address: contractAddress,
+      abi: dstackAppAbi,
+      functionName: "allowedComposeHashesAtEpoch",
+      args: [BigInt(epochPlan.currentAppEpoch), composeHashHex],
+    });
+    return allowedAtEpoch as boolean;
+  }
 
   const allowed = await publicClient.readContract({
     address: contractAddress,
