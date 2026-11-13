@@ -12,12 +12,14 @@ import {
 	describe,
 	expect,
 	mock,
+	spyOn,
 	test,
 } from "bun:test";
 import os from "node:os";
 import path from "node:path";
 import fs from "fs-extra";
 import type { CommandContext } from "@/src/core/types";
+import { logger } from "@/src/utils/logger";
 
 // Other test files replace @phala/cloud and @/src/lib/client with
 // mock.module, and bun keeps module mocks for the rest of the process. Load
@@ -33,7 +35,7 @@ afterAll(() => {
 	mock.module("@/src/lib/client", () => previousClient);
 });
 const { runDeploy } = await import("./handler");
-const { forgetDevOsMode, rememberDevOsMode } = await import(
+const { forgetDevOsMode, recallDevOsMode, rememberDevOsMode } = await import(
 	"./dev-os-selection"
 );
 const { deployCommand } = await import("./index");
@@ -86,6 +88,53 @@ const HASH_REQUIRED = {
 		{ field: "commit_token", value: "token-1" },
 	],
 };
+const OS_IMAGES = {
+	items: [
+		{
+			name: "dstack-0.6.0",
+			slug: "dstack-0.6.0",
+			version: "0.6.0",
+			os_image_hash: "aa".repeat(32),
+			is_dev: false,
+			requires_gpu: false,
+		},
+	],
+	total: 1,
+	page: 1,
+	page_size: 100,
+	pages: 1,
+};
+
+/** The CVM the stub reports; overrides replace individual fields. */
+function cvmInfo(overrides: Record<string, unknown> = {}) {
+	return {
+		id: CVM_ID,
+		vm_uuid: VM_UUID,
+		name: "my-app",
+		app_id: "abc",
+		status: "running",
+		resource: {},
+		gateway: {},
+		...overrides,
+	};
+}
+
+/** A dev box as the backend reads it: the four markers, custom volumes. */
+const DEPLOYED_DEV_BOX = `services:
+  app:
+    image: nginx
+  ssh:
+    image: ghcr.io/dstack-tee/dstack-dev-box:latest
+    privileged: true
+    pid: host
+    network_mode: host
+    uts: host
+    volumes:
+      - /:/host:rslave
+      - keys:/etc/ssh/host-keys
+      - root:/root
+`;
+
 let tmpDir: string;
 let composePath: string;
 let previousCloudDir: string | undefined;
@@ -105,6 +154,9 @@ beforeAll(async () => {
 			});
 			const overridden = respond?.(req.method, url.pathname, url.searchParams);
 			if (overridden) return overridden;
+			if (req.method === "GET" && url.pathname === "/api/v1/os-images") {
+				return Response.json(OS_IMAGES);
+			}
 			if (url.pathname.endsWith("/operations")) {
 				return Response.json({
 					items: [{ correlation_id: "corr-1", status: "completed" }],
@@ -113,15 +165,7 @@ beforeAll(async () => {
 				});
 			}
 			if (req.method === "GET") {
-				return Response.json({
-					id: CVM_ID,
-					vm_uuid: VM_UUID,
-					name: "my-app",
-					app_id: "abc",
-					status: "running",
-					resource: {},
-					gateway: {},
-				});
+				return Response.json(cvmInfo());
 			}
 			if (url.pathname.endsWith("/listed")) {
 				return Response.json({ id: CVM_ID, name: "my-app" });
@@ -156,9 +200,14 @@ afterAll(async () => {
 afterEach(() => {
 	requests = [];
 	respond = undefined;
+	// The state file lives for the whole file; drop any record a test wrote.
+	forgetDevOsMode(VM_UUID);
 });
 
-function makeContext(auth: Record<string, string>): {
+function makeContext(
+	auth: Record<string, string>,
+	cvmId: { id: string } = { id: CVM_ID },
+): {
 	context: CommandContext;
 	failure: () => unknown;
 } {
@@ -170,7 +219,7 @@ function makeContext(auth: Record<string, string>): {
 			PHALA_CLOUD_DIR: tmpDir,
 		},
 		projectConfig: {},
-		cvmId: { id: CVM_ID },
+		cvmId,
 		stdout: { write: () => true },
 		stderr: { write: () => true },
 		failWithError: (error: unknown) => {
@@ -183,8 +232,9 @@ function makeContext(auth: Record<string, string>): {
 async function deploy(
 	input: Record<string, unknown>,
 	auth: Record<string, string> = { PHALA_CLOUD_API_KEY: "test-key" },
+	cvmId: { id: string } = { id: CVM_ID },
 ) {
-	const { context, failure } = makeContext(auth);
+	const { context, failure } = makeContext(auth, cvmId);
 	const exitCode = await runDeploy(
 		{ compose: composePath, json: true, ...input } as Parameters<
 			typeof runDeploy
@@ -196,7 +246,7 @@ async function deploy(
 
 function updateRequest(): Recorded {
 	const patches = requests.filter(
-		(r) => r.method === "PATCH" && r.path === `/api/v1/cvms/${CVM_ID}`,
+		(r) => r.method === "PATCH" && /^\/api\/v1\/cvms\/[^/]+$/.test(r.path),
 	);
 	expect(patches).toHaveLength(1);
 	return patches[0] as Recorded;
@@ -334,25 +384,150 @@ describe("phala deploy --cvm-id", () => {
 	});
 
 	test("adds the dev box recorded at create when the update passes no --dev-os", async () => {
-		const previousDir = process.env.PHALA_CLOUD_DIR;
-		process.env.PHALA_CLOUD_DIR = tmpDir;
-		const cvmId = realCloud.CvmIdSchema.parse({ id: CVM_ID }).cvmId;
-		try {
-			// What `phala deploy --dev-os --image dstack-0.6.0` recorded.
-			rememberDevOsMode(cvmId, "dev-box");
+		// What `phala deploy --dev-os --image dstack-0.6.0` recorded: the server's
+		// vm_uuid, which a create and an update can both agree on.
+		rememberDevOsMode(VM_UUID, "dev-box");
 
+		const { exitCode, failure } = await deploy({});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		const compose = updateRequest().body?.docker_compose_file as string;
+		expect(compose).toContain("dev-box:");
+		expect(compose).toContain(
+			"image: ghcr.io/dstack-tee/dstack-dev-box:latest",
+		);
+	});
+
+	test("finds the record when the update names the CVM by app id", async () => {
+		// The record is keyed by vm_uuid; `app_<40hex>` is the same CVM under a
+		// different spelling, and only the server can say so.
+		rememberDevOsMode(VM_UUID, "dev-box");
+
+		const { exitCode, failure } = await deploy({}, undefined, {
+			id: `app_${CVM_ID}`,
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(updateRequest().body?.docker_compose_file).toContain("dev-box:");
+		expect(recallDevOsMode(VM_UUID)).toBe("dev-box");
+	});
+
+	test("finds the record when the update names the CVM by dashed UUID", async () => {
+		rememberDevOsMode(VM_UUID, "dev-box");
+
+		const { exitCode, failure } = await deploy({}, undefined, {
+			id: "01234567-89ab-cdef-0123-456789abcdef",
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(updateRequest().body?.docker_compose_file).toContain("dev-box:");
+		expect(recallDevOsMode(VM_UUID)).toBe("dev-box");
+	});
+
+	test("records the choice an update makes with an explicit --dev-os", async () => {
+		const first = await deploy({ devOs: true, image: "dstack-0.6.0" });
+
+		expect(first.failure).toBeUndefined();
+		expect(first.exitCode).toBe(0);
+		expect(updateRequest().body?.docker_compose_file).toContain("dev-box:");
+		expect(recallDevOsMode(VM_UUID)).toBe("dev-box");
+
+		// The next update, without the flag, keeps the dev box.
+		requests = [];
+		const second = await deploy({});
+
+		expect(second.exitCode).toBe(0);
+		expect(updateRequest().body?.docker_compose_file).toContain("dev-box:");
+	});
+
+	test("a failed update neither writes nor drops the record", async () => {
+		rememberDevOsMode(VM_UUID, "dev-box");
+		respond = (method, urlPath) =>
+			method === "PATCH" && /^\/api\/v1\/cvms\/[^/]+$/.test(urlPath)
+				? Response.json({ detail: "boom" }, { status: 500 })
+				: undefined;
+
+		const { exitCode } = await deploy({ devOs: false });
+
+		expect(exitCode).toBe(1);
+		// --no-dev-os would have cleared it; the update never landed.
+		expect(recallDevOsMode(VM_UUID)).toBe("dev-box");
+	});
+
+	test("a failed update does not record an explicit --dev-os", async () => {
+		respond = (method, urlPath) =>
+			method === "PATCH" && /^\/api\/v1\/cvms\/[^/]+$/.test(urlPath)
+				? Response.json({ detail: "boom" }, { status: 500 })
+				: undefined;
+
+		const { exitCode } = await deploy({ devOs: true, image: "dstack-0.6.0" });
+
+		expect(exitCode).toBe(1);
+		expect(recallDevOsMode(VM_UUID)).toBeUndefined();
+	});
+
+	test("--no-dev-os clears the record once the update is applied", async () => {
+		rememberDevOsMode(VM_UUID, "dev-box");
+
+		const { exitCode, failure } = await deploy({ devOs: false });
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(updateRequest().body?.docker_compose_file).not.toContain("dev-box:");
+		expect(recallDevOsMode(VM_UUID)).toBeUndefined();
+
+		// And it stays gone for the next update.
+		requests = [];
+		const next = await deploy({});
+		expect(next.exitCode).toBe(0);
+		expect(updateRequest().body?.docker_compose_file).not.toContain("dev-box:");
+	});
+
+	test("keeps a dev box the record does not know about, then records it", async () => {
+		// A CVM deployed from another machine, or before the CLI kept a record,
+		// still reads as a dev box from the server's compose.
+		respond = (method, urlPath) =>
+			method === "GET" && /^\/api\/v1\/cvms\/[^/]+$/.test(urlPath)
+				? Response.json(
+						cvmInfo({
+							compose_file: { docker_compose_file: DEPLOYED_DEV_BOX },
+						}),
+					)
+				: undefined;
+
+		expect(recallDevOsMode(VM_UUID)).toBeUndefined();
+		const { exitCode, failure } = await deploy({});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(updateRequest().body?.docker_compose_file).toContain("dev-box:");
+		expect(recallDevOsMode(VM_UUID)).toBe("dev-box");
+	});
+
+	test("says so when the deployed compose cannot be read", async () => {
+		// No compose in the payload, but the server says the CVM has SSH: the
+		// CLI must not silently treat that as "SSH should be off".
+		respond = (method, urlPath) =>
+			method === "GET" && /^\/api\/v1\/cvms\/[^/]+$/.test(urlPath)
+				? Response.json(cvmInfo({ enabled_ssh_access: true }))
+				: undefined;
+		const warn = spyOn(logger, "warn").mockImplementation(() => {});
+		try {
 			const { exitCode, failure } = await deploy({});
 
 			expect(failure).toBeUndefined();
 			expect(exitCode).toBe(0);
-			const compose = updateRequest().body?.docker_compose_file as string;
-			expect(compose).toContain("dev-box:");
-			expect(compose).toContain(
-				"image: ghcr.io/dstack-tee/dstack-dev-box:latest",
+			expect(warn).toHaveBeenCalledWith(
+				expect.stringContaining(
+					"cannot tell whether that comes from a dev box",
+				),
 			);
+			expect(updateRequest().body?.docker_compose_file).toBe(COMPOSE);
 		} finally {
-			forgetDevOsMode(cvmId);
-			process.env.PHALA_CLOUD_DIR = previousDir;
+			warn.mockRestore();
 		}
 	});
 

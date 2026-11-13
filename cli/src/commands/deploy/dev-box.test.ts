@@ -11,6 +11,7 @@ import {
 	DEV_BOX_IMAGE,
 	type OsImageCatalogEntry,
 	composeHasDevBox,
+	composeHasDevBoxMarkers,
 	findOsImage,
 	injectDevBoxService,
 	parseImageVersion,
@@ -497,6 +498,50 @@ volumes:
 		);
 	});
 
+	test("rejects a volume the compose inherits through a merge key", () => {
+		// `volumes: {<<: *storage}` already owns `home`; appending a bare `home:`
+		// would replace the operator's production volume with an empty default.
+		const compose = `x-volumes: &storage
+  home:
+    external: true
+    name: production-data
+services:
+  web:
+    image: nginx
+    volumes:
+      - home:/data
+volumes:
+  <<: *storage
+`;
+
+		expect(() => injectDevBoxService(compose)).toThrow(
+			/already declares a top-level volume named "home"/,
+		);
+	});
+
+	test("adds its volumes beside ones inherited through a merge key", () => {
+		const compose = `x-volumes: &storage
+  data:
+    driver: local
+services:
+  web:
+    image: nginx
+volumes:
+  <<: *storage
+`;
+
+		const injected = injectDevBoxService(compose);
+
+		// The merge stays where it is; the two new names are appended to it, and
+		// `data` still comes from the anchor.
+		expect(injected).toContain(
+			"volumes:\n  <<: *storage\n  ssh-host-keys:\n  home:\n",
+		);
+		expect(composeHasDevBox(compose)).toBe(false);
+		expect(composeHasDevBox(injected)).toBe(true);
+		expect(composeHasDevBoxMarkers(injected)).toBe(true);
+	});
+
 	test("adds the volumes to an existing volumes section", () => {
 		const injected = injectDevBoxService(`services:
   app:
@@ -685,5 +730,73 @@ services:
 
 		expect(composeHasDevBox(broken)).toBe(false);
 		expect(() => injectDevBoxService(broken)).toThrow(/not valid YAML/);
+	});
+});
+
+/**
+ * The backend's own rule, used for the SSH key channel: the four markers alone,
+ * never the canonical shape or the image.
+ */
+describe("composeHasDevBoxMarkers", () => {
+	const MARKED_BOX = `services:
+  app:
+    image: nginx
+  ssh:
+    image: ghcr.io/dstack-tee/dstack-dev-box:latest
+    privileged: true
+    pid: host
+    network_mode: host
+    uts: host
+    environment:
+      - MY_KEYS=\${DSTACK_AUTHORIZED_KEYS}
+    volumes:
+      - /:/host:rslave
+      - my-keys:/etc/ssh/host-keys
+      - my-home:/root
+`;
+
+	test("sees a dev box the canonical check refuses", () => {
+		// Custom volume names and a custom env name: the CLI would not have
+		// written it, but the backend still grants SSH through it.
+		expect(composeHasDevBox(MARKED_BOX)).toBe(false);
+		expect(composeHasDevBoxMarkers(MARKED_BOX)).toBe(true);
+	});
+
+	test("needs all four markers", () => {
+		const threeMarkers = MARKED_BOX.replace("    uts: host\n", "");
+		expect(composeHasDevBoxMarkers(threeMarkers)).toBe(false);
+	});
+
+	test("does not count a quoted privileged value", () => {
+		const quoted = MARKED_BOX.replace("privileged: true", 'privileged: "true"');
+		expect(composeHasDevBoxMarkers(quoted)).toBe(false);
+	});
+
+	test("resolves merge keys before reading the markers", () => {
+		const compose = `x-box: &box
+  privileged: true
+  pid: host
+  network_mode: host
+  uts: host
+services:
+  ssh:
+    <<: *box
+    image: ghcr.io/dstack-tee/dstack-dev-box:latest
+`;
+		expect(composeHasDevBoxMarkers(compose)).toBe(true);
+	});
+
+	test("unwraps an --app-compose document", () => {
+		const payload = JSON.stringify({
+			name: "raw",
+			docker_compose_file: MARKED_BOX,
+		});
+		expect(composeHasDevBoxMarkers(payload)).toBe(true);
+	});
+
+	test("does not treat unrelated JSON as a dev box", () => {
+		expect(composeHasDevBoxMarkers(JSON.stringify({ name: "raw" }))).toBe(
+			false,
+		);
 	});
 });

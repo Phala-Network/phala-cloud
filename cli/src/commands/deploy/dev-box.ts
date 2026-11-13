@@ -438,6 +438,50 @@ export function composeHasDevBox(composeYaml: string): boolean {
 }
 
 /**
+ * The compose an argument holds.
+ *
+ * `--app-compose` passes a whole AppCompose JSON document, whose compose lives
+ * in `docker_compose_file`; every other argument is the compose itself. Trying
+ * JSON first is safe: a compose that happens to be valid JSON but carries no
+ * `docker_compose_file` comes back unchanged.
+ */
+export function unwrapAppCompose(payload: string): string {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(payload);
+	} catch {
+		return payload;
+	}
+	const compose = asMapping(parsed)?.docker_compose_file;
+	return typeof compose === "string" ? compose : payload;
+}
+
+/**
+ * Whether a payload ships a dev box, on the backend's own rule.
+ *
+ * The backend grants SSH access on the four markers alone (see
+ * `teehouse/cvms/dev_box.py`): any service with `privileged: true` and the
+ * three `host` namespaces, whatever its image, volume names or environment.
+ * The markers are the claim about SSH access, so they decide the key channel;
+ * `composeHasDevBox` above is the narrower question — can the CLI treat a
+ * service as the box it injects — and stays strict.
+ *
+ * Accepts an AppCompose JSON document as well as a compose file.
+ */
+export function composeHasDevBoxMarkers(payload: string): boolean {
+	try {
+		const services = composeServices(unwrapAppCompose(payload));
+		if (!services) return false;
+		return Object.values(services).some((service) => {
+			const mapping = asMapping(service);
+			return mapping !== undefined && hasDevBoxMarkers(mapping);
+		});
+	} catch {
+		return false;
+	}
+}
+
+/**
  * Refuse a compose the CLI cannot extend unambiguously, and report whether it
  * already carries a canonical dev box (nothing left to do then).
  *
@@ -577,22 +621,6 @@ function findTopLevelBlock(
 	};
 }
 
-/** The keys declared directly under a block, in order of appearance. */
-function declaredKeys(
-	lines: string[],
-	span: { from: number; to: number },
-	indent: number | undefined,
-): string[] {
-	const keys: string[] = [];
-	if (indent === undefined) return keys;
-	for (let i = span.from; i < span.to; i += 1) {
-		if (!isContentLine(lines[i]) || indentOf(lines[i]) !== indent) continue;
-		const match = PROPERTY.exec(lines[i].trim());
-		if (match) keys.push(match[1]);
-	}
-	return keys;
-}
-
 function listServices(lines: string[], services: BlockSpan): ServiceBlock[] {
 	const serviceIndent = services.childIndent;
 	if (serviceIndent === undefined) return [];
@@ -667,11 +695,41 @@ function insertLines(
 }
 
 /**
+ * The top-level volume names a compose declares, after merge keys and anchors
+ * are resolved.
+ *
+ * Reading them from the parsed document rather than from the text is what keeps
+ * a merge inherited definition safe: `volumes: {<<: *storage}` owns every name
+ * `storage` brings with it, and appending a bare `home:` beside the merge would
+ * silently replace the operator's volume with an empty default one.
+ */
+function declaredVolumeNames(composeYaml: string): string[] {
+	const root = asMapping(parseCompose(composeYaml));
+	const volumes = root?.volumes;
+	if (volumes === undefined || volumes === null) return [];
+	const mapping = asMapping(volumes);
+	if (!mapping) {
+		throw new Error(
+			'Cannot add the dev box to this docker compose file: its "volumes" section is not a mapping. Rewrite it in block style, or add the dev-box volumes by hand.',
+		);
+	}
+	return Object.keys(mapping);
+}
+
+/**
  * Add a top-level `volumes` section holding the two named volumes the dev box
  * mounts. A compose that already uses either name would hand the dev box
  * somebody else's data, so that is a conflict rather than a merge.
  */
-function addDevBoxVolumes(lines: string[]): string[] {
+function addDevBoxVolumes(composeYaml: string, lines: string[]): string[] {
+	const declared = declaredVolumeNames(composeYaml);
+	const conflict = DEV_BOX_VOLUME_NAMES.find((name) => declared.includes(name));
+	if (conflict !== undefined) {
+		throw new Error(
+			`The compose already declares a top-level volume named "${conflict}", which the dev box needs for its own data. Rename it before deploying with --dev-os.`,
+		);
+	}
+
 	const volumes = findTopLevelBlock(lines, "volumes");
 	if (!volumes) {
 		const block = [
@@ -680,18 +738,6 @@ function addDevBoxVolumes(lines: string[]): string[] {
 		];
 		const insertAt = lastContentIndex(lines, 0, lines.length) + 1;
 		return insertLines(lines, insertAt, block);
-	}
-
-	const declared = declaredKeys(
-		lines,
-		{ from: volumes.keyIndex + 1, to: volumes.endIndex },
-		volumes.childIndent,
-	);
-	const conflict = DEV_BOX_VOLUME_NAMES.find((name) => declared.includes(name));
-	if (conflict !== undefined) {
-		throw new Error(
-			`The compose already declares a top-level volume named "${conflict}", which the dev box needs for its own data. Rename it before deploying with --dev-os.`,
-		);
 	}
 
 	const block = DEV_BOX_VOLUME_NAMES.map(
@@ -724,7 +770,7 @@ export function injectDevBoxService(composeYaml: string): string {
 		);
 	}
 
-	const withVolumes = addDevBoxVolumes(lines);
+	const withVolumes = addDevBoxVolumes(composeYaml, lines);
 	const services = findTopLevelBlock(withVolumes, "services");
 	if (services === undefined) {
 		throw new Error(

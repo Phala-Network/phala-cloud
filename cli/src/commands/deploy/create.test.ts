@@ -113,6 +113,7 @@ let server: ReturnType<typeof Bun.serve>;
 let requests: Recorded[] = [];
 let tmpDir: string;
 let composePath: string;
+let previousCloudDir: string | undefined;
 let appComposePath: string;
 let stdout = "";
 // Per-test response for GET requests (CVM info, operations); defaults to 404.
@@ -145,6 +146,10 @@ beforeAll(async () => {
 		},
 	});
 	tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "phala-deploy-create-"));
+	// `--dev-os` creates record their choice in the CLI state file; keep the
+	// developer's real one out of these tests.
+	previousCloudDir = process.env.PHALA_CLOUD_DIR;
+	process.env.PHALA_CLOUD_DIR = tmpDir;
 	composePath = path.join(tmpDir, "docker-compose.yml");
 	appComposePath = path.join(tmpDir, "app-compose.json");
 	await fs.writeFile(composePath, COMPOSE);
@@ -152,6 +157,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+	if (previousCloudDir === undefined) {
+		process.env.PHALA_CLOUD_DIR = undefined;
+	} else {
+		process.env.PHALA_CLOUD_DIR = previousCloudDir;
+	}
 	server.stop(true);
 	await fs.remove(tmpDir);
 });
@@ -393,25 +403,20 @@ describe("phala deploy (create)", () => {
 	test("records the dev OS choice so a later update keeps the dev box", async () => {
 		const pubkeyPath = path.join(tmpDir, "id_ed25519.pub");
 		await fs.writeFile(pubkeyPath, "ssh-ed25519 AAAA test@example\n");
-		const previousDir = process.env.PHALA_CLOUD_DIR;
-		process.env.PHALA_CLOUD_DIR = tmpDir;
-		try {
-			const { exitCode, failure } = await deploy({
-				compose: composePath,
-				devOs: true,
-				image: "dstack-0.6.0",
-				sshPubkey: pubkeyPath,
-			});
 
-			expect(failure).toBeUndefined();
-			expect(exitCode).toBe(0);
-			// The compose file on disk is untouched, so the record is what an
-			// update has to work from.
-			expect(recallDevOsMode(CREATED_CVM.vm_uuid)).toBe("dev-box");
-			expect(await fs.readFile(composePath, "utf8")).toBe(COMPOSE);
-		} finally {
-			process.env.PHALA_CLOUD_DIR = previousDir;
-		}
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			devOs: true,
+			image: "dstack-0.6.0",
+			sshPubkey: pubkeyPath,
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		// Keyed by the server's vm_uuid, and the compose file on disk is
+		// untouched: the record is what an update has to work from.
+		expect(recallDevOsMode(CREATED_CVM.vm_uuid)).toBe("dev-box");
+		expect(await fs.readFile(composePath, "utf8")).toBe(COMPOSE);
 	});
 
 	test("requires a pinned image for --dev-os", async () => {

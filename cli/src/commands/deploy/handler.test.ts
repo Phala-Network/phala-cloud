@@ -21,11 +21,10 @@ import {
 	buildUpdatePatchBody,
 	composeForDevOs,
 	readSshPubkey,
-	recordedDevOsMode,
 	resolveSshKeyChannel,
 	runDeploy,
 } from "./handler";
-import { rememberDevOsMode } from "./dev-os-selection";
+import { composeHasDevBox } from "./dev-box";
 
 describe("deploy node selection", () => {
 	test("parses --node and no longer exposes --node-id", () => {
@@ -44,6 +43,27 @@ describe("deploy node selection", () => {
 		).toBe(false);
 	});
 });
+
+/** The backend's dev box, written by hand with its own volume names. */
+const CUSTOM_VOLUME_DEV_BOX = `services:
+  app:
+    image: nginx
+  ssh:
+    image: ghcr.io/dstack-tee/dstack-dev-box:latest
+    privileged: true
+    pid: host
+    network_mode: host
+    uts: host
+    environment:
+      - MY_KEYS=\${DSTACK_AUTHORIZED_KEYS}
+    volumes:
+      - /:/host:rslave
+      - my-host-keys:/etc/ssh/host-keys
+      - my-home:/root
+volumes:
+  my-host-keys:
+  my-home:
+`;
 
 describe("deploy --dev-os SSH key channels", () => {
 	const sshPubkey = "ssh-ed25519 AAAA local@example";
@@ -145,6 +165,35 @@ volumes:
   ssh-host-keys:
   home:
 `;
+
+	test("treats a hand-written dev box with custom volumes as the dev-box channel", async () => {
+		// The backend grants SSH access on the four markers alone, so this is the
+		// dev-box channel even though it is not the shape the CLI injects.
+		expect(composeHasDevBox(CUSTOM_VOLUME_DEV_BOX)).toBe(false);
+
+		const channel = resolveSshKeyChannel(undefined, CUSTOM_VOLUME_DEV_BOX);
+		expect(channel).toBe("dev-box");
+		await withTempHome(async () => {
+			expect(
+				await readSshPubkey({ image: "dstack-0.6.0" }, channel),
+			).toBeUndefined();
+		}, true);
+	});
+
+	test("unwraps an --app-compose document before deciding the channel", async () => {
+		const payload = JSON.stringify({
+			name: "raw",
+			docker_compose_file: HAND_WRITTEN_DEV_BOX,
+		});
+
+		const channel = resolveSshKeyChannel(undefined, payload);
+		expect(channel).toBe("dev-box");
+		await withTempHome(async () => {
+			expect(
+				await readSshPubkey({ image: "dstack-0.6.0" }, channel),
+			).toBeUndefined();
+		}, true);
+	});
 
 	test("treats a hand-written dev box as the dev-box channel without --dev-os", async () => {
 		// `--image` 0.6 with the user's own dev-box service and no `--dev-os`: the
@@ -1141,68 +1190,39 @@ describe("buildProvisionPayload", () => {
 	});
 });
 
-describe("deploy --dev-os on redeploy", () => {
-	// The dev box is added to the payload a create sends, never to the compose
-	// file on disk, so an update without the flag can only keep it by repeating
-	// the choice recorded at create time.
-	const cvmId = `app_${"a".repeat(40)}`;
+describe("deploy --dev-os compose preparation", () => {
 	const LOCAL_COMPOSE = "services:\n  app:\n    image: nginx\n";
-	const previousDir = process.env.PHALA_CLOUD_DIR;
-	let stateDir: string;
 
-	beforeEach(async () => {
-		stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "phala-state-"));
-		process.env.PHALA_CLOUD_DIR = stateDir;
-	});
+	test("adds the canonical dev box to a compose without one", () => {
+		const prepared = composeForDevOs(LOCAL_COMPOSE, "dev-box");
 
-	afterEach(async () => {
-		if (previousDir === undefined) {
-			process.env.PHALA_CLOUD_DIR = undefined;
-		} else {
-			process.env.PHALA_CLOUD_DIR = previousDir;
-		}
-		await fs.remove(stateDir);
-	});
-
-	test("an update without --dev-os re-adds the dev box recorded at create", () => {
-		rememberDevOsMode(cvmId, "dev-box"); // what a create persists
-
-		const recorded = recordedDevOsMode({ uuid: cvmId }, cvmId); // what an update resolves
-		expect(recorded).toBe("dev-box");
-
-		const prepared = composeForDevOs(LOCAL_COMPOSE, recorded);
 		expect(prepared.added).toBe(true);
-
-		const patchBody = buildUpdatePatchBody({ uuid: cvmId }, prepared.compose);
-		expect(patchBody.docker_compose_file).toContain("dev-box:");
-	});
-
-	test("an update on a CVM with nothing recorded adds no dev box", () => {
-		const recorded = recordedDevOsMode({ uuid: cvmId }, cvmId);
-		expect(recorded).toBeUndefined();
-
-		const prepared = composeForDevOs(LOCAL_COMPOSE, recorded);
-		expect(prepared.added).toBe(false);
+		expect(prepared.compose).toContain("dev-box:");
 		expect(
-			buildUpdatePatchBody({ uuid: cvmId }, prepared.compose)
+			buildUpdatePatchBody({ uuid: "cvm-1" }, prepared.compose)
 				.docker_compose_file,
-		).not.toContain("dev-box:");
+		).toContain("dev-box:");
 	});
 
-	test("an explicit --dev-os overrides the recorded choice", () => {
-		rememberDevOsMode(cvmId, "dev-box");
+	test("leaves a compose the backend already reads as a dev box alone", () => {
+		// Hand-written, with custom volume names: not the shape the CLI injects,
+		// but the markers are what the backend reads, so a second box would only
+		// fight over port 22.
+		const prepared = composeForDevOs(CUSTOM_VOLUME_DEV_BOX, "dev-box");
 
-		// The flag is resolved against the OS image catalog, never recalled.
-		expect(
-			recordedDevOsMode({ uuid: cvmId, devOs: true }, cvmId),
-		).toBeUndefined();
-		expect(composeForDevOs(LOCAL_COMPOSE, "dev-box").added).toBe(true);
+		expect(prepared.added).toBe(false);
+		expect(prepared.compose).toBe(CUSTOM_VOLUME_DEV_BOX);
 	});
 
-	test("a create outside a CVM never recalls anything", () => {
-		rememberDevOsMode(cvmId, "dev-box");
-
-		expect(recordedDevOsMode({}, undefined)).toBeUndefined();
+	test("adds nothing when the mode is not the dev box", () => {
+		expect(composeForDevOs(LOCAL_COMPOSE, "dev-image")).toEqual({
+			compose: LOCAL_COMPOSE,
+			added: false,
+		});
+		expect(composeForDevOs(LOCAL_COMPOSE, undefined)).toEqual({
+			compose: LOCAL_COMPOSE,
+			added: false,
+		});
 	});
 
 	test("applying the dev box twice is idempotent", () => {

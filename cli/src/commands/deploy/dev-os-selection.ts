@@ -9,14 +9,18 @@
  * there was no flag to bring it back.
  *
  * The record lives in the CLI's own state file (`~/.phala-cloud/state.json`,
- * see `src/utils/state.ts`), keyed by CVM id. The project config (`phala.toml`)
- * was the other candidate, but it is user-authored and the only writer
- * available re-serialises the whole file, which would drop its comments and any
- * key this CLI does not know about.
+ * see `src/utils/state.ts`), keyed by the CVM's `vm_uuid`: the user may name a
+ * CVM as a UUID, a 40-character app id or `app_...`, and only the server's id
+ * is the same on a create and an update. The project config (`phala.toml`) was
+ * the other candidate, but it is user-authored and the only writer available
+ * re-serialises the whole file, which would drop its comments and any key this
+ * CLI does not know about.
  *
- * Writing is best effort: a deploy that succeeded must not fail because a local
- * cache could not be updated. A missing record only means a later update has to
- * pass `--dev-os` again.
+ * Callers write here only after the API accepted the change (see
+ * `commitDevOsState`), so a failed deploy leaves the record untouched. Writing
+ * is best effort: a deploy that succeeded must not fail because a local cache
+ * could not be updated, and a missing record makes the next update fall back to
+ * the deployed compose rather than drop SSH access.
  */
 
 import {
@@ -27,7 +31,7 @@ import {
 import { logger } from "@/src/utils/logger";
 import type { DevOsMode } from "./dev-box";
 
-/** State key prefix; the CVM id follows it. */
+/** State key prefix; the CVM's `vm_uuid` follows it. */
 const KEY_PREFIX = "deploy.devOsMode.";
 
 function isDevOsMode(value: unknown): value is DevOsMode {
