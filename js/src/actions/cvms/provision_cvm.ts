@@ -279,6 +279,11 @@ export const ProvisionCvmRequestSchema = z
     key_provider_mode: z.enum(["kms", "local"]).optional(),
     skip_gateway: z.boolean().optional(),
     env_keys: z.array(z.string()).optional(),
+    // SSH key hashids to authorize on the new CVM. They must belong to a member
+    // of the workspace; the backend resolves them into the guest's
+    // `user_config.ssh_authorized_keys`. Omit to authorize all of the caller's
+    // own active keys; send an empty list to authorize none.
+    ssh_key_ids: z.array(z.string()).optional(),
     // Manual nonce specification (Advanced - PHALA KMS only)
     nonce: z.number().optional(), // User-specified nonce for deterministic app_id generation
     app_id: z.string().optional(), // Expected app_id (must match calculated app_id from nonce)
