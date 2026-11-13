@@ -1,5 +1,9 @@
 import { z } from "zod";
-import type { CommandMeta, CommandGroup } from "@/src/core/types";
+import type {
+	CommandMeta,
+	CommandGroup,
+	CommandOption,
+} from "@/src/core/types";
 import {
 	interactiveOption,
 	privateKeyOption,
@@ -14,6 +18,20 @@ const cvmArgument = {
 	description: "CVM or app identifier (UUID, app_id, instance_id, or name)",
 	required: true,
 	target: "cvm",
+};
+
+/**
+ * Epoch scoping for on-chain allowlist writes. Epoch-aware contracts store
+ * allowlist rows per epoch and do not inherit them across epochs.
+ */
+export const epochOption: CommandOption = {
+	name: "epoch",
+	description:
+		"Epoch to write the allowlist entry to. Omit to write the current and the next epoch automatically; only valid on epoch-aware on-chain contracts.",
+	type: "number",
+	target: "epoch",
+	argumentName: "n",
+	group: "advanced",
 };
 
 export const allowDevicesGroup: CommandGroup = {
@@ -69,6 +87,7 @@ export const allowDevicesAddMeta: CommandMeta = {
 	options: [
 		privateKeyOption,
 		rpcUrlOption,
+		epochOption,
 		{
 			name: "wait",
 			description:
@@ -88,6 +107,11 @@ export const allowDevicesAddMeta: CommandMeta = {
 			name: "Interactive multi-select from available nodes",
 			value: "phala allow-devices add app_abc123 -i --private-key 0x...",
 		},
+		{
+			name: "Pin the entry to a specific epoch",
+			value:
+				"phala allow-devices add app_abc123 0xaabb... --epoch 1 --private-key 0x...",
+		},
 	],
 };
 
@@ -96,6 +120,7 @@ export const allowDevicesAddSchema = z.object({
 	deviceId: z.string().optional(),
 	privateKey: z.string().optional(),
 	rpcUrl: z.string().optional(),
+	epoch: z.number().int().nonnegative().optional(),
 	wait: z.boolean().default(false),
 	json: z.boolean().default(false),
 	interactive: z.boolean().default(false),
@@ -123,6 +148,7 @@ export const allowDevicesRemoveMeta: CommandMeta = {
 	options: [
 		privateKeyOption,
 		rpcUrlOption,
+		epochOption,
 		{
 			name: "wait",
 			description:
@@ -143,6 +169,11 @@ export const allowDevicesRemoveMeta: CommandMeta = {
 			name: "Interactive multi-select from allowed devices",
 			value: "phala allow-devices remove app_abc123 -i --private-key 0x...",
 		},
+		{
+			name: "Remove the entry from a specific epoch",
+			value:
+				"phala allow-devices remove app_abc123 0xaabb... --epoch 1 --private-key 0x...",
+		},
 	],
 };
 
@@ -151,6 +182,7 @@ export const allowDevicesRemoveSchema = z.object({
 	deviceId: z.string().optional(),
 	privateKey: z.string().optional(),
 	rpcUrl: z.string().optional(),
+	epoch: z.number().int().nonnegative().optional(),
 	wait: z.boolean().default(false),
 	json: z.boolean().default(false),
 	interactive: z.boolean().default(false),

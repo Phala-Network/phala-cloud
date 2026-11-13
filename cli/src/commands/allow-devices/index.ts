@@ -15,6 +15,15 @@ import {
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
+import {
+	type AppEpochPlan,
+	type EpochsWritten,
+	detectAppEpochPlan,
+	formatAppEpochPlan,
+	formatEpochsWritten,
+	legacyEpochUnsupportedMessage,
+	readEpochsWritten,
+} from "@/src/lib/app-epoch";
 import { printTable } from "@/src/lib/table";
 import {
 	allowDevicesGroup,
@@ -541,6 +550,51 @@ async function resolveAppContract(
 	};
 }
 
+/**
+ * Resolve the app contract generation (plus current epoch when available).
+ *
+ * The probe is best-effort: `null` means "could not decide" (for example an
+ * RPC hiccup), and callers must not treat that as a legacy contract.
+ */
+async function readAppEpochPlan(params: {
+	chain: SupportedChain;
+	rpcUrl?: string;
+	appContractAddress: `0x${string}`;
+}): Promise<AppEpochPlan | null> {
+	return detectAppEpochPlan({
+		chain: params.chain,
+		rpcUrl: params.rpcUrl,
+		appAddress: params.appContractAddress,
+	});
+}
+
+/**
+ * Fail fast when `--epoch` is used against a legacy contract. The SDK also
+ * rejects the combination, but the CLI can name the contract and the flag.
+ */
+async function resolveWriteEpochPlan(params: {
+	chain: SupportedChain;
+	rpcUrl?: string;
+	appContractAddress: `0x${string}`;
+	epoch: number | undefined;
+	context: CommandContext;
+}): Promise<{ ok: true; plan: AppEpochPlan | null } | { ok: false }> {
+	const plan = await readAppEpochPlan({
+		chain: params.chain,
+		rpcUrl: params.rpcUrl,
+		appContractAddress: params.appContractAddress,
+	});
+
+	if (params.epoch !== undefined && plan?.kind === "legacy") {
+		params.context.fail(
+			legacyEpochUnsupportedMessage(params.appContractAddress),
+		);
+		return { ok: false };
+	}
+
+	return { ok: true, plan };
+}
+
 // ── list ────────────────────────────────────────────────────────────
 
 async function runList(
@@ -594,12 +648,27 @@ async function runList(
 			effectiveRpc,
 		);
 
+		// Epoch contracts store allowlist rows per epoch, so the reader has to
+		// know which epoch the on-chain view belongs to. Legacy contracts have
+		// no epoch and print nothing extra.
+		const epochPlan = await readAppEpochPlan({
+			chain,
+			rpcUrl: input.rpcUrl,
+			appContractAddress,
+		});
+
 		if (input.json) {
 			context.success({
 				appAddress: appContractAddress,
 				chain: chain.name,
 				owner: onChain.owner,
 				allowAnyDevice: onChain.allowAnyDevice,
+				...(epochPlan?.kind === "epoch"
+					? {
+							appEpoch: epochPlan.currentAppEpoch,
+							epochAwareContract: true,
+						}
+					: {}),
 				// When allowAnyDevice is on, the per-device allowlist is
 				// effectively empty (all devices are implicitly allowed) —
 				// getAllowedDevices just echoes the queried IDs back.
@@ -616,6 +685,8 @@ async function runList(
 		say(`Contract: ${appContractAddress}`);
 		say(`Chain:    ${chain.name}`);
 		say(`Owner:    ${onChain.owner}`);
+		const epochLine = formatAppEpochPlan(epochPlan);
+		if (epochLine) say(epochLine);
 		say(`Allow Any Device: ${onChain.allowAnyDevice ? "yes" : "no"}`);
 
 		// When allowAnyDevice is on, the per-device list from getAllowedDevices
@@ -672,6 +743,17 @@ async function runAdd(
 		const { chain, appContractAddress, allowlist } = resolved;
 		activeChain = chain;
 		effectiveRpc = resolveEffectiveRpcUrl(chain, input.rpcUrl);
+		// `--epoch` is only meaningful on epoch-aware contracts: fail before
+		// signing anything instead of surfacing a raw contract revert.
+		const epochScope = await resolveWriteEpochPlan({
+			chain,
+			rpcUrl: input.rpcUrl,
+			appContractAddress,
+			epoch: input.epoch,
+			context,
+		});
+		if (!epochScope.ok) return 1;
+
 		const privateKey = resolvePrivateKey(input);
 
 		let deviceIds: `0x${string}`[];
@@ -732,11 +814,15 @@ async function runAdd(
 			deviceId: string;
 			txHash: string;
 			explorer: string | null;
+			epochsWritten: EpochsWritten | undefined;
 		}[] = [];
+
+		const epochLine = formatAppEpochPlan(epochScope.plan);
 
 		for (const deviceId of deviceIds) {
 			say(`Submitting add-device transaction for ${deviceId}...`);
 			say(`RPC URL: ${effectiveRpc}`);
+			if (epochLine) say(epochLine);
 
 			const result = await withRpcTimeout(
 				safeAddDevice({
@@ -744,6 +830,7 @@ async function runAdd(
 					rpcUrl: input.rpcUrl,
 					appAddress: appContractAddress,
 					deviceId,
+					epoch: input.epoch,
 					privateKey,
 					skipPrerequisiteChecks: true,
 					timeout: CLI_RPC_TIMEOUT_MS,
@@ -781,6 +868,7 @@ async function runAdd(
 				deviceId,
 				txHash: data.transactionHash,
 				explorer: txExplorerUrl(chain, data.transactionHash),
+				epochsWritten: readEpochsWritten(data.epochsWritten),
 			});
 		}
 
@@ -794,6 +882,9 @@ async function runAdd(
 			say(`Transaction: ${r.txHash}`);
 			if (r.explorer) {
 				say(`Explorer:    ${r.explorer}`);
+			}
+			if (r.epochsWritten) {
+				say(`Epoch:       ${formatEpochsWritten(r.epochsWritten)}`);
 			}
 		}
 
@@ -863,6 +954,17 @@ async function runRemove(
 		const { chain, appContractAddress, allowlist } = resolved;
 		activeChain = chain;
 		effectiveRpc = resolveEffectiveRpcUrl(chain, input.rpcUrl);
+		// `--epoch` is only meaningful on epoch-aware contracts: fail before
+		// signing anything instead of surfacing a raw contract revert.
+		const epochScope = await resolveWriteEpochPlan({
+			chain,
+			rpcUrl: input.rpcUrl,
+			appContractAddress,
+			epoch: input.epoch,
+			context,
+		});
+		if (!epochScope.ok) return 1;
+
 		const privateKey = resolvePrivateKey(input);
 
 		let deviceIds: `0x${string}`[];
@@ -908,11 +1010,15 @@ async function runRemove(
 			deviceId: string;
 			txHash: string;
 			explorer: string | null;
+			epochsWritten: EpochsWritten | undefined;
 		}[] = [];
+
+		const epochLine = formatAppEpochPlan(epochScope.plan);
 
 		for (const deviceId of deviceIds) {
 			say(`Submitting remove-device transaction for ${deviceId}...`);
 			say(`RPC URL: ${effectiveRpc}`);
+			if (epochLine) say(epochLine);
 
 			const result = await withRpcTimeout(
 				safeRemoveDevice({
@@ -920,6 +1026,7 @@ async function runRemove(
 					rpcUrl: input.rpcUrl,
 					appAddress: appContractAddress,
 					deviceId,
+					epoch: input.epoch,
 					privateKey,
 					skipPrerequisiteChecks: true,
 					timeout: CLI_RPC_TIMEOUT_MS,
@@ -957,6 +1064,7 @@ async function runRemove(
 				deviceId,
 				txHash: data.transactionHash,
 				explorer: txExplorerUrl(chain, data.transactionHash),
+				epochsWritten: readEpochsWritten(data.epochsWritten),
 			});
 		}
 
@@ -970,6 +1078,9 @@ async function runRemove(
 			say(`Transaction: ${r.txHash}`);
 			if (r.explorer) {
 				say(`Explorer:    ${r.explorer}`);
+			}
+			if (r.epochsWritten) {
+				say(`Epoch:       ${formatEpochsWritten(r.epochsWritten)}`);
 			}
 		}
 

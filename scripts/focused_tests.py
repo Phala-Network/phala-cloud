@@ -147,9 +147,15 @@ def main(args: Sequence[str]) -> int:
             files = select_js(ROOT, project, filenames)
             if project == "js":
                 command = ["bun", "run", "vitest", "run", *files]
+                commands = [(files, command)] if files else []
             else:
-                command = ["bun", "test", *("./" + name for name in files)]
-            commands = [(files, command)] if files else []
+                # `bun test` shares one module registry across the files it
+                # loads, so a whole-module mock.module() in one test file
+                # rewrites the imports of every sibling file. Run each file in
+                # its own process to keep the mocks file-scoped.
+                commands = [
+                    ([name], ["bun", "test", "./" + name]) for name in files
+                ]
         if not commands:
             raise ValueError("No related tests selected. Stage a focused regression test for this change.")
         for files, command in commands:
