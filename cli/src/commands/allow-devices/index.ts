@@ -362,14 +362,23 @@ async function waitForAllowlistState(params: {
 	rpcUrl?: string;
 	appAddress: `0x${string}`;
 	deviceIds: string[];
+	/** Read the allowlist at this app epoch instead of the current one. */
+	epoch?: number;
 	condition: (result: Awaited<ReturnType<typeof getAllowedDevices>>) => boolean;
 	description: string;
 	timeoutMs?: number;
 	intervalMs?: number;
 	json?: boolean;
 }): Promise<boolean> {
-	const { chain, rpcUrl, appAddress, deviceIds, condition, description } =
-		params;
+	const {
+		chain,
+		rpcUrl,
+		appAddress,
+		deviceIds,
+		epoch,
+		condition,
+		description,
+	} = params;
 	const timeoutMs = params.timeoutMs ?? 60_000;
 	const intervalMs = params.intervalMs ?? 2_000;
 	const deadline = Date.now() + timeoutMs;
@@ -385,6 +394,7 @@ async function waitForAllowlistState(params: {
 					rpcUrl,
 					appAddress,
 					deviceIds,
+					epoch,
 				}),
 				effectiveRpc,
 				CLI_RPC_POLL_TIMEOUT_MS,
@@ -768,8 +778,32 @@ async function runAdd(
 				return 1;
 			}
 
-			// Exclude devices already in the allowlist (normalize to match chain format)
-			const alreadyAllowed = buildAlreadyAllowedSet(allowlist.devices);
+			// Exclude devices already in the allowlist (normalize to match chain format).
+			// With --epoch the backend list reflects the current epoch, so re-check
+			// the candidates on-chain at the requested epoch instead.
+			let alreadyAllowed: Set<string>;
+			if (input.epoch !== undefined) {
+				const nodeDeviceIds = nodesResult.data.nodes
+					.map((n) => n.device_id)
+					.filter(
+						(id): id is string => typeof id === "string" && isValidDeviceId(id),
+					);
+				const atEpoch = await withRpcTimeout(
+					getAllowedDevices({
+						chain,
+						rpcUrl: input.rpcUrl,
+						appAddress: appContractAddress,
+						deviceIds: nodeDeviceIds,
+						epoch: input.epoch,
+					}),
+					effectiveRpc,
+				);
+				alreadyAllowed = new Set(
+					atEpoch.devices.map((id) => normalizeDeviceId(id)),
+				);
+			} else {
+				alreadyAllowed = buildAlreadyAllowedSet(allowlist.devices);
+			}
 
 			const candidates = nodesResult.data.nodes.filter(
 				(n) =>
@@ -894,6 +928,7 @@ async function runAdd(
 				rpcUrl: input.rpcUrl,
 				appAddress: appContractAddress,
 				deviceIds,
+				epoch: input.epoch,
 				description: "devices to be allowed",
 				json: input.json,
 				condition: (state) => {
@@ -970,9 +1005,29 @@ async function runRemove(
 		let deviceIds: `0x${string}`[];
 
 		if (input.interactive && !input.deviceId) {
-			const allowedDevices = allowlist.devices.filter(
+			let allowedDevices = allowlist.devices.filter(
 				(d) => d.status === "allowed",
 			);
+			// With --epoch the backend list reflects the current epoch; re-check
+			// the candidates on-chain at the requested epoch.
+			if (input.epoch !== undefined) {
+				const atEpoch = await withRpcTimeout(
+					getAllowedDevices({
+						chain,
+						rpcUrl: input.rpcUrl,
+						appAddress: appContractAddress,
+						deviceIds: allowedDevices.map((d) => d.device_id),
+						epoch: input.epoch,
+					}),
+					effectiveRpc,
+				);
+				const allowedAtEpoch = new Set(
+					atEpoch.devices.map((id) => normalizeDeviceId(id)),
+				);
+				allowedDevices = allowedDevices.filter((d) =>
+					allowedAtEpoch.has(normalizeDeviceId(d.device_id)),
+				);
+			}
 			if (allowedDevices.length === 0) {
 				context.fail("No allowed devices found to remove.");
 				return 1;
@@ -1107,6 +1162,7 @@ async function runRemove(
 					rpcUrl: input.rpcUrl,
 					appAddress: appContractAddress,
 					deviceIds,
+					epoch: input.epoch,
 					description: "devices to be removed",
 					json: input.json,
 					condition: (state) =>

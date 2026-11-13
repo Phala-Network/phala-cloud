@@ -27,7 +27,7 @@ const cvmArgument = {
 export const epochOption: CommandOption = {
 	name: "epoch",
 	description:
-		"Epoch to write the allowlist entry to. Omit to write the current and the next epoch automatically; only valid on epoch-aware on-chain contracts.",
+		"Epoch to write the allowlist entry to. Omit to let the SDK pick the range: additions write the current and the next epoch, removals revoke every epoch including history; only valid on epoch-aware on-chain contracts.",
 	type: "number",
 	target: "epoch",
 	argumentName: "n",
