@@ -9,7 +9,7 @@ import { getProjectConfig } from "@/src/utils/project-config";
 import { resolveAuth, type ResolvedAuth } from "@/src/utils/credentials";
 import { CLI_USER_AGENT } from "@/src/utils/cli-version";
 
-const API_VERSION = "2026-06-23" as const;
+const API_VERSION = "2026-11-11" as const;
 
 /** Default request timeout (seconds) when no --timeout flag is supplied. */
 export const DEFAULT_TIMEOUT_SECONDS = 60;

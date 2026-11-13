@@ -1,8 +1,9 @@
-import { cvmsGroup } from "./command";
 import { cvmsAttestationCommand } from "./attestation";
+import { cvmsGroup } from "./command";
 import { cvmsDeleteCommand } from "./delete";
 import { cvmsDeviceAllowlistCommand } from "./device-allowlist";
 import { cvmsGetCommand } from "./get";
+import { cvmsGpuStatusCommand } from "./gpu-status";
 import { cvmsInitScriptsCommand } from "./init-scripts";
 import { cvmsListCommand } from "./list";
 import { cvmsListNodesCommand } from "./list-node";
@@ -22,6 +23,7 @@ export const cvmsCommands = {
 		cvmsDeleteCommand,
 		cvmsDeviceAllowlistCommand,
 		cvmsGetCommand,
+		cvmsGpuStatusCommand,
 		cvmsInitScriptsCommand,
 		cvmsListCommand,
 		cvmsListNodesCommand,

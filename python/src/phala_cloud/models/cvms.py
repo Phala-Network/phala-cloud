@@ -131,6 +131,29 @@ class CvmResourceV20260121(CloudModel):
     billing_period: BillingPeriod | None = None
 
 
+class CvmResourceV20261111(CvmResourceV20260121):
+    memory_in_mb: int
+
+
+class CvmGpuCcMode(CloudModel):
+    expected: Literal["on", "devtools"]
+
+
+class CvmGpuInfo(CloudModel):
+    product_id: str | None
+    gpus: int
+    cc_mode: CvmGpuCcMode
+
+
+class CvmGpuObserved(CloudModel):
+    slot: str
+    cc_mode: str
+
+
+class CvmGpuStatus(CloudModel):
+    observed: list[CvmGpuObserved] | None
+
+
 class CvmHourlyRateV20260121(CloudModel):
     total: str | None = None
     compute: str | None = None
@@ -384,6 +407,14 @@ class CvmInfoV20260522(CloudModel):
 
 class CvmInfoDetailV20260522(CvmInfoV20260522):
     compose_file: str | dict | None = None
+
+
+class CvmInfoDetailV20261111(CvmInfoDetailV20260522):
+    enabled_ssh_access: bool = False
+    resource: CvmResourceV20261111
+    gpu: CvmGpuInfo | None = None
+    dapp_dashboard_url: str | None = None
+    syslog_endpoint: str | None = None
 
 
 class PaginatedCvmInfosV20260522(CloudModel):

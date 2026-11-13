@@ -44,7 +44,7 @@ List CVMs in your workspace with filtering and pagination.
 
 ### cvms get
 
-Get detailed information about a specific CVM.
+Get detailed information about a specific CVM. API version `2026-11-11` is used by default. Compose is omitted by default; request it explicitly with `--include-compose`.
 
 #### Usage
 
@@ -62,6 +62,7 @@ Get detailed information about a specific CVM.
 |------|---------|-------------|
 | `--json` / `-j` | false | JSON output |
 | `--interactive` / `-i` | false | Interactive mode |
+| `--include-compose` | false | Include the compose configuration |
 
 #### Examples
 
@@ -69,6 +70,17 @@ Get detailed information about a specific CVM.
     $ phala cvms get app_abc123
     $ phala cvms get --json
     $ phala cvms get --interactive
+    $ phala cvms get my-app --api-version 2026-11-11 --include-compose --json
+
+---
+
+### cvms gpu-status
+
+Get observed GPU confidential-computing modes from the CVM node. CPU-only CVMs return a 404 error. The result contains `observed`, an array of GPU slots and their `cc_mode`, or null when unavailable.
+
+    phala cvms gpu-status [cvm-id] [--json] [--interactive]
+
+    $ phala cvms gpu-status my-app --json
 
 ---
 

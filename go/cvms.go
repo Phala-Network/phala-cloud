@@ -99,8 +99,34 @@ func buildCVMListPath(opts *GetCVMListOptions) string {
 
 // GetCVMInfo returns detailed information about a CVM.
 func (c *Client) GetCVMInfo(ctx context.Context, cvmID string) (*CVMInfo, error) {
+	return c.GetCVMInfoWithOptions(ctx, cvmID, nil)
+}
+
+// GetCVMInfoOptions configures optional CVM detail query parameters.
+type GetCVMInfoOptions struct {
+	IncludeCompose *bool
+}
+
+// GetCVMInfoWithOptions returns CVM details using the configured API version.
+// IncludeCompose controls compose_file for API version 2026-11-11 and later.
+func (c *Client) GetCVMInfoWithOptions(ctx context.Context, cvmID string, opts *GetCVMInfoOptions) (*CVMInfo, error) {
+	path := cvmPath(cvmID)
+	if opts != nil && opts.IncludeCompose != nil {
+		q := url.Values{}
+		q.Set("include_compose", strconv.FormatBool(*opts.IncludeCompose))
+		path += "?" + q.Encode()
+	}
 	var result CVMInfo
-	if err := c.doJSON(ctx, "GET", cvmPath(cvmID), nil, &result); err != nil {
+	if err := c.doJSON(ctx, "GET", path, nil, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// GetCVMGPUStatus returns observed GPU status for a CVM. CPU-only CVMs return 404.
+func (c *Client) GetCVMGPUStatus(ctx context.Context, cvmID string) (*CVMGPUStatus, error) {
+	var result CVMGPUStatus
+	if err := c.doJSON(ctx, "GET", cvmPath(cvmID, "gpu-status"), nil, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil

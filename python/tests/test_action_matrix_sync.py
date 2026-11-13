@@ -239,7 +239,9 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(200, text="#!/bin/sh")
         if path.endswith("/user_config"):
             return _json_response({"hostname": "n", "ssh_authorized_keys": []})
-        return _json_response({"id": "1", "name": "n", "status": "running", "resource": {}})
+        return _json_response(
+            {"id": "1", "name": "n", "status": "running", "resource": {"memory_in_mb": 1024}}
+        )
 
     # cvm mutations
     if method == "POST" and path == "/api/v1/cvms/provision":

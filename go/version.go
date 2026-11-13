@@ -8,7 +8,7 @@ import (
 
 const (
 	// DefaultAPIVersion is the default Phala Cloud API version.
-	DefaultAPIVersion = "2026-06-23"
+	DefaultAPIVersion = "2026-11-11"
 
 	// kmsContractAPIVersion is the API version that exposes the contract-centric
 	// KMS API. The contract methods pin it per request.

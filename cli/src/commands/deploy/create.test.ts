@@ -592,7 +592,7 @@ describe("phala deploy (create)", () => {
 				progress: correlationId
 					? { target: "starting", correlation_id: correlationId }
 					: null,
-				resource: {},
+				resource: { memory_in_mb: 4096 },
 				gateway: {},
 			});
 

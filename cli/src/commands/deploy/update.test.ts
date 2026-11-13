@@ -111,7 +111,7 @@ function cvmInfo(overrides: Record<string, unknown> = {}) {
 		name: "my-app",
 		app_id: "abc",
 		status: "running",
-		resource: {},
+		resource: { memory_in_mb: 4096 },
 		gateway: {},
 		...overrides,
 	};
@@ -638,7 +638,7 @@ describe("phala deploy --cvm-id", () => {
 						app_id: "abc",
 						status: "stopped",
 						in_progress: false,
-						resource: {},
+						resource: { memory_in_mb: 4096 },
 						gateway: {},
 					})
 				: undefined;
@@ -661,7 +661,7 @@ describe("phala deploy --cvm-id", () => {
 						app_id: "abc",
 						status: reads++ === 0 ? "error" : "stopped",
 						in_progress: false,
-						resource: {},
+						resource: { memory_in_mb: 4096 },
 						gateway: {},
 					})
 				: undefined;
@@ -689,7 +689,7 @@ describe("phala deploy --cvm-id", () => {
 				app_id: "abc",
 				status,
 				in_progress: inProgress,
-				resource: {},
+				resource: { memory_in_mb: 4096 },
 				gateway: {},
 			});
 		};
@@ -767,7 +767,7 @@ describe("phala deploy --cvm-id", () => {
 				app_id: "abc",
 				status,
 				in_progress: inProgress,
-				resource: {},
+				resource: { memory_in_mb: 4096 },
 				gateway: {},
 			});
 		};
@@ -803,7 +803,7 @@ describe("phala deploy --cvm-id", () => {
 				app_id: "abc",
 				status: reads++ === 0 ? "running" : "stopped",
 				in_progress: false,
-				resource: {},
+				resource: { memory_in_mb: 4096 },
 				gateway: {},
 			});
 		};
@@ -823,7 +823,7 @@ describe("phala deploy --cvm-id", () => {
 						name: "my-app",
 						app_id: "abc",
 						status: "running",
-						resource: {},
+						resource: { memory_in_mb: 4096 },
 						gateway: {},
 						compose_file: { runner: "bash", bash_script: "echo old" },
 					})

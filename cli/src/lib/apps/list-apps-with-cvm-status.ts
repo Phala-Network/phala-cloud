@@ -40,7 +40,7 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
 }
 
 export async function listAppsWithCvmStatus(
-	client: Client<"2026-06-23">,
+	client: Client<"2026-11-11">,
 	options: AppsListWithStatusOptions,
 ): Promise<Result<AppsListWithStatusResult>> {
 	const appListResult = await safeGetAppList(client, {

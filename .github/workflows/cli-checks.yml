@@ -6,10 +6,14 @@ on:
     paths:
       - 'cli/**'
       - 'js/**'
+      - 'package.json'
+      - 'bun.lock'
   push:
     paths:
       - 'cli/**'
       - 'js/**'
+      - 'package.json'
+      - 'bun.lock'
 
 jobs:
   cli-checks:
@@ -88,21 +92,17 @@ jobs:
 
       - name: Run tests
         id: test
-        continue-on-error: true
         run: |
           set +e
           bun run test > test_report.txt 2>&1
           exit_code=$?
+          cat test_report.txt
           echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
           if [ $exit_code -ne 0 ]; then
             echo "test_issues=true" >> $GITHUB_OUTPUT
-            echo "⚠️ Some tests failed (non-blocking)"
-          else
-            echo "test_issues=false" >> $GITHUB_OUTPUT
-            echo "✓ All tests passed"
+            echo "::error::CLI tests failed, see test_report.txt"
           fi
-          # Always succeed so it doesn't block the workflow
-          exit 0
+          exit $exit_code
 
       - name: Save PR metadata
         if: always() && github.event_name == 'pull_request'
