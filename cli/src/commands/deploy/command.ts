@@ -336,7 +336,7 @@ export const deployCommandMeta: CommandMeta = {
 		{
 			name: "dev-os",
 			description:
-				"Enable SSH access (requires --image). Adds a dev-box service on dstack 0.6+, picks a dev OS image below 0.6",
+				"Enable SSH access (requires --image). Adds a dev-box service on dstack 0.6+, deploys the dev image below 0.6. An update without the flag keeps it",
 			type: "boolean",
 			target: "devOs",
 			negatedName: "no-dev-os",

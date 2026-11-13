@@ -10,23 +10,31 @@
  * `phala cp` are unaffected.
  *
  * Everything here is pure: the OS image catalog is fetched by the caller and
- * passed in, and the compose rewrite works on text instead of parsing and
- * re-emitting it, so a user's comments, anchors and formatting survive
- * deployment. It only touches two places: the end of the top-level `services`
- * mapping and the top-level `volumes` mapping.
+ * passed in.
+ *
+ * Reading and writing are deliberately separate. Deciding whether a compose
+ * already carries a dev box works on the *parsed* YAML, so anchors, merge keys,
+ * flow mappings, inline comments and the `True`/`yes` boolean spellings the
+ * backend's PyYAML accepts are all understood the same way the backend
+ * understands them. Writing (adding the service) still edits the text at the
+ * two places it changes — the end of the top-level `services` mapping and the
+ * top-level `volumes` mapping — so the user's comments, anchors and formatting
+ * survive deployment.
  */
+
+import { parse } from "yaml";
 
 /**
  * Marks a service as the dev box. The backend detects the dev box from these
  * four keys alone, so the CLI refuses to author anything it would read
  * differently.
  *
- * `privileged` is the one YAML boolean among them: only the bare `true` token
+ * `privileged` is the one YAML boolean among them: only a boolean `true`
  * counts, never the quoted string `"true"`. The other three are the string
- * `host`, which the two quoting styles share.
+ * `host`.
  */
-const DEV_BOX_MARKERS: ReadonlyArray<readonly [string, string]> = [
-	["privileged", "true"],
+const DEV_BOX_MARKERS: ReadonlyArray<readonly [string, boolean | string]> = [
+	["privileged", true],
 	["pid", "host"],
 	["network_mode", "host"],
 	["uts", "host"],
@@ -35,6 +43,19 @@ const DEV_BOX_MARKERS: ReadonlyArray<readonly [string, string]> = [
 export const DEV_BOX_SERVICE_NAME = "dev-box";
 const DEV_BOX_IMAGE_REPOSITORY = "ghcr.io/dstack-tee/dstack-dev-box";
 export const DEV_BOX_IMAGE = `${DEV_BOX_IMAGE_REPOSITORY}:latest`;
+
+/**
+ * The image references a compose must use to count as the CLI's dev box.
+ *
+ * Exact match on purpose: a tag or digest of the same repository points at a
+ * build this CLI has not chosen, and the dev box is the container that grants
+ * SSH access to the whole host. When the injection pin above moves, update this
+ * list in the same commit.
+ */
+const DEV_BOX_IMAGE_PINS: readonly string[] = [DEV_BOX_IMAGE];
+
+/** The env var the dev box's entrypoint merges the user_config keys with. */
+const DEV_BOX_ENV_KEY = "SSH_AUTHORIZED_KEYS";
 
 /**
  * Named volumes the dev box owns, as `[name, mount path]`. They keep host keys
@@ -47,6 +68,25 @@ const DEV_BOX_NAMED_VOLUMES: ReadonlyArray<readonly [string, string]> = [
 ];
 
 const DEV_BOX_VOLUME_NAMES = DEV_BOX_NAMED_VOLUMES.map(([name]) => name);
+
+/**
+ * Required mounts, as `[source, target]`. The dev box reads the host's
+ * filesystem and keeps its host keys and `/root` on named volumes, so a
+ * service without them cannot be the SSH server the platform relies on.
+ */
+const DEV_BOX_REQUIRED_MOUNTS: ReadonlyArray<readonly [string, string]> = [
+	["/", "/host"],
+	["ssh-host-keys", "/etc/ssh/host-keys"],
+	["home", "/root"],
+];
+
+/**
+ * Fields that replace or delay the entrypoint, or park the service behind a
+ * profile. `entrypoint` is stricter than the other two: in compose an empty
+ * entrypoint replaces the image's and runs nothing, so only "absent" counts as
+ * unset there.
+ */
+const DEV_BOX_DISQUALIFYING_FIELDS = ["command", "profiles"] as const;
 
 const DEFAULT_INDENT_STEP = 2;
 
@@ -65,6 +105,18 @@ export interface OsImageCatalogEntry {
 	readonly version: string;
 	readonly is_dev: boolean;
 	readonly os_image_hash: string | null;
+}
+
+/** How a deployment satisfies `--dev-os`, and with which image. */
+export interface DevOsPlan {
+	readonly mode: DevOsMode;
+	/**
+	 * The OS image to send. Below dstack 0.6 this is the dev variant of the
+	 * requested release, because sshd comes from the image itself; otherwise the
+	 * image the caller asked for. Undefined when the plan only repeats a recorded
+	 * choice and the caller's own image stands.
+	 */
+	readonly image?: string;
 }
 
 /**
@@ -91,9 +143,31 @@ function compareVersions(left: number[], right: readonly number[]): number {
 	return 0;
 }
 
-function isDevBoxImage(image: string | undefined): boolean {
+/** Whether an image reference names the dev-box repository, on any tag. */
+function usesDevBoxRepository(image: unknown): boolean {
+	if (typeof image !== "string") return false;
+	const value = image.trim();
 	return (
-		typeof image === "string" && image.startsWith(DEV_BOX_IMAGE_REPOSITORY)
+		value === DEV_BOX_IMAGE_REPOSITORY ||
+		value.startsWith(`${DEV_BOX_IMAGE_REPOSITORY}:`) ||
+		value.startsWith(`${DEV_BOX_IMAGE_REPOSITORY}@`)
+	);
+}
+
+/** Whether an image reference is exactly one of the pins the CLI injects. */
+function isPinnedDevBoxImage(image: unknown): boolean {
+	return typeof image === "string" && DEV_BOX_IMAGE_PINS.includes(image.trim());
+}
+
+/** Catalog naming for a dev OS image: `dev-0.5.7`, `dstack-dev-0.5.7`. */
+const DEV_IMAGE_NAME = /(^|[-_.])dev([-_.]|$)/i;
+
+/** Whether a catalog entry ships a dev OS image (sshd built in). */
+function isDevImage(entry: OsImageCatalogEntry): boolean {
+	return (
+		entry.is_dev ||
+		DEV_IMAGE_NAME.test(entry.name) ||
+		DEV_IMAGE_NAME.test(entry.slug)
 	);
 }
 
@@ -132,35 +206,291 @@ export function requireDevOsImage(identifier: string | undefined): string {
 }
 
 /**
+ * The dev OS images of the same dstack release.
+ *
+ * Below dstack 0.6 sshd lives in the image, so `--dev-os` cannot be satisfied
+ * by a production image of that release. The catalog marks the dev variants
+ * with `is_dev`; older rows only carry it in the name.
+ */
+function findDevImageVariants(
+	catalog: readonly OsImageCatalogEntry[],
+	image: OsImageCatalogEntry,
+): OsImageCatalogEntry[] {
+	const version = parseImageVersion(image.version);
+	if (!version) return [];
+	return catalog.filter(
+		(entry) =>
+			entry.slug !== image.slug &&
+			isDevImage(entry) &&
+			compareVersions(parseImageVersion(entry.version) ?? [], version) === 0,
+	);
+}
+
+/**
  * Decide how `--dev-os` is satisfied for the OS image the user pinned.
  *
  * The release decides it, never a guess: an image that is not in the catalog
  * would leave the CLI unable to tell whether to prefer a dev image or to inject
  * the dev box, and guessing 0.6 silently produces a CVM with the wrong SSH
  * setup.
+ *
+ * Below 0.6 the plan also resolves the *image*. The backend ignores
+ * `prefer_dev` when the request names an image, so passing a production image
+ * of a release that has a dev variant would deploy a CVM with no sshd at all.
  */
-export function resolveDevOsMode(
+export function resolveDevOsPlan(
 	identifier: string | undefined,
 	catalog: readonly OsImageCatalogEntry[],
-): DevOsMode {
-	const image = findOsImage(catalog, requireDevOsImage(identifier));
+): DevOsPlan {
+	const requested = requireDevOsImage(identifier);
+	const image = findOsImage(catalog, requested);
 	if (!image) {
 		throw new Error(
-			`--dev-os cannot tell which dstack release the OS image "${identifier}" is: it is not in the OS image catalog. ${OS_IMAGES_HINT}`,
+			`--dev-os cannot tell which dstack release the OS image "${requested}" is: it is not in the OS image catalog. ${OS_IMAGES_HINT}`,
 		);
 	}
 
 	const version = parseImageVersion(image.version);
 	if (!version) {
 		throw new Error(
-			`OS image "${identifier}" has no recognizable dstack release (version "${image.version}").`,
+			`OS image "${requested}" has no recognizable dstack release (version "${image.version}").`,
 		);
 	}
 
-	return compareVersions(version, DEV_BOX_MIN_VERSION) >= 0
-		? "dev-box"
-		: "dev-image";
+	if (compareVersions(version, DEV_BOX_MIN_VERSION) >= 0) {
+		return { mode: "dev-box", image: requested };
+	}
+
+	if (isDevImage(image)) {
+		return { mode: "dev-image", image: requested };
+	}
+
+	const variants = findDevImageVariants(catalog, image);
+	if (variants.length === 1) {
+		return {
+			mode: "dev-image",
+			image: (variants[0] as OsImageCatalogEntry).slug,
+		};
+	}
+	if (variants.length > 1) {
+		throw new Error(
+			`--dev-os cannot pick the dev OS image for "${requested}": the catalog holds ${variants.length} dev variants of dstack ${image.version} (${variants.map((entry) => entry.slug).join(", ")}). ${OS_IMAGES_HINT}`,
+		);
+	}
+	throw new Error(
+		`--dev-os cannot use the OS image "${requested}": dstack releases below 0.6 take SSH from a dev OS image, and the catalog has no dev variant of "${image.version}". ${OS_IMAGES_HINT}`,
+	);
 }
+
+/** A parsed YAML mapping. */
+type YamlMapping = Record<string, unknown>;
+
+function asMapping(value: unknown): YamlMapping | undefined {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) {
+		return undefined;
+	}
+	return value as YamlMapping;
+}
+
+/**
+ * Parse a compose file the way the backend does.
+ *
+ * `version: "1.1"` matches the PyYAML SafeLoader behind the backend's detector:
+ * `privileged: yes` is a boolean there and must be one here too. `merge: true`
+ * resolves `<<` keys, so a dev box declared through an anchor or an alias is
+ * visible instead of looking like an ordinary service. `uniqueKeys: false`
+ * keeps a repeated key readable (the last one wins), which is what PyYAML does;
+ * refusing those files would reject composes the backend accepts.
+ *
+ * Throws on YAML the parser rejects; callers decide whether that refusal is
+ * fatal (a write) or means "no dev box" (detection).
+ */
+function parseCompose(composeYaml: string): unknown {
+	return parse(composeYaml, {
+		version: "1.1",
+		merge: true,
+		uniqueKeys: false,
+	});
+}
+
+/** The services of a compose, or undefined when the section is not a mapping. */
+function composeServices(composeYaml: string): YamlMapping | undefined {
+	const root = asMapping(parseCompose(composeYaml));
+	return root ? asMapping(root.services) : undefined;
+}
+
+/** Text of a scalar, trimmed; empty for anything else. */
+function textValue(value: unknown): string {
+	return typeof value === "string" ? value.trim() : "";
+}
+
+/** Whether a service field says nothing: absent, null, blank or empty collection. */
+function isBlank(value: unknown): boolean {
+	if (value == null) return true;
+	if (typeof value === "string") return value.trim() === "";
+	if (Array.isArray(value)) return value.length === 0;
+	const mapping = asMapping(value);
+	return mapping !== undefined && Object.keys(mapping).length === 0;
+}
+
+/**
+ * Whether an `entrypoint` is unset.
+ *
+ * Only absent or null. `entrypoint: []` and `entrypoint: ""` replace the
+ * image's entrypoint with nothing, which leaves no sshd running, so they are
+ * not the dev box however many markers the service carries.
+ */
+function isEntrypointUnset(value: unknown): boolean {
+	return value == null;
+}
+
+/** Whether a service carries every dev-box marker. */
+function hasDevBoxMarkers(service: YamlMapping): boolean {
+	return DEV_BOX_MARKERS.every(([key, expected]) =>
+		typeof expected === "boolean"
+			? service[key] === true
+			: service[key] === expected,
+	);
+}
+
+/** The keys a service declares in `environment`, in list or mapping form. */
+function environmentKeys(service: YamlMapping): string[] {
+	const environment = service.environment;
+	const mapping = asMapping(environment);
+	if (mapping) return Object.keys(mapping);
+	if (!Array.isArray(environment)) return [];
+	return environment.map((entry) => {
+		const text = typeof entry === "string" ? entry : "";
+		return text.split("=")[0].trim();
+	});
+}
+
+/** A service's volume mounts, short (`src:dst[:opts]`) or long syntax. */
+function serviceMounts(service: YamlMapping): Array<{
+	source: string;
+	target: string;
+}> {
+	const volumes = service.volumes;
+	if (!Array.isArray(volumes)) return [];
+	const mounts: Array<{ source: string; target: string }> = [];
+	for (const volume of volumes) {
+		if (typeof volume === "string") {
+			const [source = "", target = ""] = volume.split(":");
+			mounts.push({ source: source.trim(), target: target.trim() });
+			continue;
+		}
+		const mount = asMapping(volume);
+		if (!mount) continue;
+		mounts.push({
+			source: textValue(mount.source),
+			target: textValue(mount.target),
+		});
+	}
+	return mounts;
+}
+
+/**
+ * Whether a service is the dev box the platform can rely on.
+ *
+ * The marks: the exact image this CLI injects, all four markers, nothing that
+ * replaces or delays the entrypoint (`command`, `profiles`, `entrypoint`), the
+ * `SSH_AUTHORIZED_KEYS` key the entrypoint merges (its value is the user's, so
+ * only the name is compared), and every mount the SSH server reads keys from.
+ *
+ * The launch form's `isPlatformDevBox` checks the same fields but treats an
+ * empty `entrypoint` as unset; compose does not, so this one does not either.
+ */
+export function isCanonicalDevBoxService(service: unknown): boolean {
+	const mapping = asMapping(service);
+	if (!mapping) return false;
+	if (!isPinnedDevBoxImage(mapping.image)) return false;
+	if (!hasDevBoxMarkers(mapping)) return false;
+	if (!isEntrypointUnset(mapping.entrypoint)) return false;
+	for (const field of DEV_BOX_DISQUALIFYING_FIELDS) {
+		if (!isBlank(mapping[field])) return false;
+	}
+	if (!environmentKeys(mapping).includes(DEV_BOX_ENV_KEY)) return false;
+	const mounts = serviceMounts(mapping);
+	return DEV_BOX_REQUIRED_MOUNTS.every(([source, target]) =>
+		mounts.some((mount) => mount.source === source && mount.target === target),
+	);
+}
+
+/** Whether any service in the compose is the canonical dev box. */
+function hasCanonicalDevBox(services: YamlMapping): boolean {
+	return Object.values(services).some(isCanonicalDevBoxService);
+}
+
+/**
+ * Whether the compose already declares a usable dev box service.
+ *
+ * Detection never breaks a write path: a file the parser rejects (or that has
+ * no `services` mapping) simply has no dev box. Injection is the one place that
+ * reports those files, and it does so with a readable error.
+ */
+export function composeHasDevBox(composeYaml: string): boolean {
+	try {
+		const services = composeServices(composeYaml);
+		return services ? hasCanonicalDevBox(services) : false;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Refuse a compose the CLI cannot extend unambiguously, and report whether it
+ * already carries a canonical dev box (nothing left to do then).
+ *
+ * Only a service that is already a canonical dev box is accepted as "done".
+ * Anything close to it — the dev-box image without the markers, the `dev-box`
+ * name for something else, or the four markers on another image — is a
+ * conflict: the backend would read it as the dev box, or the two boxes would
+ * fight over the same host network and volume names.
+ */
+function checkDevBoxCompose(composeYaml: string): boolean {
+	let services: YamlMapping | undefined;
+	try {
+		services = composeServices(composeYaml);
+	} catch (error) {
+		throw new Error(
+			`Cannot add the dev box to this docker compose file: it is not valid YAML. ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+	if (!services) {
+		throw new Error(
+			"Cannot add the dev box to this docker compose file: it has no top-level services section.",
+		);
+	}
+	if (hasCanonicalDevBox(services)) return true;
+
+	const markers = DEV_BOX_MARKERS.map(
+		([key, value]) => `${key}: ${value}`,
+	).join(", ");
+	for (const [name, service] of Object.entries(services)) {
+		const mapping = asMapping(service) ?? {};
+		if (usesDevBoxRepository(mapping.image)) {
+			throw new Error(
+				`Service "${name}" uses the dev-box image but is not configured as the dev box. Set ${markers} on it, or rename it.`,
+			);
+		}
+		if (name === DEV_BOX_SERVICE_NAME) {
+			throw new Error(
+				`Service "${name}" is not a dev box: it must use the image ${DEV_BOX_IMAGE}. Rename it, or make it the dev box.`,
+			);
+		}
+		if (hasDevBoxMarkers(mapping)) {
+			throw new Error(
+				`Service "${name}" already sets ${markers}, which Phala Cloud reads as the dev box. Remove those keys from it, or use the image ${DEV_BOX_IMAGE}.`,
+			);
+		}
+	}
+	return false;
+}
+
+/* ------------------------------------------------------------------------- *
+ * Text editing: everything below only runs on a compose that needs the dev box
+ * added, and only touches the two places described at the top of the file.
+ * ------------------------------------------------------------------------- */
 
 interface BlockSpan {
 	/** Index of the line that opens the block (`key:`). */
@@ -173,10 +503,6 @@ interface BlockSpan {
 
 interface ServiceBlock extends BlockSpan {
 	readonly name: string;
-	/** Property values exactly as written, quotes included. */
-	readonly rawProperties: ReadonlyMap<string, string>;
-	/** Property values with one layer of quotes removed. */
-	readonly properties: ReadonlyMap<string, string>;
 }
 
 const TOP_LEVEL_KEY = /^["']?([A-Za-z0-9_.-]+)["']?:(.*)$/;
@@ -198,14 +524,6 @@ function splitLines(composeYaml: string): { lines: string[]; eol: string } {
 		lines: composeYaml.split(/\r?\n/),
 		eol: composeYaml.includes("\r\n") ? "\r\n" : "\n",
 	};
-}
-
-function unquote(value: string): string {
-	if (value.length < 2) return value;
-	const quoted =
-		(value.startsWith('"') && value.endsWith('"')) ||
-		(value.startsWith("'") && value.endsWith("'"));
-	return quoted ? value.slice(1, -1) : value;
 }
 
 function shallowestIndent(
@@ -232,7 +550,13 @@ function findTopLevelBlock(
 	});
 	if (keyIndex === -1) return undefined;
 
-	const rest = (TOP_LEVEL_KEY.exec(lines[keyIndex])?.[2] ?? "").trim();
+	// A block can open with an anchor or a tag (`services: &all`) and still be
+	// block style; only the rest of the line decides.
+	const rest = (TOP_LEVEL_KEY.exec(lines[keyIndex])?.[2] ?? "")
+		.trim()
+		.replace(/^&\S*/, "")
+		.replace(/^!\S*/, "")
+		.trim();
 	if (rest !== "" && !rest.startsWith("#")) {
 		throw new Error(
 			`Cannot add the dev box to this docker compose file: its "${key}" section is written inline. Rewrite that section in block style, or add the dev-box service by hand.`,
@@ -253,25 +577,20 @@ function findTopLevelBlock(
 	};
 }
 
-function readProperties(
+/** The keys declared directly under a block, in order of appearance. */
+function declaredKeys(
 	lines: string[],
 	span: { from: number; to: number },
 	indent: number | undefined,
-): { raw: Map<string, string>; unquoted: Map<string, string> } {
-	const raw = new Map<string, string>();
-	const unquoted = new Map<string, string>();
-	if (indent === undefined) return { raw, unquoted };
+): string[] {
+	const keys: string[] = [];
+	if (indent === undefined) return keys;
 	for (let i = span.from; i < span.to; i += 1) {
 		if (!isContentLine(lines[i]) || indentOf(lines[i]) !== indent) continue;
 		const match = PROPERTY.exec(lines[i].trim());
-		if (!match) continue;
-		const [, name, value] = match;
-		if (raw.has(name)) continue;
-		const asWritten = value.trim();
-		raw.set(name, asWritten);
-		unquoted.set(name, unquote(asWritten));
+		if (match) keys.push(match[1]);
 	}
-	return { raw, unquoted };
+	return keys;
 }
 
 function listServices(lines: string[], services: BlockSpan): ServiceBlock[] {
@@ -290,104 +609,13 @@ function listServices(lines: string[], services: BlockSpan): ServiceBlock[] {
 			position + 1 < starts.length
 				? (starts[position + 1] as number)
 				: services.endIndex;
-		const propertyIndent = shallowestIndent(lines, start + 1, endIndex);
-		const { raw, unquoted } = readProperties(
-			lines,
-			{ from: start + 1, to: endIndex },
-			propertyIndent,
-		);
 		return {
 			name: PROPERTY.exec(lines[start].trim())?.[1] ?? lines[start].trim(),
 			keyIndex: start,
 			endIndex,
-			childIndent: propertyIndent,
-			rawProperties: raw,
-			properties: unquoted,
+			childIndent: shallowestIndent(lines, start + 1, endIndex),
 		};
 	});
-}
-
-/**
- * Whether a service carries one dev-box marker.
- *
- * `privileged` is compared against the text as written: the flag is a YAML
- * boolean, so only the bare `true` token turns it on and `privileged: "true"`
- * is a string that the backend's detector does not count either. The namespace
- * markers are strings, so one layer of quotes is removed first: `pid: host`
- * and `pid: "host"` are the same YAML scalar.
- */
-function markerMatches(
-	service: ServiceBlock,
-	key: string,
-	value: string,
-): boolean {
-	return key === "privileged"
-		? service.rawProperties.get(key) === value
-		: service.properties.get(key) === value;
-}
-
-function hasDevBoxMarkers(service: ServiceBlock): boolean {
-	return DEV_BOX_MARKERS.every(([key, value]) =>
-		markerMatches(service, key, value),
-	);
-}
-
-function isCanonicalDevBox(service: ServiceBlock): boolean {
-	return (
-		isDevBoxImage(service.properties.get("image")) && hasDevBoxMarkers(service)
-	);
-}
-
-/** Whether the compose already declares a usable dev box service. */
-export function composeHasDevBox(composeYaml: string): boolean {
-	const { lines } = splitLines(composeYaml);
-	const services = findTopLevelBlock(lines, "services");
-	if (!services) return false;
-	return listServices(lines, services).some(isCanonicalDevBox);
-}
-
-function requireServices(lines: string[]): BlockSpan {
-	const services = findTopLevelBlock(lines, "services");
-	if (!services) {
-		throw new Error(
-			"Cannot add the dev box to this docker compose file: it has no top-level services section.",
-		);
-	}
-	return services;
-}
-
-/**
- * Refuse compose files the CLI cannot extend unambiguously.
- *
- * Only a service that is already a canonical dev box is accepted as "done".
- * Anything close to it — the dev-box image without the markers, the `dev-box`
- * name for something else, or the four markers on another image — is a
- * conflict: the backend would read it as the dev box, or the two boxes would
- * fight over the same host network and volume names.
- */
-function assertNoDevBoxConflicts(
-	lines: string[],
-	services: BlockSpan,
-): ServiceBlock | undefined {
-	for (const service of listServices(lines, services)) {
-		if (isCanonicalDevBox(service)) return service;
-		if (isDevBoxImage(service.properties.get("image"))) {
-			throw new Error(
-				`Service "${service.name}" uses the dev-box image but is not configured as the dev box. Set ${DEV_BOX_MARKERS.map(([key, value]) => `${key}: ${value}`).join(", ")} on it, or rename it.`,
-			);
-		}
-		if (service.name === DEV_BOX_SERVICE_NAME) {
-			throw new Error(
-				`Service "${service.name}" is not a dev box: it must use the image ${DEV_BOX_IMAGE}. Rename it, or make it the dev box.`,
-			);
-		}
-		if (hasDevBoxMarkers(service)) {
-			throw new Error(
-				`Service "${service.name}" already sets ${DEV_BOX_MARKERS.map(([key, value]) => `${key}: ${value}`).join(", ")}, which Phala Cloud reads as the dev box. Remove those keys from it, or use the image ${DEV_BOX_IMAGE}.`,
-			);
-		}
-	}
-	return undefined;
 }
 
 function indentStep(lines: string[], services: BlockSpan): number {
@@ -412,7 +640,7 @@ function devBoxServiceLines(serviceIndent: number, step: number): string[] {
 		`${propertyPad}restart: unless-stopped`,
 		...DEV_BOX_MARKERS.map(([key, value]) => `${propertyPad}${key}: ${value}`),
 		`${propertyPad}environment:`,
-		`${itemPad}- SSH_AUTHORIZED_KEYS=\${DSTACK_AUTHORIZED_KEYS}`,
+		`${itemPad}- ${DEV_BOX_ENV_KEY}=\${DSTACK_AUTHORIZED_KEYS}`,
 		`${propertyPad}volumes:`,
 		`${itemPad}- /:/host:rslave`,
 		`${itemPad}- /var/run/docker.sock:/var/run/docker.sock`,
@@ -454,12 +682,12 @@ function addDevBoxVolumes(lines: string[]): string[] {
 		return insertLines(lines, insertAt, block);
 	}
 
-	const declared = readProperties(
+	const declared = declaredKeys(
 		lines,
 		{ from: volumes.keyIndex + 1, to: volumes.endIndex },
 		volumes.childIndent,
-	).raw;
-	const conflict = DEV_BOX_VOLUME_NAMES.find((name) => declared.has(name));
+	);
+	const conflict = DEV_BOX_VOLUME_NAMES.find((name) => declared.includes(name));
 	if (conflict !== undefined) {
 		throw new Error(
 			`The compose already declares a top-level volume named "${conflict}", which the dev box needs for its own data. Rename it before deploying with --dev-os.`,
@@ -480,30 +708,35 @@ function addDevBoxVolumes(lines: string[]): string[] {
 /**
  * Return the compose with the canonical dev box service added.
  *
- * Idempotent: a compose that already carries a canonical dev box (the dev-box
- * image with `privileged: true`, `pid`, `network_mode` and `uts` set to `host`)
- * is returned untouched. Anything the CLI would have to overwrite or guess
- * about throws instead.
+ * Idempotent: a compose that already carries a canonical dev box is returned
+ * untouched, however it was written (anchors, merge keys and flow mappings
+ * included). Anything the CLI would have to overwrite or guess about throws
+ * instead, and so does YAML the parser rejects — a compose the CLI cannot read
+ * is never a compose to add a second dev box to.
  */
 export function injectDevBoxService(composeYaml: string): string {
+	if (checkDevBoxCompose(composeYaml)) return composeYaml;
+
 	const { lines, eol } = splitLines(composeYaml);
-	const services = requireServices(lines);
-	if (assertNoDevBoxConflicts(lines, services) !== undefined) {
-		return composeYaml;
+	if (findTopLevelBlock(lines, "services") === undefined) {
+		throw new Error(
+			"Cannot add the dev box to this docker compose file: it has no top-level services section.",
+		);
 	}
 
 	const withVolumes = addDevBoxVolumes(lines);
-	const mergedServices = requireServices(withVolumes);
-	const step = indentStep(withVolumes, mergedServices);
+	const services = findTopLevelBlock(withVolumes, "services");
+	if (services === undefined) {
+		throw new Error(
+			"Cannot add the dev box to this docker compose file: it has no top-level services section.",
+		);
+	}
+	const step = indentStep(withVolumes, services);
 	const block = devBoxServiceLines(
-		mergedServices.childIndent ?? DEFAULT_INDENT_STEP,
+		services.childIndent ?? DEFAULT_INDENT_STEP,
 		step,
 	);
 	const insertAt =
-		lastContentIndex(
-			withVolumes,
-			mergedServices.keyIndex + 1,
-			mergedServices.endIndex,
-		) + 1;
+		lastContentIndex(withVolumes, services.keyIndex + 1, services.endIndex) + 1;
 	return insertLines(withVolumes, insertAt, block).join(eol);
 }

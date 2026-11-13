@@ -33,6 +33,7 @@ afterAll(() => {
 	mock.module("@/src/lib/client", () => previousClient);
 });
 const { runDeploy } = await import("./handler");
+const { recallDevOsMode } = await import("./dev-os-selection");
 
 type Recorded = {
 	method: string;
@@ -63,6 +64,23 @@ const OS_IMAGES = {
 			slug: "dstack-0.5.7",
 			version: "0.5.7",
 			os_image_hash: "bb".repeat(32),
+			is_dev: false,
+			requires_gpu: false,
+		},
+		{
+			name: "dev-0.5.7",
+			slug: "dstack-dev-0.5.7",
+			version: "0.5.7",
+			os_image_hash: "cc".repeat(32),
+			is_dev: true,
+			requires_gpu: false,
+		},
+		{
+			// A release with no dev variant at all.
+			name: "prod-0.5.4",
+			slug: "dstack-0.5.4",
+			version: "0.5.4",
+			os_image_hash: "dd".repeat(32),
 			is_dev: false,
 			requires_gpu: false,
 		},
@@ -372,6 +390,30 @@ describe("phala deploy (create)", () => {
 		expect("ssh_key_ids" in body).toBe(false);
 	});
 
+	test("records the dev OS choice so a later update keeps the dev box", async () => {
+		const pubkeyPath = path.join(tmpDir, "id_ed25519.pub");
+		await fs.writeFile(pubkeyPath, "ssh-ed25519 AAAA test@example\n");
+		const previousDir = process.env.PHALA_CLOUD_DIR;
+		process.env.PHALA_CLOUD_DIR = tmpDir;
+		try {
+			const { exitCode, failure } = await deploy({
+				compose: composePath,
+				devOs: true,
+				image: "dstack-0.6.0",
+				sshPubkey: pubkeyPath,
+			});
+
+			expect(failure).toBeUndefined();
+			expect(exitCode).toBe(0);
+			// The compose file on disk is untouched, so the record is what an
+			// update has to work from.
+			expect(recallDevOsMode(CREATED_CVM.vm_uuid)).toBe("dev-box");
+			expect(await fs.readFile(composePath, "utf8")).toBe(COMPOSE);
+		} finally {
+			process.env.PHALA_CLOUD_DIR = previousDir;
+		}
+	});
+
 	test("requires a pinned image for --dev-os", async () => {
 		const { exitCode, failure } = await deploy({
 			compose: composePath,
@@ -398,7 +440,7 @@ describe("phala deploy (create)", () => {
 		);
 	});
 
-	test("keeps a dev OS image for --dev-os below dstack 0.6", async () => {
+	test("deploys the dev image for --dev-os below dstack 0.6", async () => {
 		const pubkeyPath = path.join(tmpDir, "legacy_dev.pub");
 		await fs.writeFile(pubkeyPath, "ssh-ed25519 AAAA legacy@example\n");
 
@@ -412,9 +454,23 @@ describe("phala deploy (create)", () => {
 		expect(failure).toBeUndefined();
 		expect(exitCode).toBe(0);
 		const body = prepareRequest().body as Record<string, unknown>;
+		// The backend ignores prefer_dev when the request names an image, so
+		// sending the production slug would deploy a CVM with no sshd.
+		expect(body.image).toBe("dstack-dev-0.5.7");
 		expect(body.prefer_dev).toBe(true);
 		const composeFile = body.compose_file as Record<string, unknown>;
 		expect(composeFile.docker_compose_file).toBe(COMPOSE);
+	});
+
+	test("refuses a pre-0.6 production image with no dev variant", async () => {
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			devOs: true,
+			image: "dstack-0.5.4",
+		});
+
+		expect(exitCode).toBe(1);
+		expect((failure as Error).message).toContain('no dev variant of "0.5.4"');
 	});
 
 	test("leaves the compose alone with --no-dev-os", async () => {

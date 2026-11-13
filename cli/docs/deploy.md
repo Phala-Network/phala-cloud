@@ -21,7 +21,7 @@ Creates a new CVM by default. If `--cvm-id` is provided or `phala.toml` contains
 | `-e, --env <value>` | | Environment variable (KEY=VALUE) or path to .env file. Repeatable |
 | `--kms <type>` | phala | KMS type: phala, ethereum/eth, or base |
 | `--wait` | false | Wait for the deployment to finish and fail if it failed. New CVM: wait until it is running. Update (`--cvm-id`): wait until the CVM is running again, or stays stopped if it was not running before the update |
-| `--dev-os` | false | Enable SSH access (requires SSH key). Needs `--image`: on dstack 0.6+ it adds a `dev-box` service to the compose, below 0.6 it selects a dev OS image |
+| `--dev-os` | false | Enable SSH access. Needs `--image`: on dstack 0.6+ it adds a `dev-box` service to the compose, below 0.6 it deploys the dev variant of that release. An update re-adds the dev box |
 | `--public-logs` | true | Make CVM logs publicly accessible |
 | `--no-public-logs` | | Disable public log access |
 | `--public-sysinfo` | true | Make CVM system info publicly accessible |
@@ -86,7 +86,9 @@ A flag you leave out keeps the CVM's current value. In particular, an update wit
 
 `--listed` / `--no-listed` changes the Trust Center listing through its own request, sent only after the update is accepted (or, for on-chain KMS, after it is confirmed or committed with `--commit`). It is not sent with `--prepare-only`. The listing applies to the whole app, and its endpoint needs an API key or a login session: GitHub Actions OIDC tokens are not accepted for it.
 
-These flags set how a CVM is created and cannot be changed afterwards: `--name`, `--region`, `--node`, `--custom-app-id`, `--nonce`, `--key-provider-mode`, `--dev-os` / `--no-dev-os`, `--ssh-pubkey`, `--fs`, `--skip-gateway`, `--kms`, `--kms-id`, `--kms-contract`, `--kms-contract-id`, `--experimental-key-provider-type`, `--runner`, `--app-compose`, `--launch-token` and `--generate-launch-token`. An update that passes any of them fails before any request is sent.
+These flags set how a CVM is created and cannot be changed afterwards: `--name`, `--region`, `--node`, `--custom-app-id`, `--nonce`, `--key-provider-mode`, `--ssh-pubkey`, `--fs`, `--skip-gateway`, `--kms`, `--kms-id`, `--kms-contract`, `--kms-contract-id`, `--experimental-key-provider-type`, `--runner`, `--app-compose`, `--launch-token` and `--generate-launch-token`. An update that passes any of them fails before any request is sent.
+
+`--dev-os` is not in that list: it also applies to an update, because the dev box is added to the payload a deployment sends and never to the compose file on disk. The CLI records how `--dev-os` was satisfied for a CVM (dstack 0.6+ dev box, or a pre-0.6 dev image) in `~/.phala-cloud/state.json`, keyed by CVM id, and an update without the flag repeats that choice. Pass `--dev-os` to set it explicitly on an update (with `--image`, so the dstack release is known) or `--no-dev-os` to drop it, which also removes the record.
 
 ## Raw app compose
 
@@ -184,8 +186,26 @@ across redeploys; `docker_cleanup` prunes volumes and wipes both, so it cannot
 be combined with SSH access. The CLI refuses compose files it would have to
 overwrite: a service already using the dev-box image, a service named `dev-box`
 that is something else, the four dev-box keys on another service, or a top-level
-volume named `ssh-host-keys` or `home`. A compose that already declares the dev
-box is left untouched. Below 0.6 the flag selects the dev OS image as before.
+volume named `ssh-host-keys` or `home`. A compose that already declares a
+usable dev box — the image this CLI injects, the four keys, the
+`SSH_AUTHORIZED_KEYS` template and the host, host-keys and home mounts, with no
+`command`, `profiles` or `entrypoint` replacing the server — is left untouched,
+whichever way it is written (anchors, merge keys, flow mappings and inline
+comments included). Compose files the CLI cannot read as YAML are refused
+instead of extended, so a file never ends up with two dev boxes.
+
+Below 0.6 sshd lives in the image, so `--dev-os` deploys the dev variant of the
+release you named. The backend ignores `prefer_dev` when the request names an
+image, and a production image of that release would deploy a CVM without sshd:
+the CLI resolves the variant from the OS image catalog and fails, listing the
+catalog, when that release has none.
+
+The dev box only ever exists in what the CLI sends, never in your compose file.
+A create therefore records how `--dev-os` was satisfied in
+`~/.phala-cloud/state.json`, keyed by CVM id, and a later update without the
+flag re-adds the dev box, so a redeploy keeps SSH access. `--dev-os` on an
+update sets the choice explicitly (it needs `--image`, so the release is
+known), and `--no-dev-os` drops it and clears the record.
 
 SSH keys reach a 0.6 CVM two ways. Your account keys are the managed channel:
 Phala Cloud writes them into the CVM's `user_config` on every boot, so

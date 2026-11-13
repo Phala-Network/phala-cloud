@@ -33,6 +33,9 @@ afterAll(() => {
 	mock.module("@/src/lib/client", () => previousClient);
 });
 const { runDeploy } = await import("./handler");
+const { forgetDevOsMode, rememberDevOsMode } = await import(
+	"./dev-os-selection"
+);
 const { deployCommand } = await import("./index");
 const { dispatchCommand } = await import("@/src/core/dispatcher");
 const { CommandRegistry } = await import("@/src/core/registry");
@@ -328,6 +331,29 @@ describe("phala deploy --cvm-id", () => {
 			disk_size: 100,
 			image: "dstack-0.5.5",
 		});
+	});
+
+	test("adds the dev box recorded at create when the update passes no --dev-os", async () => {
+		const previousDir = process.env.PHALA_CLOUD_DIR;
+		process.env.PHALA_CLOUD_DIR = tmpDir;
+		const cvmId = realCloud.CvmIdSchema.parse({ id: CVM_ID }).cvmId;
+		try {
+			// What `phala deploy --dev-os --image dstack-0.6.0` recorded.
+			rememberDevOsMode(cvmId, "dev-box");
+
+			const { exitCode, failure } = await deploy({});
+
+			expect(failure).toBeUndefined();
+			expect(exitCode).toBe(0);
+			const compose = updateRequest().body?.docker_compose_file as string;
+			expect(compose).toContain("dev-box:");
+			expect(compose).toContain(
+				"image: ghcr.io/dstack-tee/dstack-dev-box:latest",
+			);
+		} finally {
+			forgetDevOsMode(cvmId);
+			process.env.PHALA_CLOUD_DIR = previousDir;
+		}
 	});
 
 	test("rejects --init-script file paths on update before any request", async () => {
@@ -696,8 +722,6 @@ describe("phala deploy --cvm-id", () => {
 		[{ customAppId: "abc" }, "--custom-app-id"],
 		[{ nonce: "1" }, "--nonce"],
 		[{ keyProviderMode: "local" }, "--key-provider-mode"],
-		[{ devOs: true }, "--dev-os"],
-		[{ devOs: false }, "--dev-os"],
 		[{ sshPubkey: "~/.ssh/id_ed25519.pub" }, "--ssh-pubkey"],
 		[{ fs: "ext4" }, "--fs"],
 		[{ skipGateway: true }, "--skip-gateway"],

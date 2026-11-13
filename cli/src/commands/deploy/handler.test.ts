@@ -5,7 +5,7 @@
  * proper handling of --dev-os / --no-dev-os flags.
  */
 
-import { describe, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import os from "node:os";
 import path from "node:path";
 import fs from "fs-extra";
@@ -16,11 +16,16 @@ import { logger } from "@/src/utils/logger";
 import { deployCommandMeta, deployCommandSchema } from "./command";
 import {
 	applyForceStopOption,
+	assertUpdatableOptions,
 	buildProvisionPayload,
 	buildUpdatePatchBody,
+	composeForDevOs,
 	readSshPubkey,
+	recordedDevOsMode,
+	resolveSshKeyChannel,
 	runDeploy,
 } from "./handler";
+import { rememberDevOsMode } from "./dev-os-selection";
 
 describe("deploy node selection", () => {
 	test("parses --node and no longer exposes --node-id", () => {
@@ -119,6 +124,74 @@ describe("deploy --dev-os SSH key channels", () => {
 				),
 			).toBe(sshPubkey);
 		}, true);
+	});
+
+	const HAND_WRITTEN_DEV_BOX = `services:
+  app:
+    image: nginx
+  ssh:
+    image: ghcr.io/dstack-tee/dstack-dev-box:latest
+    privileged: true
+    pid: host
+    network_mode: host
+    uts: host
+    environment:
+      - SSH_AUTHORIZED_KEYS=\${DSTACK_AUTHORIZED_KEYS}
+    volumes:
+      - /:/host:rslave
+      - ssh-host-keys:/etc/ssh/host-keys
+      - home:/root
+volumes:
+  ssh-host-keys:
+  home:
+`;
+
+	test("treats a hand-written dev box as the dev-box channel without --dev-os", async () => {
+		// `--image` 0.6 with the user's own dev-box service and no `--dev-os`: the
+		// compose still sends keys through user_config, so a frozen env copy would
+		// survive a revocation.
+		const channel = resolveSshKeyChannel(undefined, HAND_WRITTEN_DEV_BOX);
+		expect(channel).toBe("dev-box");
+		await withTempHome(async () => {
+			expect(
+				await readSshPubkey({ image: "dstack-0.6.0" }, channel),
+			).toBeUndefined();
+		}, true);
+	});
+
+	test("keeps the legacy env path for a dev OS image, dev box or not", async () => {
+		expect(resolveSshKeyChannel("dev-image", HAND_WRITTEN_DEV_BOX)).toBe(
+			"dev-image",
+		);
+		await withTempHome(async () => {
+			expect(
+				await readSshPubkey(
+					{ devOs: true, image: "dstack-0.5.7" },
+					resolveSshKeyChannel("dev-image", HAND_WRITTEN_DEV_BOX),
+				),
+			).toBe(sshPubkey);
+		}, true);
+	});
+
+	test("reads the local key when the compose carries no dev box", async () => {
+		const channel = resolveSshKeyChannel(
+			undefined,
+			"services:\n  app:\n    image: nginx\n",
+		);
+		expect(channel).toBe("none");
+		await withTempHome(async () => {
+			expect(await readSshPubkey({}, channel)).toBe(sshPubkey);
+		}, true);
+	});
+
+	test("takes the dev-box channel from the flag even when the compose is opaque", () => {
+		// `--app-compose` is a whole-document payload the line parser cannot read.
+		expect(
+			resolveSshKeyChannel(
+				"dev-box",
+				'{"docker_compose_file": "services: {}"}',
+			),
+		).toBe("dev-box");
 	});
 });
 
@@ -1065,5 +1138,83 @@ describe("buildProvisionPayload", () => {
 			).toBe(true);
 			expect(payload.listed).toBe(false);
 		});
+	});
+});
+
+describe("deploy --dev-os on redeploy", () => {
+	// The dev box is added to the payload a create sends, never to the compose
+	// file on disk, so an update without the flag can only keep it by repeating
+	// the choice recorded at create time.
+	const cvmId = `app_${"a".repeat(40)}`;
+	const LOCAL_COMPOSE = "services:\n  app:\n    image: nginx\n";
+	const previousDir = process.env.PHALA_CLOUD_DIR;
+	let stateDir: string;
+
+	beforeEach(async () => {
+		stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "phala-state-"));
+		process.env.PHALA_CLOUD_DIR = stateDir;
+	});
+
+	afterEach(async () => {
+		if (previousDir === undefined) {
+			process.env.PHALA_CLOUD_DIR = undefined;
+		} else {
+			process.env.PHALA_CLOUD_DIR = previousDir;
+		}
+		await fs.remove(stateDir);
+	});
+
+	test("an update without --dev-os re-adds the dev box recorded at create", () => {
+		rememberDevOsMode(cvmId, "dev-box"); // what a create persists
+
+		const recorded = recordedDevOsMode({ uuid: cvmId }, cvmId); // what an update resolves
+		expect(recorded).toBe("dev-box");
+
+		const prepared = composeForDevOs(LOCAL_COMPOSE, recorded);
+		expect(prepared.added).toBe(true);
+
+		const patchBody = buildUpdatePatchBody({ uuid: cvmId }, prepared.compose);
+		expect(patchBody.docker_compose_file).toContain("dev-box:");
+	});
+
+	test("an update on a CVM with nothing recorded adds no dev box", () => {
+		const recorded = recordedDevOsMode({ uuid: cvmId }, cvmId);
+		expect(recorded).toBeUndefined();
+
+		const prepared = composeForDevOs(LOCAL_COMPOSE, recorded);
+		expect(prepared.added).toBe(false);
+		expect(
+			buildUpdatePatchBody({ uuid: cvmId }, prepared.compose)
+				.docker_compose_file,
+		).not.toContain("dev-box:");
+	});
+
+	test("an explicit --dev-os overrides the recorded choice", () => {
+		rememberDevOsMode(cvmId, "dev-box");
+
+		// The flag is resolved against the OS image catalog, never recalled.
+		expect(
+			recordedDevOsMode({ uuid: cvmId, devOs: true }, cvmId),
+		).toBeUndefined();
+		expect(composeForDevOs(LOCAL_COMPOSE, "dev-box").added).toBe(true);
+	});
+
+	test("a create outside a CVM never recalls anything", () => {
+		rememberDevOsMode(cvmId, "dev-box");
+
+		expect(recordedDevOsMode({}, undefined)).toBeUndefined();
+	});
+
+	test("applying the dev box twice is idempotent", () => {
+		const once = composeForDevOs(LOCAL_COMPOSE, "dev-box");
+		const twice = composeForDevOs(once.compose, "dev-box");
+
+		expect(twice.added).toBe(false);
+		expect(twice.compose).toBe(once.compose);
+	});
+
+	test("--dev-os is no longer create-only", () => {
+		expect(() => assertUpdatableOptions({ devOs: true })).not.toThrow();
+		expect(() => assertUpdatableOptions({ devOs: false })).not.toThrow();
 	});
 });
