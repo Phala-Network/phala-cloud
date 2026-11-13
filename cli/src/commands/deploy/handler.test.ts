@@ -40,6 +40,88 @@ describe("deploy node selection", () => {
 	});
 });
 
+describe("deploy --dev-os SSH key channels", () => {
+	const sshPubkey = "ssh-ed25519 AAAA local@example";
+
+	async function withTempHome(
+		run: (homeDir: string) => Promise<void>,
+		hasLocalKey: boolean,
+	) {
+		const tempDir = await fs.mkdtemp(path.join(import.meta.dir, ".ssh-key-"));
+		const homedir = spyOn(os, "homedir").mockReturnValue(tempDir);
+		const info = spyOn(logger, "info").mockImplementation(() => {});
+		const warn = spyOn(logger, "warn").mockImplementation(() => {});
+		try {
+			if (hasLocalKey) {
+				await fs.outputFile(
+					path.join(tempDir, ".ssh", "id_ed25519.pub"),
+					sshPubkey,
+				);
+			}
+			await run(tempDir);
+		} finally {
+			homedir.mockRestore();
+			info.mockRestore();
+			warn.mockRestore();
+			await fs.remove(tempDir);
+		}
+	}
+
+	test("does not pick up a local key for a 0.6 dev box", async () => {
+		await withTempHome(async () => {
+			expect(await readSshPubkey({ devOs: true }, "dev-box")).toBeUndefined();
+			expect(
+				await readSshPubkey({ devOs: true, image: "dstack-0.6.0" }, "dev-box"),
+			).toBeUndefined();
+		}, true);
+	});
+
+	test("does not fail when a 0.6 dev box has no local key", async () => {
+		await withTempHome(async () => {
+			expect(await readSshPubkey({ devOs: true }, "dev-box")).toBeUndefined();
+		}, false);
+	});
+
+	test("injects an explicit --ssh-pubkey into a 0.6 dev box", async () => {
+		await withTempHome(async (homeDir) => {
+			const keyPath = path.join(homeDir, "explicit.pub");
+			await fs.outputFile(keyPath, `${sshPubkey}\n`);
+
+			expect(
+				await readSshPubkey({ devOs: true, sshPubkey: keyPath }, "dev-box"),
+			).toBe(sshPubkey);
+		}, true);
+	});
+
+	test("still requires a key for a dev OS image below 0.6", async () => {
+		await withTempHome(async () => {
+			let failure: unknown;
+			try {
+				await readSshPubkey(
+					{ devOs: true, image: "dstack-0.5.7" },
+					"dev-image",
+				);
+			} catch (error) {
+				failure = error;
+			}
+			expect((failure as Error).message).toContain(
+				"SSH public key is required for a dev OS image",
+			);
+		}, false);
+	});
+
+	test("reads the local key for a dev OS image below 0.6", async () => {
+		await withTempHome(async () => {
+			expect(
+				await readSshPubkey(
+					{ devOs: true, image: "dstack-0.5.7" },
+					"dev-image",
+				),
+			).toBe(sshPubkey);
+		}, true);
+	});
+});
+
 describe("deploy --no-pre-launch-script", () => {
 	const sshPubkey = "ssh-rsa test-public-key";
 	test.each([
@@ -206,9 +288,10 @@ describe("buildProvisionPayload", () => {
 	};
 
 	describe("prefer_dev flag handling (--dev-os / --no-dev-os)", () => {
-		test("should set prefer_dev to true when devOs is true (--dev-os)", () => {
+		test("should select a dev image below dstack 0.6 (--dev-os)", () => {
 			const options = {
 				devOs: true,
+				image: "dstack-0.5.7",
 			};
 
 			const payload = buildProvisionPayload(
@@ -217,9 +300,35 @@ describe("buildProvisionPayload", () => {
 				defaultDockerCompose,
 				defaultEnvs,
 				defaultPrivacySettings,
+				undefined,
+				undefined,
+				undefined,
+				"dev-image",
 			);
 
 			expect(payload.prefer_dev).toBe(true);
+		});
+
+		test("should not select a dev image from dstack 0.6 on (--dev-os)", () => {
+			const options = {
+				devOs: true,
+				image: "dstack-0.6.0",
+			};
+
+			const payload = buildProvisionPayload(
+				options,
+				defaultName,
+				defaultDockerCompose,
+				defaultEnvs,
+				defaultPrivacySettings,
+				undefined,
+				undefined,
+				undefined,
+				"dev-box",
+			);
+
+			// 0.6+ has no dev image: the dev-box service carries SSH instead.
+			expect(payload.prefer_dev).toBe(false);
 		});
 
 		test("should set prefer_dev to false when devOs is false (--no-dev-os)", () => {
@@ -294,6 +403,10 @@ describe("buildProvisionPayload", () => {
 				defaultDockerCompose,
 				defaultEnvs,
 				defaultPrivacySettings,
+				undefined,
+				undefined,
+				undefined,
+				"dev-image",
 			);
 
 			expect(payload.instance_type).toBe("tdx.small");
@@ -485,6 +598,7 @@ describe("buildProvisionPayload", () => {
 			const options = {
 				kms: "base",
 				devOs: true,
+				image: "dstack-0.5.7",
 			};
 
 			const payload = buildProvisionPayload(
@@ -493,6 +607,10 @@ describe("buildProvisionPayload", () => {
 				defaultDockerCompose,
 				defaultEnvs,
 				defaultPrivacySettings,
+				undefined,
+				undefined,
+				undefined,
+				"dev-image",
 			);
 
 			expect(payload.kms).toBe("BASE");

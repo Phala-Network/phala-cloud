@@ -54,6 +54,8 @@ import {
 	safeGetCurrentUser,
 	safeGetCvmInfo,
 	safeGetCvmList,
+	safeGetOsImages,
+	safeListSshKeys,
 	safePatchCvm,
 	safeProvisionCvm,
 	safeUpdateCvmVisibility,
@@ -67,6 +69,13 @@ import {
 	readInitScriptFiles,
 	unknownInitScriptSlugMessage,
 } from "@/src/lib/init-script-files";
+import {
+	type DevOsMode,
+	type OsImageCatalogEntry,
+	injectDevBoxService,
+	requireDevOsImage,
+	resolveDevOsMode,
+} from "./dev-box";
 import { runTwoPhaseComposeUpdate } from "@/src/lib/on-chain-update";
 import type { DeployCommandInput } from "./command";
 
@@ -461,6 +470,44 @@ async function readAppComposeFile(appComposePath: string): Promise<string> {
 	return fs.readFileSync(appComposePath, "utf8");
 }
 
+const OS_IMAGE_CATALOG_PAGE_SIZE = 100;
+
+/** Every enabled OS image, walking the catalog's pages. */
+async function listOsImageCatalog(
+	client: CliApiClient,
+): Promise<OsImageCatalogEntry[]> {
+	const entries: OsImageCatalogEntry[] = [];
+	for (let page = 1; ; page += 1) {
+		const result = await safeGetOsImages(client, {
+			page,
+			page_size: OS_IMAGE_CATALOG_PAGE_SIZE,
+		});
+		if (!result.success) throw result.error;
+		entries.push(...result.data.items);
+		if (page >= result.data.pages) return entries;
+	}
+}
+
+/**
+ * How `--dev-os` is satisfied, or undefined when the flag is absent.
+ *
+ * The dstack release of the requested image decides it, resolved against the
+ * OS image catalog. `resolveDevOsMode` refuses to guess, so an unpinned image
+ * or one the catalog does not know fails here instead of deploying a CVM with
+ * the wrong SSH setup.
+ */
+async function resolveDevOsTarget(
+	client: CliApiClient,
+	options: Options,
+): Promise<DevOsMode | undefined> {
+	if (options.devOs !== true) return undefined;
+	// Validate before the catalog request so an unusable invocation fails
+	// without touching the network.
+	const identifier = requireDevOsImage(options.image);
+	const catalog = await listOsImageCatalog(client);
+	return resolveDevOsMode(identifier, catalog);
+}
+
 const validatePrivateKey = async (
 	options: Options,
 	chainId: string | number | undefined,
@@ -650,13 +697,19 @@ const resolveEnvVars = async (
 };
 
 /**
- * Read SSH public key from file
- * - --dev-os: SSH public key is required
- * - --no-dev-os: Never inject an SSH public key
- * - Neither flag: Try to read public key unless --no-pre-launch-script is set
+ * Read the SSH public key that goes into `DSTACK_AUTHORIZED_KEYS`.
+ *
+ * - `--no-dev-os`: never inject an SSH public key
+ * - `--dev-os` below dstack 0.6 (dev image): a key is required
+ * - `--dev-os` with the dstack 0.6+ dev box: only an explicit `--ssh-pubkey` is
+ *   injected; see below for why
+ * - Neither flag: try to read a public key unless `--no-pre-launch-script` is set
+ *
+ * @param devOsMode - the mode `--dev-os` resolved to, if the flag was passed
  */
 export const readSshPubkey = async (
 	options: Options,
+	devOsMode?: DevOsMode,
 ): Promise<string | undefined> => {
 	let sshPubkeyPath = options.sshPubkey;
 
@@ -668,6 +721,17 @@ export const readSshPubkey = async (
 
 	// --no-dev-os: never inject SSH key
 	if (options.devOs === false) {
+		return undefined;
+	}
+
+	// The dev box merges two key channels, and the managed one —
+	// `user_config.ssh_authorized_keys`, which provision fills with every
+	// account key when the request carries no ssh_key_ids — is the one that
+	// follows the platform key management. A key read from disk would only land
+	// in the container environment, where it is frozen at deploy time and
+	// survives revoking the key in the account. So never pick up a local key
+	// here; the user has to name one explicitly.
+	if (devOsMode === "dev-box" && !options.sshPubkey) {
 		return undefined;
 	}
 
@@ -698,11 +762,11 @@ export const readSshPubkey = async (
 
 		// If still no key found
 		if (!sshPubkeyPath) {
-			// --dev-os requires SSH public key
+			// A dev OS image (dstack 0.5 and older) can only take keys from here.
 			if (options.devOs) {
 				throw new Error(
 					dedent(`
-						SSH public key is required for dev images but not found.
+						SSH public key is required for a dev OS image but not found.
 
 						Searched for:
 						  - ~/.ssh/id_rsa.pub
@@ -742,6 +806,25 @@ export const readSshPubkey = async (
 		);
 	}
 };
+
+/**
+ * Point out that a dev-box deployment with no account SSH key and no
+ * `--ssh-pubkey` produces a CVM nobody can log into.
+ *
+ * Provision authorizes every account key into `user_config` when the request
+ * carries no `ssh_key_ids`, which is exactly the channel the dev box reads, so
+ * an empty account means an empty authorized_keys. This is a hint, never a
+ * failure: keys added later reach the CVM on its next boot.
+ */
+async function warnWhenAccountHasNoSshKeys(
+	client: CliApiClient,
+): Promise<void> {
+	const result = await safeListSshKeys(client);
+	if (!result.success || result.data.length > 0) return;
+	logger.warn(
+		"This account has no SSH keys. The dev box authorizes your account keys into the CVM, so add one with `phala ssh-keys add` and restart the CVM, or no SSH login will succeed.",
+	);
+}
 
 const validateCpuMemoryDiskSize = async (options: Options) => {
 	let vcpu = DEFAULT_VCPU;
@@ -860,6 +943,9 @@ function buildComposeFile(
  * Build provision payload from options
  * All parameters are optional - backend will auto-match resources
  * @param preResolvedKmsSelection - Optional pre-resolved KMS selection to avoid duplicate calls/warnings
+ * @param devOsMode - How `--dev-os` was resolved against the OS image catalog;
+ *   undefined when the flag is absent. Required for the flag, because
+ *   `prefer_dev` must be false when the dev box already carries SSH.
  */
 export const buildProvisionPayload = (
 	options: Options,
@@ -870,6 +956,7 @@ export const buildProvisionPayload = (
 	preResolvedKmsSelection?: ReturnType<typeof resolveKmsSelection>,
 	preLaunchScriptContent?: string,
 	initScriptContents?: string[],
+	devOsMode?: DevOsMode,
 ) => {
 	const payload: ProvisionCvmRequest = options.appCompose
 		? // The file is the whole app compose; the API parses it.
@@ -954,11 +1041,14 @@ export const buildProvisionPayload = (
 	}
 
 	// Add prefer_dev flag based on --dev-os / --no-dev-os
-	// For on-chain KMS (ETHEREUM/BASE), default to non-dev since dev images may not be available
+	// For on-chain KMS (ETHEREUM/BASE), default to non-dev since dev images may not be available.
+	// dstack 0.6+ has no dev image at all: there `--dev-os` injected the
+	// dev-box service into the compose, so the release image is the right one
+	// and prefer_dev must stay false.
 	const isOnchainKms = kmsType === "ETHEREUM" || kmsType === "BASE";
-	if (options.devOs === true) {
-		payload.prefer_dev = true;
-	} else if (options.devOs === false || isOnchainKms) {
+	if (options.devOs !== undefined) {
+		payload.prefer_dev = devOsMode === "dev-image";
+	} else if (isOnchainKms) {
 		payload.prefer_dev = false;
 	}
 	// If devOs is undefined and not on-chain KMS, don't add prefer_dev (let backend auto-select)
@@ -1032,6 +1122,7 @@ const deployNewCvm = async (
 	projectConfig: PrivacyConfig | undefined,
 	preLaunchScriptContent: string | undefined,
 	initScriptContents: string[],
+	devOsMode: DevOsMode | undefined,
 	context: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
 ) => {
 	// Resolve KMS selection once at the start to avoid duplicate calls and warnings
@@ -1040,13 +1131,23 @@ const deployNewCvm = async (
 	const name = await validateName(validatedOptions);
 
 	// Read SSH public key and add to environment variables
-	const sshPubkey = await readSshPubkey(validatedOptions);
+	const sshPubkey = await readSshPubkey(validatedOptions, devOsMode);
+	const usesDevBox = devOsMode === "dev-box";
 	const envsWithSshKey = [...(envs || [])];
 	if (sshPubkey) {
 		envsWithSshKey.push({
 			key: "DSTACK_AUTHORIZED_KEYS",
 			value: sshPubkey,
 		});
+	}
+	if (usesDevBox) {
+		if (sshPubkey) {
+			logger.warn(
+				"The key from --ssh-pubkey is frozen into DSTACK_AUTHORIZED_KEYS at deploy time. Revoking it with `phala ssh-keys revoke` does not remove it from the dev-box container; restart with a compose that drops the variable for that.",
+			);
+		} else {
+			await warnWhenAccountHasNoSshKeys(client);
+		}
 	}
 
 	// Resolve privacy settings based on options, phala.toml, and dev mode
@@ -1064,6 +1165,7 @@ const deployNewCvm = async (
 		kmsSelection,
 		preLaunchScriptContent,
 		initScriptContents,
+		devOsMode,
 	);
 
 	logger.info(`Provisioning CVM ${name}...`);
@@ -1547,12 +1649,31 @@ export async function runDeploy(
 			interactive: input.interactive,
 		});
 
-		const docker_compose_yml = input.appCompose
+		const composeSource = input.appCompose
 			? await readAppComposeFile(input.appCompose)
 			: await readDockerComposeFile({
 					dockerComposePath: dockerComposePath,
 					interactive: input.interactive,
 				});
+
+		// `--dev-os` on dstack 0.6+: the SSH server ships as an extra service in
+		// the compose instead of a dev OS image. Inject it before the payload
+		// size check so the limit covers what is actually sent.
+		const devOsMode = await resolveDevOsTarget(client, input);
+		let docker_compose_yml = composeSource;
+		if (devOsMode === "dev-box") {
+			if (input.appCompose) {
+				// --app-compose is an opaque whole-document payload the API parses.
+				logger.warn(
+					"--dev-os cannot add the dev-box service to an --app-compose payload. Add it to that file's docker_compose_file yourself.",
+				);
+			} else {
+				docker_compose_yml = injectDevBoxService(composeSource);
+				logger.info(
+					"Added the dev-box SSH service to the compose file (dstack 0.6+ has no dev image).",
+				);
+			}
+		}
 
 		// Read pre-launch script file if provided
 		let preLaunchScriptContent: string | undefined;
@@ -1640,6 +1761,7 @@ export async function runDeploy(
 				context.projectConfig,
 				preLaunchScriptContent,
 				initScriptContents,
+				devOsMode,
 				context,
 			);
 		}

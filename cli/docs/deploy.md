@@ -21,7 +21,7 @@ Creates a new CVM by default. If `--cvm-id` is provided or `phala.toml` contains
 | `-e, --env <value>` | | Environment variable (KEY=VALUE) or path to .env file. Repeatable |
 | `--kms <type>` | phala | KMS type: phala, ethereum/eth, or base |
 | `--wait` | false | Wait for the deployment to finish and fail if it failed. New CVM: wait until it is running. Update (`--cvm-id`): wait until the CVM is running again, or stays stopped if it was not running before the update |
-| `--dev-os` | false | Use development OS image (requires SSH key) |
+| `--dev-os` | false | Enable SSH access (requires SSH key). Needs `--image`: on dstack 0.6+ it adds a `dev-box` service to the compose, below 0.6 it selects a dev OS image |
 | `--public-logs` | true | Make CVM logs publicly accessible |
 | `--no-public-logs` | | Disable public log access |
 | `--public-sysinfo` | true | Make CVM system info publicly accessible |
@@ -100,7 +100,7 @@ These flags set how a CVM is created and cannot be changed afterwards: `--name`,
 
 By default, deploy leaves the pre-launch script field out of the request. When creating a CVM, Phala Cloud then uses its official default script; when updating one, the current script is kept (see [Updating an existing CVM](#updating-an-existing-cvm)). Use `--pre-launch-script <path>` to supply a script. If that file is empty, the field is still omitted: a new CVM gets the default script, and an updated CVM keeps its current script. To explicitly deploy with no pre-launch script, use `--no-pre-launch-script`; it cannot be combined with `--pre-launch-script`.
 
-When creating a CVM with `--no-pre-launch-script`, deploy skips automatic local SSH key injection into `DSTACK_AUTHORIZED_KEYS` unless you explicitly pass `--dev-os` or `--ssh-pubkey`. `--no-dev-os` always disables injection. The platform pre-launch script normally installs this key, so without it the variable only adds an unused entry to `allowed_envs`.
+When creating a CVM with `--no-pre-launch-script`, deploy skips automatic local SSH key injection into `DSTACK_AUTHORIZED_KEYS` unless you explicitly pass `--ssh-pubkey`. `--no-dev-os` always disables injection. The platform pre-launch script normally installs this key, so without it the variable only adds an unused entry to `allowed_envs`.
 
 ```bash
 $ phala deploy --no-pre-launch-script
@@ -169,10 +169,33 @@ $ phala deploy -n my-production-app
 $ phala deploy --disk-size 100G
 ```
 
-### Deploy with dev OS image and SSH access
+### Deploy with SSH access
+
+`--dev-os` needs `--image`, because the dstack release of that image decides
+how SSH is set up. Run `phala os-images` to list the available images. Deploy
+fails instead of guessing when the image is missing or unknown.
+
+On dstack 0.6 and newer there is no dev OS image. `--dev-os` instead adds a
+`dev-box` service to your compose: a privileged container that runs sshd on port
+22 and shares the host's PID, network and UTS namespaces, so `phala ssh` and
+`phala cp` keep working through `<app-id>-22.<gateway>`. The service mounts two
+named volumes, `ssh-host-keys` and `home`, which keep host keys and `/root`
+across redeploys; `docker_cleanup` prunes volumes and wipes both, so it cannot
+be combined with SSH access. The CLI refuses compose files it would have to
+overwrite: a service already using the dev-box image, a service named `dev-box`
+that is something else, the four dev-box keys on another service, or a top-level
+volume named `ssh-host-keys` or `home`. A compose that already declares the dev
+box is left untouched. Below 0.6 the flag selects the dev OS image as before.
+
+SSH keys reach a 0.6 CVM two ways. Your account keys are the managed channel:
+Phala Cloud writes them into the CVM's `user_config` on every boot, so
+`phala ssh-keys add` plus a restart is enough, and revoking a key removes it.
+`--ssh-pubkey` is the other channel and only applies when you pass it: the key
+goes into the dev box's environment, frozen at deploy time, so revoking it in
+the account does not remove it from the container.
 
 ```bash
-$ phala deploy --dev-os --ssh-pubkey ~/.ssh/id_ed25519.pub
+$ phala deploy --dev-os --image dstack-0.6.0
 ```
 
 ### Deploy with Ethereum KMS

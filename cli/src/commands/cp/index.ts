@@ -14,7 +14,7 @@ import {
 	checkLibreSSLEd25519Compatibility,
 	fetchCvmInfo,
 	getSshKeyFile,
-	isDevImage,
+	hasSshAccess,
 	parseGatewayDomain,
 	selectPort,
 	shellEscape,
@@ -99,11 +99,11 @@ async function runCpCommand(
 				instanceId = cvmInfo.appId;
 				gatewayDomain = cvmInfo.gatewayDomain;
 
-				// Warn if not a dev image
-				const devImage = cvmInfo.isDevImage ?? isDevImage(cvmInfo.baseImage);
-				if (devImage === false) {
+				// Warn when the CVM has no SSH surface at all: no dev image and no
+				// dev-box service recorded by the API.
+				if (!hasSshAccess(cvmInfo)) {
 					logger.warn(
-						"This CVM is not using a dev image. SCP access may not be available.",
+						"This CVM has no SSH access enabled. SSH access may not be available.",
 					);
 				}
 			} catch (error) {

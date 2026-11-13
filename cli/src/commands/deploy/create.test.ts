@@ -48,6 +48,31 @@ const APP_COMPOSE = JSON.stringify({
 });
 const LAUNCH_TOKEN = "t".repeat(32);
 
+const OS_IMAGES = {
+	items: [
+		{
+			name: "dstack-0.6.0",
+			slug: "dstack-0.6.0",
+			version: "0.6.0",
+			os_image_hash: "aa".repeat(32),
+			is_dev: false,
+			requires_gpu: false,
+		},
+		{
+			name: "prod-0.5.7",
+			slug: "dstack-0.5.7",
+			version: "0.5.7",
+			os_image_hash: "bb".repeat(32),
+			is_dev: false,
+			requires_gpu: false,
+		},
+	],
+	total: 2,
+	page: 1,
+	page_size: 100,
+	pages: 1,
+};
+
 const CREATED_CVM = {
 	id: "cvm_1",
 	user_id: null,
@@ -93,6 +118,9 @@ beforeAll(async () => {
 							compose_hash: "hash-1",
 							token: "prepare-token",
 						});
+			}
+			if (req.method === "GET" && url.pathname === "/api/v1/os-images") {
+				return Response.json(OS_IMAGES);
 			}
 			if (req.method === "GET" && respondGet) return respondGet(url.pathname);
 			return Response.json({ detail: "unexpected" }, { status: 404 });
@@ -299,6 +327,105 @@ describe("phala deploy (create)", () => {
 		expect(composeFile.runner).toBe("bash");
 		expect(composeFile.bash_script).toBe(COMPOSE);
 		expect("docker_compose_file" in composeFile).toBe(false);
+	});
+
+	test("injects the dev-box service when --dev-os targets dstack 0.6+", async () => {
+		const pubkeyPath = path.join(tmpDir, "id_ed25519.pub");
+		await fs.writeFile(pubkeyPath, "ssh-ed25519 AAAA test@example\n");
+
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			devOs: true,
+			image: "dstack-0.6.0",
+			sshPubkey: pubkeyPath,
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		const body = prepareRequest().body as Record<string, unknown>;
+		const composeFile = body.compose_file as Record<string, unknown>;
+		const compose = composeFile.docker_compose_file as string;
+		expect(compose).toContain(`${COMPOSE}  dev-box:`);
+		expect(compose).toContain(
+			"- SSH_AUTHORIZED_KEYS=${DSTACK_AUTHORIZED_KEYS}",
+		);
+		expect(compose).toContain("volumes:\n  ssh-host-keys:\n  home:");
+		// The dev box reads the key through the env var, which must be allowed.
+		expect(composeFile.allowed_envs).toEqual(["DSTACK_AUTHORIZED_KEYS"]);
+		expect(body.prefer_dev).toBe(false);
+	});
+
+	test("does not inject a local key into a 0.6 dev box", async () => {
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			devOs: true,
+			image: "dstack-0.6.0",
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		const body = prepareRequest().body as Record<string, unknown>;
+		const composeFile = body.compose_file as Record<string, unknown>;
+		// Keys travel through user_config: the backend authorizes every account
+		// key when the request carries no ssh_key_ids.
+		expect(composeFile.allowed_envs).toEqual([]);
+		expect("ssh_key_ids" in body).toBe(false);
+	});
+
+	test("requires a pinned image for --dev-os", async () => {
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			devOs: true,
+		});
+
+		expect(exitCode).toBe(1);
+		expect((failure as Error).message).toContain(
+			"--dev-os needs an explicit OS image",
+		);
+		expect(requests).toEqual([]);
+	});
+
+	test("rejects an OS image that is not in the catalog", async () => {
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			devOs: true,
+			image: "my-custom-image",
+		});
+
+		expect(exitCode).toBe(1);
+		expect((failure as Error).message).toContain(
+			"is not in the OS image catalog",
+		);
+	});
+
+	test("keeps a dev OS image for --dev-os below dstack 0.6", async () => {
+		const pubkeyPath = path.join(tmpDir, "legacy_dev.pub");
+		await fs.writeFile(pubkeyPath, "ssh-ed25519 AAAA legacy@example\n");
+
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			devOs: true,
+			image: "dstack-0.5.7",
+			sshPubkey: pubkeyPath,
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		const body = prepareRequest().body as Record<string, unknown>;
+		expect(body.prefer_dev).toBe(true);
+		const composeFile = body.compose_file as Record<string, unknown>;
+		expect(composeFile.docker_compose_file).toBe(COMPOSE);
+	});
+
+	test("leaves the compose alone with --no-dev-os", async () => {
+		const { exitCode } = await deploy({ compose: composePath, devOs: false });
+
+		expect(exitCode).toBe(0);
+		const composeFile = prepareRequest().body?.compose_file as Record<
+			string,
+			unknown
+		>;
+		expect(composeFile.docker_compose_file).toBe(COMPOSE);
 	});
 
 	test("sends --app-compose as compose_file_raw and prints the issued launch token", async () => {

@@ -2,6 +2,10 @@
 
 Copy files to/from a CVM via SCP through the Phala Cloud gateway.
 
+SCP needs the CVM to serve SSH: a dev OS image (dstack 0.5 and older) or a
+`dev-box` container in its compose (dstack 0.6 and newer, added by
+`phala deploy --dev-os`).
+
 ## Usage
 
     phala cp <source> <destination> [options]
