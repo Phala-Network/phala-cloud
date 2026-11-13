@@ -362,13 +362,18 @@ function hasDevBoxMarkers(service: YamlMapping): boolean {
  * `bindsAuthorizedKeys`:
  * - `:+` / `+` substitute an *alternate* value when the variable is set, so
  *   `${DSTACK_AUTHORIZED_KEYS:+x}` hands sshd `x` instead of the keys;
- * - `:?` / `?` substitute the error text, with the same effect;
+ * - `:?` / `?` make the expansion *fail* when the variable is unset, and a
+ *   deployment whose keys come from `user_config` only leaves it unset, so the
+ *   container would not start at all — it never falls back to those keys;
  * - `$${...}` is compose's escape for a literal `$`, so nothing is expanded;
  * - any prefix or suffix (`prefix${...}`, `${...}suffix`) makes the variable
- *   part of a larger string, which is not a key list any more.
+ *   part of a larger string, which is not a key list any more;
+ * - the default itself may not contain braces: nested expressions are not
+ *   resolved here, and a default that may contain `}` can smuggle a suffix past
+ *   the closing brace (`${DSTACK_AUTHORIZED_KEYS:-}suffix}`).
  */
 const AUTHORIZED_KEYS_REFERENCE =
-	/^\$(?:DSTACK_AUTHORIZED_KEYS|\{DSTACK_AUTHORIZED_KEYS(?::?-.*)?\})$/;
+	/^\$(?:DSTACK_AUTHORIZED_KEYS|\{DSTACK_AUTHORIZED_KEYS(?::?-[^{}]*)?\})$/;
 
 /**
  * A service's `environment`, in list or mapping form, as name/value pairs.

@@ -858,6 +858,18 @@ describe("dev-box SSH_AUTHORIZED_KEYS binding", () => {
 			["SSH_AUTHORIZED_KEYS=${DSTACK_AUTHORIZED_KEYS?missing}"],
 		],
 		["the escaped literal", ["SSH_AUTHORIZED_KEYS=$${DSTACK_AUTHORIZED_KEYS}"]],
+		[
+			"a suffix smuggled past the closing brace",
+			["SSH_AUTHORIZED_KEYS=${DSTACK_AUTHORIZED_KEYS:-}suffix}"],
+		],
+		[
+			"a nested expression as the default",
+			["SSH_AUTHORIZED_KEYS=${DSTACK_AUTHORIZED_KEYS:-${OTHER}}"],
+		],
+		[
+			"a nested expression in the bare default form",
+			["SSH_AUTHORIZED_KEYS=${DSTACK_AUTHORIZED_KEYS-${OTHER}}"],
+		],
 		["a prefix", ["SSH_AUTHORIZED_KEYS=key-${DSTACK_AUTHORIZED_KEYS}"]],
 		["a suffix", ["SSH_AUTHORIZED_KEYS=${DSTACK_AUTHORIZED_KEYS}-end"]],
 		["an empty value", ["SSH_AUTHORIZED_KEYS="]],
