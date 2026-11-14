@@ -713,6 +713,8 @@ class _FollowPlan(Protocol[T_co]):
 
     def decoder(self) -> _Decoder[T_co]: ...
 
+    def on_clean_end(self) -> None: ...
+
     def window_reached(self, now: float) -> bool: ...
 
 
@@ -738,6 +740,9 @@ class _NodeFollowPlan:
 
     def decoder(self) -> _Decoder[str]:
         return _NodeTextDecoder(ansi=self._ansi)
+
+    def on_clean_end(self) -> None:
+        pass
 
     def window_reached(self, now: float) -> bool:
         return False
@@ -769,6 +774,7 @@ class _ContainerFollowPlan:
         self._text = text
         self._cursor = _Cursor()
         self._first_200_second: int | None = None
+        self._replay_complete = False
         self._container: str | None = None
 
     def _reconnect_since(self) -> int | None:
@@ -782,13 +788,15 @@ class _ContainerFollowPlan:
         endpoint, self._container = yield from _container_endpoint_lookup(
             self._cvm_id, self._name, self._match_prefix, self._container
         )
-        accepted = self._first_200_second is not None
+        accepted = self._first_200_second is not None and (
+            self._tail in (0, "0") or self._cursor.since is not None or self._replay_complete
+        )
         return _build_log_url(
             endpoint,
             since=self._reconnect_since() if accepted else self._since,
             until=self._until,
             follow=True,
-            # The caller's tail applies only until the first 200 is accepted.
+            # Keep the initial history window until replay completes or a cursor exists.
             tail="all" if accepted else self._tail,
             timestamps=True,
             ansi=self._ansi and self._text,
@@ -808,6 +816,9 @@ class _ContainerFollowPlan:
         return _NdjsonDecoder(
             ansi=self._ansi, keep_timestamps=self._timestamps, cursor=self._cursor
         )
+
+    def on_clean_end(self) -> None:
+        self._replay_complete = True
 
     def window_reached(self, now: float) -> bool:
         if self._until is None:
@@ -887,6 +898,7 @@ class _RetryPolicy:
             self._empty_ends = 0
             return 0.0
         if duration >= EMPTY_STREAM_QUIET_SECONDS:
+            self._failures = 0
             self._empty_ends = 0
             return 0.0
         self._empty_ends += 1
@@ -894,7 +906,7 @@ class _RetryPolicy:
             raise LogAccessError(_EMPTY_STREAM_END_MESSAGE, from_stream_body=True)
         return _backoff_delay(self._empty_ends)
 
-    def after_error(self, error: Exception, *, delivered: bool) -> float | None:
+    def after_error(self, error: Exception, *, delivered: bool, duration: float) -> float | None:
         """Delay before reconnecting, or None when the error must be raised."""
         self._empty_ends = 0
         kind = _classify_error(error)
@@ -903,7 +915,10 @@ class _RetryPolicy:
         if kind == "expired":
             self._expired_retries += 1
             return None if self._expired_retries > _MAX_EXPIRED_RETRIES else 0.0
-        if delivered:
+        if delivered or (
+            isinstance(error, httpx.RequestError | OSError)
+            and duration >= EMPTY_STREAM_QUIET_SECONDS
+        ):
             self._failures = 0
             self._expired_retries = 0
         self._failures += 1
@@ -940,7 +955,7 @@ async def _async_log_client(log_http: httpx.AsyncClient | None) -> AsyncIterator
 @dataclass
 class _Connection:
     delivered: bool = False
-    connected_at: float = 0.0
+    connected_at: float | None = None
 
 
 class LogFollowIterator(Generic[T]):
@@ -1013,12 +1028,19 @@ def _follow_sync(
             except Exception as error:
                 if stop.is_set():
                     return
-                delay = retry.after_error(error, delivered=conn.delivered)
+                duration = (
+                    _monotonic() - conn.connected_at
+                    if conn.connected_at is not None and not plan.window_reached(_wall_clock())
+                    else 0.0
+                )
+                delay = retry.after_error(error, delivered=conn.delivered, duration=duration)
                 if delay is None:
                     raise
             else:
+                plan.on_clean_end()
                 if plan.window_reached(_wall_clock()):
                     return
+                assert conn.connected_at is not None
                 delay = retry.after_clean_end(
                     delivered=conn.delivered, duration=_monotonic() - conn.connected_at
                 )
@@ -1055,12 +1077,19 @@ async def _follow_async(
                         conn.delivered = True
                         yield item
             except Exception as error:
-                delay = retry.after_error(error, delivered=conn.delivered)
+                duration = (
+                    _monotonic() - conn.connected_at
+                    if conn.connected_at is not None and not plan.window_reached(_wall_clock())
+                    else 0.0
+                )
+                delay = retry.after_error(error, delivered=conn.delivered, duration=duration)
                 if delay is None:
                     raise
             else:
+                plan.on_clean_end()
                 if plan.window_reached(_wall_clock()):
                     return
+                assert conn.connected_at is not None
                 delay = retry.after_clean_end(
                     delivered=conn.delivered, duration=_monotonic() - conn.connected_at
                 )

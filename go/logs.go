@@ -890,6 +890,8 @@ type followPlan struct {
 	requestURL func(ctx context.Context) (string, error)
 	// accepted runs after each HTTP 200.
 	accepted func()
+	// completed marks a cleanly completed initial replay.
+	completed func()
 	// consume reads one 200 body, counting delivered records.
 	consume func(ctx context.Context, body io.Reader, delivered *int) error
 	// stopOnEmptyEnds stops after repeated quick clean ends (container streams).
@@ -945,6 +947,21 @@ func classifyLookupError(err error) followAction {
 	return followStop
 }
 
+// followBody distinguishes a transport read failure from a decoder error at a
+// clean HTTP EOF (for example, an incomplete JSON value).
+type followBody struct {
+	io.Reader
+	readFailed bool
+}
+
+func (b *followBody) Read(p []byte) (int, error) {
+	n, err := b.Reader.Read(p)
+	if err != nil && !errors.Is(err, io.EOF) {
+		b.readFailed = true
+	}
+	return n, err
+}
+
 // runFollow implements the shared reconnect rules: every connection resolves a
 // fresh URL (lookup failures follow classifyLookupError); failures back off 250 ms doubling to 5 s and give up after 5 in a
 // row; a connection that delivered records resets the failure counter even if
@@ -964,6 +981,8 @@ func (c *Client) runFollow(ctx context.Context, plan followPlan) error {
 		}
 		lastStart = time.Now()
 		delivered := 0
+		healthy := false
+		readFailed := false
 		rawURL, err := plan.requestURL(ctx)
 		lookupFailed := err != nil
 		var resp *http.Response
@@ -977,10 +996,19 @@ func (c *Client) runFollow(ctx context.Context, plan followPlan) error {
 			} else {
 				plan.accepted()
 				connectedAt := followNow()
-				err = plan.consume(ctx, resp.Body, &delivered)
+				body := &followBody{Reader: resp.Body}
+				err = plan.consume(ctx, body, &delivered)
+				readFailed = body.readFailed
+				healthy = followNow().Sub(connectedAt) >= emptyStreamQuiet
 				resp.Body.Close()
 				if err == nil {
+					if plan.completed != nil {
+						plan.completed()
+					}
 					expired = 0
+					if healthy {
+						failures = 0
+					}
 					if delivered > 0 {
 						failures, emptyEnds = 0, 0
 					}
@@ -990,7 +1018,7 @@ func (c *Client) runFollow(ctx context.Context, plan followPlan) error {
 					if delivered > 0 {
 						continue
 					}
-					if followNow().Sub(connectedAt) >= emptyStreamQuiet {
+					if healthy {
 						emptyEnds = 0
 						continue
 					}
@@ -1022,7 +1050,9 @@ func (c *Client) runFollow(ctx context.Context, plan followPlan) error {
 				return err
 			}
 		case followFailure:
-			if delivered > 0 {
+			var gatewayErr *gatewayStreamError
+			if delivered > 0 || (healthy && readFailed && !errors.As(err, &gatewayErr) &&
+				(plan.windowDone == nil || !plan.windowDone())) {
 				failures, expired = 0, 0
 			}
 			failures++
@@ -1074,14 +1104,15 @@ func (c *Client) followNode(ctx context.Context, cvmID string, channel CVMLogCha
 // second and how many identical records of that second were delivered, so a
 // reconnect with since=<second> can skip them.
 type followCursor struct {
-	callerTail     string
-	callerSince    *int64
-	until          *int64
-	since          *int64
-	first200       *int64
-	boundarySecond *int64
-	boundaryCounts map[string]int
-	replayCounts   map[string]int
+	callerTail      string
+	callerSince     *int64
+	until           *int64
+	since           *int64
+	first200        *int64
+	completedReplay bool
+	boundarySecond  *int64
+	boundaryCounts  map[string]int
+	replayCounts    map[string]int
 }
 
 func newFollowCursor(opts *LogsOptions, times logTimeWindow) *followCursor {
@@ -1100,7 +1131,7 @@ func (c *followCursor) query(q logQuery) logQuery {
 		c.replayCounts[k] = v
 	}
 	q.until = c.until
-	if c.first200 == nil {
+	if c.first200 == nil || (c.since == nil && !c.completedReplay && c.callerTail != "0") {
 		q.tail = c.callerTail
 		q.since = c.callerSince
 		return q
@@ -1178,7 +1209,8 @@ func (c *Client) followContainerText(ctx context.Context, cvmID string, source L
 			q := cur.query(logQuery{follow: true, timestamps: true, ansi: opts.ANSI, format: "text"})
 			return q.apply(base), nil
 		},
-		accepted: cur.accepted,
+		accepted:  cur.accepted,
+		completed: func() { cur.completedReplay = true },
 		consume: func(ctx context.Context, body io.Reader, delivered *int) error {
 			atBodyStart := true
 			return readLines(body, func(line string) error {
@@ -1228,7 +1260,8 @@ func (c *Client) followContainerEntries(ctx context.Context, cvmID string, sourc
 			q := cur.query(logQuery{follow: true, timestamps: true, format: "ndjson"})
 			return q.apply(base), nil
 		},
-		accepted: cur.accepted,
+		accepted:  cur.accepted,
+		completed: func() { cur.completedReplay = true },
 		consume: func(ctx context.Context, body io.Reader, delivered *int) error {
 			return decodeLogRecords(body, func(entry LogEntry) error {
 				out := entry.Message
