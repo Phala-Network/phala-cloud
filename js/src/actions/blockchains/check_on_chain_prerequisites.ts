@@ -1,14 +1,20 @@
 import { type Chain, type Address, type PublicClient, createPublicClient, http } from "viem";
 import { asHex } from "../../utils";
 import { dstackAppAbi } from "./abi/dstack_app";
+import { resolveAppEpochPlan } from "./epoch_compat";
 
 /**
  * Check on-chain prerequisites for a CVM update in a single RPC call.
  *
  * Uses `multicall` to batch-check:
  * 1. `allowAnyDevice()` — whether the contract allows any device
- * 2. `allowedDeviceIds(deviceId)` — whether the specific device is registered
- * 3. `allowedComposeHashes(composeHash)` — whether the compose hash is already registered
+ * 2. the device row for the specific device
+ * 3. the compose-hash row for the specific compose hash
+ *
+ * The row reads are epoch-aware: contracts without app epochs use the
+ * `allowedDeviceIds` / `allowedComposeHashes` getters, epoch-aware contracts use
+ * the `…AtEpoch(currentAppEpoch, …)` getters because the plain getters only ever
+ * report epoch-0 rows.
  *
  * @group Actions
  * @since 0.7.0
@@ -73,34 +79,56 @@ export async function checkOnChainPrerequisites(
         return createPublicClient({ chain, transport: http(rpcUrl) });
       })();
 
-  const calls = [
-    {
-      address: contractAddress,
-      abi: dstackAppAbi,
-      functionName: "allowAnyDevice" as const,
-    },
-    {
-      address: contractAddress,
-      abi: dstackAppAbi,
-      functionName: "allowedDeviceIds" as const,
-      args: [deviceIdHex] as const,
-    },
-    {
-      address: contractAddress,
-      abi: dstackAppAbi,
-      functionName: "allowedComposeHashes" as const,
-      args: [composeHashHex] as const,
-    },
-  ];
+  const epochPlan = await resolveAppEpochPlan(publicClient, contractAddress);
 
-  const multicallResults = await publicClient.multicall({ contracts: calls });
+  const [allowAnyDeviceResult, deviceResult, composeHashResult] =
+    epochPlan.kind === "epoch"
+      ? await publicClient.multicall({
+          contracts: [
+            {
+              address: contractAddress,
+              abi: dstackAppAbi,
+              functionName: "allowAnyDevice",
+            },
+            {
+              address: contractAddress,
+              abi: dstackAppAbi,
+              functionName: "allowedDeviceIdsAtEpoch",
+              args: [BigInt(epochPlan.currentAppEpoch), deviceIdHex],
+            },
+            {
+              address: contractAddress,
+              abi: dstackAppAbi,
+              functionName: "allowedComposeHashesAtEpoch",
+              args: [BigInt(epochPlan.currentAppEpoch), composeHashHex],
+            },
+          ],
+        })
+      : await publicClient.multicall({
+          contracts: [
+            {
+              address: contractAddress,
+              abi: dstackAppAbi,
+              functionName: "allowAnyDevice",
+            },
+            {
+              address: contractAddress,
+              abi: dstackAppAbi,
+              functionName: "allowedDeviceIds",
+              args: [deviceIdHex],
+            },
+            {
+              address: contractAddress,
+              abi: dstackAppAbi,
+              functionName: "allowedComposeHashes",
+              args: [composeHashHex],
+            },
+          ],
+        });
 
-  const allowAnyDevice =
-    multicallResults[0]?.status === "success" && multicallResults[0]?.result === true;
-  const deviceIdAllowed =
-    multicallResults[1]?.status === "success" && multicallResults[1]?.result === true;
-  const composeHashAllowed =
-    multicallResults[2]?.status === "success" && multicallResults[2]?.result === true;
+  const allowAnyDevice = allowAnyDeviceResult.status === "success" && allowAnyDeviceResult.result;
+  const deviceIdAllowed = deviceResult.status === "success" && deviceResult.result;
+  const composeHashAllowed = composeHashResult.status === "success" && composeHashResult.result;
 
   return {
     allowAnyDevice,

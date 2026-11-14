@@ -2,12 +2,16 @@ import { z } from "zod";
 import { type Chain, type Address, type PublicClient, createPublicClient, http } from "viem";
 import { asHex } from "../../utils";
 import { dstackAppAbi } from "./abi/dstack_app";
+import { type AppEpochPlan, resolveAppEpochPlan } from "./epoch_compat";
 
 /**
  * Query the on-chain device allowlist for a DstackApp contract.
  *
- * Checks a list of candidate device IDs against the contract's
- * `allowedDeviceIds` mapping and returns the ones that are allowed.
+ * Checks a list of candidate device IDs against the contract's device rows and
+ * returns the ones that are allowed. The row reads are epoch-aware: contracts
+ * without app epochs use the `allowedDeviceIds` getter, epoch-aware contracts
+ * use `allowedDeviceIdsAtEpoch(currentAppEpoch, …)` because the plain getter
+ * only ever reports epoch-0 rows.
  *
  * @group Actions
  * @since 0.6.0
@@ -36,6 +40,11 @@ export type GetAllowedDevicesRequest = {
   appAddress: Address;
   /** Candidate device IDs to check against the on-chain allowlist. */
   deviceIds: string[];
+  /**
+   * Read the allowlist at this app epoch instead of the current one. Only
+   * meaningful on epoch-aware contracts; ignored on legacy contracts.
+   */
+  epoch?: number;
   publicClient?: PublicClient;
 };
 
@@ -52,10 +61,48 @@ export type GetAllowedDevices = z.infer<typeof GetAllowedDevicesSchema>;
 
 // ── Implementation ─────────────────────────────────────────────────
 
+/** Batch-read one candidate device row per ID, at the generation-appropriate getter. */
+async function readDeviceRows(
+  publicClient: PublicClient,
+  contractAddress: Address,
+  epochPlan: AppEpochPlan,
+  deviceIds: string[],
+): Promise<boolean[]> {
+  if (epochPlan.kind === "epoch") {
+    const currentEpoch = BigInt(epochPlan.currentAppEpoch);
+    const results = await publicClient.multicall({
+      contracts: deviceIds.map((deviceId) => ({
+        address: contractAddress,
+        abi: dstackAppAbi,
+        functionName: "allowedDeviceIdsAtEpoch" as const,
+        args: [currentEpoch, asHex(deviceId)] as const,
+      })),
+    });
+    return results.map((result) => result.status === "success" && result.result === true);
+  }
+
+  const results = await publicClient.multicall({
+    contracts: deviceIds.map((deviceId) => ({
+      address: contractAddress,
+      abi: dstackAppAbi,
+      functionName: "allowedDeviceIds" as const,
+      args: [asHex(deviceId)] as const,
+    })),
+  });
+  return results.map((result) => result.status === "success" && result.result === true);
+}
+
 export async function getAllowedDevices(
   request: GetAllowedDevicesRequest,
 ): Promise<GetAllowedDevices> {
-  const { chain, rpcUrl, appAddress, deviceIds, publicClient: providedPublicClient } = request;
+  const {
+    chain,
+    rpcUrl,
+    appAddress,
+    deviceIds,
+    epoch,
+    publicClient: providedPublicClient,
+  } = request;
 
   const contractAddress = (appAddress.startsWith("0x") ? appAddress : `0x${appAddress}`) as Address;
 
@@ -96,19 +143,18 @@ export async function getAllowedDevices(
   if (deviceIds.length === 0) {
     devices = [];
   } else {
-    const calls = deviceIds.map((deviceId) => ({
-      address: contractAddress,
-      abi: dstackAppAbi,
-      functionName: "allowedDeviceIds" as const,
-      args: [asHex(deviceId)] as const,
-    }));
-
-    const multicallResults = await publicClient.multicall({ contracts: calls });
+    const epochPlan = await resolveAppEpochPlan(publicClient, contractAddress);
+    // An explicit epoch override reads that row instead of the current one.
+    const readPlan: AppEpochPlan =
+      epochPlan.kind === "epoch" && epoch !== undefined
+        ? { kind: "epoch", currentAppEpoch: epoch }
+        : epochPlan;
+    const allowedFlags = await readDeviceRows(publicClient, contractAddress, readPlan, deviceIds);
 
     devices = deviceIds
       .map((deviceId, i) => ({
         deviceId: asHex(deviceId),
-        allowed: multicallResults[i]?.status === "success" && multicallResults[i]?.result === true,
+        allowed: allowedFlags[i] === true,
       }))
       .filter((r) => r.allowed)
       .map((r) => r.deviceId);

@@ -15,6 +15,15 @@ import {
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
+import {
+	type AppEpochPlan,
+	type EpochsWritten,
+	detectAppEpochPlan,
+	formatAppEpochPlan,
+	formatEpochsWritten,
+	legacyEpochUnsupportedMessage,
+	readEpochsWritten,
+} from "@/src/lib/app-epoch";
 import { printTable } from "@/src/lib/table";
 import {
 	allowDevicesGroup,
@@ -353,14 +362,23 @@ async function waitForAllowlistState(params: {
 	rpcUrl?: string;
 	appAddress: `0x${string}`;
 	deviceIds: string[];
+	/** Read the allowlist at this app epoch instead of the current one. */
+	epoch?: number;
 	condition: (result: Awaited<ReturnType<typeof getAllowedDevices>>) => boolean;
 	description: string;
 	timeoutMs?: number;
 	intervalMs?: number;
 	json?: boolean;
 }): Promise<boolean> {
-	const { chain, rpcUrl, appAddress, deviceIds, condition, description } =
-		params;
+	const {
+		chain,
+		rpcUrl,
+		appAddress,
+		deviceIds,
+		epoch,
+		condition,
+		description,
+	} = params;
 	const timeoutMs = params.timeoutMs ?? 60_000;
 	const intervalMs = params.intervalMs ?? 2_000;
 	const deadline = Date.now() + timeoutMs;
@@ -376,6 +394,7 @@ async function waitForAllowlistState(params: {
 					rpcUrl,
 					appAddress,
 					deviceIds,
+					epoch,
 				}),
 				effectiveRpc,
 				CLI_RPC_POLL_TIMEOUT_MS,
@@ -541,6 +560,51 @@ async function resolveAppContract(
 	};
 }
 
+/**
+ * Resolve the app contract generation (plus current epoch when available).
+ *
+ * The probe is best-effort: `null` means "could not decide" (for example an
+ * RPC hiccup), and callers must not treat that as a legacy contract.
+ */
+async function readAppEpochPlan(params: {
+	chain: SupportedChain;
+	rpcUrl?: string;
+	appContractAddress: `0x${string}`;
+}): Promise<AppEpochPlan | null> {
+	return detectAppEpochPlan({
+		chain: params.chain,
+		rpcUrl: params.rpcUrl,
+		appAddress: params.appContractAddress,
+	});
+}
+
+/**
+ * Fail fast when `--epoch` is used against a legacy contract. The SDK also
+ * rejects the combination, but the CLI can name the contract and the flag.
+ */
+async function resolveWriteEpochPlan(params: {
+	chain: SupportedChain;
+	rpcUrl?: string;
+	appContractAddress: `0x${string}`;
+	epoch: number | undefined;
+	context: CommandContext;
+}): Promise<{ ok: true; plan: AppEpochPlan | null } | { ok: false }> {
+	const plan = await readAppEpochPlan({
+		chain: params.chain,
+		rpcUrl: params.rpcUrl,
+		appContractAddress: params.appContractAddress,
+	});
+
+	if (params.epoch !== undefined && plan?.kind === "legacy") {
+		params.context.fail(
+			legacyEpochUnsupportedMessage(params.appContractAddress),
+		);
+		return { ok: false };
+	}
+
+	return { ok: true, plan };
+}
+
 // ── list ────────────────────────────────────────────────────────────
 
 async function runList(
@@ -594,12 +658,27 @@ async function runList(
 			effectiveRpc,
 		);
 
+		// Epoch contracts store allowlist rows per epoch, so the reader has to
+		// know which epoch the on-chain view belongs to. Legacy contracts have
+		// no epoch and print nothing extra.
+		const epochPlan = await readAppEpochPlan({
+			chain,
+			rpcUrl: input.rpcUrl,
+			appContractAddress,
+		});
+
 		if (input.json) {
 			context.success({
 				appAddress: appContractAddress,
 				chain: chain.name,
 				owner: onChain.owner,
 				allowAnyDevice: onChain.allowAnyDevice,
+				...(epochPlan?.kind === "epoch"
+					? {
+							appEpoch: epochPlan.currentAppEpoch,
+							epochAwareContract: true,
+						}
+					: {}),
 				// When allowAnyDevice is on, the per-device allowlist is
 				// effectively empty (all devices are implicitly allowed) —
 				// getAllowedDevices just echoes the queried IDs back.
@@ -616,6 +695,8 @@ async function runList(
 		say(`Contract: ${appContractAddress}`);
 		say(`Chain:    ${chain.name}`);
 		say(`Owner:    ${onChain.owner}`);
+		const epochLine = formatAppEpochPlan(epochPlan);
+		if (epochLine) say(epochLine);
 		say(`Allow Any Device: ${onChain.allowAnyDevice ? "yes" : "no"}`);
 
 		// When allowAnyDevice is on, the per-device list from getAllowedDevices
@@ -672,6 +753,17 @@ async function runAdd(
 		const { chain, appContractAddress, allowlist } = resolved;
 		activeChain = chain;
 		effectiveRpc = resolveEffectiveRpcUrl(chain, input.rpcUrl);
+		// `--epoch` is only meaningful on epoch-aware contracts: fail before
+		// signing anything instead of surfacing a raw contract revert.
+		const epochScope = await resolveWriteEpochPlan({
+			chain,
+			rpcUrl: input.rpcUrl,
+			appContractAddress,
+			epoch: input.epoch,
+			context,
+		});
+		if (!epochScope.ok) return 1;
+
 		const privateKey = resolvePrivateKey(input);
 
 		let deviceIds: `0x${string}`[];
@@ -686,8 +778,32 @@ async function runAdd(
 				return 1;
 			}
 
-			// Exclude devices already in the allowlist (normalize to match chain format)
-			const alreadyAllowed = buildAlreadyAllowedSet(allowlist.devices);
+			// Exclude devices already in the allowlist (normalize to match chain format).
+			// With --epoch the backend list reflects the current epoch, so re-check
+			// the candidates on-chain at the requested epoch instead.
+			let alreadyAllowed: Set<string>;
+			if (input.epoch !== undefined) {
+				const nodeDeviceIds = nodesResult.data.nodes
+					.map((n) => n.device_id)
+					.filter(
+						(id): id is string => typeof id === "string" && isValidDeviceId(id),
+					);
+				const atEpoch = await withRpcTimeout(
+					getAllowedDevices({
+						chain,
+						rpcUrl: input.rpcUrl,
+						appAddress: appContractAddress,
+						deviceIds: nodeDeviceIds,
+						epoch: input.epoch,
+					}),
+					effectiveRpc,
+				);
+				alreadyAllowed = new Set(
+					atEpoch.devices.map((id) => normalizeDeviceId(id)),
+				);
+			} else {
+				alreadyAllowed = buildAlreadyAllowedSet(allowlist.devices);
+			}
 
 			const candidates = nodesResult.data.nodes.filter(
 				(n) =>
@@ -732,11 +848,15 @@ async function runAdd(
 			deviceId: string;
 			txHash: string;
 			explorer: string | null;
+			epochsWritten: EpochsWritten | undefined;
 		}[] = [];
+
+		const epochLine = formatAppEpochPlan(epochScope.plan);
 
 		for (const deviceId of deviceIds) {
 			say(`Submitting add-device transaction for ${deviceId}...`);
 			say(`RPC URL: ${effectiveRpc}`);
+			if (epochLine) say(epochLine);
 
 			const result = await withRpcTimeout(
 				safeAddDevice({
@@ -744,6 +864,7 @@ async function runAdd(
 					rpcUrl: input.rpcUrl,
 					appAddress: appContractAddress,
 					deviceId,
+					epoch: input.epoch,
 					privateKey,
 					skipPrerequisiteChecks: true,
 					timeout: CLI_RPC_TIMEOUT_MS,
@@ -781,6 +902,7 @@ async function runAdd(
 				deviceId,
 				txHash: data.transactionHash,
 				explorer: txExplorerUrl(chain, data.transactionHash),
+				epochsWritten: readEpochsWritten(data.epochsWritten),
 			});
 		}
 
@@ -795,6 +917,9 @@ async function runAdd(
 			if (r.explorer) {
 				say(`Explorer:    ${r.explorer}`);
 			}
+			if (r.epochsWritten) {
+				say(`Epoch:       ${formatEpochsWritten(r.epochsWritten)}`);
+			}
 		}
 
 		if (input.wait) {
@@ -803,6 +928,7 @@ async function runAdd(
 				rpcUrl: input.rpcUrl,
 				appAddress: appContractAddress,
 				deviceIds,
+				epoch: input.epoch,
 				description: "devices to be allowed",
 				json: input.json,
 				condition: (state) => {
@@ -863,14 +989,51 @@ async function runRemove(
 		const { chain, appContractAddress, allowlist } = resolved;
 		activeChain = chain;
 		effectiveRpc = resolveEffectiveRpcUrl(chain, input.rpcUrl);
+		// `--epoch` is only meaningful on epoch-aware contracts: fail before
+		// signing anything instead of surfacing a raw contract revert.
+		const epochScope = await resolveWriteEpochPlan({
+			chain,
+			rpcUrl: input.rpcUrl,
+			appContractAddress,
+			epoch: input.epoch,
+			context,
+		});
+		if (!epochScope.ok) return 1;
+
 		const privateKey = resolvePrivateKey(input);
 
 		let deviceIds: `0x${string}`[];
 
 		if (input.interactive && !input.deviceId) {
-			const allowedDevices = allowlist.devices.filter(
-				(d) => d.status === "allowed",
-			);
+			// With --epoch the target epoch may hold devices the backend's
+			// current-epoch view already reports as removed, so start from every
+			// known device and let the on-chain read at that epoch decide.
+			// Without --epoch the backend's current status is the right filter.
+			const candidatePool =
+				input.epoch !== undefined
+					? allowlist.devices
+					: allowlist.devices.filter((d) => d.status === "allowed");
+			let allowedDevices = candidatePool;
+			// With --epoch the backend list reflects the current epoch; re-check
+			// the candidates on-chain at the requested epoch.
+			if (input.epoch !== undefined) {
+				const atEpoch = await withRpcTimeout(
+					getAllowedDevices({
+						chain,
+						rpcUrl: input.rpcUrl,
+						appAddress: appContractAddress,
+						deviceIds: allowedDevices.map((d) => d.device_id),
+						epoch: input.epoch,
+					}),
+					effectiveRpc,
+				);
+				const allowedAtEpoch = new Set(
+					atEpoch.devices.map((id) => normalizeDeviceId(id)),
+				);
+				allowedDevices = allowedDevices.filter((d) =>
+					allowedAtEpoch.has(normalizeDeviceId(d.device_id)),
+				);
+			}
 			if (allowedDevices.length === 0) {
 				context.fail("No allowed devices found to remove.");
 				return 1;
@@ -908,11 +1071,15 @@ async function runRemove(
 			deviceId: string;
 			txHash: string;
 			explorer: string | null;
+			epochsWritten: EpochsWritten | undefined;
 		}[] = [];
+
+		const epochLine = formatAppEpochPlan(epochScope.plan);
 
 		for (const deviceId of deviceIds) {
 			say(`Submitting remove-device transaction for ${deviceId}...`);
 			say(`RPC URL: ${effectiveRpc}`);
+			if (epochLine) say(epochLine);
 
 			const result = await withRpcTimeout(
 				safeRemoveDevice({
@@ -920,6 +1087,7 @@ async function runRemove(
 					rpcUrl: input.rpcUrl,
 					appAddress: appContractAddress,
 					deviceId,
+					epoch: input.epoch,
 					privateKey,
 					skipPrerequisiteChecks: true,
 					timeout: CLI_RPC_TIMEOUT_MS,
@@ -957,6 +1125,7 @@ async function runRemove(
 				deviceId,
 				txHash: data.transactionHash,
 				explorer: txExplorerUrl(chain, data.transactionHash),
+				epochsWritten: readEpochsWritten(data.epochsWritten),
 			});
 		}
 
@@ -970,6 +1139,9 @@ async function runRemove(
 			say(`Transaction: ${r.txHash}`);
 			if (r.explorer) {
 				say(`Explorer:    ${r.explorer}`);
+			}
+			if (r.epochsWritten) {
+				say(`Epoch:       ${formatEpochsWritten(r.epochsWritten)}`);
 			}
 		}
 
@@ -996,6 +1168,7 @@ async function runRemove(
 					rpcUrl: input.rpcUrl,
 					appAddress: appContractAddress,
 					deviceIds,
+					epoch: input.epoch,
 					description: "devices to be removed",
 					json: input.json,
 					condition: (state) =>

@@ -9,6 +9,13 @@ import {
 	resolveToggleAllowAny,
 	buildAlreadyAllowedSet,
 } from "../../src/commands/allow-devices/index";
+import {
+	allowDevicesAddMeta,
+	allowDevicesAddSchema,
+	allowDevicesRemoveMeta,
+	allowDevicesRemoveSchema,
+	epochOption,
+} from "../../src/commands/allow-devices/command";
 
 // ── normalizeDeviceId ───────────────────────────────────────────────
 
@@ -230,5 +237,70 @@ describe("buildAlreadyAllowedSet", () => {
 			{ device_id: raw.toUpperCase() },
 		]);
 		expect(set.size).toBe(1);
+	});
+});
+
+// ── epoch option ────────────────────────────────────────────────────
+
+describe("allow-devices epoch option", () => {
+	test("add accepts an explicit epoch", () => {
+		const parsed = allowDevicesAddSchema.parse({
+			cvm: "app_abc123",
+			epoch: 2,
+		});
+		expect(parsed.epoch).toBe(2);
+	});
+
+	test("remove accepts an explicit epoch", () => {
+		const parsed = allowDevicesRemoveSchema.parse({
+			cvm: "app_abc123",
+			epoch: 0,
+		});
+		expect(parsed.epoch).toBe(0);
+	});
+
+	test("epoch is optional on both commands", () => {
+		expect(allowDevicesAddSchema.parse({ cvm: "app_abc123" }).epoch).toBe(
+			undefined,
+		);
+		expect(allowDevicesRemoveSchema.parse({ cvm: "app_abc123" }).epoch).toBe(
+			undefined,
+		);
+	});
+
+	test("rejects negative epochs", () => {
+		expect(
+			allowDevicesAddSchema.safeParse({ cvm: "app_abc123", epoch: -1 }).success,
+		).toBe(false);
+		expect(
+			allowDevicesRemoveSchema.safeParse({ cvm: "app_abc123", epoch: -1 })
+				.success,
+		).toBe(false);
+	});
+
+	test("rejects non-integer epochs", () => {
+		expect(
+			allowDevicesAddSchema.safeParse({ cvm: "app_abc123", epoch: 1.5 })
+				.success,
+		).toBe(false);
+	});
+
+	test("the --epoch flag targets the schema field", () => {
+		expect(epochOption.name).toBe("epoch");
+		expect(epochOption.type).toBe("number");
+		expect(epochOption.target).toBe("epoch");
+		expect(Object.keys(allowDevicesAddSchema.shape)).toContain(
+			epochOption.target,
+		);
+		expect(Object.keys(allowDevicesRemoveSchema.shape)).toContain(
+			epochOption.target,
+		);
+	});
+
+	test("add/remove metadata expose the --epoch option", () => {
+		for (const meta of [allowDevicesAddMeta, allowDevicesRemoveMeta]) {
+			const names = (meta.options ?? []).map((option) => option.name);
+			expect(names).toContain("epoch");
+		}
 	});
 });

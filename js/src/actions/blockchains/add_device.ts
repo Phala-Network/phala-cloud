@@ -25,6 +25,13 @@ import {
   type TransactionOptions,
 } from "../../utils";
 import { dstackAppAbi } from "./abi/dstack_app";
+import {
+  type EpochsWritten,
+  EpochsWrittenSchema,
+  epochsWritten,
+  resolveAppEpochWritePlan,
+  writeDeviceAllowlist,
+} from "./epoch_compat";
 
 /**
  * Add a device to a DstackApp contract's allowlist.
@@ -53,7 +60,24 @@ import { dstackAppAbi } from "./abi/dstack_app";
  *   walletClient: myWallet,
  *   publicClient: myPublicClient,
  * })
+ *
+ * // Mode 3: Write one specific app epoch (dstack >= 0.6.4 only)
+ * const result3 = await addDevice({
+ *   appAddress: "0x1234...abcd",
+ *   deviceId: "0xaabbccdd...",
+ *   privateKey: "0x...",
+ *   epoch: 2,
+ * })
  * ```
+ *
+ * ## Epoch handling
+ *
+ * The contract generation is probed before writing. On a contract without app
+ * epochs the epoch-less `addDevice` setter is used and `epoch` must be omitted.
+ * On an epoch-aware contract, `epoch` pins the write to that epoch, and an
+ * omitted `epoch` writes `[currentAppEpoch, currentAppEpoch + 1]` because
+ * allowlist rows are not inherited across epochs. The written rows are reported
+ * as `epochsWritten`.
  */
 
 // ── Request ────────────────────────────────────────────────────────
@@ -64,6 +88,7 @@ const AddDeviceRequestSchema = z
     rpcUrl: z.string().optional(),
     appAddress: z.string(),
     deviceId: z.string(),
+    epoch: z.number().int().optional(),
     privateKey: z.string().optional(),
     walletClient: z.unknown().optional(),
     publicClient: z.unknown().optional(),
@@ -97,6 +122,12 @@ export type AddDeviceRequest = {
   rpcUrl?: string;
   appAddress: Address;
   deviceId: string;
+  /**
+   * App epoch to write, on epoch-aware contracts. Omit to write
+   * `[currentAppEpoch, currentAppEpoch + 1]`. Unsupported (and rejected) on
+   * contracts that predate app epochs.
+   */
+  epoch?: number;
   privateKey?: Hex;
   walletClient?: WalletClient;
   publicClient?: PublicClient;
@@ -119,6 +150,8 @@ export const AddDeviceSchema = z
     transactionHash: z.string(),
     blockNumber: z.bigint().optional(),
     gasUsed: z.bigint().optional(),
+    /** Epoch rows written, absent when the contract has no app epochs. */
+    epochsWritten: EpochsWrittenSchema.optional(),
   })
   .passthrough();
 
@@ -149,6 +182,7 @@ export async function addDevice<T extends z.ZodTypeAny | false | undefined = und
     rpcUrl,
     appAddress,
     deviceId,
+    epoch,
     privateKey,
     walletClient: providedWalletClient,
     publicClient: providedPublicClient,
@@ -234,6 +268,10 @@ export async function addDevice<T extends z.ZodTypeAny | false | undefined = und
     }
   }
 
+  // Resolve the contract generation and, on epoch-aware contracts, the rows to write
+  const writePlan = await resolveAppEpochWritePlan(publicClient, contractAddress, epoch);
+  const writtenEpochs: EpochsWritten | undefined = epochsWritten(writePlan);
+
   // Pre-check: verify sender is the contract owner before submitting tx
   const contractOwner = (await publicClient.readContract({
     address: contractAddress,
@@ -248,14 +286,17 @@ export async function addDevice<T extends z.ZodTypeAny | false | undefined = und
   }
 
   const addDeviceOperation = async (clients: NetworkClients): Promise<Hash> => {
-    return clients.walletClient.writeContract({
-      address: contractAddress,
-      abi: dstackAppAbi,
-      functionName: "addDevice",
-      args: [deviceIdHex],
-      account: clients.walletClient.account || clients.address,
-      chain: (chain as Chain) || null,
-    });
+    return writeDeviceAllowlist(
+      {
+        walletClient: clients.walletClient,
+        address: contractAddress,
+        account: clients.walletClient.account || clients.address,
+        chain: (chain as Chain) || null,
+      },
+      "add",
+      writePlan,
+      deviceIdHex,
+    );
   };
 
   const transactionResult = retryOptions
@@ -286,6 +327,7 @@ export async function addDevice<T extends z.ZodTypeAny | false | undefined = und
     transactionHash: transactionResult.receipt.transactionHash,
     blockNumber: transactionResult.receipt.blockNumber,
     gasUsed: transactionResult.receipt.gasUsed,
+    epochsWritten: writtenEpochs,
   };
 
   if (parameters?.schema === false) {

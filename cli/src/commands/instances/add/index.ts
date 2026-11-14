@@ -5,6 +5,7 @@ import { defineCommand } from "@/src/core/define-command";
 import { isInJsonMode } from "@/src/core/json-mode";
 import type { CommandContext } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
+import { logWrittenEpochRange, readEpochsWritten } from "@/src/lib/app-epoch";
 import {
 	type Client,
 	type EnvVar,
@@ -405,6 +406,12 @@ async function runInstancesAddCommand(
 								"Failed to register compose hash on-chain",
 						);
 					}
+					logWrittenEpochRange(
+						"compose hash allowlist",
+						readEpochsWritten(
+							(receiptResult.data as { epochsWritten?: unknown }).epochsWritten,
+						),
+					);
 					transactionHash = String(
 						(
 							receiptResult.data as {

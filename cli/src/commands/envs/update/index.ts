@@ -7,6 +7,7 @@ import {
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
+import { logWrittenEpochRange, readEpochsWritten } from "@/src/lib/app-epoch";
 import { logger } from "@/src/utils/logger";
 import { resolveEnvInputs } from "../resolve-envs";
 import { getEncryptPubkey } from "../get-encrypt-pubkey";
@@ -148,6 +149,13 @@ async function runEnvsUpdateCommand(
 				});
 				return 1;
 			}
+
+			logWrittenEpochRange(
+				"compose hash allowlist",
+				readEpochsWritten(
+					(addHashResult.data as { epochsWritten?: unknown }).epochsWritten,
+				),
+			);
 
 			const txResult = addHashResult.data as {
 				transactionHash?: string;

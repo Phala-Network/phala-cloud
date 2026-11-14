@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi, type MockedFunction } from "vitest";
 import { z } from "zod";
-import { createPublicClient, createWalletClient, parseEventLogs, parseEther, type PublicClient, type WalletClient, type Hash, type TransactionReceipt } from "viem";
+import { ContractFunctionZeroDataError, createPublicClient, createWalletClient, parseEventLogs, parseEther, type PublicClient, type WalletClient, type Hash, type TransactionReceipt } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
 import {
@@ -9,6 +9,11 @@ import {
   type AddComposeHashRequest,
   AddComposeHashSchema,
 } from "./add_compose_hash";
+import {
+  APP_AUTH_BASIC_MANAGEMENT_INTERFACE_ID,
+  APP_EPOCH_MANAGEMENT_INTERFACE_ID,
+  clearAppEpochProbeCache,
+} from "./epoch_compat";
 
 // Mock external libraries
 vi.mock("viem", async () => {
@@ -44,6 +49,11 @@ import {
   createTransactionTracker, 
   executeTransactionWithRetry 
 } from "../../utils";
+
+/** Simulate a call to a function the contract does not have: the node answers with empty data. */
+function missingFunction(functionName: string): ContractFunctionZeroDataError {
+  return new ContractFunctionZeroDataError({ functionName });
+}
 
 // Type-safe mocks
 const mockCreatePublicClient = createPublicClient as MockedFunction<typeof createPublicClient>;
@@ -89,13 +99,25 @@ describe("addComposeHash", () => {
     // Reset all mocks
     vi.clearAllMocks();
 
+    // The generation probe caches per contract address, and every case here
+    // reuses the same address with a different contract fixture.
+    clearAppEpochProbeCache();
+
     // Mock PublicClient
-    // Pre-check reads owner() and compares to sender; all other readContract
-    // calls keep their historical tuple shape.
+    // Pre-check reads owner() and compares to sender. The generation probe reads
+    // supportsInterface() / currentAppEpoch(); the default fixture is a contract
+    // from before app epochs. All other readContract calls keep their historical
+    // tuple shape.
     mockPublicClient = {
       readContract: vi.fn().mockImplementation(async (args: any) => {
         if (args?.functionName === "owner") {
           return TEST_SENDER_ADDRESS;
+        }
+        if (args?.functionName === "supportsInterface") {
+          return args.args?.[0] === APP_AUTH_BASIC_MANAGEMENT_INTERFACE_ID;
+        }
+        if (args?.functionName === "currentAppEpoch") {
+          throw missingFunction("currentAppEpoch");
         }
         return [true, "0x1234567890abcdef1234567890abcdef12345678" as `0x${string}`];
       }),
@@ -727,3 +749,127 @@ describe("addComposeHash", () => {
     });
   });
 }); 
+describe("addComposeHash epoch handling", () => {
+  const APP_ID = "0xabcdef1234567890abcdef1234567890abcdef12" as `0x${string}`;
+  const COMPOSE_HASH_HEX = `0x${"ab".repeat(32)}` as `0x${string}`;
+  // The file-level asHex mock only pads short values; a full 32-byte value passes through.
+  const COMPOSE_HASH_INPUT = COMPOSE_HASH_HEX.slice(2);
+  const RECEIPT = {
+    transactionHash: "0x123...abc" as `0x${string}`,
+    blockNumber: 1234567n,
+    gasUsed: 21000n,
+    logs: [],
+    status: "success",
+  } as unknown as TransactionReceipt;
+
+  let publicClient: PublicClient & { readContract: MockedFunction<(args: any) => Promise<unknown>> };
+  let walletClient: WalletClient;
+  let writeContract: MockedFunction<(args: any) => Promise<Hash>>;
+
+  function useContract(generation: "legacy" | "epoch", currentAppEpoch = 2): void {
+    clearAppEpochProbeCache();
+    publicClient.readContract.mockImplementation(async (args: any) => {
+      switch (args?.functionName) {
+        case "owner":
+          return TEST_SENDER_ADDRESS;
+        case "supportsInterface":
+          return generation === "epoch"
+            ? args.args?.[0] === APP_EPOCH_MANAGEMENT_INTERFACE_ID
+            : args.args?.[0] === APP_AUTH_BASIC_MANAGEMENT_INTERFACE_ID;
+        case "currentAppEpoch":
+          if (generation === "legacy") throw missingFunction("currentAppEpoch");
+          return BigInt(currentAppEpoch);
+        default:
+          throw new Error(`unexpected read: ${args?.functionName}`);
+      }
+    });
+  }
+
+  function request(): AddComposeHashRequest {
+    return {
+      appId: APP_ID,
+      composeHash: COMPOSE_HASH_INPUT,
+      walletClient,
+      publicClient,
+      skipPrerequisiteChecks: true,
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    writeContract = vi.fn().mockResolvedValue("0x123...abc" as `0x${string}`);
+    walletClient = {
+      account: { address: TEST_SENDER_ADDRESS },
+      chain: base,
+      writeContract,
+      getChainId: vi.fn().mockResolvedValue(base.id),
+    } as unknown as WalletClient;
+
+    publicClient = {
+      readContract: vi.fn(),
+    } as unknown as PublicClient & {
+      readContract: MockedFunction<(args: any) => Promise<unknown>>;
+    };
+
+    mockCreateTransactionTracker.mockReturnValue({
+      status: { state: "idle" },
+      isComplete: false,
+      execute: vi.fn(async (operation: any, clients: any) => {
+        await operation(clients);
+        return { hash: "0x123...abc" as `0x${string}`, receipt: RECEIPT, success: true };
+      }),
+    });
+
+    useContract("legacy");
+  });
+
+  it("keeps the epoch-less setter on a legacy contract", async () => {
+    const result = await addComposeHash(request());
+
+    expect(writeContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        address: APP_ID,
+        functionName: "addComposeHash",
+        args: [COMPOSE_HASH_HEX],
+      }),
+    );
+    expect(result.epochsWritten).toBeUndefined();
+  });
+
+  it("rejects an explicit epoch on a legacy contract", async () => {
+    await expect(addComposeHash({ ...request(), epoch: 1 })).rejects.toThrow(
+      "does not support app epochs",
+    );
+
+    expect(writeContract).not.toHaveBeenCalled();
+  });
+
+  it("writes the current and next epoch when no epoch is requested", async () => {
+    useContract("epoch", 3);
+
+    const result = await addComposeHash(request());
+
+    expect(writeContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        functionName: "addComposeHashAtEpochs",
+        args: [3n, 4n, COMPOSE_HASH_HEX],
+      }),
+    );
+    expect(result.epochsWritten).toEqual([3, 4]);
+  });
+
+  it("writes exactly the requested epoch", async () => {
+    useContract("epoch", 3);
+
+    const result = await addComposeHash({ ...request(), epoch: 1 });
+
+    expect(writeContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        functionName: "addComposeHashAtEpoch",
+        args: [1n, COMPOSE_HASH_HEX],
+      }),
+    );
+    expect(result.epochsWritten).toEqual([1, 1]);
+  });
+});

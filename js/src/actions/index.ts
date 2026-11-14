@@ -147,6 +147,19 @@ export {
 export { dstackAppAbi } from "./blockchains/abi/dstack_app";
 
 export {
+  APP_EPOCH_MANAGEMENT_INTERFACE_ID,
+  APP_AUTH_BASIC_MANAGEMENT_INTERFACE_ID,
+  EpochsWrittenSchema,
+  type EpochsWritten,
+  type AppContractGeneration,
+  type AppEpochPlan,
+  type AppEpochWritePlan,
+  resolveAppEpochPlan,
+  resolveAppEpochWritePlan,
+  clearAppEpochProbeCache,
+} from "./blockchains/epoch_compat";
+
+export {
   getCvmComposeFile,
   safeGetCvmComposeFile,
   type GetCvmComposeFileResult,

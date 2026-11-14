@@ -46,6 +46,9 @@ mock.module("@phala/cloud", () => ({
 		}),
 	),
 	safeGetAppCvms: mock(() => Promise.resolve({ success: true, data: [] })),
+	// Kept in sync with @phala/cloud's epoch-compat exports so the app-epoch
+	// helper module can be imported under this mock.
+	resolveAppEpochPlan: mock(() => Promise.resolve({ kind: "legacy" })),
 	safeGetCvmInfo: mock(() =>
 		Promise.resolve({ success: true, data: { vm_uuid: "source-uuid" } }),
 	),

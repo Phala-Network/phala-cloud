@@ -347,6 +347,10 @@ const onChainActions = {
   safeCheckComposeHashAllowed: actions.safeCheckComposeHashAllowed,
   checkOnChainPrerequisites: actions.checkOnChainPrerequisites,
   safeCheckOnChainPrerequisites: actions.safeCheckOnChainPrerequisites,
+  // Contract-generation probe and epoch cache control, also independent of the cloud client.
+  resolveAppEpochPlan: actions.resolveAppEpochPlan,
+  resolveAppEpochWritePlan: actions.resolveAppEpochWritePlan,
+  clearAppEpochProbeCache: actions.clearAppEpochProbeCache,
 };
 
 type OnChainActions = typeof onChainActions;

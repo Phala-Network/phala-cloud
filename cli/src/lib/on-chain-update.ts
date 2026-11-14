@@ -5,6 +5,11 @@ import {
 	safeAddDevice,
 	safeCheckOnChainPrerequisites,
 } from "@phala/cloud";
+import {
+	type EpochsWritten,
+	formatEpochsWritten,
+	readEpochsWritten,
+} from "@/src/lib/app-epoch";
 import { logger } from "@/src/utils/logger";
 
 export type OnChainPhase2 = (
@@ -122,6 +127,13 @@ export async function runTwoPhaseComposeUpdate(args: {
 				`Failed to register device on-chain (device: ${result.deviceId.slice(0, 10)}...): ${errorMessage(deviceResult)}`,
 			);
 		}
+		logEpochRange(
+			"device allowlist",
+			readEpochsWritten(
+				(deviceResult.data as { epochsWritten?: unknown }).epochsWritten,
+			),
+			options.debug,
+		);
 	}
 
 	const receipt_result = await safeAddComposeHash({
@@ -143,9 +155,33 @@ export async function runTwoPhaseComposeUpdate(args: {
 	if (options.debug) {
 		console.log("[DEBUG] transactionHash:", transactionHash);
 	}
+	logEpochRange(
+		"compose hash allowlist",
+		readEpochsWritten(
+			(receipt_result.data as { epochsWritten?: unknown }).epochsWritten,
+		),
+		options.debug,
+	);
 
 	const confirmed = await args.phase2(result.composeHash, transactionHash);
 	return { prepared: false, correlationId: confirmed.correlationId };
+}
+
+/**
+ * Epoch-aware app contracts store allowlist rows per epoch. The SDK reports the
+ * range it wrote; surface it on the debug channel so a `--debug` deploy shows
+ * which epochs the compose hash covers.
+ */
+function logEpochRange(
+	label: string,
+	epochs: EpochsWritten | undefined,
+	debug: boolean | undefined,
+): void {
+	if (!epochs) return;
+	logger.debug(`${label} written for ${formatEpochsWritten(epochs)}`);
+	if (debug) {
+		console.log(`[DEBUG] ${label} epochs: ${epochs[0]}..${epochs[1]}`);
+	}
 }
 
 function errorMessage(result: unknown): string {

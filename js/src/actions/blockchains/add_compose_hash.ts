@@ -26,6 +26,14 @@ import {
   executeTransactionWithRetry,
   type TransactionOptions,
 } from "../../utils";
+import { dstackAppAbi } from "./abi/dstack_app";
+import {
+  type EpochsWritten,
+  EpochsWrittenSchema,
+  epochsWritten,
+  resolveAppEpochWritePlan,
+  writeComposeHashAllowlist,
+} from "./epoch_compat";
 
 /**
  * Add a compose hash to an App Auth contract through KMS lookup.
@@ -83,6 +91,15 @@ import {
  * console.log(`Transaction hash: ${result.transactionHash}`)
  * // Output: { composeHash: "0x...", appAuthAddress: "0x...", transactionHash: "0x..." }
  * ```
+ *
+ * ## Epoch handling
+ *
+ * The contract generation is probed before writing. On a contract without app
+ * epochs the epoch-less `addComposeHash` setter is used and `epoch` must be
+ * omitted. On an epoch-aware contract, `epoch` pins the write to that epoch, and
+ * an omitted `epoch` writes `[currentAppEpoch, currentAppEpoch + 1]` because
+ * allowlist rows are not inherited across epochs. The written rows are reported
+ * as `epochsWritten`.
  *
  * ## Returns
  *
@@ -200,23 +217,6 @@ const kmsAuthAbi = [
   },
 ] as const;
 
-// App Auth ABI for addComposeHash function
-const appAuthAbi = [
-  {
-    inputs: [{ name: "composeHash", type: "bytes32" }],
-    name: "addComposeHash",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [{ name: "composeHash", type: "bytes32", indexed: false }],
-    name: "ComposeHashAdded",
-    type: "event",
-    anonymous: false,
-  },
-] as const;
-
 // Request schema with conditional validation using Zod refine
 const AddComposeHashRequestSchema = z
   .object({
@@ -227,6 +227,7 @@ const AddComposeHashRequestSchema = z
 
     appId: z.string(),
     composeHash: z.string(),
+    epoch: z.number().int().optional(),
 
     // Authentication mode: either privateKey OR walletClient (required, mutually exclusive)
     privateKey: z.string().optional(),
@@ -286,6 +287,12 @@ export type AddComposeHashRequest = {
   rpcUrl?: string;
   appId: Address;
   composeHash: string;
+  /**
+   * App epoch to write, on epoch-aware contracts. Omit to write
+   * `[currentAppEpoch, currentAppEpoch + 1]`. Unsupported (and rejected) on
+   * contracts that predate app epochs.
+   */
+  epoch?: number;
   privateKey?: Hex;
   walletClient?: WalletClient;
   publicClient?: PublicClient;
@@ -313,6 +320,8 @@ export const AddComposeHashSchema = z
     transactionHash: z.string(),
     blockNumber: z.bigint().optional(),
     gasUsed: z.bigint().optional(),
+    /** Epoch rows written, absent when the contract has no app epochs. */
+    epochsWritten: EpochsWrittenSchema.optional(),
   })
   .passthrough();
 
@@ -337,12 +346,13 @@ function parseComposeHashResult(
   composeHash: Hash,
   appAuthAddress: Address,
   appId: Address,
+  writtenEpochs: EpochsWritten | undefined,
 ): AddComposeHash {
   console.log(receipt.logs);
   try {
     // Parse ComposeHashAdded event
     const logs = parseEventLogs({
-      abi: appAuthAbi,
+      abi: dstackAppAbi,
       eventName: "ComposeHashAdded",
       logs: receipt.logs,
       strict: false,
@@ -365,6 +375,7 @@ function parseComposeHashResult(
       transactionHash: receipt.transactionHash,
       blockNumber: receipt.blockNumber,
       gasUsed: receipt.gasUsed,
+      epochsWritten: writtenEpochs,
     };
   } catch (parseError) {
     // If event parsing fails, still return basic result
@@ -376,6 +387,7 @@ function parseComposeHashResult(
       transactionHash: receipt.transactionHash,
       blockNumber: receipt.blockNumber,
       gasUsed: receipt.gasUsed,
+      epochsWritten: writtenEpochs,
     };
   }
 }
@@ -392,6 +404,7 @@ export async function addComposeHash<T extends z.ZodTypeAny | false | undefined 
     rpcUrl,
     appId,
     composeHash,
+    epoch,
     privateKey,
     walletClient: providedWalletClient,
     publicClient: providedPublicClient,
@@ -499,6 +512,10 @@ export async function addComposeHash<T extends z.ZodTypeAny | false | undefined 
     }
   }
 
+  // Resolve the contract generation and, on epoch-aware contracts, the rows to write
+  const writePlan = await resolveAppEpochWritePlan(publicClient, appAuthAddress, epoch);
+  const writtenEpochs: EpochsWritten | undefined = epochsWritten(writePlan);
+
   // Pre-check: verify sender is the contract owner before submitting tx
   const contractOwner = (await publicClient.readContract({
     address: appAuthAddress,
@@ -522,16 +539,17 @@ export async function addComposeHash<T extends z.ZodTypeAny | false | undefined 
 
   // Define the blockchain operation
   const addComposeHashOperation = async (clients: NetworkClients): Promise<Hash> => {
-    const hash = await clients.walletClient.writeContract({
-      address: appAuthAddress,
-      abi: appAuthAbi,
-      functionName: "addComposeHash",
-      args: [asHex(composeHash)],
-      account: clients.walletClient.account || clients.address,
-      chain: (chain as Chain) || null,
-    });
-
-    return hash;
+    return writeComposeHashAllowlist(
+      {
+        walletClient: clients.walletClient,
+        address: appAuthAddress,
+        account: clients.walletClient.account || clients.address,
+        chain: (chain as Chain) || null,
+      },
+      "add",
+      writePlan,
+      asHex(composeHash),
+    );
   };
 
   // Execute transaction with enhanced features
@@ -563,6 +581,7 @@ export async function addComposeHash<T extends z.ZodTypeAny | false | undefined 
     asHex(composeHash),
     appAuthAddress,
     appId as Address,
+    writtenEpochs,
   );
 
   // Schema handling
