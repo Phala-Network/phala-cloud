@@ -1,22 +1,22 @@
 import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import inquirer from "inquirer";
-import { mergeAppDomainIngress } from "@phala/cloud";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
-import { failDomainError, normalizeDomain, resolveAppId } from "../shared";
-import {
-	domainsSetupCommandMeta,
-	domainsSetupCommandSchema,
-	type DomainsSetupCommandInput,
-} from "./command";
 import {
 	resolveWritableComposeFile,
 	unifiedDiff,
 	writeFileAtomic,
 } from "@/src/lib/compose-file";
 import { insertComposeService } from "@/src/lib/compose-text";
+import { mergeAppDomainIngress } from "@phala/cloud";
+import inquirer from "inquirer";
+import { failDomainError, normalizeDomain, resolveAppId } from "../shared";
+import {
+	type DomainsSetupCommandInput,
+	domainsSetupCommandMeta,
+	domainsSetupCommandSchema,
+} from "./command";
 
 const DEFAULT_COMPOSE_FILES = ["docker-compose.yml", "docker-compose.yaml"];
 
@@ -46,7 +46,13 @@ async function runDomainsSetupCommand(
 		const appId = resolveAppId(input.appId, context);
 		const domain = normalizeDomain(input.domain);
 		const composePath = resolveComposePath(input, context);
-		const label = relative(context.cwd, composePath) || composePath;
+		// Name the file relative to the working directory only when it lives
+		// below it; otherwise the absolute path reads better than `../../..`.
+		const relativePath = relative(context.cwd, composePath);
+		const label =
+			relativePath && !relativePath.startsWith("..")
+				? relativePath
+				: composePath;
 		const original = readFileSync(composePath, "utf8");
 
 		const client = await getClient(context);

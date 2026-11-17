@@ -597,6 +597,27 @@ describe("domains setup", () => {
 		expect(out.stdout).toContain("phala deploy");
 	});
 
+	test("names a compose file outside the working directory by its absolute path", async () => {
+		const elsewhere = mkdtempSync(join(tmpdir(), "phala-domains-cwd-"));
+		try {
+			const { context, out } = makeContext({ cwd: elsewhere, isTTY: false });
+			const code = await domainsSetupCommand.run(
+				domainsSetupCommandSchema.parse({
+					domain: "app.example.com",
+					appId: APP_A,
+					compose: file,
+					yes: true,
+				}),
+				context,
+			);
+			expect(code).toBe(0);
+			expect(out.stdout).toContain(`Updated ${file}.`);
+			expect(out.stdout).not.toContain("../");
+		} finally {
+			rmSync(elsewhere, { recursive: true, force: true });
+		}
+	});
+
 	test("already configured: nothing is written", async () => {
 		post.mockResolvedValue({ ...merge, already_configured: true });
 		const { promise, out } = run({ yes: true }, false);
