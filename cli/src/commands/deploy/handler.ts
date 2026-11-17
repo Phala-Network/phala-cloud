@@ -73,7 +73,7 @@ import {
 	resolveWritableComposeFile,
 	unifiedDiff,
 	writeFileAtomic,
-} from "./compose-write-back";
+} from "@/src/lib/compose-file";
 import {
 	type DevOsMode,
 	type DevOsPlan,

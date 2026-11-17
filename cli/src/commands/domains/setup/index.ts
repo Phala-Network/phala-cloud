@@ -12,10 +12,11 @@ import {
 	type DomainsSetupCommandInput,
 } from "./command";
 import {
-	insertIngressService,
+	resolveWritableComposeFile,
 	unifiedDiff,
 	writeFileAtomic,
-} from "./compose-insert";
+} from "@/src/lib/compose-file";
+import { insertComposeService } from "@/src/lib/compose-text";
 
 const DEFAULT_COMPOSE_FILES = ["docker-compose.yml", "docker-compose.yaml"];
 
@@ -78,8 +79,8 @@ async function runDomainsSetupCommand(
 				"The server did not return an ingress service to add. Update the CLI and try again.",
 			);
 		}
-		const updated = insertIngressService(original, {
-			serviceName: merge.ingress_service_name,
+		const updated = insertComposeService(original, {
+			name: merge.ingress_service_name,
 			service: merge.ingress_service,
 			volumes: merge.top_level_volumes,
 		});
@@ -128,7 +129,13 @@ async function runDomainsSetupCommand(
 			}
 		}
 
-		writeFileAtomic(composePath, updated);
+		const target = resolveWritableComposeFile(composePath);
+		if (!target) {
+			throw new Error(
+				`${label} is not a regular file, so the changes cannot be written back to it.`,
+			);
+		}
+		writeFileAtomic(target, updated);
 
 		if (input.json) {
 			context.success({ ...summary, changed: true });

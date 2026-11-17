@@ -1,5 +1,5 @@
 /**
- * Atomic compose write-back and the unified diff shown for it.
+ * Compose file I/O: atomic write-back and the unified diff shown for it.
  */
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -10,7 +10,7 @@ import {
 	resolveWritableComposeFile,
 	unifiedDiff,
 	writeFileAtomic,
-} from "./compose-write-back";
+} from "./compose-file";
 
 let dir: string;
 
