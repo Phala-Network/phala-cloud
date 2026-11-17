@@ -47,6 +47,7 @@ function catalogEntry(
 		slug: `dstack-${overrides.version}`,
 		version: overrides.version,
 		is_dev: false,
+		requires_gpu: false,
 		os_image_hash: null,
 		...overrides,
 	};
@@ -75,10 +76,49 @@ const CATALOG: OsImageCatalogEntry[] = [
 ];
 
 describe("resolveDevOsPlan", () => {
-	test("rejects --dev-os without a pinned image", () => {
-		expect(() => resolveDevOsPlan(undefined, CATALOG)).toThrow(
-			/needs an explicit OS image/,
+	test("without an image picks the newest dev-box release", () => {
+		const catalog = [
+			catalogEntry({ version: "0.6.1", slug: "dstack-0.6.1" }),
+			catalogEntry({ version: "0.6.4", slug: "dstack-0.6.4" }),
+			catalogEntry({ version: "0.6.3", slug: "dstack-0.6.3" }),
+			catalogEntry({ version: "0.5.7", slug: "dstack-0.5.7" }),
+			catalogEntry({
+				version: "0.10.0",
+				slug: "dstack-dev-0.10.0",
+				is_dev: true,
+			}),
+		];
+		expect(resolveDevOsPlan(undefined, catalog)).toEqual({
+			mode: "dev-box",
+			image: "dstack-0.6.4",
+			defaulted: true,
+		});
+	});
+
+	test("without an image prefers the image that needs no GPU on a tie", () => {
+		const catalog = [
+			catalogEntry({
+				version: "0.6.4",
+				slug: "dstack-nvidia-0.6.4",
+				requires_gpu: true,
+			}),
+			catalogEntry({ version: "0.6.4", slug: "dstack-0.6.4" }),
+		];
+		expect(resolveDevOsPlan(undefined, catalog).image).toBe("dstack-0.6.4");
+		expect(resolveDevOsPlan(undefined, [...catalog].reverse()).image).toBe(
+			"dstack-0.6.4",
 		);
+	});
+
+	test("without an image fails when the catalog has no dev-box release", () => {
+		expect(() => resolveDevOsPlan(undefined, [])).toThrow(
+			/pass one with --image/,
+		);
+		expect(() =>
+			resolveDevOsPlan(undefined, [
+				catalogEntry({ version: "0.5.7", slug: "dstack-0.5.7" }),
+			]),
+		).toThrow(/no dstack release with dev-box support/);
 	});
 
 	test("rejects an image the catalog does not know", () => {

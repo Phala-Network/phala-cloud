@@ -9,6 +9,7 @@ import {
 	afterAll,
 	afterEach,
 	beforeAll,
+	beforeEach,
 	describe,
 	expect,
 	mock,
@@ -76,6 +77,23 @@ const OS_IMAGES = {
 			requires_gpu: false,
 		},
 		{
+			// Same release as the next entry; --dev must prefer the one without GPU.
+			name: "dstack-nvidia-0.6.3",
+			slug: "dstack-nvidia-0.6.3",
+			version: "0.6.3",
+			os_image_hash: "ee".repeat(32),
+			is_dev: false,
+			requires_gpu: true,
+		},
+		{
+			name: "dstack-0.6.3",
+			slug: "dstack-0.6.3",
+			version: "0.6.3",
+			os_image_hash: "ff".repeat(32),
+			is_dev: false,
+			requires_gpu: false,
+		},
+		{
 			// A release with no dev variant at all.
 			name: "prod-0.5.4",
 			slug: "dstack-0.5.4",
@@ -116,7 +134,9 @@ let composePath: string;
 let previousCloudDir: string | undefined;
 let appComposePath: string;
 let stdout = "";
+let stderr = "";
 // Per-test response for GET requests (CVM info, operations); defaults to 404.
+let osImagesResponse: unknown = OS_IMAGES;
 let respondGet: ((path: string) => Response) | undefined;
 
 beforeAll(async () => {
@@ -139,7 +159,7 @@ beforeAll(async () => {
 						});
 			}
 			if (req.method === "GET" && url.pathname === "/api/v1/os-images") {
-				return Response.json(OS_IMAGES);
+				return Response.json(osImagesResponse);
 			}
 			if (req.method === "GET" && respondGet) return respondGet(url.pathname);
 			return Response.json({ detail: "unexpected" }, { status: 404 });
@@ -166,10 +186,18 @@ afterAll(async () => {
 	await fs.remove(tmpDir);
 });
 
+// `--dev-os` writes the dev box into the compose file it deploys; every test
+// starts from the original.
+beforeEach(async () => {
+	await fs.writeFile(composePath, COMPOSE);
+});
+
 afterEach(() => {
 	requests = [];
 	stdout = "";
+	stderr = "";
 	respondGet = undefined;
+	osImagesResponse = OS_IMAGES;
 });
 
 async function deploy(input: Record<string, unknown>) {
@@ -188,7 +216,12 @@ async function deploy(input: Record<string, unknown>) {
 				return true;
 			},
 		},
-		stderr: { write: () => true },
+		stderr: {
+			write: (chunk: string) => {
+				stderr += chunk;
+				return true;
+			},
+		},
 		failWithError: (error: unknown) => {
 			failure = error;
 		},
@@ -442,23 +475,40 @@ describe("phala deploy (create)", () => {
 
 		expect(failure).toBeUndefined();
 		expect(exitCode).toBe(0);
-		// Keyed by the server's vm_uuid, and the compose file on disk is
-		// untouched: the record is what an update has to work from.
+		// Keyed by the server's vm_uuid: the record is what an update without
+		// the flag works from.
 		expect(recallDevOsMode(CREATED_CVM.vm_uuid)).toBe("dev-box");
-		expect(await fs.readFile(composePath, "utf8")).toBe(COMPOSE);
 	});
 
-	test("requires a pinned image for --dev-os", async () => {
+	test("--dev without --image pins the newest dev-box release and writes the compose back", async () => {
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			devOs: true,
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		const body = prepareRequest().body as Record<string, unknown>;
+		// 0.6.3 exists with and without a GPU requirement; the plain one wins.
+		expect(body.image).toBe("dstack-0.6.3");
+		expect(body.prefer_dev).toBe(false);
+		const composeFile = body.compose_file as Record<string, unknown>;
+		expect(composeFile.docker_compose_file as string).toContain("  dev-box:");
+		expect(await fs.readFile(composePath, "utf8")).toContain("  dev-box:");
+		// --json keeps stdout a single JSON document.
+		expect(JSON.parse(stdout).success).toBe(true);
+	});
+
+	test("--dev without --image fails when no release has dev-box support", async () => {
+		osImagesResponse = { ...OS_IMAGES, items: [] };
 		const { exitCode, failure } = await deploy({
 			compose: composePath,
 			devOs: true,
 		});
 
 		expect(exitCode).toBe(1);
-		expect((failure as Error).message).toContain(
-			"--dev-os needs an explicit OS image",
-		);
-		expect(requests).toEqual([]);
+		expect((failure as Error).message).toContain("pass one with --image");
+		expect(requests.some((request) => request.method === "POST")).toBe(false);
 	});
 
 	test("rejects an OS image that is not in the catalog", async () => {
@@ -684,5 +734,168 @@ describe("phala deploy (create)", () => {
 			expect(exitCode).toBe(0);
 			expect(requests.filter((r) => r.method === "GET")).toEqual([]);
 		});
+	});
+});
+
+describe("phala deploy --dev-os writes the compose file", () => {
+	function deployedCompose(): string {
+		const body = prepareRequest().body as Record<string, unknown>;
+		const composeFile = body.compose_file as Record<string, unknown>;
+		return composeFile.docker_compose_file as string;
+	}
+
+	test("saves the injected compose, shows the diff and deploys the saved content", async () => {
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			devOs: true,
+			image: "dstack-0.6.0",
+			json: false,
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		const written = await fs.readFile(composePath, "utf8");
+		expect(written).toStartWith(COMPOSE);
+		expect(written).toContain("  dev-box:");
+		// What the user can review is what runs.
+		expect(deployedCompose()).toBe(written);
+		expect(stderr).toContain(`--- ${composePath}`);
+		expect(stderr).toContain("+  dev-box:");
+		expect(stderr).not.toContain("-services:");
+		// No leftover temporary file next to it.
+		expect(await fs.readdir(tmpDir)).not.toContain(".docker-compose.yml.tmp");
+	});
+
+	test("reports the written file in the JSON result and keeps stdout pure", async () => {
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			devOs: true,
+			image: "dstack-0.6.0",
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		const result = JSON.parse(stdout);
+		expect(result.success).toBe(true);
+		expect(result.compose_file_updated).toBe(composePath);
+		// The diff is human output only.
+		expect(stderr).toBe("");
+		expect(deployedCompose()).toBe(await fs.readFile(composePath, "utf8"));
+	});
+
+	test("writes nothing when the compose already has the dev box", async () => {
+		const first = await deploy({
+			compose: composePath,
+			devOs: true,
+			image: "dstack-0.6.0",
+		});
+		expect(first.exitCode).toBe(0);
+		const written = await fs.readFile(composePath, "utf8");
+		const inode = (await fs.stat(composePath)).ino;
+		requests = [];
+		stdout = "";
+		stderr = "";
+
+		const second = await deploy({
+			compose: composePath,
+			devOs: true,
+			image: "dstack-0.6.0",
+			json: false,
+		});
+
+		expect(second.failure).toBeUndefined();
+		expect(second.exitCode).toBe(0);
+		expect(await fs.readFile(composePath, "utf8")).toBe(written);
+		// Not even rewritten with the same bytes.
+		expect((await fs.stat(composePath)).ino).toBe(inode);
+		expect(stderr).toBe("");
+		expect(stdout).not.toContain("compose_file_updated");
+		expect(deployedCompose()).toBe(written);
+	});
+
+	test("keeps CRLF line endings, a missing final newline and a symlink", async () => {
+		const realPath = path.join(tmpDir, "crlf-real.yml");
+		const linkPath = path.join(tmpDir, "crlf-link.yml");
+		const original = "services:\r\n  app:\r\n    image: nginx";
+		await fs.writeFile(realPath, original);
+		await fs.remove(linkPath);
+		await fs.symlink(realPath, linkPath);
+
+		const { exitCode, failure } = await deploy({
+			compose: linkPath,
+			devOs: true,
+			image: "dstack-0.6.0",
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect((await fs.lstat(linkPath)).isSymbolicLink()).toBe(true);
+		const written = await fs.readFile(realPath, "utf8");
+		expect(written).toStartWith(`${original}\r\n  dev-box:`);
+		expect(written).not.toMatch(/[^\r]\n/);
+		expect(written.endsWith("\n")).toBe(false);
+		expect(deployedCompose()).toBe(written);
+	});
+
+	test("does not write a source that is not a regular file", async () => {
+		const fifoPath = path.join(tmpDir, "compose.fifo");
+		await fs.remove(fifoPath);
+		const mkfifo = Bun.spawnSync(["mkfifo", fifoPath]);
+		expect(mkfifo.exitCode).toBe(0);
+		// A writer end so the handler's read of the pipe completes.
+		const feeder = Bun.spawn([
+			"sh",
+			"-c",
+			`cat "$1" > "$2"`,
+			"sh",
+			composePath,
+			fifoPath,
+		]);
+
+		const { exitCode, failure } = await deploy({
+			compose: fifoPath,
+			devOs: true,
+			image: "dstack-0.6.0",
+			json: false,
+		});
+		await feeder.exited;
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		// The payload still carries the dev box; the local file stays as it was.
+		expect(deployedCompose()).toContain("  dev-box:");
+		expect(await fs.readFile(composePath, "utf8")).toBe(COMPOSE);
+		expect(stderr).not.toContain("+++");
+	});
+
+	test("does not touch an --app-compose document", async () => {
+		const { exitCode, failure } = await deploy({
+			appCompose: appComposePath,
+			devOs: true,
+			image: "dstack-0.6.0",
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(await fs.readFile(appComposePath, "utf8")).toBe(APP_COMPOSE);
+		expect(stdout).not.toContain("compose_file_updated");
+	});
+
+	test("does not write for the pre-0.6 dev image", async () => {
+		// The dev image needs a key; pass one so the test never reads ~/.ssh.
+		const pubkeyPath = path.join(tmpDir, "id_ed25519.pub");
+		await fs.writeFile(pubkeyPath, "ssh-ed25519 AAAA test@example\n");
+
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			devOs: true,
+			image: "dstack-0.5.7",
+			sshPubkey: pubkeyPath,
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(await fs.readFile(composePath, "utf8")).toBe(COMPOSE);
+		expect(stdout).not.toContain("compose_file_updated");
 	});
 });

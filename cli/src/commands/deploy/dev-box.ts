@@ -22,7 +22,13 @@
  * survive deployment.
  */
 
-import { parse } from "yaml";
+import {
+	asMapping,
+	declaredVolumeNames,
+	insertComposeService,
+	parseCompose,
+	type YamlMapping,
+} from "@/src/lib/compose-text";
 
 /**
  * Marks a service as the dev box. The backend detects the dev box from these
@@ -88,8 +94,6 @@ const DEV_BOX_REQUIRED_MOUNTS: ReadonlyArray<readonly [string, string]> = [
  */
 const DEV_BOX_DISQUALIFYING_FIELDS = ["command", "profiles"] as const;
 
-const DEFAULT_INDENT_STEP = 2;
-
 /** dstack release that replaced the dev OS image with the dev-box container. */
 const DEV_BOX_MIN_VERSION: readonly number[] = [0, 6, 0];
 
@@ -104,6 +108,7 @@ export interface OsImageCatalogEntry {
 	readonly slug: string;
 	readonly version: string;
 	readonly is_dev: boolean;
+	readonly requires_gpu: boolean;
 	readonly os_image_hash: string | null;
 }
 
@@ -117,6 +122,8 @@ export interface DevOsPlan {
 	 * choice and the caller's own image stands.
 	 */
 	readonly image?: string;
+	/** True when no image was pinned and the plan chose the newest suitable one. */
+	readonly defaulted?: boolean;
 }
 
 /**
@@ -192,23 +199,47 @@ export function findOsImage(
 }
 
 /**
- * Require the image `--dev-os` needs before anything is fetched from the API.
- * An unpinned image would leave the release unknown, and a guess would deploy
- * the wrong SSH setup.
+ * The image `--dev` uses when none is pinned: the newest dstack release that
+ * has dev-box support, never a dev OS image.
+ *
+ * Among images sharing the newest release, one without a GPU requirement wins:
+ * the CLI cannot tell from the flags whether the deployment targets a GPU, so
+ * the plain image is the safe default.
  */
-export function requireDevOsImage(identifier: string | undefined): string {
-	if (!identifier) {
+function pickDefaultDevBoxImage(
+	catalog: readonly OsImageCatalogEntry[],
+): OsImageCatalogEntry {
+	const candidates = catalog.flatMap((entry) => {
+		const version = parseImageVersion(entry.version);
+		return version &&
+			!isDevImage(entry) &&
+			compareVersions(version, DEV_BOX_MIN_VERSION) >= 0
+			? [{ entry, version }]
+			: [];
+	});
+	const best = candidates.reduce<(typeof candidates)[number] | undefined>(
+		(current, candidate) => {
+			if (!current) return candidate;
+			const byVersion = compareVersions(candidate.version, current.version);
+			if (byVersion !== 0) return byVersion > 0 ? candidate : current;
+			return current.entry.requires_gpu && !candidate.entry.requires_gpu
+				? candidate
+				: current;
+		},
+		undefined,
+	);
+	if (!best) {
 		throw new Error(
-			`--dev-os needs an explicit OS image so its dstack release is known. ${OS_IMAGES_HINT}`,
+			`--dev found no dstack release with dev-box support (0.6 or newer) in the OS image catalog. ${OS_IMAGES_HINT}`,
 		);
 	}
-	return identifier;
+	return best.entry;
 }
 
 /**
  * The dev OS images of the same dstack release.
  *
- * Below dstack 0.6 sshd lives in the image, so `--dev-os` cannot be satisfied
+ * Below dstack 0.6 sshd lives in the image, so `--dev` cannot be satisfied
  * by a production image of that release. The catalog marks the dev variants
  * with `is_dev`; older rows only carry it in the name.
  */
@@ -227,7 +258,8 @@ function findDevImageVariants(
 }
 
 /**
- * Decide how `--dev-os` is satisfied for the OS image the user pinned.
+ * Decide how `--dev` is satisfied for the OS image the user pinned, or, when
+ * none is pinned, pick the newest release with dev-box support.
  *
  * The release decides it, never a guess: an image that is not in the catalog
  * would leave the CLI unable to tell whether to prefer a dev image or to inject
@@ -242,7 +274,14 @@ export function resolveDevOsPlan(
 	identifier: string | undefined,
 	catalog: readonly OsImageCatalogEntry[],
 ): DevOsPlan {
-	const requested = requireDevOsImage(identifier);
+	if (identifier === undefined) {
+		return {
+			mode: "dev-box",
+			image: pickDefaultDevBoxImage(catalog).slug,
+			defaulted: true,
+		};
+	}
+	const requested = identifier;
 	const image = findOsImage(catalog, requested);
 	if (!image) {
 		throw new Error(
@@ -280,37 +319,6 @@ export function resolveDevOsPlan(
 	throw new Error(
 		`--dev-os cannot use the OS image "${requested}": dstack releases below 0.6 take SSH from a dev OS image, and the catalog has no dev variant of "${image.version}". ${OS_IMAGES_HINT}`,
 	);
-}
-
-/** A parsed YAML mapping. */
-type YamlMapping = Record<string, unknown>;
-
-function asMapping(value: unknown): YamlMapping | undefined {
-	if (typeof value !== "object" || value === null || Array.isArray(value)) {
-		return undefined;
-	}
-	return value as YamlMapping;
-}
-
-/**
- * Parse a compose file the way the backend does.
- *
- * `version: "1.1"` matches the PyYAML SafeLoader behind the backend's detector:
- * `privileged: yes` is a boolean there and must be one here too. `merge: true`
- * resolves `<<` keys, so a dev box declared through an anchor or an alias is
- * visible instead of looking like an ordinary service. `uniqueKeys: false`
- * keeps a repeated key readable (the last one wins), which is what PyYAML does;
- * refusing those files would reject composes the backend accepts.
- *
- * Throws on YAML the parser rejects; callers decide whether that refusal is
- * fatal (a write) or means "no dev box" (detection).
- */
-function parseCompose(composeYaml: string): unknown {
-	return parse(composeYaml, {
-		version: "1.1",
-		merge: true,
-		uniqueKeys: false,
-	});
 }
 
 /** The services of a compose, or undefined when the section is not a mapping. */
@@ -589,224 +597,20 @@ function checkDevBoxCompose(composeYaml: string): boolean {
 	return false;
 }
 
-/* ------------------------------------------------------------------------- *
- * Text editing: everything below only runs on a compose that needs the dev box
- * added, and only touches the two places described at the top of the file.
- * ------------------------------------------------------------------------- */
-
-interface BlockSpan {
-	/** Index of the line that opens the block (`key:`). */
-	readonly keyIndex: number;
-	/** Exclusive index of the block's last line. */
-	readonly endIndex: number;
-	/** Indentation of the block's direct children; undefined when it has none. */
-	readonly childIndent: number | undefined;
-}
-
-interface ServiceBlock extends BlockSpan {
-	readonly name: string;
-}
-
-const TOP_LEVEL_KEY = /^["']?([A-Za-z0-9_.-]+)["']?:(.*)$/;
-const PROPERTY = /^["']?([A-Za-z0-9_.-]+)["']?\s*:\s*(.*)$/;
-
-function indentOf(line: string): number {
-	let count = 0;
-	while (line[count] === " ") count += 1;
-	return count;
-}
-
-function isContentLine(line: string): boolean {
-	const text = line.trim();
-	return text !== "" && !text.startsWith("#");
-}
-
-function splitLines(composeYaml: string): { lines: string[]; eol: string } {
+/** The service the CLI adds: the canonical dev box, as a compose service mapping. */
+function devBoxService(): Record<string, unknown> {
 	return {
-		lines: composeYaml.split(/\r?\n/),
-		eol: composeYaml.includes("\r\n") ? "\r\n" : "\n",
+		image: DEV_BOX_IMAGE,
+		restart: "unless-stopped",
+		...Object.fromEntries(DEV_BOX_MARKERS),
+		environment: [`${DEV_BOX_ENV_KEY}=\${DSTACK_AUTHORIZED_KEYS}`],
+		volumes: [
+			"/:/host:rslave",
+			"/var/run/docker.sock:/var/run/docker.sock",
+			"/dev/pts:/dev/pts",
+			...DEV_BOX_NAMED_VOLUMES.map(([name, mount]) => `${name}:${mount}`),
+		],
 	};
-}
-
-function shallowestIndent(
-	lines: string[],
-	from: number,
-	to: number,
-): number | undefined {
-	let indent: number | undefined;
-	for (let i = from; i < to; i += 1) {
-		if (!isContentLine(lines[i])) continue;
-		const current = indentOf(lines[i]);
-		if (indent === undefined || current < indent) indent = current;
-	}
-	return indent;
-}
-
-function findTopLevelBlock(
-	lines: string[],
-	key: string,
-): BlockSpan | undefined {
-	const keyIndex = lines.findIndex((line) => {
-		if (indentOf(line) !== 0 || !isContentLine(line)) return false;
-		return TOP_LEVEL_KEY.exec(line)?.[1] === key;
-	});
-	if (keyIndex === -1) return undefined;
-
-	// A block can open with an anchor or a tag (`services: &all`) and still be
-	// block style; only the rest of the line decides.
-	const rest = (TOP_LEVEL_KEY.exec(lines[keyIndex])?.[2] ?? "")
-		.trim()
-		.replace(/^&\S*/, "")
-		.replace(/^!\S*/, "")
-		.trim();
-	if (rest !== "" && !rest.startsWith("#")) {
-		throw new Error(
-			`Cannot add the dev box to this docker compose file: its "${key}" section is written inline. Rewrite that section in block style, or add the dev-box service by hand.`,
-		);
-	}
-
-	let endIndex = lines.length;
-	for (let i = keyIndex + 1; i < lines.length; i += 1) {
-		if (indentOf(lines[i]) !== 0 || !isContentLine(lines[i])) continue;
-		endIndex = i;
-		break;
-	}
-
-	return {
-		keyIndex,
-		endIndex,
-		childIndent: shallowestIndent(lines, keyIndex + 1, endIndex),
-	};
-}
-
-function listServices(lines: string[], services: BlockSpan): ServiceBlock[] {
-	const serviceIndent = services.childIndent;
-	if (serviceIndent === undefined) return [];
-
-	const starts: number[] = [];
-	for (let i = services.keyIndex + 1; i < services.endIndex; i += 1) {
-		if (isContentLine(lines[i]) && indentOf(lines[i]) === serviceIndent) {
-			starts.push(i);
-		}
-	}
-
-	return starts.map((start, position) => {
-		const endIndex =
-			position + 1 < starts.length
-				? (starts[position + 1] as number)
-				: services.endIndex;
-		return {
-			name: PROPERTY.exec(lines[start].trim())?.[1] ?? lines[start].trim(),
-			keyIndex: start,
-			endIndex,
-			childIndent: shallowestIndent(lines, start + 1, endIndex),
-		};
-	});
-}
-
-function indentStep(lines: string[], services: BlockSpan): number {
-	const serviceIndent = services.childIndent;
-	if (serviceIndent === undefined) return DEFAULT_INDENT_STEP;
-	for (const service of listServices(lines, services)) {
-		const propertyIndent = service.childIndent;
-		if (propertyIndent !== undefined && propertyIndent > serviceIndent) {
-			return propertyIndent - serviceIndent;
-		}
-	}
-	return DEFAULT_INDENT_STEP;
-}
-
-function devBoxServiceLines(serviceIndent: number, step: number): string[] {
-	const namePad = " ".repeat(serviceIndent);
-	const propertyPad = " ".repeat(serviceIndent + step);
-	const itemPad = " ".repeat(serviceIndent + step + step);
-	return [
-		`${namePad}${DEV_BOX_SERVICE_NAME}:`,
-		`${propertyPad}image: ${DEV_BOX_IMAGE}`,
-		`${propertyPad}restart: unless-stopped`,
-		...DEV_BOX_MARKERS.map(([key, value]) => `${propertyPad}${key}: ${value}`),
-		`${propertyPad}environment:`,
-		`${itemPad}- ${DEV_BOX_ENV_KEY}=\${DSTACK_AUTHORIZED_KEYS}`,
-		`${propertyPad}volumes:`,
-		`${itemPad}- /:/host:rslave`,
-		`${itemPad}- /var/run/docker.sock:/var/run/docker.sock`,
-		`${itemPad}- /dev/pts:/dev/pts`,
-		...DEV_BOX_NAMED_VOLUMES.map(
-			([name, mount]) => `${itemPad}- ${name}:${mount}`,
-		),
-	];
-}
-
-function lastContentIndex(lines: string[], from: number, to: number): number {
-	for (let i = to - 1; i >= from; i -= 1) {
-		if (isContentLine(lines[i])) return i;
-	}
-	return from - 1;
-}
-
-function insertLines(
-	lines: string[],
-	index: number,
-	block: string[],
-): string[] {
-	return [...lines.slice(0, index), ...block, ...lines.slice(index)];
-}
-
-/**
- * The top-level volume names a compose declares, after merge keys and anchors
- * are resolved.
- *
- * Reading them from the parsed document rather than from the text is what keeps
- * a merge inherited definition safe: `volumes: {<<: *storage}` owns every name
- * `storage` brings with it, and appending a bare `home:` beside the merge would
- * silently replace the operator's volume with an empty default one.
- */
-function declaredVolumeNames(composeYaml: string): string[] {
-	const root = asMapping(parseCompose(composeYaml));
-	const volumes = root?.volumes;
-	if (volumes === undefined || volumes === null) return [];
-	const mapping = asMapping(volumes);
-	if (!mapping) {
-		throw new Error(
-			'Cannot add the dev box to this docker compose file: its "volumes" section is not a mapping. Rewrite it in block style, or add the dev-box volumes by hand.',
-		);
-	}
-	return Object.keys(mapping);
-}
-
-/**
- * Add a top-level `volumes` section holding the two named volumes the dev box
- * mounts. A compose that already uses either name would hand the dev box
- * somebody else's data, so that is a conflict rather than a merge.
- */
-function addDevBoxVolumes(composeYaml: string, lines: string[]): string[] {
-	const declared = declaredVolumeNames(composeYaml);
-	const conflict = DEV_BOX_VOLUME_NAMES.find((name) => declared.includes(name));
-	if (conflict !== undefined) {
-		throw new Error(
-			`The compose already declares a top-level volume named "${conflict}", which the dev box needs for its own data. Rename it before deploying with --dev-os.`,
-		);
-	}
-
-	const volumes = findTopLevelBlock(lines, "volumes");
-	if (!volumes) {
-		const block = [
-			"volumes:",
-			...DEV_BOX_VOLUME_NAMES.map((name) => `  ${name}:`),
-		];
-		const insertAt = lastContentIndex(lines, 0, lines.length) + 1;
-		return insertLines(lines, insertAt, block);
-	}
-
-	const block = DEV_BOX_VOLUME_NAMES.map(
-		(name) =>
-			`${" ".repeat(volumes.childIndent ?? DEFAULT_INDENT_STEP)}${name}:`,
-	);
-	const insertAt =
-		volumes.childIndent === undefined
-			? volumes.keyIndex + 1
-			: lastContentIndex(lines, volumes.keyIndex + 1, volumes.endIndex) + 1;
-	return insertLines(lines, insertAt, block);
 }
 
 /**
@@ -817,30 +621,24 @@ function addDevBoxVolumes(composeYaml: string, lines: string[]): string[] {
  * included). Anything the CLI would have to overwrite or guess about throws
  * instead, and so does YAML the parser rejects — a compose the CLI cannot read
  * is never a compose to add a second dev box to.
+ *
+ * A compose that already uses either of the dev box's volume names would hand
+ * it somebody else's data, so that is a conflict rather than a merge.
  */
 export function injectDevBoxService(composeYaml: string): string {
 	if (checkDevBoxCompose(composeYaml)) return composeYaml;
 
-	const { lines, eol } = splitLines(composeYaml);
-	if (findTopLevelBlock(lines, "services") === undefined) {
+	const declared = declaredVolumeNames(composeYaml);
+	const conflict = DEV_BOX_VOLUME_NAMES.find((name) => declared.includes(name));
+	if (conflict !== undefined) {
 		throw new Error(
-			"Cannot add the dev box to this docker compose file: it has no top-level services section.",
+			`The compose already declares a top-level volume named "${conflict}", which the dev box needs for its own data. Rename it before deploying with --dev-os.`,
 		);
 	}
 
-	const withVolumes = addDevBoxVolumes(composeYaml, lines);
-	const services = findTopLevelBlock(withVolumes, "services");
-	if (services === undefined) {
-		throw new Error(
-			"Cannot add the dev box to this docker compose file: it has no top-level services section.",
-		);
-	}
-	const step = indentStep(withVolumes, services);
-	const block = devBoxServiceLines(
-		services.childIndent ?? DEFAULT_INDENT_STEP,
-		step,
-	);
-	const insertAt =
-		lastContentIndex(withVolumes, services.keyIndex + 1, services.endIndex) + 1;
-	return insertLines(withVolumes, insertAt, block).join(eol);
+	return insertComposeService(composeYaml, {
+		name: DEV_BOX_SERVICE_NAME,
+		service: devBoxService(),
+		volumes: Object.fromEntries(DEV_BOX_VOLUME_NAMES.map((name) => [name, {}])),
+	});
 }

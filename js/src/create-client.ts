@@ -241,6 +241,54 @@ import {
   type SyncGithubSshKeysResponse,
 } from "./actions/ssh_keys/sync_github_ssh_keys";
 import type { SshKey } from "./actions/ssh_keys/list_ssh_keys";
+import {
+  listDomains,
+  safeListDomains,
+  type ListDomainsRequest,
+  type ListDomainsResponse,
+} from "./actions/domains/list_domains";
+import {
+  listAppDomains,
+  safeListAppDomains,
+  type ListAppDomainsRequest,
+  type ListAppDomainsResponse,
+} from "./actions/domains/list_app_domains";
+import {
+  getAppDomainGuide,
+  safeGetAppDomainGuide,
+  type GetAppDomainGuideRequest,
+  type AppDomainGuide,
+} from "./actions/domains/get_app_domain_guide";
+import {
+  preflightAppDomain,
+  safePreflightAppDomain,
+  type PreflightAppDomainRequest,
+  type PreflightAppDomainResponse,
+} from "./actions/domains/preflight_app_domain";
+import {
+  createAppDomain,
+  safeCreateAppDomain,
+  type CreateAppDomainRequest,
+  type CreateAppDomainResponse,
+} from "./actions/domains/create_app_domain";
+import {
+  verifyAppDomain,
+  safeVerifyAppDomain,
+  type VerifyAppDomainRequest,
+  type VerifyAppDomainResponse,
+} from "./actions/domains/verify_app_domain";
+import {
+  deleteAppDomain,
+  safeDeleteAppDomain,
+  type DeleteAppDomainRequest,
+  type DeleteAppDomainResponse,
+} from "./actions/domains/delete_app_domain";
+import {
+  mergeAppDomainIngress,
+  safeMergeAppDomainIngress,
+  type MergeAppDomainIngressRequest,
+  type MergeAppDomainIngressResponse,
+} from "./actions/domains/merge_app_domain_ingress";
 
 import {
   getOsImages,
@@ -582,6 +630,22 @@ function buildClient<V extends ApiVersion>(client: BaseClient<V>): Client<V> {
     readonly safeDeleteSshKey: typeof safeDeleteSshKey;
     readonly syncGithubSshKeys: typeof syncGithubSshKeys;
     readonly safeSyncGithubSshKeys: typeof safeSyncGithubSshKeys;
+    readonly listDomains: typeof listDomains;
+    readonly safeListDomains: typeof safeListDomains;
+    readonly listAppDomains: typeof listAppDomains;
+    readonly safeListAppDomains: typeof safeListAppDomains;
+    readonly getAppDomainGuide: typeof getAppDomainGuide;
+    readonly safeGetAppDomainGuide: typeof safeGetAppDomainGuide;
+    readonly preflightAppDomain: typeof preflightAppDomain;
+    readonly safePreflightAppDomain: typeof safePreflightAppDomain;
+    readonly createAppDomain: typeof createAppDomain;
+    readonly safeCreateAppDomain: typeof safeCreateAppDomain;
+    readonly verifyAppDomain: typeof verifyAppDomain;
+    readonly safeVerifyAppDomain: typeof safeVerifyAppDomain;
+    readonly deleteAppDomain: typeof deleteAppDomain;
+    readonly safeDeleteAppDomain: typeof safeDeleteAppDomain;
+    readonly mergeAppDomainIngress: typeof mergeAppDomainIngress;
+    readonly safeMergeAppDomainIngress: typeof safeMergeAppDomainIngress;
     readonly getOsImages: typeof getOsImages;
     readonly safeGetOsImages: typeof safeGetOsImages;
     readonly getKmsOnChainDetail: typeof getKmsOnChainDetail;
@@ -683,6 +747,22 @@ function buildClient<V extends ApiVersion>(client: BaseClient<V>): Client<V> {
     safeDeleteSshKey,
     syncGithubSshKeys,
     safeSyncGithubSshKeys,
+    listDomains,
+    safeListDomains,
+    listAppDomains,
+    safeListAppDomains,
+    getAppDomainGuide,
+    safeGetAppDomainGuide,
+    preflightAppDomain,
+    safePreflightAppDomain,
+    createAppDomain,
+    safeCreateAppDomain,
+    verifyAppDomain,
+    safeVerifyAppDomain,
+    deleteAppDomain,
+    safeDeleteAppDomain,
+    mergeAppDomainIngress,
+    safeMergeAppDomainIngress,
     getOsImages,
     safeGetOsImages,
     getKmsOnChainDetail,
@@ -1618,6 +1698,167 @@ export interface Client<V extends ApiVersion = DefaultApiVersion>
     SafeResult<z.infer<T>>
   >;
   safeSyncGithubSshKeys(parameters: { schema: false }): Promise<SafeResult<unknown>>;
+
+  // Custom Domains
+  listDomains(request?: ListDomainsRequest): Promise<ListDomainsResponse>;
+  listDomains<T extends z.ZodTypeAny>(
+    request: ListDomainsRequest | undefined,
+    parameters: { schema: T },
+  ): Promise<z.infer<T>>;
+  listDomains(
+    request: ListDomainsRequest | undefined,
+    parameters: { schema: false },
+  ): Promise<unknown>;
+
+  safeListDomains(request?: ListDomainsRequest): Promise<SafeResult<ListDomainsResponse>>;
+  safeListDomains<T extends z.ZodTypeAny>(
+    request: ListDomainsRequest | undefined,
+    parameters: { schema: T },
+  ): Promise<SafeResult<z.infer<T>>>;
+  safeListDomains(
+    request: ListDomainsRequest | undefined,
+    parameters: { schema: false },
+  ): Promise<SafeResult<unknown>>;
+
+  listAppDomains(request: ListAppDomainsRequest): Promise<ListAppDomainsResponse>;
+  listAppDomains<T extends z.ZodTypeAny>(
+    request: ListAppDomainsRequest,
+    parameters: { schema: T },
+  ): Promise<z.infer<T>>;
+  listAppDomains(request: ListAppDomainsRequest, parameters: { schema: false }): Promise<unknown>;
+
+  safeListAppDomains(request: ListAppDomainsRequest): Promise<SafeResult<ListAppDomainsResponse>>;
+  safeListAppDomains<T extends z.ZodTypeAny>(
+    request: ListAppDomainsRequest,
+    parameters: { schema: T },
+  ): Promise<SafeResult<z.infer<T>>>;
+  safeListAppDomains(
+    request: ListAppDomainsRequest,
+    parameters: { schema: false },
+  ): Promise<SafeResult<unknown>>;
+
+  getAppDomainGuide(request: GetAppDomainGuideRequest): Promise<AppDomainGuide>;
+  getAppDomainGuide<T extends z.ZodTypeAny>(
+    request: GetAppDomainGuideRequest,
+    parameters: { schema: T },
+  ): Promise<z.infer<T>>;
+  getAppDomainGuide(
+    request: GetAppDomainGuideRequest,
+    parameters: { schema: false },
+  ): Promise<unknown>;
+
+  safeGetAppDomainGuide(request: GetAppDomainGuideRequest): Promise<SafeResult<AppDomainGuide>>;
+  safeGetAppDomainGuide<T extends z.ZodTypeAny>(
+    request: GetAppDomainGuideRequest,
+    parameters: { schema: T },
+  ): Promise<SafeResult<z.infer<T>>>;
+  safeGetAppDomainGuide(
+    request: GetAppDomainGuideRequest,
+    parameters: { schema: false },
+  ): Promise<SafeResult<unknown>>;
+
+  preflightAppDomain(request: PreflightAppDomainRequest): Promise<PreflightAppDomainResponse>;
+  preflightAppDomain<T extends z.ZodTypeAny>(
+    request: PreflightAppDomainRequest,
+    parameters: { schema: T },
+  ): Promise<z.infer<T>>;
+  preflightAppDomain(
+    request: PreflightAppDomainRequest,
+    parameters: { schema: false },
+  ): Promise<unknown>;
+
+  safePreflightAppDomain(
+    request: PreflightAppDomainRequest,
+  ): Promise<SafeResult<PreflightAppDomainResponse>>;
+  safePreflightAppDomain<T extends z.ZodTypeAny>(
+    request: PreflightAppDomainRequest,
+    parameters: { schema: T },
+  ): Promise<SafeResult<z.infer<T>>>;
+  safePreflightAppDomain(
+    request: PreflightAppDomainRequest,
+    parameters: { schema: false },
+  ): Promise<SafeResult<unknown>>;
+
+  createAppDomain(request: CreateAppDomainRequest): Promise<CreateAppDomainResponse>;
+  createAppDomain<T extends z.ZodTypeAny>(
+    request: CreateAppDomainRequest,
+    parameters: { schema: T },
+  ): Promise<z.infer<T>>;
+  createAppDomain(request: CreateAppDomainRequest, parameters: { schema: false }): Promise<unknown>;
+
+  safeCreateAppDomain(
+    request: CreateAppDomainRequest,
+  ): Promise<SafeResult<CreateAppDomainResponse>>;
+  safeCreateAppDomain<T extends z.ZodTypeAny>(
+    request: CreateAppDomainRequest,
+    parameters: { schema: T },
+  ): Promise<SafeResult<z.infer<T>>>;
+  safeCreateAppDomain(
+    request: CreateAppDomainRequest,
+    parameters: { schema: false },
+  ): Promise<SafeResult<unknown>>;
+
+  verifyAppDomain(request: VerifyAppDomainRequest): Promise<VerifyAppDomainResponse>;
+  verifyAppDomain<T extends z.ZodTypeAny>(
+    request: VerifyAppDomainRequest,
+    parameters: { schema: T },
+  ): Promise<z.infer<T>>;
+  verifyAppDomain(request: VerifyAppDomainRequest, parameters: { schema: false }): Promise<unknown>;
+
+  safeVerifyAppDomain(
+    request: VerifyAppDomainRequest,
+  ): Promise<SafeResult<VerifyAppDomainResponse>>;
+  safeVerifyAppDomain<T extends z.ZodTypeAny>(
+    request: VerifyAppDomainRequest,
+    parameters: { schema: T },
+  ): Promise<SafeResult<z.infer<T>>>;
+  safeVerifyAppDomain(
+    request: VerifyAppDomainRequest,
+    parameters: { schema: false },
+  ): Promise<SafeResult<unknown>>;
+
+  deleteAppDomain(request: DeleteAppDomainRequest): Promise<DeleteAppDomainResponse>;
+  deleteAppDomain<T extends z.ZodTypeAny>(
+    request: DeleteAppDomainRequest,
+    parameters: { schema: T },
+  ): Promise<z.infer<T>>;
+  deleteAppDomain(request: DeleteAppDomainRequest, parameters: { schema: false }): Promise<unknown>;
+
+  safeDeleteAppDomain(
+    request: DeleteAppDomainRequest,
+  ): Promise<SafeResult<DeleteAppDomainResponse>>;
+  safeDeleteAppDomain<T extends z.ZodTypeAny>(
+    request: DeleteAppDomainRequest,
+    parameters: { schema: T },
+  ): Promise<SafeResult<z.infer<T>>>;
+  safeDeleteAppDomain(
+    request: DeleteAppDomainRequest,
+    parameters: { schema: false },
+  ): Promise<SafeResult<unknown>>;
+
+  mergeAppDomainIngress(
+    request: MergeAppDomainIngressRequest,
+  ): Promise<MergeAppDomainIngressResponse>;
+  mergeAppDomainIngress<T extends z.ZodTypeAny>(
+    request: MergeAppDomainIngressRequest,
+    parameters: { schema: T },
+  ): Promise<z.infer<T>>;
+  mergeAppDomainIngress(
+    request: MergeAppDomainIngressRequest,
+    parameters: { schema: false },
+  ): Promise<unknown>;
+
+  safeMergeAppDomainIngress(
+    request: MergeAppDomainIngressRequest,
+  ): Promise<SafeResult<MergeAppDomainIngressResponse>>;
+  safeMergeAppDomainIngress<T extends z.ZodTypeAny>(
+    request: MergeAppDomainIngressRequest,
+    parameters: { schema: T },
+  ): Promise<SafeResult<z.infer<T>>>;
+  safeMergeAppDomainIngress(
+    request: MergeAppDomainIngressRequest,
+    parameters: { schema: false },
+  ): Promise<SafeResult<unknown>>;
 
   // OS Images
   getOsImages(request?: GetOsImagesRequest): Promise<GetOsImagesResponse>;

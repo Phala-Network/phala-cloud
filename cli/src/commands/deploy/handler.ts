@@ -70,12 +70,16 @@ import {
 	unknownInitScriptSlugMessage,
 } from "@/src/lib/init-script-files";
 import {
+	resolveWritableComposeFile,
+	unifiedDiff,
+	writeFileAtomic,
+} from "@/src/lib/compose-file";
+import {
 	type DevOsMode,
 	type DevOsPlan,
 	type OsImageCatalogEntry,
 	composeHasDevBoxMarkers,
 	injectDevBoxService,
-	requireDevOsImage,
 	resolveDevOsPlan,
 } from "./dev-box";
 import {
@@ -126,6 +130,8 @@ interface Options {
 	forceStop?: boolean;
 	sshPubkey?: string;
 	devOs?: boolean;
+	/** Set by the handler, not a flag: the compose file `--dev` edited. */
+	composeFileUpdated?: string;
 	publicLogs?: boolean;
 	publicSysinfo?: boolean;
 	publicTcbinfo?: boolean;
@@ -180,7 +186,7 @@ const CREATE_ONLY_FLAGS: ReadonlyArray<readonly [keyof Options, string]> = [
 	["customAppId", "--custom-app-id"],
 	["nonce", "--nonce"],
 	["keyProviderMode", "--key-provider-mode"],
-	// --dev-os is *not* here: a dev box lives only in the payload, never in the
+	// --dev is *not* here: a dev box lives only in the payload, never in the
 	// compose file on disk, so an update has to be able to re-add it.
 	["sshPubkey", "--ssh-pubkey"],
 	["fs", "--fs"],
@@ -425,7 +431,7 @@ async function readDockerComposeFile({
 }: {
 	dockerComposePath?: string;
 	interactive: boolean;
-}): Promise<string> {
+}): Promise<{ content: string; filePath: string }> {
 	// 1. If path is not provided and we're in interactive mode, try to detect it
 	if (!dockerComposePath) {
 		if (interactive) {
@@ -468,7 +474,10 @@ async function readDockerComposeFile({
 	}
 
 	// 3. Read and return the file content
-	return fs.readFileSync(dockerComposePath, "utf8");
+	return {
+		content: fs.readFileSync(dockerComposePath, "utf8"),
+		filePath: dockerComposePath,
+	};
 }
 
 async function readAppComposeFile(appComposePath: string): Promise<string> {
@@ -504,7 +513,7 @@ type DevOsStateChange =
 /**
  * Where a dev box decision came from.
  *
- * `flag` is an explicit `--dev-os` and is always authored strictly. `carried`
+ * `flag` is an explicit `--dev` and is always authored strictly. `carried`
  * means the CVM already had the dev box according to its record or its deployed
  * compose: the payload keeps whatever it already carries, because the user did
  * not ask for a second box this time.
@@ -513,7 +522,7 @@ type DevOsOrigin = "flag" | "carried";
 
 /** What the dev OS step decided, and what to record once it succeeded. */
 interface DevOsResolution {
-	/** How this deployment satisfies `--dev-os`, when it does. */
+	/** How this deployment satisfies `--dev`, when it does. */
 	readonly plan?: DevOsPlan;
 	/** The state write to commit once the deployment has been applied. */
 	readonly stateChange?: DevOsStateChange;
@@ -526,7 +535,7 @@ interface DevOsResolution {
  * the resolved mode asks for it.
  *
  * Always the strict injector, never a marker shortcut. A request that names
- * `--dev-os` asks for a dev box this platform can rely on, and a compose that
+ * `--dev` asks for a dev box this platform can rely on, and a compose that
  * merely carries the four markers on something else (`network_mode: host` on an
  * nginx, a `command: sleep`, a `profiles` list, a service using the dev-box
  * image without its mounts) must be reported, not accepted as if SSH were
@@ -608,7 +617,7 @@ async function fetchUpdateTarget(
 		typeof vmUuid === "string" && vmUuid.length > 0 ? vmUuid : undefined;
 	if (!resolvedUuid) {
 		logger.warn(
-			"Phala Cloud did not return this CVM's vm_uuid, so the dev OS setting is recorded under the identifier you passed. Pass --dev-os on the next update if this CVM uses a dev box.",
+			"Phala Cloud did not return this CVM's vm_uuid, so the dev OS setting is recorded under the identifier you passed. Pass --dev on the next update if this CVM uses a dev box.",
 		);
 	}
 
@@ -622,7 +631,7 @@ async function fetchUpdateTarget(
 }
 
 /**
- * How `--dev-os` is satisfied for this deployment.
+ * How `--dev` is satisfied for this deployment.
  *
  * The dstack release of the requested image decides it, resolved against the OS
  * image catalog. `resolveDevOsPlan` refuses to guess, so an unpinned image or
@@ -673,16 +682,13 @@ async function resolveDevOsTarget(
 			// Unknown is not "off": the CVM has SSH access and the server did not
 			// say how, so sending a compose without a dev box could remove it.
 			throw new Error(
-				"This CVM has SSH access and Phala Cloud did not return its compose, so the CLI cannot tell whether that comes from a dev box. Pass --dev-os to keep the dev box, or --no-dev-os to drop it, then retry the update.",
+				"This CVM has SSH access and Phala Cloud did not return its compose, so the CLI cannot tell whether that comes from a dev box. Pass --dev to keep the dev box, or --no-dev-os to drop it, then retry the update.",
 			);
 		}
 		return {};
 	}
-	// Validate before the catalog request so an unusable invocation fails
-	// without touching the network.
-	const identifier = requireDevOsImage(options.image);
 	const catalog = await listOsImageCatalog(client);
-	const plan = resolveDevOsPlan(identifier, catalog);
+	const plan = resolveDevOsPlan(options.image, catalog);
 	return {
 		plan,
 		stateChange: { kind: "remember", mode: plan.mode },
@@ -704,7 +710,7 @@ function commitDevOsState(
 	if (!vmUuid) {
 		if (change.kind === "remember") {
 			logger.warn(
-				"Could not record the dev OS setting: the API did not return the CVM's vm_uuid. Pass --dev-os on the next update.",
+				"Could not record the dev OS setting: the API did not return the CVM's vm_uuid. Pass --dev on the next update.",
 			);
 		}
 		return;
@@ -1188,7 +1194,7 @@ function buildComposeFile(
  * Build provision payload from options
  * All parameters are optional - backend will auto-match resources
  * @param preResolvedKmsSelection - Optional pre-resolved KMS selection to avoid duplicate calls/warnings
- * @param devOsMode - How `--dev-os` was resolved against the OS image catalog;
+ * @param devOsMode - How `--dev` was resolved against the OS image catalog;
  *   undefined when the flag is absent. Required for the flag, because
  *   `prefer_dev` must be false when the dev box already carries SSH.
  */
@@ -1285,9 +1291,9 @@ export const buildProvisionPayload = (
 		payload.skip_gateway = true;
 	}
 
-	// Add prefer_dev flag based on --dev-os / --no-dev-os
+	// Add prefer_dev flag based on --dev / --no-dev-os
 	// For on-chain KMS (ETHEREUM/BASE), default to non-dev since dev images may not be available.
-	// dstack 0.6+ has no dev image at all: there `--dev-os` injected the
+	// dstack 0.6+ has no dev image at all: there `--dev` injected the
 	// dev-box service into the compose, so the release image is the right one
 	// and prefer_dev must stay false.
 	const isOnchainKms = kmsType === "ETHEREUM" || kmsType === "BASE";
@@ -1560,6 +1566,7 @@ const deployNewCvm = async (
 					app_id: cvm.app_id,
 					dashboard_url: `${CLOUD_URL}/dashboard/cvms/${cvm.vm_uuid}`,
 					...(cvm.launch_token ? { launch_token: cvm.launch_token } : {}),
+					...composeFileUpdatedField(validatedOptions),
 				},
 				null,
 				2,
@@ -1680,7 +1687,16 @@ const updateCvm = async (
 			"--prepare-only has no effect on this CVM: it does not use on-chain KMS. The update was applied directly.";
 		if (validatedOptions.json !== false) {
 			stdout.write(
-				`${JSON.stringify({ success: true, prepare_only: false, message: msg }, null, 2)}\n`,
+				`${JSON.stringify(
+					{
+						success: true,
+						prepare_only: false,
+						message: msg,
+						...composeFileUpdatedField(validatedOptions),
+					},
+					null,
+					2,
+				)}\n`,
 			);
 		} else {
 			logger.warn(msg);
@@ -1790,6 +1806,7 @@ const updateCvm = async (
 					name: cvm.name,
 					app_id: cvm.app_id,
 					dashboard_url: `${CLOUD_URL}/dashboard/cvms/${cvm.vm_uuid}`,
+					...composeFileUpdatedField(validatedOptions),
 				},
 				null,
 				2,
@@ -1919,6 +1936,58 @@ export function addComposeFanOutHint(
 	return new Error(messageWithHint);
 }
 
+/** The JSON result field naming the compose file `--dev` edited. */
+function composeFileUpdatedField(
+	options: Options,
+): { compose_file_updated: string } | Record<string, never> {
+	return options.composeFileUpdated
+		? { compose_file_updated: options.composeFileUpdated }
+		: {};
+}
+
+/**
+ * Save a compose the CLI added the dev box to back into the file it was read
+ * from. Returns the path written, or `undefined` when there is no local file
+ * to write (a pipe, or no file at all).
+ *
+ * `--dev` is the user's consent: no prompt, but the change is shown as a
+ * diff on stderr in human mode. JSON mode stays silent and reports the path in
+ * the result instead.
+ */
+function saveDevBoxToComposeFile({
+	filePath,
+	original,
+	updated,
+	json,
+	stderr,
+}: {
+	filePath: string | undefined;
+	original: string;
+	updated: string;
+	json: boolean;
+	stderr: NodeJS.WriteStream;
+}): string | undefined {
+	const target = filePath ? resolveWritableComposeFile(filePath) : undefined;
+	if (!filePath || !target) {
+		logger.info(
+			"The deployed compose includes a dev-box service that is not in your local compose; the source is not a regular file, so nothing was written back.",
+		);
+		return undefined;
+	}
+	try {
+		writeFileAtomic(target, updated);
+	} catch (error) {
+		throw new Error(
+			`--dev could not update ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+	logger.info(
+		`Added the dev-box SSH service to ${filePath}; deploying the file as written.`,
+	);
+	if (!json) stderr.write(unifiedDiff(filePath, original, updated));
+	return filePath;
+}
+
 export async function runDeploy(
 	input: DeployCommandInput,
 	context: CommandContext,
@@ -1959,12 +2028,16 @@ export async function runDeploy(
 			interactive: input.interactive,
 		});
 
-		const composeSource = input.appCompose
-			? await readAppComposeFile(input.appCompose)
+		// `composeFilePath` is only set for a docker compose file; an
+		// --app-compose document is never edited.
+		const composeRead: { content: string; filePath?: string } = input.appCompose
+			? { content: await readAppComposeFile(input.appCompose) }
 			: await readDockerComposeFile({
 					dockerComposePath: dockerComposePath,
 					interactive: input.interactive,
 				});
+		const composeSource = composeRead.content;
+		const composeFilePath = composeRead.filePath;
 
 		// Resolve the CVM id here, once, for the dev OS record and everything
 		// below. An update also needs the server's view of the CVM: the canonical
@@ -1989,16 +2062,20 @@ export async function runDeploy(
 			devOsPlan?.image !== undefined && devOsPlan.image !== input.image
 				? devOsPlan.image
 				: undefined;
-		const deployInput: Options = devOsImage
-			? { ...input, image: devOsImage }
-			: input;
-		if (devOsImage) {
+		const deployInput: Options = { ...input };
+		if (devOsImage) deployInput.image = devOsImage;
+		if (devOsPlan?.defaulted && devOsImage) {
 			logger.info(
-				`--dev-os selected the dev OS image ${devOsImage} for this dstack release.`,
+				`--dev picked ${devOsImage} (the newest dstack release with dev-box support); pass --image to choose another.`,
+			);
+		} else if (devOsImage) {
+			logger.info(
+				`--dev selected the dev OS image ${devOsImage} for this dstack release.`,
 			);
 		}
 
 		let docker_compose_yml = composeSource;
+		let devBoxAdded = false;
 		// The SSH server ships as an extra service in the compose instead of a dev
 		// OS image. Inject it before the payload size check so the limit covers
 		// what is actually sent.
@@ -2006,7 +2083,7 @@ export async function runDeploy(
 			if (input.appCompose) {
 				// --app-compose is an opaque whole-document payload the API parses.
 				logger.warn(
-					"--dev-os cannot add the dev-box service to an --app-compose payload. Add it to that file's docker_compose_file yourself.",
+					"--dev cannot add the dev-box service to an --app-compose payload. Add it to that file's docker_compose_file yourself.",
 				);
 			} else {
 				// A carried dev box is the user's own: keep the payload as it is when
@@ -2018,11 +2095,12 @@ export async function runDeploy(
 					? { compose: composeSource, added: false }
 					: composeForDevOs(composeSource, devOsMode);
 				docker_compose_yml = prepared.compose;
-				logger.info(
-					prepared.added
-						? "Added the dev-box SSH service to the compose file (dstack 0.6+ has no dev image)."
-						: "The compose already carries the dev-box SSH service.",
-				);
+				devBoxAdded = prepared.added;
+				if (!prepared.added) {
+					logger.info(
+						"The compose already carries the dev-box SSH service; nothing to add.",
+					);
+				}
 			}
 		}
 
@@ -2096,6 +2174,22 @@ export async function runDeploy(
 		if (input.debug) {
 			console.log("[DEBUG] resolved uuid:", uuid);
 			console.log("[DEBUG] isUpdate:", !!uuid);
+		}
+
+		// The dev box was added to the payload: save it to the user's compose
+		// file first, so the file they review (and whose hash they register) is
+		// the file that runs.
+		const composeFileUpdated = devBoxAdded
+			? saveDevBoxToComposeFile({
+					filePath: composeFilePath,
+					original: composeSource,
+					updated: docker_compose_yml,
+					json: input.json !== false,
+					stderr: context.stderr,
+				})
+			: undefined;
+		if (composeFileUpdated) {
+			deployInput.composeFileUpdated = composeFileUpdated;
 		}
 
 		if (updateTarget) {

@@ -75,7 +75,7 @@ Deploy new CVM or update existing one.
 | `--kms <type>` | phala | KMS type: phala, ethereum/eth, base |
 | `--wait` | false | Wait until a new CVM is running, or until an updated CVM is running again (it stays stopped if it was not running before); fail if the deployment failed |
 | `--ssh-pubkey <path>` | ~/.ssh/id_rsa.pub | SSH public key |
-| `--dev-os` | false | Use dev OS image |
+| `--dev` (alias `--dev-os`) | false | Enable SSH access (without `--image` it picks the newest dstack release). dstack 0.6+: adds a `dev-box` service and **edits your local compose file** (diff on stderr, `compose_file_updated` in `--json`) before deploying; below 0.6: deploys the dev image |
 | `--public-logs` | true | Public container logs |
 | `--no-public-logs` | | Disable public logs |
 | `--public-sysinfo` | true | Public system info |
@@ -230,6 +230,28 @@ List worker nodes. No arguments or options.
     phala link [cvm-id] [-j]
 
 Link current directory to a CVM. Creates/updates `phala.toml`.
+
+### phala domains
+
+Custom domains of the workspace. Commands that need an app use `--app-id`, `--cvm-id` (the CVM's app), or `app_id` / the CVM identifier from `phala.toml`; passing both flags is an error.
+
+    phala domains ls [--app-id <id> | --cvm-id <cvm>] [--page <n>] [--page-size <n>] [-j]
+    phala domains inspect <domain> [--app-id <id> | --cvm-id <cvm>] [-j]
+    phala domains check <domain> (--app-id <id> | --cvm-id <cvm>) [--port 443] [-j]
+    phala domains add <domain> (--app-id <id> | --cvm-id <cvm>) [--port 443] [-j]
+    phala domains verify <domain> [--app-id <id> | --cvm-id <cvm>] [-j]
+    phala domains rm <domain> [--app-id <id> | --cvm-id <cvm>] [-y] [-j]
+    phala domains setup <domain> (--app-id <id> | --cvm-id <cvm>) [--port 443] [--dns-provider cloudflare] [-c <file>] [-y] [-j]
+
+| Subcommand | What it does |
+|------------|--------------|
+| `ls` | List domains (domain, app, port, DNS, routing) |
+| `inspect` | Records to publish, DNS error, routing, CNAME target, TXT requirement |
+| `check` | Preflight DNS for an app without adding the domain |
+| `add` | Bind the domain to an app and print the DNS records to publish |
+| `verify` | Re-check DNS; `--app-id` is required if the domain is bound to several apps |
+| `rm` | Unbind; confirms in a terminal, needs `--yes` otherwise |
+| `setup` | Insert the dstack-ingress sidecar into the local compose (diff, confirm, atomic write) |
 
 ### phala nodes list
 
