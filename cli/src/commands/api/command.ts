@@ -25,20 +25,26 @@ Use -F key=value or -F key:=value to add body fields (sent as JSON body).
 for numbers, booleans, null, arrays, objects). Both -f and -F support @file
 syntax: -f q=@query.txt, -F config:=@data.json.
 
+Use --multipart with -F to send multipart/form-data. In multipart mode,
+-F file=@path attaches a file while -F key=value adds a text field. Without
+--multipart, the existing @file syntax continues to read file content into JSON.
+
 Use -d to send raw request body data (cURL-style). If the value is valid JSON,
 it will be sent as JSON automatically.
 
 Use --input to send a JSON file as request body, or --input - to read from stdin.
 
 -f (query) can be combined with -F/-d/--input (body). -F, -d, and --input
-are mutually exclusive.
+are mutually exclusive. --multipart requires -F and cannot be combined with
+-d or --input.
 
 Use -q to filter JSON output with jq syntax (built-in, no jq installation needed).
 
 ENVIRONMENT VARIABLES
 
-  PHALA_CLOUD_API_KEY       Override the API key (useful for CI/CD)
-  PHALA_CLOUD_API_PREFIX    Override the API base URL`,
+  PHALA_CLOUD_API_KEY              Override the API key (useful for CI/CD)
+  PHALA_CLOUD_API_PREFIX           Override the API base URL
+  PHALA_CLOUD_REQUESTS_PER_MINUTE  Pace request starts per credential (default: 180)`,
 	stability: "unstable",
 	arguments: [
 		{
@@ -71,6 +77,13 @@ ENVIRONMENT VARIABLES
 				"Body field: key=value (string) or key:=value (typed JSON). Supports @file",
 			type: "string[]",
 			target: "field",
+		},
+		{
+			name: "multipart",
+			description:
+				"Send -F fields as multipart/form-data; key=@path attaches a file",
+			type: "boolean",
+			target: "multipart",
 		},
 		{
 			name: "header",
@@ -151,6 +164,11 @@ ENVIRONMENT VARIABLES
 			value: "phala api /endpoint -X POST -F config:=@settings.json",
 		},
 		{
+			name: "Upload a file",
+			value:
+				"phala api /admin/changelog/images -X POST --multipart -F file=@cover.png",
+		},
+		{
 			name: "Show response headers",
 			value: "phala api /cvms -i",
 		},
@@ -165,6 +183,7 @@ export const apiCommandSchema = z.object({
 		.transform((v) => v.toUpperCase() as (typeof HTTP_METHODS)[number]),
 	query: z.array(z.string()).optional(),
 	field: z.array(z.string()).optional(),
+	multipart: z.boolean().default(false),
 	header: z.array(z.string()).optional(),
 	data: z.array(z.string()).optional(),
 	input: z.string().optional(),

@@ -19,6 +19,7 @@ Make authenticated HTTP requests to the Phala Cloud API with automatic credentia
 | `--method <method>` | `-X` | GET | HTTP method (GET, POST, PUT, DELETE, PATCH, etc.) |
 | `--query <param>` | `-f` | | Query parameter: `key=value` (use `key=@file` for file). Repeatable |
 | `--field <field>` | `-F` | | Body field: `key=value` (string) or `key:=value` (typed JSON). Supports `@file`. Repeatable |
+| `--multipart` | | false | Send `-F` fields as multipart/form-data; in this mode `key=@path` attaches a file |
 | `--header <header>` | `-H` | | HTTP header `key:value`. Repeatable |
 | `--data <data>` | `-d` | | Request body (cURL-style). Repeatable |
 | `--input <file>` | | | Read body from file (use `-` for stdin) |
@@ -30,17 +31,19 @@ Make authenticated HTTP requests to the Phala Cloud API with automatic credentia
 ## Flag Semantics
 
 - **`-f` (query)**: Always appended to the URL as query parameters, regardless of HTTP method.
-- **`-F` (body field)**: Always sent as JSON request body. Supports `key=value` for strings and `key:=value` for typed JSON (numbers, booleans, null, arrays, objects).
+- **`-F` (body field)**: Sent as JSON by default. Supports `key=value` for strings and `key:=value` for typed JSON (numbers, booleans, null, arrays, objects).
+- **`--multipart`**: Sends the `-F` fields as multipart/form-data. `key=@path` attaches the file with its original filename; `key=value` adds a text field. Without `--multipart`, the existing `key=@path` behavior still reads the file content into the JSON field.
 - **`-d` (data)**: Raw request body. If the value is valid JSON, it is sent as JSON automatically.
 - **`--input`**: Read body from a file.
 
 `-f` can be combined with any body option (`-F`, `-d`, `--input`).
-`-F`, `-d`, and `--input` are mutually exclusive.
+`-F`, `-d`, and `--input` are mutually exclusive. `--multipart` requires at least one `-F` field and cannot be combined with `-d` or `--input`.
 
 ## Environment Variables
 
 - `PHALA_CLOUD_API_KEY`: Override API key
 - `PHALA_CLOUD_API_PREFIX`: Override API base URL
+- `PHALA_CLOUD_REQUESTS_PER_MINUTE`: Pace request starts for each credential (default: `180`; must be a positive integer)
 
 ## Examples
 
@@ -76,9 +79,17 @@ Query params + body combined:
 
     $ phala api /api/v1/cvms -X POST -f page=1 -F name=my-app -F vcpu:=2
 
-Body field from file:
+Body field from file (read into the JSON body):
 
     $ phala api /api/v1/endpoint -X POST -F config:=@settings.json
+
+Upload a file as multipart/form-data:
+
+    $ phala api /admin/changelog/images -X POST --multipart -F file=@cover.png
+
+Upload a file with additional text fields:
+
+    $ phala api /admin/changelog/images -X POST --multipart -F file=@cover.png -F alt="Release cover"
 
 Delete CVM:
 
