@@ -1,7 +1,12 @@
 import { z } from "zod";
 import { jsonOption } from "@/src/core/common-flags";
 import type { CommandMeta } from "@/src/core/types";
-import { appIdOption, DEFAULT_DOMAIN_PORT, portOption } from "../shared";
+import {
+	appIdOption,
+	cvmSelectorOption,
+	DEFAULT_DOMAIN_PORT,
+	portOption,
+} from "../shared";
 
 export const domainsSetupCommandMeta: CommandMeta = {
 	name: "setup",
@@ -21,6 +26,7 @@ export const domainsSetupCommandMeta: CommandMeta = {
 			...appIdOption,
 			description: "App ID (hex identifier). Defaults to app_id in phala.toml.",
 		},
+		cvmSelectorOption,
 		portOption,
 		{
 			name: "dns-provider",
@@ -63,6 +69,7 @@ export const domainsSetupCommandMeta: CommandMeta = {
 export const domainsSetupCommandSchema = z.object({
 	domain: z.string().min(1),
 	appId: z.string().optional(),
+	cvmId: z.string().optional(),
 	port: z.number().int().min(1).max(65535).default(DEFAULT_DOMAIN_PORT),
 	dnsProvider: z.string().min(1).default("cloudflare"),
 	compose: z.string().optional(),

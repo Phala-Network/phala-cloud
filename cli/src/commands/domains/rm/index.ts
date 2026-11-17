@@ -7,6 +7,7 @@ import {
 	describeApp,
 	failDomainError,
 	normalizeDomain,
+	resolveAppFilter,
 	resolveBinding,
 } from "../shared";
 import {
@@ -24,7 +25,7 @@ async function runDomainsRmCommand(
 		const binding = await resolveBinding(
 			client,
 			normalizeDomain(input.domain),
-			input.appId,
+			await resolveAppFilter(client, input),
 		);
 
 		if (!input.yes) {

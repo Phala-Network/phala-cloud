@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { jsonOption } from "@/src/core/common-flags";
 import type { CommandMeta } from "@/src/core/types";
-import { appIdOption } from "../shared";
+import { appIdOption, cvmSelectorOption } from "../shared";
 
 export const domainsRmCommandMeta: CommandMeta = {
 	name: "rm",
@@ -29,6 +29,7 @@ export const domainsRmCommandMeta: CommandMeta = {
 			type: "boolean",
 			target: "yes",
 		},
+		cvmSelectorOption,
 		jsonOption,
 	],
 	examples: [
@@ -46,6 +47,7 @@ export const domainsRmCommandMeta: CommandMeta = {
 export const domainsRmCommandSchema = z.object({
 	domain: z.string().min(1),
 	appId: z.string().optional(),
+	cvmId: z.string().optional(),
 	yes: z.boolean().default(false),
 	json: z.boolean().default(false),
 });

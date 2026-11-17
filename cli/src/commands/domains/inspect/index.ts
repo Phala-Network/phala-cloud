@@ -12,6 +12,7 @@ import {
 	dnsStatus,
 	failDomainError,
 	findBindings,
+	resolveAppFilter,
 	normalizeDomain,
 } from "../shared";
 import {
@@ -90,7 +91,7 @@ async function runDomainsInspectCommand(
 		const items = await findBindings(
 			client,
 			normalizeDomain(input.domain),
-			input.appId,
+			await resolveAppFilter(client, input),
 		);
 		const bindings: Binding[] = [];
 		for (const domain of items) {

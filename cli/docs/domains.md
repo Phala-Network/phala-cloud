@@ -8,7 +8,9 @@ Typical flow: `check` the DNS, `add` the domain, publish the DNS records it prin
 
     phala domains <subcommand> [args] [options]
 
-Commands that need an app take `--app-id`, and fall back to `app_id` in `phala.toml` (see `phala link`).
+Commands that need an app (`check`, `add`, `setup`) take `--app-id` or `--cvm-id` (UUID, app_id, instance_id or name; the CVM's app is used). Without either, they use `app_id` in `phala.toml`, then the CVM identifier in `phala.toml` (see `phala link`). Passing both flags is an error.
+
+`ls`, `inspect`, `verify` and `rm` use `--app-id` or `--cvm-id` only to narrow the lookup; they do not read `phala.toml`.
 
 ## Subcommands
 
@@ -25,6 +27,7 @@ List the custom domains of the workspace. Values are never truncated.
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--app-id <id>` | | | Only list domains bound to this app |
+| `--cvm-id <cvm>` | | | CVM whose app to use instead of `--app-id` |
 | `--page <n>` | | 1 | Page number |
 | `--page-size <n>` | | server default | Items per page (1-100) |
 | `--json` | `-j` | false | Output in JSON format |
@@ -55,6 +58,7 @@ Show the DNS records to publish, the DNS error, the routing status and the app's
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--app-id <id>` | | | Only show the binding to this app |
+| `--cvm-id <cvm>` | | | CVM whose app to use instead of `--app-id` |
 | `--json` | `-j` | false | Output in JSON format |
 
 ---
@@ -65,13 +69,14 @@ Check a domain's DNS against what the app expects, without adding it. Prints eac
 
 #### Usage
 
-    phala domains check <domain> --app-id <id> [options]
+    phala domains check <domain> (--app-id <id> | --cvm-id <cvm>) [options]
 
 #### Options
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--app-id <id>` | | `phala.toml` | App to check the domain for |
+| `--cvm-id <cvm>` | | | CVM whose app to use instead of `--app-id` |
 | `--port <n>` | | 443 | External HTTPS port the domain is served on |
 | `--json` | `-j` | false | Output in JSON format |
 
@@ -85,13 +90,14 @@ Add a custom domain to an app and print the DNS records you still have to publis
 
 #### Usage
 
-    phala domains add <domain> --app-id <id> [options]
+    phala domains add <domain> (--app-id <id> | --cvm-id <cvm>) [options]
 
 #### Options
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--app-id <id>` | | `phala.toml` | App to add the domain to |
+| `--cvm-id <cvm>` | | | CVM whose app to use instead of `--app-id` |
 | `--port <n>` | | 443 | External HTTPS port the domain is served on |
 | `--json` | `-j` | false | Output in JSON format |
 
@@ -101,7 +107,7 @@ A domain registered by another workspace is refused with the server's message.
 
 ### domains verify
 
-Re-check the DNS records of a domain you added. The app is found from the domain; pass `--app-id` when the domain is bound to more than one app.
+Re-check the DNS records of a domain you added. The app is found from the domain; pass `--app-id` or `--cvm-id` when the domain is bound to more than one app.
 
 #### Usage
 
@@ -112,6 +118,7 @@ Re-check the DNS records of a domain you added. The app is found from the domain
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--app-id <id>` | | | Required when the domain is bound to more than one app |
+| `--cvm-id <cvm>` | | | CVM whose app to use instead of `--app-id` |
 | `--json` | `-j` | false | Output in JSON format |
 
 ---
@@ -129,6 +136,7 @@ Remove a custom domain from an app.
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--app-id <id>` | | | Required when the domain is bound to more than one app |
+| `--cvm-id <cvm>` | | | CVM whose app to use instead of `--app-id` |
 | `--yes` | `-y` | false | Skip the confirmation prompt |
 | `--json` | `-j` | false | Output in JSON format |
 
@@ -142,13 +150,14 @@ Add the dstack-ingress sidecar for a domain to your local compose file. The serv
 
 #### Usage
 
-    phala domains setup <domain> --app-id <id> [options]
+    phala domains setup <domain> (--app-id <id> | --cvm-id <cvm>) [options]
 
 #### Options
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--app-id <id>` | | `phala.toml` | App the domain belongs to |
+| `--cvm-id <cvm>` | | | CVM whose app to use instead of `--app-id` |
 | `--port <n>` | | 443 | External HTTPS port the domain is served on |
 | `--dns-provider <name>` | | cloudflare | DNS provider the ingress uses for certificates |
 | `--compose <file>` | `-c` | `compose_file` in `phala.toml`, then `docker-compose.yml` | Compose file to edit |
@@ -158,6 +167,8 @@ Add the dstack-ingress sidecar for a domain to your local compose file. The serv
 If the compose already has the ingress for this domain, nothing changes. Without a terminal and without `--yes`, the command prints the diff, leaves the file alone and exits non-zero.
 
 #### Examples
+
+    $ phala domains setup app.example.com --cvm-id my-cvm
 
     $ phala domains setup app.example.com --app-id 50b0e827cc6c53f4010b57e588a18c5ef9388cc1
     Changes to docker-compose.yml:

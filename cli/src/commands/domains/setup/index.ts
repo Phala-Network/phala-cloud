@@ -43,7 +43,8 @@ async function runDomainsSetupCommand(
 	context: CommandContext,
 ): Promise<number> {
 	try {
-		const appId = resolveAppId(input.appId, context);
+		const client = await getClient(context);
+		const appId = await resolveAppId(client, input, context);
 		const domain = normalizeDomain(input.domain);
 		const composePath = resolveComposePath(input, context);
 		// Name the file relative to the working directory only when it lives
@@ -55,7 +56,6 @@ async function runDomainsSetupCommand(
 				: composePath;
 		const original = readFileSync(composePath, "utf8");
 
-		const client = await getClient(context);
 		const merge = await mergeAppDomainIngress(client, {
 			appId,
 			domain,

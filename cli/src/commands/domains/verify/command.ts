@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { jsonOption } from "@/src/core/common-flags";
 import type { CommandMeta } from "@/src/core/types";
-import { appIdOption } from "../shared";
+import { appIdOption, cvmSelectorOption } from "../shared";
 
 export const domainsVerifyCommandMeta: CommandMeta = {
 	name: "verify",
@@ -21,6 +21,7 @@ export const domainsVerifyCommandMeta: CommandMeta = {
 			description:
 				"App the domain is bound to. Required when the domain is bound to more than one app.",
 		},
+		cvmSelectorOption,
 		jsonOption,
 	],
 	examples: [
@@ -38,6 +39,7 @@ export const domainsVerifyCommandMeta: CommandMeta = {
 export const domainsVerifyCommandSchema = z.object({
 	domain: z.string().min(1),
 	appId: z.string().optional(),
+	cvmId: z.string().optional(),
 	json: z.boolean().default(false),
 });
 

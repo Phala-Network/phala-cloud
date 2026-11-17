@@ -233,15 +233,15 @@ Link current directory to a CVM. Creates/updates `phala.toml`.
 
 ### phala domains
 
-Custom domains of the workspace. Commands that need an app use `--app-id` or `app_id` from `phala.toml`.
+Custom domains of the workspace. Commands that need an app use `--app-id`, `--cvm-id` (the CVM's app), or `app_id` / the CVM identifier from `phala.toml`; passing both flags is an error.
 
-    phala domains ls [--app-id <id>] [--page <n>] [--page-size <n>] [-j]
-    phala domains inspect <domain> [--app-id <id>] [-j]
-    phala domains check <domain> --app-id <id> [--port 443] [-j]
-    phala domains add <domain> --app-id <id> [--port 443] [-j]
-    phala domains verify <domain> [--app-id <id>] [-j]
-    phala domains rm <domain> [--app-id <id>] [-y] [-j]
-    phala domains setup <domain> --app-id <id> [--port 443] [--dns-provider cloudflare] [-c <file>] [-y] [-j]
+    phala domains ls [--app-id <id> | --cvm-id <cvm>] [--page <n>] [--page-size <n>] [-j]
+    phala domains inspect <domain> [--app-id <id> | --cvm-id <cvm>] [-j]
+    phala domains check <domain> (--app-id <id> | --cvm-id <cvm>) [--port 443] [-j]
+    phala domains add <domain> (--app-id <id> | --cvm-id <cvm>) [--port 443] [-j]
+    phala domains verify <domain> [--app-id <id> | --cvm-id <cvm>] [-j]
+    phala domains rm <domain> [--app-id <id> | --cvm-id <cvm>] [-y] [-j]
+    phala domains setup <domain> (--app-id <id> | --cvm-id <cvm>) [--port 443] [--dns-provider cloudflare] [-c <file>] [-y] [-j]
 
 | Subcommand | What it does |
 |------------|--------------|

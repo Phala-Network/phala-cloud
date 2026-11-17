@@ -19,9 +19,9 @@ async function runDomainsAddCommand(
 	context: CommandContext,
 ): Promise<number> {
 	try {
-		const appId = resolveAppId(input.appId, context);
-		const domain = normalizeDomain(input.domain);
 		const client = await getClient(context);
+		const appId = await resolveAppId(client, input, context);
+		const domain = normalizeDomain(input.domain);
 		const created = await createAppDomain(client, {
 			appId,
 			domain,

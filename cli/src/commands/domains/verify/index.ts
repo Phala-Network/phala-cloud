@@ -6,6 +6,7 @@ import {
 	failDomainError,
 	normalizeDomain,
 	renderRecordChecks,
+	resolveAppFilter,
 	resolveBinding,
 } from "../shared";
 import {
@@ -23,7 +24,7 @@ async function runDomainsVerifyCommand(
 		const binding = await resolveBinding(
 			client,
 			normalizeDomain(input.domain),
-			input.appId,
+			await resolveAppFilter(client, input),
 		);
 		const result = await verifyAppDomain(client, {
 			appId: binding.app_id,

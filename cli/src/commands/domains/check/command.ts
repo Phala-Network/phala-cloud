@@ -1,7 +1,12 @@
 import { z } from "zod";
 import { jsonOption } from "@/src/core/common-flags";
 import type { CommandMeta } from "@/src/core/types";
-import { appIdOption, DEFAULT_DOMAIN_PORT, portOption } from "../shared";
+import {
+	appIdOption,
+	cvmSelectorOption,
+	DEFAULT_DOMAIN_PORT,
+	portOption,
+} from "../shared";
 
 export const domainsCheckCommandMeta: CommandMeta = {
 	name: "check",
@@ -20,6 +25,7 @@ export const domainsCheckCommandMeta: CommandMeta = {
 			...appIdOption,
 			description: "App ID (hex identifier). Defaults to app_id in phala.toml.",
 		},
+		cvmSelectorOption,
 		portOption,
 		jsonOption,
 	],
@@ -39,6 +45,7 @@ export const domainsCheckCommandMeta: CommandMeta = {
 export const domainsCheckCommandSchema = z.object({
 	domain: z.string().min(1),
 	appId: z.string().optional(),
+	cvmId: z.string().optional(),
 	port: z.number().int().min(1).max(65535).default(DEFAULT_DOMAIN_PORT),
 	json: z.boolean().default(false),
 });

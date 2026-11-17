@@ -7,7 +7,7 @@ import {
 	describeApp,
 	dnsStatus,
 	failDomainError,
-	normalizeAppId,
+	resolveAppFilter,
 } from "../shared";
 import {
 	domainsLsCommandMeta,
@@ -21,8 +21,9 @@ async function runDomainsLsCommand(
 ): Promise<number> {
 	try {
 		const client = await getClient(context);
+		const appId = await resolveAppFilter(client, input);
 		const result = await listDomains(client, {
-			...(input.appId ? { app_id: normalizeAppId(input.appId) } : {}),
+			...(appId ? { app_id: appId } : {}),
 			...(input.page ? { page: input.page } : {}),
 			...(input.pageSize ? { page_size: input.pageSize } : {}),
 		});

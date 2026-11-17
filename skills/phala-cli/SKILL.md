@@ -213,6 +213,7 @@ Domains belong to the workspace and are bound to an app. Use the app ID from `ph
 ```bash
 phala domains check app.example.com --app-id <app-id>   # preflight: actual vs expected DNS
 phala domains add app.example.com --app-id <app-id>     # bind it; prints the records to publish
+# --cvm-id <cvm> works in place of --app-id, e.g. phala domains add app.example.com --cvm-id my-cvm
 # publish the CNAME/TXT records at your DNS provider, then:
 phala domains verify app.example.com                    # re-check; run again until verified
 phala domains inspect app.example.com                   # records, DNS error, routing status

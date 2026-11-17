@@ -21,6 +21,17 @@ const realInquirer = await import(
 	`${require.resolve("inquirer")}?domains-real`
 );
 
+const realCloud = await import(
+	`${require.resolve("@phala/cloud")}?domains-real`
+);
+
+const getCvm =
+	mock<
+		(
+			client: unknown,
+			request: unknown,
+		) => Promise<{ success: boolean; data?: unknown; error?: unknown }>
+	>();
 const get = mock<(path: string, options?: unknown) => Promise<unknown>>();
 const post = mock<(path: string, body?: unknown) => Promise<unknown>>();
 const del = mock<(path: string) => Promise<unknown>>();
@@ -34,8 +45,13 @@ mock.module("inquirer", () => ({
 	...realInquirer,
 	default: { prompt },
 }));
+mock.module("@phala/cloud", () => ({
+	...realCloud,
+	safeGetCvmInfo: getCvm,
+}));
 
 afterAll(() => {
+	mock.module("@phala/cloud", () => ({ ...realCloud }));
 	mock.module("@/src/lib/client", () => ({ ...realClient }));
 	mock.module("inquirer", () => ({ ...realInquirer }));
 });
@@ -163,7 +179,7 @@ function httpError(
 }
 
 beforeEach(() => {
-	for (const fn of [get, post, del, prompt]) fn.mockReset();
+	for (const fn of [get, post, del, prompt, getCvm]) fn.mockReset();
 	prompt.mockImplementation(() => Promise.resolve({ confirm: true }));
 });
 
@@ -704,5 +720,210 @@ describe("domains setup", () => {
 		);
 		expect(readFileSync(custom, "utf8")).toContain("dstack-ingress:");
 		expect(readFileSync(file, "utf8")).toBe(compose);
+	});
+});
+
+describe("--cvm-id", () => {
+	const MIXED = `${"aB".repeat(10)}${"cD".repeat(10)}`;
+
+	function cvmIs(appId: string | null) {
+		getCvm.mockResolvedValue({ success: true, data: { app_id: appId } });
+	}
+
+	test("add resolves the CVM to its app ID and keeps the case", async () => {
+		cvmIs(MIXED);
+		post.mockResolvedValue({
+			...binding({ app_id: MIXED }),
+			sync: { nodes: [], warnings: [] },
+		});
+		const { context } = makeContext();
+		const code = await domainsAddCommand.run(
+			domainsAddCommandSchema.parse({
+				domain: "app.example.com",
+				cvmId: "my-cvm",
+			}),
+			context,
+		);
+		expect(code).toBe(0);
+		expect(getCvm.mock.calls[0]?.[1]).toEqual({ id: "my-cvm" });
+		expect(post).toHaveBeenCalledWith(`/apps/${MIXED}/domains`, {
+			domain: "app.example.com",
+			port: 443,
+		});
+	});
+
+	test("check resolves the CVM to its app ID", async () => {
+		cvmIs(`app_${MIXED}`);
+		post.mockResolvedValue({
+			domain: "app.example.com",
+			port: 443,
+			ready: true,
+			records: [],
+		});
+		const { context } = makeContext();
+		await domainsCheckCommand.run(
+			domainsCheckCommandSchema.parse({
+				domain: "app.example.com",
+				cvmId: "my-cvm",
+			}),
+			context,
+		);
+		expect(post.mock.calls[0]?.[0]).toBe(`/apps/${MIXED}/domains/preflight`);
+	});
+
+	test("setup resolves the CVM to its app ID", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "phala-domains-cvm-"));
+		try {
+			writeFileSync(
+				join(dir, "docker-compose.yml"),
+				"services:\n  a:\n    image: x\n",
+			);
+			cvmIs(MIXED);
+			post.mockResolvedValue({
+				docker_compose_file: "ignored",
+				already_configured: true,
+				required_env_keys: [],
+				warnings: [],
+				ingress_service_name: "dstack-ingress",
+				ingress_service: {},
+				top_level_volumes: {},
+			});
+			const { context } = makeContext({ cwd: dir });
+			await domainsSetupCommand.run(
+				domainsSetupCommandSchema.parse({
+					domain: "app.example.com",
+					cvmId: "my-cvm",
+					yes: true,
+				}),
+				context,
+			);
+			expect(post.mock.calls[0]?.[0]).toBe(
+				`/apps/${MIXED}/domains/ingress-merge`,
+			);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("ls, verify and rm narrow by the CVM's app", async () => {
+		cvmIs(APP_B);
+		get.mockResolvedValue(page([binding({ app_id: APP_B })]));
+		post.mockResolvedValue({ ...binding(), records: [] });
+		del.mockResolvedValue({ ...binding(), sync: { nodes: [], warnings: [] } });
+
+		await domainsLsCommand.run(
+			domainsLsCommandSchema.parse({ cvmId: "c" }),
+			makeContext().context,
+		);
+		expect(get.mock.calls.at(-1)).toEqual([
+			"/domains",
+			{ params: { app_id: APP_B } },
+		]);
+
+		await domainsVerifyCommand.run(
+			domainsVerifyCommandSchema.parse({
+				domain: "app.example.com",
+				cvmId: "c",
+			}),
+			makeContext().context,
+		);
+		expect(get.mock.calls.at(-1)?.[1]).toMatchObject({
+			params: { app_id: APP_B },
+		});
+		expect(post.mock.calls.at(-1)?.[0]).toContain(`/apps/${APP_B}/`);
+
+		await domainsRmCommand.run(
+			domainsRmCommandSchema.parse({
+				domain: "app.example.com",
+				cvmId: "c",
+				yes: true,
+			}),
+			makeContext().context,
+		);
+		expect(get.mock.calls.at(-1)?.[1]).toMatchObject({
+			params: { app_id: APP_B },
+		});
+		expect(del).toHaveBeenCalled();
+	});
+
+	test("both flags are an error and nothing is sent", async () => {
+		const { context, out } = makeContext();
+		const code = await domainsAddCommand.run(
+			domainsAddCommandSchema.parse({
+				domain: "app.example.com",
+				appId: APP_A,
+				cvmId: "my-cvm",
+			}),
+			context,
+		);
+		expect(code).toBe(1);
+		expect(out.errors[0]).toContain("Pass one of --app-id or --cvm-id");
+		expect(getCvm).not.toHaveBeenCalled();
+		expect(post).not.toHaveBeenCalled();
+	});
+
+	test("phala.toml with only a CVM identifier resolves through the CVM", async () => {
+		cvmIs(APP_B);
+		post.mockResolvedValue({
+			...binding(),
+			sync: { nodes: [], warnings: [] },
+		});
+		const { context } = makeContext({
+			projectConfig: { cvm_id: "app_cfg" } as never,
+		});
+		await domainsAddCommand.run(
+			domainsAddCommandSchema.parse({ domain: "app.example.com" }),
+			context,
+		);
+		expect(getCvm.mock.calls[0]?.[1]).toEqual({ id: "app_cfg" });
+		expect(post.mock.calls[0]?.[0]).toBe(`/apps/${APP_B}/domains`);
+	});
+
+	test("phala.toml app_id wins over its CVM identifier", async () => {
+		post.mockResolvedValue({
+			...binding(),
+			sync: { nodes: [], warnings: [] },
+		});
+		const { context } = makeContext({
+			projectConfig: { app_id: APP_A, cvm_id: "app_cfg" } as never,
+		});
+		await domainsAddCommand.run(
+			domainsAddCommandSchema.parse({ domain: "app.example.com" }),
+			context,
+		);
+		expect(getCvm).not.toHaveBeenCalled();
+		expect(post.mock.calls[0]?.[0]).toBe(`/apps/${APP_A}/domains`);
+	});
+
+	test("an unknown CVM is an error", async () => {
+		getCvm.mockResolvedValue({
+			success: false,
+			error: httpError(404, { detail: "nope" }),
+		});
+		const { context, out } = makeContext();
+		const code = await domainsAddCommand.run(
+			domainsAddCommandSchema.parse({
+				domain: "app.example.com",
+				cvmId: "ghost",
+			}),
+			context,
+		);
+		expect(code).toBe(1);
+		expect(out.errors[0]).toBe("CVM ghost was not found.");
+		expect(post).not.toHaveBeenCalled();
+	});
+
+	test("a CVM without an app ID is an error", async () => {
+		cvmIs(null);
+		const { context, out } = makeContext();
+		const code = await domainsAddCommand.run(
+			domainsAddCommandSchema.parse({
+				domain: "app.example.com",
+				cvmId: "bare",
+			}),
+			context,
+		);
+		expect(code).toBe(1);
+		expect(out.errors[0]).toBe("CVM bare has no app ID.");
 	});
 });

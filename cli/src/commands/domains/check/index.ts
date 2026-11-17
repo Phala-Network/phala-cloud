@@ -19,8 +19,8 @@ async function runDomainsCheckCommand(
 	context: CommandContext,
 ): Promise<number> {
 	try {
-		const appId = resolveAppId(input.appId, context);
 		const client = await getClient(context);
+		const appId = await resolveAppId(client, input, context);
 		const result = await preflightAppDomain(client, {
 			appId,
 			domain: normalizeDomain(input.domain),

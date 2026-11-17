@@ -1,9 +1,11 @@
 import {
 	listDomains,
+	safeGetCvmInfo,
 	type DnsRecordCheck,
 	type ExpectedDnsRecord,
 	type WorkspaceDomain,
 } from "@phala/cloud";
+import { cvmIdOption } from "@/src/core/common-flags";
 import { formatTable } from "@/src/lib/table";
 import type { CliApiClient } from "@/src/lib/client";
 import type { CommandContext } from "@/src/core/types";
@@ -33,18 +35,72 @@ export function normalizeAppId(raw: string): string {
 	return raw.trim().replace(/^app_/, "").replace(/^0x/, "");
 }
 
-/** The app ID from `--app-id`, falling back to the linked project config. */
-export function resolveAppId(
-	appId: string | undefined,
-	context: Pick<CommandContext, "projectConfig">,
-): string {
-	const raw = appId || context.projectConfig.app_id;
-	if (!raw) {
-		throw new Error(
-			"No app ID provided. Pass --app-id or run `phala link` to create phala.toml with app_id.",
-		);
+/** The options that select an app, as the schemas of every domains command parse them. */
+export interface AppSelector {
+	appId?: string;
+	cvmId?: string;
+}
+
+export const cvmSelectorOption = {
+	...cvmIdOption,
+	description:
+		"CVM identifier (UUID, app_id, instance_id, or name); selects the CVM's app.",
+} as const;
+
+function assertSingleSelector(selector: AppSelector): void {
+	if (selector.appId && selector.cvmId) {
+		throw new Error("Pass one of --app-id or --cvm-id, not both.");
 	}
-	return normalizeAppId(raw);
+}
+
+/** The app ID of a CVM, looked up through the shared CVM identifier rules. */
+async function resolveCvmAppId(
+	client: CliApiClient,
+	cvmId: string,
+): Promise<string> {
+	const result = await safeGetCvmInfo(client, { id: cvmId });
+	if (!result.success) {
+		const status = (result.error as { status?: unknown }).status;
+		if (status === 404) throw new Error(`CVM ${cvmId} was not found.`);
+		throw result.error.cause ?? result.error;
+	}
+	const appId = (result.data as { app_id?: string | null }).app_id;
+	if (!appId) throw new Error(`CVM ${cvmId} has no app ID.`);
+	return normalizeAppId(appId);
+}
+
+/**
+ * The app a command works on, in order: `--app-id`, `--cvm-id`, `app_id` in
+ * phala.toml, then the CVM identifier in phala.toml.
+ */
+export async function resolveAppId(
+	client: CliApiClient,
+	selector: AppSelector,
+	context: Pick<CommandContext, "projectConfig">,
+): Promise<string> {
+	assertSingleSelector(selector);
+	if (selector.appId) return normalizeAppId(selector.appId);
+	if (selector.cvmId) return resolveCvmAppId(client, selector.cvmId);
+	const { app_id, cvm_id } = context.projectConfig;
+	if (app_id) return normalizeAppId(app_id);
+	if (cvm_id) return resolveCvmAppId(client, cvm_id);
+	throw new Error(
+		"No app ID provided. Pass --app-id or --cvm-id, or run `phala link` to create phala.toml.",
+	);
+}
+
+/**
+ * The app that narrows a lookup by domain: `--app-id`, or the app of
+ * `--cvm-id`. Undefined when neither is given; phala.toml is not consulted.
+ */
+export async function resolveAppFilter(
+	client: CliApiClient,
+	selector: AppSelector,
+): Promise<string | undefined> {
+	assertSingleSelector(selector);
+	if (selector.appId) return normalizeAppId(selector.appId);
+	if (selector.cvmId) return resolveCvmAppId(client, selector.cvmId);
+	return undefined;
 }
 
 export function normalizeDomain(raw: string): string {
@@ -67,7 +123,7 @@ export async function resolveBinding(
 	if (bindings.length > 1) {
 		const apps = bindings.map((item) => `  - ${describeApp(item)}`).join("\n");
 		throw new Error(
-			`Domain ${domain} is bound to more than one app. Pass --app-id to pick one:\n${apps}`,
+			`Domain ${domain} is bound to more than one app. Pass --app-id or --cvm-id to pick one:\n${apps}`,
 		);
 	}
 	return bindings[0] as WorkspaceDomain;

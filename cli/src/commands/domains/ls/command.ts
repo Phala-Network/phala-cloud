@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { jsonOption } from "@/src/core/common-flags";
 import type { CommandMeta } from "@/src/core/types";
-import { appIdOption } from "../shared";
+import { appIdOption, cvmSelectorOption } from "../shared";
 
 export const domainsLsCommandMeta: CommandMeta = {
 	name: "ls",
@@ -24,6 +24,7 @@ export const domainsLsCommandMeta: CommandMeta = {
 			type: "number",
 			target: "pageSize",
 		},
+		cvmSelectorOption,
 		jsonOption,
 	],
 	examples: [
@@ -38,6 +39,7 @@ export const domainsLsCommandMeta: CommandMeta = {
 
 export const domainsLsCommandSchema = z.object({
 	appId: z.string().optional(),
+	cvmId: z.string().optional(),
 	page: z.number().int().min(1).optional(),
 	pageSize: z.number().int().min(1).max(100).optional(),
 	json: z.boolean().default(false),
