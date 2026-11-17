@@ -30,7 +30,7 @@ type UpdateCVMSSHKeysRequest struct {
 // GetCVMSSHKeys returns the CVM's desired authorized key set.
 func (c *Client) GetCVMSSHKeys(ctx context.Context, cvmID string) (*CVMSSHKeysResponse, error) {
 	var result CVMSSHKeysResponse
-	if err := c.doJSON(ctx, "GET", cvmPath(cvmID, "ssh-keys"), nil, &result); err != nil {
+	if err := c.getJSON(ctx, cvmPath(cvmID, "ssh-keys"), &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -302,7 +302,7 @@ type updateCVMAnnotationsRequest struct {
 // Needs the cvm_annotations feature flag.
 func (c *Client) GetCVMAnnotations(ctx context.Context, cvmID string) (*CVMAnnotationsResponse, error) {
 	var result CVMAnnotationsResponse
-	if err := c.doJSON(ctx, "GET", cvmPath(cvmID, "annotations"), nil, &result); err != nil {
+	if err := c.getJSON(ctx, cvmPath(cvmID, "annotations"), &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -342,7 +342,7 @@ type CVMInitScriptsResponse struct {
 // it can select.
 func (c *Client) GetCVMInitScripts(ctx context.Context, cvmID string) (*CVMInitScriptsResponse, error) {
 	var result CVMInitScriptsResponse
-	if err := c.doJSON(ctx, "GET", cvmPath(cvmID, "init-scripts"), nil, &result); err != nil {
+	if err := c.getJSON(ctx, cvmPath(cvmID, "init-scripts"), &result); err != nil {
 		return nil, err
 	}
 	return &result, nil

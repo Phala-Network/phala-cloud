@@ -9,7 +9,7 @@ import (
 // ListWorkspaces returns the list of workspaces.
 func (c *Client) ListWorkspaces(ctx context.Context) (*ListWorkspacesResponse, error) {
 	var result ListWorkspacesResponse
-	if err := c.doJSON(ctx, "GET", "/workspaces", nil, &result); err != nil {
+	if err := c.getJSON(ctx, "/workspaces", &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -18,7 +18,7 @@ func (c *Client) ListWorkspaces(ctx context.Context) (*ListWorkspacesResponse, e
 // GetWorkspace returns information about a workspace.
 func (c *Client) GetWorkspace(ctx context.Context, slug string) (*Workspace, error) {
 	var result Workspace
-	if err := c.doJSON(ctx, "GET", "/workspaces/"+slug, nil, &result); err != nil {
+	if err := c.getJSON(ctx, "/workspaces/"+slug, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -40,7 +40,7 @@ func (c *Client) GetWorkspaceNodes(ctx context.Context, slug string, opts *Pagin
 		}
 	}
 	var result WorkspaceNodes
-	if err := c.doJSON(ctx, "GET", path, nil, &result); err != nil {
+	if err := c.getJSON(ctx, path, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -49,7 +49,7 @@ func (c *Client) GetWorkspaceNodes(ctx context.Context, slug string, opts *Pagin
 // GetWorkspaceQuotas returns quotas for a workspace.
 func (c *Client) GetWorkspaceQuotas(ctx context.Context, slug string) (*WorkspaceQuotas, error) {
 	var result WorkspaceQuotas
-	if err := c.doJSON(ctx, "GET", "/workspaces/"+slug+"/quotas", nil, &result); err != nil {
+	if err := c.getJSON(ctx, "/workspaces/"+slug+"/quotas", &result); err != nil {
 		return nil, err
 	}
 	return &result, nil

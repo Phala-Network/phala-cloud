@@ -5,7 +5,7 @@ import "context"
 // ListSSHKeys returns the list of SSH keys for the current user.
 func (c *Client) ListSSHKeys(ctx context.Context) ([]SSHKey, error) {
 	var result []SSHKey
-	if err := c.doJSON(ctx, "GET", "/user/ssh-keys", nil, &result); err != nil {
+	if err := c.getJSON(ctx, "/user/ssh-keys", &result); err != nil {
 		return nil, err
 	}
 	return result, nil

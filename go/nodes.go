@@ -5,7 +5,7 @@ import "context"
 // GetAvailableNodes returns available nodes for CVM deployment.
 func (c *Client) GetAvailableNodes(ctx context.Context) (*AvailableNodes, error) {
 	var result AvailableNodes
-	if err := c.doJSON(ctx, "GET", "/teepods/available", nil, &result); err != nil {
+	if err := c.getJSON(ctx, "/teepods/available", &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -14,7 +14,7 @@ func (c *Client) GetAvailableNodes(ctx context.Context) (*AvailableNodes, error)
 // GetCVMCreateResources returns the resource graph for CVM creation.
 func (c *Client) GetCVMCreateResources(ctx context.Context) (*CVMCreateResources, error) {
 	var result CVMCreateResources
-	if err := c.doJSON(ctx, "GET", "/teepods/cvm-create-resources", nil, &result); err != nil {
+	if err := c.getJSON(ctx, "/teepods/cvm-create-resources", &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -24,7 +24,7 @@ func (c *Client) GetCVMCreateResources(ctx context.Context) (*CVMCreateResources
 func (c *Client) GetCVMCreateResourcesV20260121(ctx context.Context) (*CVMCreateResourcesV20260121, error) {
 	c = c.withVersion("2026-01-21")
 	var result CVMCreateResourcesV20260121
-	if err := c.doJSON(ctx, "GET", "/teepods/cvm-create-resources", nil, &result); err != nil {
+	if err := c.getJSON(ctx, "/teepods/cvm-create-resources", &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
