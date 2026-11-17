@@ -19,6 +19,7 @@ import {
 	addComposeFanOutHint,
 	applyForceStopOption,
 	assertUpdatableOptions,
+	addNoProductionImageHint,
 	buildProvisionPayload,
 	buildUpdatePatchBody,
 	composeForDevOs,
@@ -412,6 +413,7 @@ describe("deploy --no-pre-launch-script", () => {
 			},
 			listed: false,
 			kms: "PHALA",
+			prefer_dev: false,
 		});
 	});
 
@@ -476,6 +478,37 @@ describe("buildProvisionPayload", () => {
 		listed: false,
 	};
 
+	describe("addNoProductionImageHint", () => {
+		const noMatch = (field: string | undefined) =>
+			Object.assign(new Error("No teepod found matching all requirements"), {
+				errorCode: "ERR-02-002",
+				structuredDetails: [{ message: "x" }, ...(field ? [{ field }] : [])],
+			});
+
+		test("explains a no-match error that echoes the default preference", () => {
+			const error = noMatch("prefer_dev");
+			const result = addNoProductionImageHint(error, { prefer_dev: false });
+
+			expect(result).toBe(error);
+			expect((result as Error).message).toContain("asked for a production OS image");
+			expect((result as Error).message).toContain("--image");
+		});
+
+		test("leaves a capacity error without the preference alone", () => {
+			const error = noMatch(undefined);
+			addNoProductionImageHint(error, { prefer_dev: false });
+
+			expect(error.message).toBe("No teepod found matching all requirements");
+		});
+
+		test("leaves the error alone when the user named an image", () => {
+			const error = noMatch("prefer_dev");
+			addNoProductionImageHint(error, { image: "dstack-0.5.9" });
+
+			expect(error.message).toBe("No teepod found matching all requirements");
+		});
+	});
+
 	describe("prefer_dev flag handling (--dev-os / --no-dev-os)", () => {
 		test("should select a dev image below dstack 0.6 (--dev-os)", () => {
 			const options = {
@@ -536,7 +569,7 @@ describe("buildProvisionPayload", () => {
 			expect(payload.prefer_dev).toBe(false);
 		});
 
-		test("should not include prefer_dev when devOs is undefined", () => {
+		test("should ask for a production image when no image and no dev flag is given", () => {
 			const options = {};
 
 			const payload = buildProvisionPayload(
@@ -547,6 +580,19 @@ describe("buildProvisionPayload", () => {
 				defaultPrivacySettings,
 			);
 
+			expect(payload.prefer_dev).toBe(false);
+		});
+
+		test("should not send prefer_dev when --image names the image", () => {
+			const payload = buildProvisionPayload(
+				{ image: "dstack-dev-0.5.9" },
+				defaultName,
+				defaultDockerCompose,
+				defaultEnvs,
+				defaultPrivacySettings,
+			);
+
+			expect(payload.image).toBe("dstack-dev-0.5.9");
 			expect("prefer_dev" in payload).toBe(false);
 		});
 	});
@@ -825,7 +871,6 @@ describe("buildProvisionPayload", () => {
 			expect("region" in payload).toBe(false);
 			expect("image" in payload).toBe(false);
 			expect("kms_id" in payload).toBe(false);
-			expect("prefer_dev" in payload).toBe(false);
 			// kms always has a value (defaults to PHALA)
 			expect(payload.kms).toBe("PHALA");
 		});

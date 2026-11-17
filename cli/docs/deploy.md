@@ -51,7 +51,7 @@ Do not run concurrent `phala deploy` commands with the same compose file in one 
 |------|---------|-------------|
 | `--cvm-id <id>` | | CVM ID for updating existing deployment |
 | `--disk-size <size>` | 20G | Disk size with unit (e.g., 50G, 100G) |
-| `--image <image>` | latest | OS image version |
+| `--image <image>` | newest production image | OS image name. Without it, the CLI asks for a production image, as the web console does; to use a development image, name it (run `phala os-images`) |
 | `--node <name>` | | Deploy to specific physical node name |
 | `--custom-app-id <id>` | | Use custom App ID (requires --nonce for PHALA KMS) |
 | `--nonce <nonce>` | | Nonce for deterministic app_id generation |
@@ -186,6 +186,18 @@ $ phala deploy -n my-production-app
 ```bash
 $ phala deploy --disk-size 100G
 ```
+
+### OS image
+
+Without `--image`, `phala deploy` asks Phala Cloud for a production OS image
+(it sends `prefer_dev: false`), the same choice the web console makes, and
+prints the image that was used (`OS image:  <name>`, or `os_image` in the
+`--json` result). It never falls back to a development image on its own: when
+the selected node offers no production image, the deploy fails with the API's
+"no resources" error and a hint on how to name a development image. To use a development image, name it with `--image`, for example
+`--image dstack-dev-0.5.9`; `phala os-images` lists the images. Updating an
+existing CVM with `--cvm-id` does not change its OS image unless you pass
+`--image`.
 
 ### Deploy with SSH access
 

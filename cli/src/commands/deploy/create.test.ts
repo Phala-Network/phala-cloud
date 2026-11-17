@@ -365,6 +365,87 @@ describe("phala deploy (create)", () => {
 		expect(requests).toEqual([]);
 	});
 
+	describe("OS image choice", () => {
+		// `devOs` stays unset (the CLI default); --no-dev-os would send
+		// prefer_dev=false by itself. --no-pre-launch-script keeps a local
+		// ~/.ssh key out of the request.
+		const defaults = () => ({
+			compose: composePath,
+			noPreLaunchScript: true,
+		});
+
+		test("asks for a production image when no image and no dev flag is given", async () => {
+			const { exitCode, failure } = await deploy({
+				...defaults(),
+				devOs: undefined,
+			});
+
+			expect(failure).toBeUndefined();
+			expect(exitCode).toBe(0);
+			const body = prepareRequest().body as Record<string, unknown>;
+			expect(body.prefer_dev).toBe(false);
+			expect("image" in body).toBe(false);
+		});
+
+		test("sends a named image and no preference", async () => {
+			const { exitCode } = await deploy({
+				...defaults(),
+				devOs: undefined,
+				image: "dstack-dev-0.5.9",
+			});
+
+			expect(exitCode).toBe(0);
+			const body = prepareRequest().body as Record<string, unknown>;
+			expect(body.image).toBe("dstack-dev-0.5.9");
+			expect("prefer_dev" in body).toBe(false);
+		});
+
+		test("--dev below dstack 0.6 asks for the dev image", async () => {
+			const { exitCode } = await deploy({
+				...defaults(),
+				devOs: true,
+				image: "dstack-0.5.7",
+			});
+
+			expect(exitCode).toBe(0);
+			const body = prepareRequest().body as Record<string, unknown>;
+			expect(body.image).toBe("dstack-dev-0.5.7");
+			expect(body.prefer_dev).toBe(true);
+		});
+
+		test("on-chain KMS still sends prefer_dev=false", async () => {
+			const { exitCode } = await deploy({
+				...defaults(),
+				devOs: undefined,
+				kms: "base",
+			});
+
+			// The on-chain flow continues past provision against a chain; only the
+			// provision request matters here.
+			expect(exitCode === 0 || exitCode === 1).toBe(true);
+			const body = prepareRequest().body as Record<string, unknown>;
+			expect(body.kms).toBe("BASE");
+			expect(body.prefer_dev).toBe(false);
+		});
+
+		test("prints the OS image the API chose", async () => {
+			const text = await deploy({
+				...defaults(),
+				devOs: undefined,
+				json: false,
+			});
+
+			expect(text.exitCode).toBe(0);
+			expect(stdout).toContain("OS image:  dstack-0.6.3");
+		});
+
+		test("reports the OS image in the JSON result", async () => {
+			await deploy({ ...defaults(), devOs: undefined });
+
+			expect(JSON.parse(stdout).os_image).toBe("dstack-0.6.3");
+		});
+	});
+
 	test("--json writes exactly one JSON object to stdout", async () => {
 		const { exitCode, failure } = await deploy({ compose: composePath });
 
@@ -685,6 +766,7 @@ describe("phala deploy (create)", () => {
 				"name",
 				"app_id",
 				"dashboard_url",
+				"os_image",
 				"launch_token",
 			]);
 		}, 15000);
