@@ -401,12 +401,19 @@ describe("phala deploy (create)", () => {
 		});
 
 		test("--dev below dstack 0.6 asks for the dev image", async () => {
-			const { exitCode } = await deploy({
+			// A dev OS image takes SSH keys only from a local public key, so the
+			// test supplies one instead of relying on ~/.ssh.
+			const pubkeyPath = path.join(tmpDir, "prefer_dev.pub");
+			await fs.writeFile(pubkeyPath, "ssh-ed25519 AAAA prefer@example\n");
+
+			const { exitCode, failure } = await deploy({
 				...defaults(),
 				devOs: true,
 				image: "dstack-0.5.7",
+				sshPubkey: pubkeyPath,
 			});
 
+			expect(failure).toBeUndefined();
 			expect(exitCode).toBe(0);
 			const body = prepareRequest().body as Record<string, unknown>;
 			expect(body.image).toBe("dstack-dev-0.5.7");

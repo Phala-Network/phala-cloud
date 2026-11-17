@@ -490,7 +490,9 @@ describe("buildProvisionPayload", () => {
 			const result = addNoProductionImageHint(error, { prefer_dev: false });
 
 			expect(result).toBe(error);
-			expect((result as Error).message).toContain("asked for a production OS image");
+			expect((result as Error).message).toContain(
+				"asked for a production OS image",
+			);
 			expect((result as Error).message).toContain("--image");
 		});
 
