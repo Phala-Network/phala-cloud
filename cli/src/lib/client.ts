@@ -10,9 +10,80 @@ import { resolveAuth, type ResolvedAuth } from "@/src/utils/credentials";
 import { CLI_USER_AGENT } from "@/src/utils/cli-version";
 
 const API_VERSION = "2026-11-11" as const;
+const DEFAULT_REQUESTS_PER_MINUTE = 180;
 
 /** Default request timeout (seconds) when no --timeout flag is supplied. */
 export const DEFAULT_TIMEOUT_SECONDS = 60;
+
+class RequestStartPacer {
+	private nextStartAt = 0;
+
+	constructor(private readonly intervalMs: number) {}
+
+	async wait(): Promise<void> {
+		const now = Date.now();
+		const startAt = Math.max(now, this.nextStartAt);
+		this.nextStartAt = startAt + this.intervalMs;
+		const delayMs = startAt - now;
+		if (delayMs > 0) {
+			await new Promise((resolve) => setTimeout(resolve, delayMs));
+		}
+	}
+}
+
+interface SharedRequestBudget {
+	readonly requestsPerMinute: number;
+	readonly pacer: RequestStartPacer;
+}
+
+const requestBudgets = new Map<string, SharedRequestBudget>();
+
+function resolveRequestsPerMinute(
+	env: Record<string, string | undefined>,
+): number {
+	const raw = env.PHALA_CLOUD_REQUESTS_PER_MINUTE;
+	if (raw === undefined) return DEFAULT_REQUESTS_PER_MINUTE;
+	if (!/^[1-9]\d*$/.test(raw)) {
+		throw new Error(
+			"PHALA_CLOUD_REQUESTS_PER_MINUTE must be a positive integer",
+		);
+	}
+	const value = Number(raw);
+	if (!Number.isSafeInteger(value)) {
+		throw new Error(
+			"PHALA_CLOUD_REQUESTS_PER_MINUTE must be a positive integer",
+		);
+	}
+	return value;
+}
+
+function getRequestPacer(
+	auth: ResolvedAuth,
+	env: Record<string, string | undefined>,
+): RequestStartPacer {
+	const requestsPerMinute = resolveRequestsPerMinute(env);
+	const credential = auth.apiKey
+		? `api-key:${auth.apiKey}`
+		: auth.bearerToken
+			? `bearer:${auth.bearerToken}`
+			: "anonymous";
+	const key = `${auth.baseURL.replace(/\/+$/, "")}|${credential}`;
+	const existing = requestBudgets.get(key);
+	if (existing) {
+		if (existing.requestsPerMinute !== requestsPerMinute) {
+			throw new Error(
+				"Conflicting request rates for clients sharing one API credential",
+			);
+		}
+		return existing.pacer;
+	}
+	const budget = {
+		requestsPerMinute,
+		pacer: new RequestStartPacer(60_000 / requestsPerMinute),
+	};
+	requestBudgets.set(key, budget);
+	return budget.pacer;
+}
 
 export type CliApiClient = Client<typeof API_VERSION>;
 
@@ -61,9 +132,11 @@ export async function getClient(
 		profile?: string;
 	},
 ): Promise<CliApiClient> {
-	const auth = resolveAuthForContext(context, options);
+	const ctx = context ?? getDefaultContext();
+	const auth = resolveAuthForContext(ctx, options);
 	const version = getApiVersionOverride() ?? API_VERSION;
-	const timeoutSeconds = resolveTimeoutSeconds(context);
+	const timeoutSeconds = resolveTimeoutSeconds(ctx);
+	const pacer = getRequestPacer(auth, ctx.env);
 	return createClient({
 		apiKey: auth.apiKey ?? undefined,
 		bearerToken: auth.bearerToken ?? undefined,
@@ -73,6 +146,9 @@ export async function getClient(
 		timeout: timeoutSeconds * 1000,
 		headers: {
 			"User-Agent": CLI_USER_AGENT,
+		},
+		onRequest: async () => {
+			await pacer.wait();
 		},
 	}) as CliApiClient;
 }
@@ -97,15 +173,19 @@ export async function getClientWithKey(
 		baseURL?: string;
 	},
 ): Promise<CliApiClient> {
-	const version = getApiVersionOverride() ?? API_VERSION;
-	return createClient({
-		apiKey,
-		baseURL: options?.baseURL,
-		version,
-		headers: {
-			"User-Agent": CLI_USER_AGENT,
+	return getClient(
+		{
+			env: {
+				...process.env,
+				PHALA_CLOUD_API_KEY: apiKey,
+				...(options?.baseURL
+					? { PHALA_CLOUD_API_PREFIX: options.baseURL }
+					: {}),
+			},
+			projectConfig: {},
 		},
-	}) as CliApiClient;
+		{ apiToken: apiKey },
+	);
 }
 
 export type RevokeTokenOutcome =

@@ -166,6 +166,8 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
       ...fetchOptions
     } = this.config;
 
+    const userOnRequest = fetchOptions.onRequest;
+
     const requestHeaders = new Headers({ "Content-Type": "application/json" });
     const userAgent = defaultUserAgent();
     if (userAgent) {
@@ -197,7 +199,17 @@ export class Client<V extends ApiVersion = DefaultApiVersion> {
       // the correct multipart/form-data boundary automatically.
       // This runs after ofetch merges instance and per-request headers,
       // so deleting here is final.
-      onRequest({ request, options }) {
+      async onRequest(context) {
+        const hooks = Array.isArray(userOnRequest)
+          ? userOnRequest
+          : userOnRequest
+            ? [userOnRequest]
+            : [];
+        for (const hook of hooks) {
+          await hook(context);
+        }
+
+        const { request, options } = context;
         if (options.body instanceof FormData) {
           const h = options.headers;
           if (h instanceof Headers) {

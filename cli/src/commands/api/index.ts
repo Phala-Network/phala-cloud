@@ -1,9 +1,7 @@
 import { readFileSync } from "node:fs";
-import { createClient } from "@phala/cloud";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
-import { resolveAuthForContext } from "@/src/lib/client";
-import { CLI_USER_AGENT } from "@/src/utils/cli-version";
+import { getClient, resolveAuthForContext } from "@/src/lib/client";
 import { applyJqFilter, formatJqOutput } from "./jq-filter";
 import { apiCommandMeta, apiCommandSchema, HTTP_METHODS } from "./command";
 import type { ApiCommandInput } from "./command";
@@ -299,14 +297,7 @@ export async function runApiCommand(
 		return 1;
 	}
 
-	// Create client with User-Agent header
-	const client = createClient({
-		apiKey: auth.apiKey,
-		baseURL: auth.baseURL,
-		headers: {
-			"User-Agent": CLI_USER_AGENT,
-		},
-	});
+	const client = await getClient(context, { apiToken: input.apiToken });
 
 	const customHeaders = parseHeaders(input.header);
 
