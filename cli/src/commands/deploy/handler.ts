@@ -1986,7 +1986,7 @@ function saveDevBoxToComposeFile({
 		);
 	}
 	logger.info(
-		`--dev-os added the dev-box SSH service to ${filePath}; deploying the file as written.`,
+		`Added the dev-box SSH service to ${filePath}; deploying the file as written.`,
 	);
 	if (!json) stderr.write(unifiedDiff(filePath, original, updated));
 	return filePath;
