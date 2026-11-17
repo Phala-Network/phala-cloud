@@ -845,10 +845,15 @@ describe("phala deploy --dev-os writes the compose file", () => {
 	});
 
 	test("does not write for the pre-0.6 dev image", async () => {
+		// The dev image needs a key; pass one so the test never reads ~/.ssh.
+		const pubkeyPath = path.join(tmpDir, "id_ed25519.pub");
+		await fs.writeFile(pubkeyPath, "ssh-ed25519 AAAA test@example\n");
+
 		const { exitCode, failure } = await deploy({
 			compose: composePath,
 			devOs: true,
 			image: "dstack-0.5.7",
+			sshPubkey: pubkeyPath,
 		});
 
 		expect(failure).toBeUndefined();
