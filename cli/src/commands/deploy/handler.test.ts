@@ -2,7 +2,7 @@
  * Deploy Handler Tests
  *
  * Tests for the buildProvisionPayload function to ensure
- * proper handling of --dev-os / --no-dev-os flags.
+ * proper handling of --dev / --dev-os / --no-dev-os flags.
  */
 
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
@@ -114,6 +114,23 @@ volumes:
   my-host-keys:
   my-home:
 `;
+
+describe("deploy --dev flag spellings", () => {
+	function parseDevOs(argv: string[]): unknown {
+		const parsed = parseCommandArguments(argv, deployCommandMeta.options);
+		return buildCommandSchemaInput(deployCommandMeta, parsed).options.devOs;
+	}
+
+	test("--dev and its alias --dev-os both set the dev OS option", () => {
+		expect(parseDevOs(["--dev"])).toBe(true);
+		expect(parseDevOs(["--dev-os"])).toBe(true);
+	});
+
+	test("--no-dev-os still turns it off, and the option stays unset by default", () => {
+		expect(parseDevOs(["--no-dev-os"])).toBe(false);
+		expect(parseDevOs([])).toBeUndefined();
+	});
+});
 
 describe("deploy --dev-os SSH key channels", () => {
 	const sshPubkey = "ssh-ed25519 AAAA local@example";

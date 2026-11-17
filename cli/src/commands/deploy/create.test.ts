@@ -77,6 +77,23 @@ const OS_IMAGES = {
 			requires_gpu: false,
 		},
 		{
+			// Same release as the next entry; --dev must prefer the one without GPU.
+			name: "dstack-nvidia-0.6.3",
+			slug: "dstack-nvidia-0.6.3",
+			version: "0.6.3",
+			os_image_hash: "ee".repeat(32),
+			is_dev: false,
+			requires_gpu: true,
+		},
+		{
+			name: "dstack-0.6.3",
+			slug: "dstack-0.6.3",
+			version: "0.6.3",
+			os_image_hash: "ff".repeat(32),
+			is_dev: false,
+			requires_gpu: false,
+		},
+		{
 			// A release with no dev variant at all.
 			name: "prod-0.5.4",
 			slug: "dstack-0.5.4",
@@ -119,6 +136,7 @@ let appComposePath: string;
 let stdout = "";
 let stderr = "";
 // Per-test response for GET requests (CVM info, operations); defaults to 404.
+let osImagesResponse: unknown = OS_IMAGES;
 let respondGet: ((path: string) => Response) | undefined;
 
 beforeAll(async () => {
@@ -141,7 +159,7 @@ beforeAll(async () => {
 						});
 			}
 			if (req.method === "GET" && url.pathname === "/api/v1/os-images") {
-				return Response.json(OS_IMAGES);
+				return Response.json(osImagesResponse);
 			}
 			if (req.method === "GET" && respondGet) return respondGet(url.pathname);
 			return Response.json({ detail: "unexpected" }, { status: 404 });
@@ -179,6 +197,7 @@ afterEach(() => {
 	stdout = "";
 	stderr = "";
 	respondGet = undefined;
+	osImagesResponse = OS_IMAGES;
 });
 
 async function deploy(input: Record<string, unknown>) {
@@ -461,17 +480,35 @@ describe("phala deploy (create)", () => {
 		expect(recallDevOsMode(CREATED_CVM.vm_uuid)).toBe("dev-box");
 	});
 
-	test("requires a pinned image for --dev-os", async () => {
+	test("--dev without --image pins the newest dev-box release and writes the compose back", async () => {
+		const { exitCode, failure } = await deploy({
+			compose: composePath,
+			devOs: true,
+		});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		const body = prepareRequest().body as Record<string, unknown>;
+		// 0.6.3 exists with and without a GPU requirement; the plain one wins.
+		expect(body.image).toBe("dstack-0.6.3");
+		expect(body.prefer_dev).toBe(false);
+		const composeFile = body.compose_file as Record<string, unknown>;
+		expect(composeFile.docker_compose_file as string).toContain("  dev-box:");
+		expect(await fs.readFile(composePath, "utf8")).toContain("  dev-box:");
+		// --json keeps stdout a single JSON document.
+		expect(JSON.parse(stdout).success).toBe(true);
+	});
+
+	test("--dev without --image fails when no release has dev-box support", async () => {
+		osImagesResponse = { ...OS_IMAGES, items: [] };
 		const { exitCode, failure } = await deploy({
 			compose: composePath,
 			devOs: true,
 		});
 
 		expect(exitCode).toBe(1);
-		expect((failure as Error).message).toContain(
-			"--dev-os needs an explicit OS image",
-		);
-		expect(requests).toEqual([]);
+		expect((failure as Error).message).toContain("pass one with --image");
+		expect(requests.some((request) => request.method === "POST")).toBe(false);
 	});
 
 	test("rejects an OS image that is not in the catalog", async () => {

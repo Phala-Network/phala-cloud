@@ -104,6 +104,7 @@ export interface OsImageCatalogEntry {
 	readonly slug: string;
 	readonly version: string;
 	readonly is_dev: boolean;
+	readonly requires_gpu: boolean;
 	readonly os_image_hash: string | null;
 }
 
@@ -117,6 +118,8 @@ export interface DevOsPlan {
 	 * choice and the caller's own image stands.
 	 */
 	readonly image?: string;
+	/** True when no image was pinned and the plan chose the newest suitable one. */
+	readonly defaulted?: boolean;
 }
 
 /**
@@ -192,23 +195,47 @@ export function findOsImage(
 }
 
 /**
- * Require the image `--dev-os` needs before anything is fetched from the API.
- * An unpinned image would leave the release unknown, and a guess would deploy
- * the wrong SSH setup.
+ * The image `--dev` uses when none is pinned: the newest dstack release that
+ * has dev-box support, never a dev OS image.
+ *
+ * Among images sharing the newest release, one without a GPU requirement wins:
+ * the CLI cannot tell from the flags whether the deployment targets a GPU, so
+ * the plain image is the safe default.
  */
-export function requireDevOsImage(identifier: string | undefined): string {
-	if (!identifier) {
+function pickDefaultDevBoxImage(
+	catalog: readonly OsImageCatalogEntry[],
+): OsImageCatalogEntry {
+	const candidates = catalog.flatMap((entry) => {
+		const version = parseImageVersion(entry.version);
+		return version &&
+			!isDevImage(entry) &&
+			compareVersions(version, DEV_BOX_MIN_VERSION) >= 0
+			? [{ entry, version }]
+			: [];
+	});
+	const best = candidates.reduce<(typeof candidates)[number] | undefined>(
+		(current, candidate) => {
+			if (!current) return candidate;
+			const byVersion = compareVersions(candidate.version, current.version);
+			if (byVersion !== 0) return byVersion > 0 ? candidate : current;
+			return current.entry.requires_gpu && !candidate.entry.requires_gpu
+				? candidate
+				: current;
+		},
+		undefined,
+	);
+	if (!best) {
 		throw new Error(
-			`--dev-os needs an explicit OS image so its dstack release is known. ${OS_IMAGES_HINT}`,
+			`--dev found no dstack release with dev-box support (0.6 or newer) in the OS image catalog. ${OS_IMAGES_HINT}`,
 		);
 	}
-	return identifier;
+	return best.entry;
 }
 
 /**
  * The dev OS images of the same dstack release.
  *
- * Below dstack 0.6 sshd lives in the image, so `--dev-os` cannot be satisfied
+ * Below dstack 0.6 sshd lives in the image, so `--dev` cannot be satisfied
  * by a production image of that release. The catalog marks the dev variants
  * with `is_dev`; older rows only carry it in the name.
  */
@@ -227,7 +254,8 @@ function findDevImageVariants(
 }
 
 /**
- * Decide how `--dev-os` is satisfied for the OS image the user pinned.
+ * Decide how `--dev` is satisfied for the OS image the user pinned, or, when
+ * none is pinned, pick the newest release with dev-box support.
  *
  * The release decides it, never a guess: an image that is not in the catalog
  * would leave the CLI unable to tell whether to prefer a dev image or to inject
@@ -242,7 +270,14 @@ export function resolveDevOsPlan(
 	identifier: string | undefined,
 	catalog: readonly OsImageCatalogEntry[],
 ): DevOsPlan {
-	const requested = requireDevOsImage(identifier);
+	if (identifier === undefined) {
+		return {
+			mode: "dev-box",
+			image: pickDefaultDevBoxImage(catalog).slug,
+			defaulted: true,
+		};
+	}
+	const requested = identifier;
 	const image = findOsImage(catalog, requested);
 	if (!image) {
 		throw new Error(

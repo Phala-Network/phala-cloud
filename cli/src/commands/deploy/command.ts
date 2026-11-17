@@ -334,9 +334,10 @@ export const deployCommandMeta: CommandMeta = {
 			group: "deprecated",
 		},
 		{
-			name: "dev-os",
+			name: "dev",
+			aliases: ["dev-os"],
 			description:
-				"Enable SSH access (requires --image). On dstack 0.6+ it adds a dev-box service and saves it to your local compose file before deploying (a diff is shown); below 0.6 it deploys the dev image. An update without the flag keeps it",
+				"Enable SSH access. Without --image it picks the newest dstack release. On dstack 0.6+ it adds a dev-box service and saves it to your local compose file before deploying (a diff is shown); below 0.6 (with --image) it deploys the dev image. An update without the flag keeps it",
 			type: "boolean",
 			target: "devOs",
 			negatedName: "no-dev-os",
@@ -447,6 +448,10 @@ export const deployCommandMeta: CommandMeta = {
 		{
 			name: "Deploy with a generated launch token",
 			value: "phala deploy --generate-launch-token",
+		},
+		{
+			name: "Deploy with SSH access (newest dstack release)",
+			value: "phala deploy --dev",
 		},
 		{
 			name: "Deploy with Ethereum KMS",

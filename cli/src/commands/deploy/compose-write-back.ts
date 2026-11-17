@@ -1,7 +1,7 @@
 /**
  * Writing an edited compose back to the file it was read from.
  *
- * `phala deploy --dev-os` adds the dev-box service to the compose it sends. The
+ * `phala deploy --dev` adds the dev-box service to the compose it sends. The
  * edit is saved to the user's own file first and that saved content is what
  * gets deployed, so the file the user reviews, commits or registers on-chain
  * is the file that runs.
