@@ -37,7 +37,7 @@ Do not run concurrent `phala deploy` commands with the same compose file in one 
 | `-e, --env <value>` | | Environment variable (KEY=VALUE) or path to .env file. Repeatable |
 | `--kms <type>` | phala | KMS type: phala, ethereum/eth, or base |
 | `--wait` | false | Wait for the deployment to finish and fail if it failed. New CVM: wait until it is running. Update (`--cvm-id`): wait until the CVM is running again, or stays stopped if it was not running before the update |
-| `--dev-os` | false | Enable SSH access. Needs `--image`: on dstack 0.6+ it adds a `dev-box` service and saves it to your local compose file, below 0.6 it deploys the dev variant of that release. An update re-adds the dev box |
+| `--dev` (alias `--dev-os`) | false | Enable SSH access. Without `--image` it picks the newest dstack release; on dstack 0.6+ it adds a `dev-box` service and saves it to your local compose file, below 0.6 (with `--image`) it deploys the dev variant of that release. An update re-adds the dev box |
 | `--public-logs` | true | Make CVM logs publicly accessible |
 | `--no-public-logs` | | Disable public log access |
 | `--public-sysinfo` | true | Make CVM system info publicly accessible |
@@ -104,7 +104,7 @@ A flag you leave out keeps the CVM's current value. In particular, an update wit
 
 These flags set how a CVM is created and cannot be changed afterwards: `--name`, `--region`, `--node`, `--custom-app-id`, `--nonce`, `--key-provider-mode`, `--ssh-pubkey`, `--fs`, `--skip-gateway`, `--kms`, `--kms-id`, `--kms-contract`, `--kms-contract-id`, `--experimental-key-provider-type`, `--runner`, `--app-compose`, `--launch-token` and `--generate-launch-token`. An update that passes any of them fails before any request is sent.
 
-`--dev-os` is not in that list: it also applies to an update, because on dstack 0.6+ the dev box is part of the compose a deployment sends. The CLI records how `--dev-os` was satisfied for a CVM (dstack 0.6+ dev box, or a pre-0.6 dev image) in `~/.phala-cloud/state.json`, keyed by the CVM's `vm_uuid` — the one id a create and an update agree on, however you spell the `--cvm-id`. An update without the flag repeats that choice; the record is written only after the API accepts the change, so a failed deploy leaves it untouched. Pass `--dev-os` to set it explicitly on an update (with `--image`, so the dstack release is known) or `--no-dev-os` to drop it, which removes the record once the update is applied.
+`--dev` is not in that list: it also applies to an update, because on dstack 0.6+ the dev box is part of the compose a deployment sends. The CLI records how `--dev-os` was satisfied for a CVM (dstack 0.6+ dev box, or a pre-0.6 dev image) in `~/.phala-cloud/state.json`, keyed by the CVM's `vm_uuid` — the one id a create and an update agree on, however you spell the `--cvm-id`. An update without the flag repeats that choice; the record is written only after the API accepts the change, so a failed deploy leaves it untouched. Pass `--dev` to set it explicitly on an update or `--no-dev-os` to drop it, which removes the record once the update is applied.
 
 ## Raw app compose
 
@@ -189,11 +189,16 @@ $ phala deploy --disk-size 100G
 
 ### Deploy with SSH access
 
-`--dev-os` needs `--image`, because the dstack release of that image decides
-how SSH is set up. Run `phala os-images` to list the available images. Deploy
-fails instead of guessing when the image is missing or unknown.
+`--dev` (also spelled `--dev-os`) without `--image` deploys the newest dstack
+release that supports SSH through the dev box, and prints which image it picked
+(`--dev picked <slug> (the newest dstack release with dev-box support); pass
+--image to choose another.`). When several images share that release, the one
+that does not require a GPU is used. Deploy fails when the catalog has no such
+image. Pass `--image` to choose the release yourself; run `phala os-images` to
+list the available images. With `--image`, deploy fails instead of guessing when
+the image is unknown.
 
-On dstack 0.6 and newer there is no dev OS image. `--dev-os` instead adds a
+On dstack 0.6 and newer there is no dev OS image. `--dev` instead adds a
 `dev-box` service to your compose: a privileged container that runs sshd on port
 22 and shares the host's PID, network and UTS namespaces, so `phala ssh` and
 `phala cp` keep working through `<app-id>-22.<gateway>`. The service mounts two
@@ -210,13 +215,13 @@ whichever way it is written (anchors, merge keys, flow mappings and inline
 comments included). Compose files the CLI cannot read as YAML are refused
 instead of extended, so a file never ends up with two dev boxes.
 
-Below 0.6 sshd lives in the image, so `--dev-os` deploys the dev variant of the
+Below 0.6 sshd lives in the image, so `--dev --image <slug>` deploys the dev variant of the
 release you named. The backend ignores `prefer_dev` when the request names an
 image, and a production image of that release would deploy a CVM without sshd:
 the CLI resolves the variant from the OS image catalog and fails, listing the
 catalog, when that release has none.
 
-`--dev-os` edits your local compose file. When it adds the dev box, the CLI
+`--dev` edits your local compose file. When it adds the dev box, the CLI
 writes the new compose back to the file you passed with `-c` (or that
 `phala.toml` names) before deploying, prints a unified diff of the change on
 stderr, and deploys exactly the content it wrote. The flag is the consent, so
@@ -230,11 +235,10 @@ dev image, for an `--app-compose` document, or when the compose file is not a
 regular file (for example a pipe); in the last two cases the CLI deploys the
 compose with the dev box and notes that it is not in your local file.
 
-A create records how `--dev-os` was satisfied in
+A create records how `--dev` was satisfied in
 `~/.phala-cloud/state.json`, keyed by the CVM's `vm_uuid`, and a later update
 without the flag re-adds the dev box, so a redeploy keeps SSH access.
-`--dev-os` on an update sets the choice explicitly (it needs `--image`, so the
-release is known), and `--no-dev-os` drops it and clears the record. Records
+`--dev` on an update sets the choice explicitly, and `--no-dev-os` drops it and clears the record. Records
 are committed only after the API accepts the change: a failed deploy never
 changes what the next one does.
 
@@ -242,7 +246,7 @@ A missing record is not read as "turn SSH off". When the CVM was deployed from
 another machine, or before this CLI kept records, the update asks the deployed
 compose instead: a dev box there is kept (and recorded), and when the server
 does not return the compose while reporting SSH access, the CLI says so and
-asks you to pass `--dev-os` or `--no-dev-os` rather than silently dropping it.
+asks you to pass `--dev` or `--no-dev-os` rather than silently dropping it.
 
 The SSH key channel follows the backend's own rule: any service carrying the
 four dev-box markers (`privileged: true` and `pid`, `network_mode`, `uts` set to
@@ -260,7 +264,8 @@ goes into the dev box's environment, frozen at deploy time, so revoking it in
 the account does not remove it from the container.
 
 ```bash
-$ phala deploy --dev-os --image dstack-0.6.0
+$ phala deploy --dev
+$ phala deploy --dev --image dstack-0.6.0
 ```
 
 ### Deploy with Ethereum KMS
