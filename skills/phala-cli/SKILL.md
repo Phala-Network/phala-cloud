@@ -24,6 +24,7 @@ Determine what the user wants, then follow the matching procedure:
 | "SSH", "connect", "shell", "copy files" | **SSH & File Transfer** |
 | "CI/CD", "automate", "pipeline", "GitHub Actions" | **CI/CD Setup** |
 | "attestation", "verify", "proof" | **Attestation** |
+| "custom domain", "my own domain", "dstack-ingress" | **Custom Domain** |
 | "list", "status", "which CVMs" | `phala apps` or `phala cvms get <id>` |
 
 ---
@@ -202,6 +203,32 @@ phala logs --tail 20                  # verify startup
 `--wait` is critical in CI — without it, deploy returns immediately and the CVM may not be ready when subsequent steps run.
 
 With `phala.toml` committed to the repo, CI just needs `PHALA_CLOUD_API_KEY` and `phala deploy --wait`.
+
+---
+
+## Custom Domain
+
+Domains belong to the workspace and are bound to an app. Use the app ID from `phala.toml` or `--app-id`.
+
+```bash
+phala domains check app.example.com --app-id <app-id>   # preflight: actual vs expected DNS
+phala domains add app.example.com --app-id <app-id>     # bind it; prints the records to publish
+# publish the CNAME/TXT records at your DNS provider, then:
+phala domains verify app.example.com                    # re-check; run again until verified
+phala domains inspect app.example.com                   # records, DNS error, routing status
+```
+
+`check`, `add` and `verify` share one rate limit. On HTTP 429 the CLI says how many seconds to wait; if it mentions a browser challenge, wait or use the web dashboard.
+
+To serve the domain with dstack-ingress from your own compose file:
+
+```bash
+phala domains setup app.example.com --app-id <app-id>   # shows a diff, asks before writing
+phala envs ...                                          # set the env vars it lists (or use your .env)
+phala deploy                                            # apply the new compose
+```
+
+Without a terminal (CI) `setup` and `rm` need `--yes`; `setup` without it prints the diff and exits non-zero. Remove a domain with `phala domains rm app.example.com`.
 
 ---
 

@@ -231,6 +231,28 @@ List worker nodes. No arguments or options.
 
 Link current directory to a CVM. Creates/updates `phala.toml`.
 
+### phala domains
+
+Custom domains of the workspace. Commands that need an app use `--app-id` or `app_id` from `phala.toml`.
+
+    phala domains ls [--app-id <id>] [--page <n>] [--page-size <n>] [-j]
+    phala domains inspect <domain> [--app-id <id>] [-j]
+    phala domains check <domain> --app-id <id> [--port 443] [-j]
+    phala domains add <domain> --app-id <id> [--port 443] [-j]
+    phala domains verify <domain> [--app-id <id>] [-j]
+    phala domains rm <domain> [--app-id <id>] [-y] [-j]
+    phala domains setup <domain> --app-id <id> [--port 443] [--dns-provider cloudflare] [-c <file>] [-y] [-j]
+
+| Subcommand | What it does |
+|------------|--------------|
+| `ls` | List domains (domain, app, port, DNS, routing) |
+| `inspect` | Records to publish, DNS error, routing, CNAME target, TXT requirement |
+| `check` | Preflight DNS for an app without adding the domain |
+| `add` | Bind the domain to an app and print the DNS records to publish |
+| `verify` | Re-check DNS; `--app-id` is required if the domain is bound to several apps |
+| `rm` | Unbind; confirms in a terminal, needs `--yes` otherwise |
+| `setup` | Insert the dstack-ingress sidecar into the local compose (diff, confirm, atomic write) |
+
 ### phala nodes list
 
     phala nodes list [options]
