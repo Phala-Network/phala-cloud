@@ -189,8 +189,10 @@ describe("domains ls", () => {
 			context,
 		);
 		expect(code).toBe(0);
+		// The prefix is stripped but the case is kept: the server matches app
+		// IDs exactly, and mixed-case IDs exist.
 		expect(get).toHaveBeenCalledWith("/domains", {
-			params: { page: 2, page_size: 20, app_id: APP_A },
+			params: { page: 2, page_size: 20, app_id: APP_A.toUpperCase() },
 		});
 		expect(out.stdout).toContain(long);
 		expect(out.stdout).toContain(`demo (${APP_A})`);

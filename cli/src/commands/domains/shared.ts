@@ -25,9 +25,12 @@ export const portOption = {
 	target: "port",
 } as const;
 
-/** App IDs travel as 40 lowercase hex characters, without prefixes. */
+/**
+ * App IDs travel as 40 hex characters, without prefixes. Case is kept: the
+ * server matches app IDs exactly, and some apps carry mixed-case IDs.
+ */
 export function normalizeAppId(raw: string): string {
-	return raw.trim().replace(/^app_/, "").replace(/^0x/, "").toLowerCase();
+	return raw.trim().replace(/^app_/, "").replace(/^0x/, "");
 }
 
 /** The app ID from `--app-id`, falling back to the linked project config. */
