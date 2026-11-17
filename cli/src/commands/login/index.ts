@@ -17,6 +17,10 @@ import type { CommandContext } from "@/src/core/types";
 import { getClientWithKey } from "@/src/lib/client";
 import { CLI_USER_AGENT } from "@/src/utils/cli-version";
 import { DEFAULT_API_PREFIX, upsertProfile } from "@/src/utils/credentials";
+import {
+	getRateLimitRetryDelayMs,
+	sleepWithinDeadline,
+} from "@/src/utils/rate-limit";
 
 import { loginCommandMeta, loginCommandSchema } from "./command";
 import type { LoginCommandInput } from "./command";
@@ -170,9 +174,13 @@ export async function runDeviceAuthFlow(
 	// Step 4: Poll for authorization
 	const spinner = ora("Waiting for authorization...").start();
 	const expiresAt = Date.now() + expires_in * 1000;
+	let rateLimitAttempt = 0;
+	let nextPollDelayMs = pollingInterval * 1000;
 
 	while (Date.now() < expiresAt) {
-		await new Promise((resolve) => setTimeout(resolve, pollingInterval * 1000));
+		await sleepWithinDeadline(nextPollDelayMs, expiresAt);
+		if (Date.now() >= expiresAt) break;
+		nextPollDelayMs = pollingInterval * 1000;
 
 		try {
 			const tokenResponse = await client.post<DeviceTokenResponse>(
@@ -186,6 +194,14 @@ export async function runDeviceAuthFlow(
 			spinner.succeed("Authorization successful!");
 			return tokenResponse.access_token;
 		} catch (error) {
+			const retryDelayMs = getRateLimitRetryDelayMs(error, rateLimitAttempt);
+			if (retryDelayMs !== undefined) {
+				rateLimitAttempt += 1;
+				nextPollDelayMs = retryDelayMs;
+				continue;
+			}
+			rateLimitAttempt = 0;
+
 			// 1. Handle StructuredError (SDK converts to ResourceError)
 			if (error instanceof ResourceError) {
 				spinner.stop();
@@ -203,6 +219,7 @@ export async function runDeviceAuthFlow(
 
 						case "slow_down":
 							pollingInterval += 5;
+							nextPollDelayMs = pollingInterval * 1000;
 							continue;
 
 						case "expired_token":

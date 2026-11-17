@@ -2,6 +2,9 @@ import { safeGetCvmInfo } from "@phala/cloud";
 import type { CommandContext } from "@/src/core/types";
 import { type CliApiClient, getClient } from "@/src/lib/client";
 import { logger } from "./logger";
+import { getRateLimitRetryDelayMs, sleepWithinDeadline } from "./rate-limit";
+
+const CHECK_INTERVAL_MS = 2000;
 
 /** A wait that can no longer succeed; unlike a failed poll, it is not retried. */
 class CvmWaitError extends Error {}
@@ -27,18 +30,32 @@ export async function waitForCvmReady(
 ): Promise<void> {
 	const client = await getClient(context);
 	const startTime = Date.now();
-	const checkIntervalMs = 2000; // Check every 2 seconds
+	const deadline = startTime + Math.max(0, timeoutMs);
+	let rateLimitAttempt = 0;
 
 	logger.info("Waiting for CVM to be ready...");
 
 	// Poll at least once, even when the caller has no budget left.
 	do {
+		let nextDelayMs = CHECK_INTERVAL_MS;
 		try {
 			const result = await safeGetCvmInfo(client, { id: cvmId });
 
 			if (!result.success) {
-				logger.warn(`Failed to get CVM info: ${result.error.message}`);
+				const retryDelayMs = getRateLimitRetryDelayMs(
+					result.error,
+					rateLimitAttempt,
+				);
+				if (retryDelayMs !== undefined) {
+					rateLimitAttempt += 1;
+					nextDelayMs = retryDelayMs;
+					logger.warn("Rate limited while checking CVM status; retrying...");
+				} else {
+					rateLimitAttempt = 0;
+					logger.warn(`Failed to get CVM info: ${result.error.message}`);
+				}
 			} else {
+				rateLimitAttempt = 0;
 				const cvmInfo = result.data as {
 					status?: string;
 					in_progress?: boolean;
@@ -62,12 +79,19 @@ export async function waitForCvmReady(
 			}
 		} catch (error) {
 			if (error instanceof CvmWaitError) throw error;
-			logger.warn(`Error checking CVM status: ${error}`);
+			const retryDelayMs = getRateLimitRetryDelayMs(error, rateLimitAttempt);
+			if (retryDelayMs !== undefined) {
+				rateLimitAttempt += 1;
+				nextDelayMs = retryDelayMs;
+				logger.warn("Rate limited while checking CVM status; retrying...");
+			} else {
+				rateLimitAttempt = 0;
+				logger.warn(`Error checking CVM status: ${error}`);
+			}
 		}
 
-		// Wait before next check
-		await new Promise((resolve) => setTimeout(resolve, checkIntervalMs));
-	} while (Date.now() - startTime < timeoutMs);
+		await sleepWithinDeadline(nextDelayMs, deadline);
+	} while (Date.now() < deadline);
 
 	throw new Error(
 		`Timeout waiting for CVM to be ready (${Math.max(0, Math.floor(timeoutMs / 1000))}s)`,
@@ -88,21 +112,38 @@ export async function waitForCvmOperation(
 	timeoutMs: number,
 	label: "Update" | "Create" = "Update",
 ): Promise<void> {
-	const deadline = Date.now() + timeoutMs;
+	const deadline = Date.now() + Math.max(0, timeoutMs);
+	let rateLimitAttempt = 0;
 	do {
-		const { items } = await client.get<{
-			items: Array<{ status: string; error_message?: string | null }>;
-		}>(`/cvms/${cvmId}/operations`, {
-			params: { correlation_id: correlationId },
-		});
-		const operation = items[0];
-		if (operation?.status === "completed") return;
-		if (operation && operation.status !== "in_progress") {
-			throw new Error(
-				`${label} ${operation.status}: ${operation.error_message ?? "no error message"}`,
+		let nextDelayMs = CHECK_INTERVAL_MS;
+		try {
+			const remainingMs = Math.max(1, deadline - Date.now());
+			const { items } = await client.get<{
+				items: Array<{ status: string; error_message?: string | null }>;
+			}>(`/cvms/${cvmId}/operations`, {
+				params: { correlation_id: correlationId },
+				timeout: remainingMs,
+			});
+			rateLimitAttempt = 0;
+			const operation = items[0];
+			if (operation?.status === "completed") return;
+			if (operation && operation.status !== "in_progress") {
+				throw new CvmWaitError(
+					`${label} ${operation.status}: ${operation.error_message ?? "no error message"}`,
+				);
+			}
+		} catch (error) {
+			if (error instanceof CvmWaitError) throw error;
+			if (Date.now() >= deadline) break;
+			const retryDelayMs = getRateLimitRetryDelayMs(error, rateLimitAttempt);
+			if (retryDelayMs === undefined) throw error;
+			rateLimitAttempt += 1;
+			nextDelayMs = retryDelayMs;
+			logger.warn(
+				`Rate limited while checking the ${label.toLowerCase()} operation; retrying...`,
 			);
 		}
-		await new Promise((resolve) => setTimeout(resolve, 2000));
+		await sleepWithinDeadline(nextDelayMs, deadline);
 	} while (Date.now() < deadline);
 	throw new Error(
 		`Timeout waiting for the ${label.toLowerCase()} operation to finish (${Math.floor(timeoutMs / 1000)}s)`,
@@ -122,24 +163,40 @@ export async function waitForCvmCreated(
 	timeoutMs: number,
 ): Promise<void> {
 	const startedAt = Date.now();
-	const info = await safeGetCvmInfo(client, { id: cvmId });
-	const correlationId = info.success
-		? info.data.progress?.correlation_id
-		: undefined;
+	const deadline = startedAt + Math.max(0, timeoutMs);
+	let rateLimitAttempt = 0;
+	let info: Awaited<ReturnType<typeof safeGetCvmInfo>>;
+	while (true) {
+		info = await safeGetCvmInfo(client, { id: cvmId });
+		if (info.success) break;
+		const retryDelayMs = getRateLimitRetryDelayMs(info.error, rateLimitAttempt);
+		if (retryDelayMs === undefined) break;
+		rateLimitAttempt += 1;
+		logger.warn("Rate limited while finding the create operation; retrying...");
+		await sleepWithinDeadline(retryDelayMs, deadline);
+		if (Date.now() >= deadline) {
+			throw new Error(
+				`Timeout waiting for the create operation to appear (${Math.floor(timeoutMs / 1000)}s)`,
+			);
+		}
+	}
+	const progress =
+		info.success && "progress" in info.data ? info.data.progress : undefined;
+	const correlationId =
+		progress &&
+		typeof progress === "object" &&
+		"correlation_id" in progress &&
+		typeof progress.correlation_id === "string"
+			? progress.correlation_id
+			: undefined;
 	if (correlationId) {
 		await waitForCvmOperation(
 			client,
 			cvmId,
 			correlationId,
-			timeoutMs,
+			deadline - Date.now(),
 			"Create",
 		);
 	}
-	await waitForCvmReady(
-		cvmId,
-		timeoutMs - (Date.now() - startedAt),
-		context,
-		"running",
-		true,
-	);
+	await waitForCvmReady(cvmId, deadline - Date.now(), context, "running", true);
 }

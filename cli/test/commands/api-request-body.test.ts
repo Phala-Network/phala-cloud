@@ -15,6 +15,7 @@ function baseInput(overrides: Partial<ApiCommandInput> = {}): ApiCommandInput {
 	return {
 		endpoint: "/test",
 		method: "GET",
+		multipart: false,
 		include: false,
 		silent: false,
 		...overrides,
@@ -346,16 +347,19 @@ describe("@file syntax", () => {
 	let textFile: string;
 	let jsonFile: string;
 	let invalidJsonFile: string;
+	let binaryFile: string;
 
 	beforeAll(() => {
 		tmpDir = mkdtempSync(join(tmpdir(), "api-test-"));
 		textFile = join(tmpDir, "content.txt");
 		jsonFile = join(tmpDir, "config.json");
 		invalidJsonFile = join(tmpDir, "invalid.json");
+		binaryFile = join(tmpDir, "image.png");
 
 		writeFileSync(textFile, "Hello from file!");
 		writeFileSync(jsonFile, '{"nested": true, "count": 42}');
 		writeFileSync(invalidJsonFile, "not valid json {");
+		writeFileSync(binaryFile, new Uint8Array([0, 255, 1, 2]));
 	});
 
 	afterAll(() => {
@@ -407,5 +411,101 @@ describe("@file syntax", () => {
 				"/test",
 			),
 		).toThrow();
+	});
+
+	test("--multipart attaches binary files and includes text fields", async () => {
+		const result = buildApiRequestBody(
+			baseInput({
+				multipart: true,
+				field: [`file=@${binaryFile}`, "title=release", "count:=2"],
+			}),
+		);
+
+		expect(result.body).toBeInstanceOf(FormData);
+		const form = result.body as FormData;
+		const image = form.get("file");
+		expect(image).toBeInstanceOf(File);
+		expect((image as File).name).toBe("image.png");
+		expect((image as File).type).toBe("image/png");
+		expect(
+			Array.from(new Uint8Array(await (image as File).arrayBuffer())),
+		).toEqual([0, 255, 1, 2]);
+		expect(form.get("title")).toBe("release");
+		expect(form.get("count")).toBe("2");
+	});
+
+	test("--multipart sends a runtime boundary and the original file bytes", async () => {
+		let receivedContentType = "";
+		let receivedName = "";
+		let receivedType = "";
+		let receivedBytes: number[] = [];
+		const uploadServer = Bun.serve({
+			port: 0,
+			async fetch(request) {
+				receivedContentType = request.headers.get("content-type") ?? "";
+				const form = await request.formData();
+				const image = form.get("file");
+				if (image instanceof File) {
+					receivedName = image.name;
+					receivedType = image.type;
+					receivedBytes = Array.from(new Uint8Array(await image.arrayBuffer()));
+				}
+				return Response.json({ uploaded: true });
+			},
+		});
+		try {
+			const { body } = buildApiRequestBody(
+				baseInput({
+					method: "POST",
+					multipart: true,
+					field: [`file=@${binaryFile}`],
+				}),
+			);
+			const response = await fetch(
+				`http://127.0.0.1:${uploadServer.port}/upload`,
+				{
+					method: "POST",
+					body: body as FormData,
+				},
+			);
+
+			expect(response.ok).toBe(true);
+			expect(receivedContentType).toStartWith("multipart/form-data; boundary=");
+			expect(receivedName).toBe("image.png");
+			expect(receivedType).toBe("image/png");
+			expect(receivedBytes).toEqual([0, 255, 1, 2]);
+		} finally {
+			uploadServer.stop(true);
+		}
+	});
+
+	test("--multipart preserves repeated fields", () => {
+		const result = buildApiRequestBody(
+			baseInput({
+				multipart: true,
+				field: ["tag=one", "tag=two"],
+			}),
+		);
+
+		expect((result.body as FormData).getAll("tag")).toEqual(["one", "two"]);
+	});
+
+	test("--multipart requires at least one -F field", () => {
+		expect(() => buildApiRequestBody(baseInput({ multipart: true }))).toThrow(
+			'"--multipart" requires at least one "-F/--field"',
+		);
+	});
+
+	test("--multipart cannot be combined with -d or --input", () => {
+		expect(() =>
+			buildApiRequestBody(
+				baseInput({ multipart: true, field: ["x=1"], data: ["raw"] }),
+			),
+		).toThrow('"--multipart" cannot be used with "-d/--data"');
+		expect(() =>
+			buildApiRequestBody(
+				baseInput({ multipart: true, field: ["x=1"], input: "data.json" }),
+			),
+		).toThrow('"--multipart" cannot be used with "--input"');
 	});
 });

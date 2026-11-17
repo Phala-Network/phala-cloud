@@ -62,7 +62,8 @@ gateway_port = 443
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `PHALA_CLOUD_API_KEY` | Override stored API key | `phak_abc123...` |
-| `PHALA_CLOUD_API_PREFIX` | Override API base URL | `https://cloud-api.phala.ai` |
+| `PHALA_CLOUD_API_PREFIX` | Override API base URL | `https://cloud-api.phala.com/api/v1` |
+| `PHALA_CLOUD_REQUESTS_PER_MINUTE` | Pace request starts per credential; must be a positive integer | `180` |
 | `PHALA_CLOUD_DIR` | Override credentials directory | `/custom/path/.phala-cloud` |
 | `PHALA_UPDATE_CHANNEL` | Release channel for `self update` | `latest`, `beta`, `next` |
 

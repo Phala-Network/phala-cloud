@@ -1,9 +1,8 @@
 import { readFileSync } from "node:fs";
-import { createClient } from "@phala/cloud";
+import { basename, extname } from "node:path";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
-import { resolveAuthForContext } from "@/src/lib/client";
-import { CLI_USER_AGENT } from "@/src/utils/cli-version";
+import { getClient, resolveAuthForContext } from "@/src/lib/client";
 import { applyJqFilter, formatJqOutput } from "./jq-filter";
 import { apiCommandMeta, apiCommandSchema, HTTP_METHODS } from "./command";
 import type { ApiCommandInput } from "./command";
@@ -120,6 +119,75 @@ function parseBodyFields(
 	return result;
 }
 
+function multipartTextValue(value: unknown): string {
+	if (typeof value === "string") return value;
+	return JSON.stringify(value);
+}
+
+const CONTENT_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
+	".csv": "text/csv",
+	".gif": "image/gif",
+	".jpeg": "image/jpeg",
+	".jpg": "image/jpeg",
+	".json": "application/json",
+	".pdf": "application/pdf",
+	".png": "image/png",
+	".svg": "image/svg+xml",
+	".txt": "text/plain",
+	".webp": "image/webp",
+	".zip": "application/zip",
+};
+
+function contentTypeForPath(path: string): string {
+	return (
+		CONTENT_TYPES_BY_EXTENSION[extname(path).toLowerCase()] ??
+		"application/octet-stream"
+	);
+}
+
+/** Parse -F fields as multipart/form-data. In this mode key=@path is a file. */
+function parseMultipartFields(fields: string[]): FormData {
+	const form = new FormData();
+	for (const field of fields) {
+		const colonEqIdx = field.indexOf(":=");
+		if (colonEqIdx > 0) {
+			const key = field.slice(0, colonEqIdx);
+			const rawValue = field.slice(colonEqIdx + 2);
+			if (rawValue.startsWith("@")) {
+				const path = rawValue.slice(1);
+				const content = readFileContent(path);
+				try {
+					form.append(key, multipartTextValue(JSON.parse(content)));
+				} catch {
+					throw new Error(
+						`Failed to parse JSON from file "${path}" for field "${key}"`,
+					);
+				}
+			} else {
+				form.append(key, multipartTextValue(parseJsonValue(rawValue)));
+			}
+			continue;
+		}
+
+		const eqIdx = field.indexOf("=");
+		if (eqIdx <= 0) continue;
+		const key = field.slice(0, eqIdx);
+		const rawValue = field.slice(eqIdx + 1);
+		if (rawValue.startsWith("@")) {
+			const path = rawValue.slice(1);
+			const bytes = new Uint8Array(readFileSync(path));
+			form.append(
+				key,
+				new Blob([bytes], { type: contentTypeForPath(path) }),
+				basename(path),
+			);
+		} else {
+			form.append(key, rawValue);
+		}
+	}
+	return form;
+}
+
 /**
  * Parse header strings into a headers object
  */
@@ -151,8 +219,10 @@ function methodHasBody(method: string): boolean {
 	return !["GET", "HEAD", "OPTIONS"].includes(method);
 }
 
+type ApiRequestBody = RequestInit["body"] | Record<string, unknown>;
+
 type BuiltRequestBody = {
-	body: Record<string, unknown> | string | undefined;
+	body: ApiRequestBody | undefined;
 	defaultContentType?: string;
 };
 
@@ -164,6 +234,15 @@ type BuiltRequestBody = {
 export function buildApiRequestBody(input: ApiCommandInput): BuiltRequestBody {
 	const hasFields = input.field && input.field.length > 0;
 
+	if (input.multipart && !hasFields) {
+		throw new Error('"--multipart" requires at least one "-F/--field"');
+	}
+	if (input.multipart && input.data && input.data.length > 0) {
+		throw new Error('"--multipart" cannot be used with "-d/--data"');
+	}
+	if (input.multipart && input.input) {
+		throw new Error('"--multipart" cannot be used with "--input"');
+	}
 	if (input.input && input.data && input.data.length > 0) {
 		throw new Error('"-d/--data" cannot be used with "--input"');
 	}
@@ -206,6 +285,9 @@ export function buildApiRequestBody(input: ApiCommandInput): BuiltRequestBody {
 
 	// -F body fields
 	if (hasFields) {
+		if (input.multipart) {
+			return { body: parseMultipartFields(input.field ?? []) };
+		}
 		const bodyFields = parseBodyFields(input.field);
 		if (Object.keys(bodyFields).length === 0) {
 			return { body: undefined };
@@ -219,7 +301,7 @@ export function buildApiRequestBody(input: ApiCommandInput): BuiltRequestBody {
 type ResolvedRequest = {
 	method: string;
 	endpoint: string;
-	body: Record<string, unknown> | string | undefined;
+	body: ApiRequestBody | undefined;
 };
 
 const HTTP_METHOD_SET = new Set<string>(HTTP_METHODS);
@@ -257,8 +339,9 @@ export function getApiMethodPositionUsageError(
 export function resolveRequest(
 	input: ApiCommandInput,
 	endpoint: string,
+	builtBody: BuiltRequestBody = buildApiRequestBody(input),
 ): ResolvedRequest {
-	const { body } = buildApiRequestBody(input);
+	const { body } = builtBody;
 
 	// -f → query params (always appended to URL)
 	const queryParams = parseQueryParams(input.query);
@@ -299,14 +382,7 @@ export async function runApiCommand(
 		return 1;
 	}
 
-	// Create client with User-Agent header
-	const client = createClient({
-		apiKey: auth.apiKey,
-		baseURL: auth.baseURL,
-		headers: {
-			"User-Agent": CLI_USER_AGENT,
-		},
-	});
+	const client = await getClient(context, { apiToken: input.apiToken });
 
 	const customHeaders = parseHeaders(input.header);
 
@@ -323,13 +399,14 @@ export async function runApiCommand(
 			: rawEndpoint;
 
 	try {
-		const { defaultContentType } = buildApiRequestBody(input);
+		const builtBody = buildApiRequestBody(input);
+		const { defaultContentType } = builtBody;
 
 		if (defaultContentType && !hasHeader(customHeaders, "content-type")) {
 			customHeaders["Content-Type"] = defaultContentType;
 		}
 
-		const resolved = resolveRequest(input, endpoint);
+		const resolved = resolveRequest(input, endpoint, builtBody);
 
 		if (resolved.body !== undefined && !methodHasBody(resolved.method)) {
 			context.stderr.write(

@@ -77,6 +77,7 @@ export class PhalaCloudError extends Error {
   public readonly requestId?: string;
   public readonly request?: FetchRequest | undefined;
   public readonly requestMethod?: string | undefined;
+  public readonly response?: Response | undefined;
   public readonly data?: unknown;
   /** Machine-readable error code (e.g. "TIMEOUT", HTTP status as string). */
   public readonly code?: string;
@@ -93,6 +94,7 @@ export class PhalaCloudError extends Error {
       requestId?: string;
       request?: FetchRequest | undefined;
       requestMethod?: string | undefined;
+      response?: Response | undefined;
       data?: unknown;
       code?: string;
     },
@@ -105,6 +107,7 @@ export class PhalaCloudError extends Error {
     this.requestId = data.requestId;
     this.request = data.request;
     this.requestMethod = data.requestMethod;
+    this.response = data.response;
     this.data = data.data;
     this.code = data.code;
 
@@ -161,6 +164,7 @@ export class RequestError extends PhalaCloudError implements ApiError {
       requestId: options?.requestId,
       request: options?.request,
       requestMethod: options?.requestMethod,
+      response: options?.response,
       data: options?.data,
       code: options?.code,
     });
@@ -297,6 +301,7 @@ export class ValidationError extends PhalaCloudError {
           }>;
       validationErrors: ValidationErrorItem[];
       request?: FetchRequest | undefined;
+      response?: Response | undefined;
       data?: unknown;
     },
   ) {
@@ -533,6 +538,7 @@ export function parseApiError(requestError: RequestError): PhalaCloudError {
       requestId: structured.request_id ?? requestError.requestId,
       request: requestError.request,
       requestMethod: requestError.requestMethod,
+      response: requestError.response,
       data: requestError.data,
       errorCode: structured.error_code,
       structuredDetails: structured.details,
@@ -551,6 +557,7 @@ export function parseApiError(requestError: RequestError): PhalaCloudError {
     requestId: requestError.requestId,
     request: requestError.request,
     requestMethod: requestError.requestMethod,
+    response: requestError.response,
     data: requestError.data,
     code: requestError.code,
   };
@@ -802,6 +809,7 @@ export class ResourceError extends BusinessError {
       requestId?: string;
       request?: FetchRequest | undefined;
       requestMethod?: string | undefined;
+      response?: Response | undefined;
       data?: unknown;
       errorCode?: string;
       structuredDetails?: StructuredErrorDetail[];

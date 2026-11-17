@@ -10,6 +10,22 @@ phala deploy [options]
 
 Creates a new CVM by default. If `--cvm-id` is provided or `phala.toml` contains a CVM ID, updates the existing CVM instead.
 
+## Deploy one app to multiple nodes
+
+Run `phala deploy` once to create the app and its first CVM. Add more CVMs under that app with `phala instances add`:
+
+```bash
+set -euo pipefail
+
+phala deploy --name my-app --node node-a --wait
+
+for node in node-b node-c node-d; do
+  phala instances add --app-id <app-id> --node "$node"
+done
+```
+
+Do not run concurrent `phala deploy` commands with the same compose file in one workspace. They share one in-progress compose commit and can invalidate each other's commit token. `phala instances add` is the supported fan-out path and reuses the app's existing compose revision.
+
 ## Basic Options
 
 | Flag | Default | Description |

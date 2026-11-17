@@ -6,15 +6,17 @@
  */
 
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { BusinessError } from "@phala/cloud";
 import os from "node:os";
 import path from "node:path";
 import fs from "fs-extra";
 import { buildCommandSchemaInput } from "@/src/core/input-builder";
 import { parseCommandArguments } from "@/src/core/parser";
 import type { CommandContext } from "@/src/core/types";
-import { logger } from "@/src/utils/logger";
+import { logger, normalizeCliError } from "@/src/utils/logger";
 import { deployCommandMeta, deployCommandSchema } from "./command";
 import {
+	addComposeFanOutHint,
 	applyForceStopOption,
 	assertUpdatableOptions,
 	buildProvisionPayload,
@@ -25,6 +27,54 @@ import {
 	runDeploy,
 } from "./handler";
 import { composeHasDevBox } from "./dev-box";
+
+describe("deploy compose fan-out guidance", () => {
+	test.each([
+		"A commit for this compose is already in progress",
+		"Invalid or expired commit token",
+	])("explains how to create multiple instances after %s", (message) => {
+		const original = new Error(message);
+		const result = addComposeFanOutHint(original);
+
+		expect(result).toBe(original);
+		expect(original.message).toContain(
+			"Concurrent phala deploy commands for the same compose file",
+		);
+		expect(original.message).toContain(
+			"phala instances add --app-id <app-id> --node <node>",
+		);
+	});
+
+	test("renders the hint for SDK business errors", () => {
+		const message = "A commit for this compose is already in progress";
+		const original = new BusinessError(message, {
+			status: 409,
+			statusText: "Conflict",
+			detail: message,
+		});
+
+		const envelope = normalizeCliError(addComposeFanOutHint(original));
+
+		expect(envelope.message).toContain(
+			"phala instances add --app-id <app-id> --node <node>",
+		);
+		expect(envelope.httpStatus).toBe(409);
+	});
+
+	test("does not show fan-out guidance for an expired update token", () => {
+		const original = new Error("Invalid or expired commit token");
+
+		expect(addComposeFanOutHint(original, true)).toBe(original);
+		expect(original.message).toBe("Invalid or expired commit token");
+	});
+
+	test("leaves unrelated deploy errors unchanged", () => {
+		const original = new Error("Node has insufficient capacity");
+
+		expect(addComposeFanOutHint(original)).toBe(original);
+		expect(original.message).toBe("Node has insufficient capacity");
+	});
+});
 
 describe("deploy node selection", () => {
 	test("parses --node and no longer exposes --node-id", () => {
