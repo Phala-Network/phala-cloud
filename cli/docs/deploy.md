@@ -37,7 +37,7 @@ Do not run concurrent `phala deploy` commands with the same compose file in one 
 | `-e, --env <value>` | | Environment variable (KEY=VALUE) or path to .env file. Repeatable |
 | `--kms <type>` | phala | KMS type: phala, ethereum/eth, or base |
 | `--wait` | false | Wait for the deployment to finish and fail if it failed. New CVM: wait until it is running. Update (`--cvm-id`): wait until the CVM is running again, or stays stopped if it was not running before the update |
-| `--dev-os` | false | Enable SSH access. Needs `--image`: on dstack 0.6+ it adds a `dev-box` service to the compose, below 0.6 it deploys the dev variant of that release. An update re-adds the dev box |
+| `--dev-os` | false | Enable SSH access. Needs `--image`: on dstack 0.6+ it adds a `dev-box` service and saves it to your local compose file, below 0.6 it deploys the dev variant of that release. An update re-adds the dev box |
 | `--public-logs` | true | Make CVM logs publicly accessible |
 | `--no-public-logs` | | Disable public log access |
 | `--public-sysinfo` | true | Make CVM system info publicly accessible |
@@ -104,7 +104,7 @@ A flag you leave out keeps the CVM's current value. In particular, an update wit
 
 These flags set how a CVM is created and cannot be changed afterwards: `--name`, `--region`, `--node`, `--custom-app-id`, `--nonce`, `--key-provider-mode`, `--ssh-pubkey`, `--fs`, `--skip-gateway`, `--kms`, `--kms-id`, `--kms-contract`, `--kms-contract-id`, `--experimental-key-provider-type`, `--runner`, `--app-compose`, `--launch-token` and `--generate-launch-token`. An update that passes any of them fails before any request is sent.
 
-`--dev-os` is not in that list: it also applies to an update, because the dev box is added to the payload a deployment sends and never to the compose file on disk. The CLI records how `--dev-os` was satisfied for a CVM (dstack 0.6+ dev box, or a pre-0.6 dev image) in `~/.phala-cloud/state.json`, keyed by the CVM's `vm_uuid` — the one id a create and an update agree on, however you spell the `--cvm-id`. An update without the flag repeats that choice; the record is written only after the API accepts the change, so a failed deploy leaves it untouched. Pass `--dev-os` to set it explicitly on an update (with `--image`, so the dstack release is known) or `--no-dev-os` to drop it, which removes the record once the update is applied.
+`--dev-os` is not in that list: it also applies to an update, because on dstack 0.6+ the dev box is part of the compose a deployment sends. The CLI records how `--dev-os` was satisfied for a CVM (dstack 0.6+ dev box, or a pre-0.6 dev image) in `~/.phala-cloud/state.json`, keyed by the CVM's `vm_uuid` — the one id a create and an update agree on, however you spell the `--cvm-id`. An update without the flag repeats that choice; the record is written only after the API accepts the change, so a failed deploy leaves it untouched. Pass `--dev-os` to set it explicitly on an update (with `--image`, so the dstack release is known) or `--no-dev-os` to drop it, which removes the record once the update is applied.
 
 ## Raw app compose
 
@@ -216,8 +216,21 @@ image, and a production image of that release would deploy a CVM without sshd:
 the CLI resolves the variant from the OS image catalog and fails, listing the
 catalog, when that release has none.
 
-The dev box only ever exists in what the CLI sends, never in your compose file.
-A create therefore records how `--dev-os` was satisfied in
+`--dev-os` edits your local compose file. When it adds the dev box, the CLI
+writes the new compose back to the file you passed with `-c` (or that
+`phala.toml` names) before deploying, prints a unified diff of the change on
+stderr, and deploys exactly the content it wrote. The flag is the consent, so
+there is no confirmation prompt. The file is replaced atomically and keeps its
+line endings and trailing newline; a symlink is followed, so the link stays. The
+file you review, commit or register on-chain is therefore the compose that runs,
+and its hash matches. With `--json`, stdout stays a single JSON document and the
+result carries `compose_file_updated` with the path that was written. A compose
+that already has the dev box is not touched. Nothing is written for a pre-0.6
+dev image, for an `--app-compose` document, or when the compose file is not a
+regular file (for example a pipe); in the last two cases the CLI deploys the
+compose with the dev box and notes that it is not in your local file.
+
+A create records how `--dev-os` was satisfied in
 `~/.phala-cloud/state.json`, keyed by the CVM's `vm_uuid`, and a later update
 without the flag re-adds the dev box, so a redeploy keeps SSH access.
 `--dev-os` on an update sets the choice explicitly (it needs `--image`, so the

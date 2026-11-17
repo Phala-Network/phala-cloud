@@ -9,6 +9,7 @@ import {
 	afterAll,
 	afterEach,
 	beforeAll,
+	beforeEach,
 	describe,
 	expect,
 	mock,
@@ -193,6 +194,12 @@ afterAll(async () => {
 	else process.env.PHALA_CLOUD_DIR = previousCloudDir;
 	server.stop(true);
 	await fs.remove(tmpDir);
+});
+
+// `--dev-os` writes the dev box into the compose file it deploys; every test
+// starts from the original.
+beforeEach(async () => {
+	await fs.writeFile(composePath, COMPOSE);
 });
 
 afterEach(() => {
