@@ -1865,6 +1865,60 @@ const commitCvmUpdate = async (
 	}
 };
 
+const COMPOSE_FAN_OUT_HINT =
+	"Concurrent phala deploy commands for the same compose file compete for one compose commit and can invalidate each other's commit token. Deploy the app once, then add each additional CVM with `phala instances add --app-id <app-id> --node <node>`.";
+
+function appendComposeFanOutHint(message: string): string {
+	return message.includes(COMPOSE_FAN_OUT_HINT)
+		? message
+		: `${message}\n\n${COMPOSE_FAN_OUT_HINT}`;
+}
+
+export function addComposeFanOutHint(
+	error: unknown,
+	isUpdate = false,
+): unknown {
+	const message = error instanceof Error ? error.message : String(error);
+	const normalized = message.toLowerCase();
+	const isComposeConflict = normalized.includes(
+		"a commit for this compose is already in progress",
+	);
+	const isExpiredCommitToken =
+		!isUpdate &&
+		(normalized.includes("invalid or expired commit token") ||
+			(normalized.includes("commit token") && normalized.includes("expired")));
+	if (!isComposeConflict && !isExpiredCommitToken) return error;
+
+	const messageWithHint = appendComposeFanOutHint(message);
+	if (error instanceof Error) {
+		Object.defineProperty(error, "message", {
+			value: messageWithHint,
+			configurable: true,
+			writable: true,
+		});
+		if ("detail" in error) {
+			const detail = (error as { detail?: unknown }).detail;
+			const detailWithHint =
+				typeof detail === "string"
+					? appendComposeFanOutHint(detail)
+					: detail !== null &&
+							typeof detail === "object" &&
+							!Array.isArray(detail) &&
+							"message" in detail &&
+							typeof detail.message === "string"
+						? { ...detail, message: appendComposeFanOutHint(detail.message) }
+						: detail;
+			Object.defineProperty(error, "detail", {
+				value: detailWithHint,
+				configurable: true,
+				writable: true,
+			});
+		}
+		return error;
+	}
+	return new Error(messageWithHint);
+}
+
 export async function runDeploy(
 	input: DeployCommandInput,
 	context: CommandContext,
@@ -2084,7 +2138,7 @@ export async function runDeploy(
 		return 0;
 	} catch (error) {
 		const isUpdate = Boolean(context.cvmId);
-		context.failWithError(error, {
+		context.failWithError(addComposeFanOutHint(error, isUpdate), {
 			operation: isUpdate ? "CVM update" : "CVM deployment",
 			debug: input.debug,
 			guidance: isUpdate

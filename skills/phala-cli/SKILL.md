@@ -19,6 +19,7 @@ Determine what the user wants, then follow the matching procedure:
 |-----------|-----------|
 | "deploy", "上线", "launch", "create a CVM" | **First Deploy** |
 | "update", "redeploy", "upgrade", "push changes" | **Update Existing CVM** |
+| "multiple instances", "many nodes", "scale out", "replicas" | **Add Instances to an App** |
 | "not working", "error", "logs", "debug", "为什么挂了" | **Debug a CVM** |
 | "SSH", "connect", "shell", "copy files" | **SSH & File Transfer** |
 | "CI/CD", "automate", "pipeline", "GitHub Actions" | **CI/CD Setup** |
@@ -84,6 +85,26 @@ phala deploy --cvm-id app_abc123
 The CLI detects a CVM identifier and switches to update mode automatically. Changed compose file, env vars, or deploy flags are applied.
 
 ---
+
+## Add Instances to an App
+
+Create the app and first CVM once:
+
+```bash
+phala deploy --name my-app --node node-a --wait
+```
+
+Then add one instance per target node:
+
+```bash
+set -euo pipefail
+
+for node in node-b node-c node-d; do
+  phala instances add --app-id <app-id> --node "$node"
+done
+```
+
+Do not start multiple concurrent `phala deploy` commands with the same compose file in one workspace. Those commands compete for one in-progress compose commit, so one can invalidate another command's commit token. Use `phala instances add` for additional CVMs under the same app.
 
 ## Debug a CVM
 
@@ -241,6 +262,7 @@ With `phala.toml` present, no identifier needed.
 | `--` required for ssh pass-through | `phala ssh -L 8080:...` fails — the CLI eats the flag. Use `phala ssh -- -L 8080:...`. |
 | `-o ProxyCommand` blocked | Security restriction in `phala ssh`. Cannot override. |
 | Deploy auto-detects update mode | If `phala.toml` or `--cvm-id` provides a CVM identifier, deploy updates instead of creating. No separate "update" command. |
+| Same-compose fan-out uses instances | Run `phala deploy` once, then use `phala instances add --app-id <app-id> --node <node>` for each additional CVM. Concurrent deploys can collide on the compose commit. |
 | `--wait` only for deploy | Only `phala deploy --wait` blocks until ready. Other commands don't have `--wait`. |
 | Env file secrets are encrypted | `DSTACK_*` and other env vars in `-e .env` are encrypted before transmission. The CVM decrypts at runtime. Safe to include registry passwords. |
 | Serial logs show boot-time only | `--serial` captures the VM boot sequence. If you need runtime container logs, use default `phala logs`. |

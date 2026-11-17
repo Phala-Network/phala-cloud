@@ -131,6 +131,20 @@ List deployed CVMs with filtering.
 | `--region <region>` | | Filter by region |
 | `-j, --json` | false | JSON output |
 
+### phala instances add
+
+    phala instances add --app-id <app-id> --node <node>
+
+Create one additional CVM under an existing app. To place the same app on several nodes, run the command once per node in a sequential loop. Create the app once with `phala deploy`; do not run concurrent deploys with the same compose file.
+
+| Flag | Description |
+|------|-------------|
+| `--app-id <id>` | Existing app ID; defaults to `app_id` in `phala.toml` |
+| `--name <name>` | Custom name for the new CVM |
+| `--node <name>` | Physical node for the new CVM |
+| `-c, --compose-file <file>` | Use a new Docker Compose revision instead of the app's current revision |
+| `--compose-hash <hash>` | Use a specific existing compose revision |
+
 ### phala cvms list
 
 Alias for `phala apps`. Also available as `phala cvms ls`.
