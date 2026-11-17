@@ -537,6 +537,29 @@ describe("RequestError.fromFetchError with StructuredError responses", () => {
     expect(Array.isArray(detail.details)).toBe(true);
   });
 
+  it("should preserve Retry-After on the parsed API error", () => {
+    const response = new Response(null, {
+      status: 429,
+      headers: { "Retry-After": "7" },
+    });
+    const fetchError = {
+      message: '[GET] "/api/v1/cvms": 429 Too Many Requests',
+      status: 429,
+      statusText: "Too Many Requests",
+      data: { detail: "Rate limit exceeded" },
+      request: "/api/v1/cvms",
+      options: { method: "GET" },
+      response,
+    } as unknown;
+
+    const requestError = RequestError.fromFetchError(fetchError as never);
+    const error = parseApiError(requestError);
+
+    expect(error.status).toBe(429);
+    expect(error.response).toBe(response);
+    expect(error.response?.headers.get("Retry-After")).toBe("7");
+  });
+
   it("should parse StructuredError wrapped in HTTPException detail", () => {
     const fetchError = {
       message: '[GET] "/api/v1/profiles/me": 403 Forbidden',
