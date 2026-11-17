@@ -48,12 +48,13 @@ type LogEntry = {
 };
 
 const mockFetchContainerLogsEntries = mock(
-	(_appId: string, _options: ContainerLogsOptions) =>
+	(_context: unknown, _appId: string, _options: ContainerLogsOptions) =>
 		Promise.resolve<LogEntry[]>([{ channel: "stdout", message: "hello\n" }]),
 );
 
 const mockStreamContainerLogsEntries = mock(
 	(
+		_context: unknown,
 		_appId: string,
 		onEntry: (entry: LogEntry) => void,
 		_options: ContainerLogsOptions,
@@ -68,12 +69,17 @@ const mockStreamContainerLogsEntries = mock(
 );
 
 const mockFetchCvmChannelLogs = mock(
-	(_appId: string, _channel: CvmLogChannel, _options: SerialLogsOptions) =>
-		Promise.resolve("serial log output\n"),
+	(
+		_context: unknown,
+		_appId: string,
+		_channel: CvmLogChannel,
+		_options: SerialLogsOptions,
+	) => Promise.resolve("serial log output\n"),
 );
 
 const mockStreamCvmChannelLogs = mock(
 	(
+		_context: unknown,
 		_appId: string,
 		_channel: CvmLogChannel,
 		onData: (data: string) => void,
@@ -85,7 +91,9 @@ const mockStreamCvmChannelLogs = mock(
 	},
 );
 
-const mockGetCvmStatus = mock((_appId: string) => Promise.resolve("running"));
+const mockGetCvmStatus = mock((_context: unknown, _appId: string) =>
+	Promise.resolve("running"),
+);
 
 mock.module("@/src/api/cvms", () => ({
 	...realApi,
@@ -237,9 +245,9 @@ describe("logs command", () => {
 
 		expect(code).toBe(0);
 		const firstCall = mockFetchContainerLogsEntries.mock.calls[0] as
-			| [string, ContainerLogsOptions]
+			| [unknown, string, ContainerLogsOptions]
 			| undefined;
-		expect(firstCall?.[1]).toMatchObject({ tail: "all" });
+		expect(firstCall?.[2]).toMatchObject({ tail: "all" });
 	});
 
 	test("fetches container logs with container name", async () => {
@@ -258,9 +266,9 @@ describe("logs command", () => {
 		expect(code).toBe(0);
 		expect(mockFetchContainerLogsEntries).toHaveBeenCalledTimes(1);
 		const firstCall = mockFetchContainerLogsEntries.mock.calls[0] as
-			| [string, ContainerLogsOptions]
+			| [unknown, string, ContainerLogsOptions]
 			| undefined;
-		expect(firstCall?.[1]).toMatchObject({
+		expect(firstCall?.[2]).toMatchObject({
 			container: "my-service",
 			matchContainerIdPrefix: true,
 		});
@@ -491,9 +499,9 @@ describe("logs command", () => {
 
 			expect(code).toBe(0);
 			const call = mockFetchContainerLogsEntries.mock.calls[0] as
-				| [string, ContainerLogsOptions]
+				| [unknown, string, ContainerLogsOptions]
 				| undefined;
-			expect(call?.[1]).toMatchObject({ since: 1794225000, until: 1794225481 });
+			expect(call?.[2]).toMatchObject({ since: 1794225000, until: 1794225481 });
 			expect(nowSpy).toHaveBeenCalledTimes(1);
 		} finally {
 			nowSpy.mockRestore();
@@ -516,11 +524,12 @@ describe("logs command", () => {
 		expect(code).toBe(0);
 		expect(mockFetchCvmChannelLogs).toHaveBeenCalledTimes(1);
 		const call = mockFetchCvmChannelLogs.mock.calls[0] as [
+			unknown,
 			string,
 			CvmLogChannel,
 			SerialLogsOptions,
 		];
-		expect(call[1]).toBe("serial");
+		expect(call[2]).toBe("serial");
 		expect(stdoutWriteSpy).toHaveBeenCalledWith("serial log output\n");
 	});
 
@@ -541,11 +550,12 @@ describe("logs command", () => {
 
 		expect(code).toBe(0);
 		const call = mockFetchCvmChannelLogs.mock.calls[0] as [
+			unknown,
 			string,
 			CvmLogChannel,
 			SerialLogsOptions,
 		];
-		expect(call[1]).toBe("stdout");
+		expect(call[2]).toBe("stdout");
 	});
 
 	test("--cvm-stderr fetches CVM stderr logs", async () => {
@@ -565,11 +575,12 @@ describe("logs command", () => {
 
 		expect(code).toBe(0);
 		const call = mockFetchCvmChannelLogs.mock.calls[0] as [
+			unknown,
 			string,
 			CvmLogChannel,
 			SerialLogsOptions,
 		];
-		expect(call[1]).toBe("stderr");
+		expect(call[2]).toBe("stderr");
 	});
 
 	test("--serial with --follow streams CVM serial logs", async () => {
@@ -719,11 +730,12 @@ describe("logs command", () => {
 		expect(mockGetCvmStatus).toHaveBeenCalledTimes(1);
 		expect(mockFetchCvmChannelLogs).toHaveBeenCalledTimes(1);
 		const call = mockFetchCvmChannelLogs.mock.calls[0] as [
+			unknown,
 			string,
 			CvmLogChannel,
 			SerialLogsOptions,
 		];
-		expect(call[1]).toBe("serial");
+		expect(call[2]).toBe("serial");
 	});
 
 	test("defaults to container mode when getCvmStatus fails", async () => {

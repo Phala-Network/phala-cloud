@@ -14,7 +14,7 @@ class CvmWaitError extends Error {}
  * Progress messages are automatically suppressed in JSON mode.
  *
  * @param cvmId CVM identifier (UUID, app_id, name, or any format accepted by CvmIdSchema)
- * @param timeoutMs Maximum time to wait in milliseconds (default: 5 minutes)
+ * @param timeoutMs Maximum time to wait in milliseconds
  * @param expectedStatus Status that counts as ready (default: running)
  * @returns Promise that resolves when CVM is in expectedStatus and not in_progress, or rejects on timeout.
  * With failOnError, a CVM that settles in error rejects at once; only use it
@@ -23,8 +23,8 @@ class CvmWaitError extends Error {}
  */
 export async function waitForCvmReady(
 	cvmId: string,
-	timeoutMs = 300000, // 5 minutes default
-	context?: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
+	timeoutMs: number,
+	context: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
 	expectedStatus = "running",
 	failOnError = false,
 ): Promise<void> {

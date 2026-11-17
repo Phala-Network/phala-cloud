@@ -1,9 +1,11 @@
 import { selectCvm } from "@/src/api/cvms";
 import {
+	type CliErrorAuthScope,
 	buildJsonCliError,
 	normalizeCliError,
 	renderHumanCliError,
 } from "@/src/utils/logger";
+import { resolveAuthForContext } from "@/src/lib/client";
 import { getProjectConfig } from "@/src/utils/project-config";
 import { type CvmIdInput, SUPPORTED_API_VERSIONS } from "@phala/cloud";
 import chalk from "chalk";
@@ -273,7 +275,7 @@ export async function dispatchCommand(
 		);
 
 		if (isInteractive && commandAcceptsCvmId) {
-			const selected = await selectCvm();
+			const selected = await selectCvm({ env, projectConfig, globalOptions });
 			if (selected) {
 				cvmId = { app_id: selected };
 			}
@@ -388,6 +390,11 @@ export async function dispatchCommand(
 						operation: options?.operation,
 						debug: options?.debug,
 						guidance: options?.guidance,
+						authScope: describeAuthScope({
+							env,
+							projectConfig,
+							globalOptions,
+						}),
 					}),
 				);
 			},
@@ -644,4 +651,20 @@ function isArgError(error: unknown): error is Error & { code?: string } {
 		// biome-ignore lint/suspicious/noExplicitAny: arg library error type
 		typeof (error as any).code === "string"
 	);
+}
+
+/** Which profile and endpoint a command's requests use; undefined when unresolvable. */
+function describeAuthScope(
+	context: Parameters<typeof resolveAuthForContext>[0],
+): CliErrorAuthScope | undefined {
+	try {
+		const auth = resolveAuthForContext(context);
+		return {
+			profile: auth.profileName,
+			apiUrl: auth.baseURL,
+			...(auth.workspace ? { workspace: auth.workspace } : {}),
+		};
+	} catch {
+		return undefined;
+	}
 }

@@ -48,8 +48,10 @@ async function runCvmsAttestationCommand(
 		);
 
 		try {
-			const attestationData: CvmAttestationResponse =
-				await getCvmAttestation(resolvedAppId);
+			const attestationData: CvmAttestationResponse = await getCvmAttestation(
+				context,
+				resolvedAppId,
+			);
 			spinner.stop(true);
 
 			if (!attestationData) {

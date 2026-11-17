@@ -148,7 +148,7 @@ async function runLogsCommand(
 	if (!mode) {
 		// Auto-detect based on CVM status
 		try {
-			const status = await getCvmStatus(appId);
+			const status = await getCvmStatus(context, appId);
 			if (status === "running") {
 				mode = { type: "container" };
 			} else {
@@ -212,6 +212,7 @@ async function runCvmMode(
 
 			try {
 				await streamCvmChannelLogs(
+					context,
 					appId,
 					channel,
 					(data) => context.stdout.write(data),
@@ -232,7 +233,7 @@ async function runCvmMode(
 			return 0;
 		}
 
-		const logs = await fetchCvmChannelLogs(appId, channel, {
+		const logs = await fetchCvmChannelLogs(context, appId, channel, {
 			tail: input.tail,
 		});
 
@@ -293,6 +294,7 @@ async function runContainerMode(
 
 			try {
 				await streamContainerLogsEntries(
+					context,
 					appId,
 					(entry) => writeLogEntry(entry, outputConfig, context),
 					options,
@@ -310,7 +312,7 @@ async function runContainerMode(
 			return 0;
 		}
 
-		const entries = await fetchContainerLogsEntries(appId, options);
+		const entries = await fetchContainerLogsEntries(context, appId, options);
 		const filteredEntries = entries.filter((e) =>
 			e.channel === "stderr"
 				? outputConfig.includeStderr
@@ -330,7 +332,7 @@ async function runContainerMode(
 			return 0;
 		}
 
-		const logsDisabled = await checkAndWarnIfLogsDisabled(appId);
+		const logsDisabled = await checkAndWarnIfLogsDisabled(appId, context);
 		if (!logsDisabled) {
 			logger.info("No logs available");
 		}
@@ -340,7 +342,7 @@ async function runContainerMode(
 			operation: "Fetch container logs",
 			debug: Boolean((input as { debug?: boolean }).debug),
 		});
-		await checkAndWarnIfLogsDisabled(appId);
+		await checkAndWarnIfLogsDisabled(appId, context);
 		return 1;
 	}
 }

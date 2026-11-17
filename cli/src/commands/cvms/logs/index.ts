@@ -21,17 +21,18 @@ const runCvmsLogsCommand = createLogsHandler<
 >(
 	{
 		logType: "container",
-		fetchLogs: async (appId, options) => {
-			const entries = await fetchContainerLogsEntries(appId, options);
+		fetchLogs: async (context, appId, options) => {
+			const entries = await fetchContainerLogsEntries(context, appId, options);
 			return entries.map((entry) => entry.message).join("");
 		},
-		streamLogs: async (appId, onData, options, signal, context) => {
+		streamLogs: async (context, appId, onData, options, signal) => {
 			await streamContainerLogsEntries(
+				context,
 				appId,
 				(entry) => {
 					const message = entry.message;
 					if (entry.channel === "stderr") {
-						context?.stderr.write(message);
+						context.stderr.write(message);
 					} else {
 						onData(message);
 					}

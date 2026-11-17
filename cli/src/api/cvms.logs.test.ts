@@ -70,6 +70,8 @@ const {
 	LogAccessError,
 } = await import("./cvms");
 
+const ctx = { env: {}, projectConfig: {} };
+
 let fetchImplementation: (
 	input: string | URL | Request,
 	init?: RequestInit,
@@ -130,6 +132,7 @@ describe("CVM log access client", () => {
 		};
 
 		await streamCvmChannelLogs(
+			ctx,
 			"app_test",
 			"serial",
 			(data) => {
@@ -169,6 +172,7 @@ describe("CVM log access client", () => {
 				: new Response("still following\n");
 
 		await streamCvmChannelLogs(
+			ctx,
 			"app_test",
 			"serial",
 			(data) => {
@@ -189,6 +193,7 @@ describe("CVM log access client", () => {
 		};
 
 		const error = await streamCvmChannelLogs(
+			ctx,
 			"app_test",
 			"serial",
 			() => {},
@@ -213,6 +218,7 @@ describe("CVM log access client", () => {
 			);
 
 		const error = await streamCvmChannelLogs(
+			ctx,
 			"app_test",
 			"serial",
 			() => {},
@@ -243,6 +249,7 @@ describe("CVM log access client", () => {
 		};
 
 		await streamCvmChannelLogs(
+			ctx,
 			"app_test",
 			"serial",
 			(data) => {
@@ -274,6 +281,7 @@ describe("CVM log access client", () => {
 				: ndjsonResponse(second);
 
 		await streamContainerLogsEntries(
+			ctx,
 			"app_test",
 			(entry) => {
 				output.push(entry.message);
@@ -311,6 +319,7 @@ describe("CVM log access client", () => {
 				: ndjsonResponse([repeated, repeated, repeated]);
 
 		await streamContainerLogsEntries(
+			ctx,
 			"app_test",
 			(entry) => {
 				output.push(entry.message);
@@ -347,6 +356,7 @@ describe("CVM log access client", () => {
 			]);
 
 		await streamContainerLogsEntries(
+			ctx,
 			"app_test",
 			(entry) => {
 				output.push(entry.message);
@@ -366,7 +376,7 @@ describe("CVM log access client", () => {
 				{ channel: "stderr", message: "[vmm heartbeat]" },
 			]);
 
-		const entries = await fetchContainerLogsEntries("app_test");
+		const entries = await fetchContainerLogsEntries(ctx, "app_test");
 		expect(entries).toEqual([
 			{ channel: "stdout", message: "" },
 			{ channel: "stderr", message: "[vmm heartbeat]" },
@@ -388,7 +398,7 @@ describe("CVM log access client", () => {
 			);
 
 		await expect(
-			fetchCvmChannelLogs("app_test", "serial"),
+			fetchCvmChannelLogs(ctx, "app_test", "serial"),
 		).rejects.toMatchObject({
 			name: "LogAccessError",
 			code: "ERR-17-004",
@@ -408,6 +418,7 @@ describe("CVM log access client", () => {
 				: ndjsonResponse([{ channel: "stdout", message: "reconnected log" }]);
 
 		await streamContainerLogsEntries(
+			ctx,
 			"app_test",
 			(entry) => {
 				output.push(entry.message);
@@ -428,6 +439,7 @@ describe("CVM log access client", () => {
 			jsonResponse({ error_code: "ERR-17-003", message: "URL expired" }, 401);
 
 		const error = await streamCvmChannelLogs(
+			ctx,
 			"app_test",
 			"serial",
 			() => {},
@@ -446,7 +458,11 @@ describe("CVM log access client", () => {
 		fetchImplementation = async () =>
 			ndjsonResponse([{ error_code: "ERR-17-003", message: "URL expired" }]);
 
-		const error = await streamContainerLogsEntries("app_test", () => {}).then(
+		const error = await streamContainerLogsEntries(
+			ctx,
+			"app_test",
+			() => {},
+		).then(
 			() => undefined,
 			(reason: unknown) => reason,
 		);
