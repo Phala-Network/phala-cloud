@@ -836,3 +836,90 @@ export {
   type GetOsImagesRequest,
   type OSImagePublic,
 } from "./os_images/get_os_images";
+
+export {
+  AppDomainSchema,
+  WorkspaceDomainSchema,
+  ExpectedDnsRecordSchema,
+  RoutingStatusSchema,
+  DnsRecordCheckSchema,
+  DomainSyncSchema,
+  type AppDomain,
+  type WorkspaceDomain,
+  type ExpectedDnsRecord,
+  type RoutingStatus,
+  type DnsRecordCheck,
+  type DomainSync,
+} from "./domains/schemas";
+
+export {
+  listDomains,
+  safeListDomains,
+  ListDomainsRequestSchema,
+  ListDomainsResponseSchema,
+  type ListDomainsRequest,
+  type ListDomainsResponse,
+} from "./domains/list_domains";
+
+export {
+  listAppDomains,
+  safeListAppDomains,
+  ListAppDomainsRequestSchema,
+  ListAppDomainsResponseSchema,
+  type ListAppDomainsRequest,
+  type ListAppDomainsResponse,
+} from "./domains/list_app_domains";
+
+export {
+  getAppDomainGuide,
+  safeGetAppDomainGuide,
+  GetAppDomainGuideRequestSchema,
+  AppDomainGuideSchema,
+  type GetAppDomainGuideRequest,
+  type AppDomainGuide,
+} from "./domains/get_app_domain_guide";
+
+export {
+  preflightAppDomain,
+  safePreflightAppDomain,
+  PreflightAppDomainRequestSchema,
+  PreflightAppDomainResponseSchema,
+  type PreflightAppDomainRequest,
+  type PreflightAppDomainResponse,
+} from "./domains/preflight_app_domain";
+
+export {
+  createAppDomain,
+  safeCreateAppDomain,
+  CreateAppDomainRequestSchema,
+  CreateAppDomainResponseSchema,
+  type CreateAppDomainRequest,
+  type CreateAppDomainResponse,
+} from "./domains/create_app_domain";
+
+export {
+  verifyAppDomain,
+  safeVerifyAppDomain,
+  VerifyAppDomainRequestSchema,
+  VerifyAppDomainResponseSchema,
+  type VerifyAppDomainRequest,
+  type VerifyAppDomainResponse,
+} from "./domains/verify_app_domain";
+
+export {
+  deleteAppDomain,
+  safeDeleteAppDomain,
+  DeleteAppDomainRequestSchema,
+  DeleteAppDomainResponseSchema,
+  type DeleteAppDomainRequest,
+  type DeleteAppDomainResponse,
+} from "./domains/delete_app_domain";
+
+export {
+  mergeAppDomainIngress,
+  safeMergeAppDomainIngress,
+  MergeAppDomainIngressRequestSchema,
+  MergeAppDomainIngressResponseSchema,
+  type MergeAppDomainIngressRequest,
+  type MergeAppDomainIngressResponse,
+} from "./domains/merge_app_domain_ingress";
