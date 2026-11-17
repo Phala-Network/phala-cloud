@@ -132,7 +132,7 @@ phala ssh --dry-run       # print the SSH command for debugging
 # Check CVM status
 phala apps --search my-app
 
-# Redeploy with SSH key
+# Redeploy with SSH key (--dev-os on dstack 0.6+ also adds a dev-box service to your local compose file)
 phala deploy --cvm-id app_abc123 --ssh-pubkey ~/.ssh/id_rsa.pub --dev-os
 ```
 

@@ -166,6 +166,8 @@ phala ssh -- -L 8080:localhost:80     # port forwarding
 
 Everything after `--` is passed to ssh. **`-o ProxyCommand` is blocked** for security.
 
+To enable SSH on a CVM, deploy with `--dev-os --image <dstack release>` (see `phala os-images`). On dstack 0.6+ this **edits the local compose file**: it adds a `dev-box` service to the file passed with `-c`, prints a diff on stderr, and deploys exactly what it wrote. Tell the user the file changed so they can review and commit it. Nothing is written for pre-0.6 releases or for `--app-compose`.
+
 ### Copy files
 
 ```bash

@@ -75,7 +75,7 @@ Deploy new CVM or update existing one.
 | `--kms <type>` | phala | KMS type: phala, ethereum/eth, base |
 | `--wait` | false | Wait until a new CVM is running, or until an updated CVM is running again (it stays stopped if it was not running before); fail if the deployment failed |
 | `--ssh-pubkey <path>` | ~/.ssh/id_rsa.pub | SSH public key |
-| `--dev-os` | false | Use dev OS image |
+| `--dev-os` | false | Enable SSH access (needs `--image`). dstack 0.6+: adds a `dev-box` service and **edits your local compose file** (diff on stderr, `compose_file_updated` in `--json`) before deploying; below 0.6: deploys the dev image |
 | `--public-logs` | true | Public container logs |
 | `--no-public-logs` | | Disable public logs |
 | `--public-sysinfo` | true | Public system info |
