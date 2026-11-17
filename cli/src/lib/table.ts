@@ -7,10 +7,11 @@ const visibleLength = (value: string): number =>
 const padCell = (value: string, width: number): string =>
 	value + " ".repeat(Math.max(0, width - visibleLength(value)));
 
-export function printTable(
+/** Render a table as text, one line per row. Values are never truncated. */
+export function formatTable(
 	columns: readonly TableColumn[],
 	rows: readonly Record<TableColumn, string>[],
-): void {
+): string {
 	const widths: Record<string, number> = {};
 	for (const col of columns) {
 		widths[col] = col.length;
@@ -22,9 +23,13 @@ export function printTable(
 	const formatRow = (values: Record<string, string>) =>
 		columns.map((col) => padCell(values[col] ?? "", widths[col])).join("  ");
 
-	// header
-	console.log(formatRow(Object.fromEntries(columns.map((c) => [c, c]))));
-	for (const row of rows) {
-		console.log(formatRow(row));
-	}
+	const header = formatRow(Object.fromEntries(columns.map((c) => [c, c])));
+	return [header, ...rows.map(formatRow)].join("\n");
+}
+
+export function printTable(
+	columns: readonly TableColumn[],
+	rows: readonly Record<TableColumn, string>[],
+): void {
+	for (const line of formatTable(columns, rows).split("\n")) console.log(line);
 }
