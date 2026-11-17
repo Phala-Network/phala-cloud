@@ -800,6 +800,24 @@ services:
 			false,
 		);
 	});
+
+	test("reads the markers in a compose written as JSON", () => {
+		// Docker Compose accepts JSON outright (it is a YAML subset), and the
+		// backend grants SSH access on such a file; the CLI must see it too.
+		const jsonCompose = JSON.stringify({
+			services: {
+				app: { image: "nginx:latest" },
+				ssh: {
+					image: "example.com/dev-box:latest",
+					privileged: true,
+					pid: "host",
+					network_mode: "host",
+					uts: "host",
+				},
+			},
+		});
+		expect(composeHasDevBoxMarkers(jsonCompose)).toBe(true);
+	});
 });
 
 /**
