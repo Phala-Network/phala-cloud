@@ -1,7 +1,7 @@
-import { preflightAppDomain } from "@phala/cloud";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
+import { preflightAppDomain } from "@phala/cloud";
 import {
 	failDomainError,
 	normalizeDomain,
@@ -9,9 +9,9 @@ import {
 	resolveAppId,
 } from "../shared";
 import {
+	type DomainsCheckCommandInput,
 	domainsCheckCommandMeta,
 	domainsCheckCommandSchema,
-	type DomainsCheckCommandInput,
 } from "./command";
 
 async function runDomainsCheckCommand(
@@ -32,11 +32,22 @@ async function runDomainsCheckCommand(
 			return 0;
 		}
 
+		// Platform rows decide whether the domain can be bound at all; DNS rows
+		// only say whether traffic reaches the app yet. Binding does not wait for
+		// DNS, so only a platform failure blocks the next step.
+		const bindable = result.records.every(
+			(record) => record.record_type !== "platform" || record.is_valid,
+		);
+		const status = result.is_valid
+			? "ready"
+			: bindable
+				? "can be bound; DNS is not ready yet"
+				: "cannot be bound to this app";
 		context.stdout.write(
-			`${result.domain} (port ${result.port}): ${result.is_valid ? "DNS is ready" : "DNS is not ready yet"}\n\n`,
+			`${result.domain} (port ${result.port}): ${status}\n\n`,
 		);
 		context.stdout.write(renderRecordChecks(result.records));
-		if (result.is_valid) {
+		if (bindable) {
 			context.stdout.write(
 				`\nNext: phala domains add ${result.domain} --app-id ${appId}\n`,
 			);

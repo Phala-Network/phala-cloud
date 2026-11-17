@@ -10,9 +10,9 @@ import {
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RequestError } from "@phala/cloud";
 import type { CommandContext } from "@/src/core/types";
 import { normalizeCliError } from "@/src/utils/logger";
+import { RequestError } from "@phala/cloud";
 
 const realClient = await import(
 	`${require.resolve("@/src/lib/client")}?domains-real`
@@ -284,6 +284,39 @@ describe("domains check", () => {
 		expect(out.stdout).toContain("expected: gateway.dstack.example.net");
 		expect(out.stdout).toContain("actual:   old.example.org");
 		expect(out.stdout).toContain("[fail]");
+		// DNS alone does not block binding.
+		expect(out.stdout).toContain("can be bound; DNS is not ready yet");
+		expect(out.stdout).toContain("Next: phala domains add app.example.com");
+	});
+
+	test("a failed platform row says the domain cannot be bound, with no next step", async () => {
+		post.mockResolvedValue({
+			domain: "app.example.com",
+			port: 443,
+			is_valid: false,
+			records: [
+				{ ...check, is_valid: true },
+				{
+					record_type: "platform",
+					query_name: "app.example.com",
+					expected_value: "The domain can be bound to this app",
+					actual_value: "Registered in your account",
+					is_valid: false,
+					warning_message: "This domain is already bound in your account",
+				},
+			],
+		});
+		const { context, out } = makeContext({ projectConfig: { app_id: APP_A } });
+		const code = await domainsCheckCommand.run(
+			domainsCheckCommandSchema.parse({ domain: "app.example.com" }),
+			context,
+		);
+		expect(code).toBe(0);
+		expect(out.stdout).toContain(
+			"app.example.com (port 443): cannot be bound to this app",
+		);
+		expect(out.stdout).not.toContain("DNS is not ready");
+		expect(out.stdout).not.toContain("Next:");
 	});
 
 	test("needs an app id from the flag or phala.toml", async () => {
