@@ -107,6 +107,7 @@ When `phala.toml` exists, commands like `deploy`, `logs`, `ssh`, and `cp` automa
 |----------|-------------|
 | `PHALA_CLOUD_API_KEY` | Override the stored API key |
 | `PHALA_CLOUD_API_PREFIX` | Override the API base URL |
+| `PHALA_CLOUD_REQUESTS_PER_MINUTE` | Pace request starts per credential (default: `180`; must be a positive integer) |
 | `PHALA_CLOUD_PROFILE` | Use this auth profile instead of the current one (same as `--profile`) |
 | `PHALA_CLOUD_DIR` | Override the credentials directory (default: `~/.phala-cloud`) |
 | `PHALA_UPDATE_CHANNEL` | Release channel for `self update` (e.g., `latest`, `beta`) |

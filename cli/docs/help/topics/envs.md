@@ -10,9 +10,11 @@ All environment variables recognized by the Phala CLI. Command-line flags always
   Precedence: `--profile` > `PHALA_CLOUD_PROFILE` > `phala.toml` `profile` > current profile (`phala profiles use`).
 - `PHALA_CLOUD_WORKSPACE` — Workspace slug sent as `X-Phala-Workspace` (needed when a GitHub repo is trusted in multiple workspaces).
 - `PHALA_CLOUD_API_PREFIX` — API base URL. Default: `https://cloud-api.phala.com/api/v1`.
+- `PHALA_CLOUD_REQUESTS_PER_MINUTE` — Maximum request starts per minute for each API credential within one CLI process. Default: `180`. The value must be a positive integer.
 
-The `@phala/cloud` JS SDK also reads both directly when `createClient()` is
-called without explicit config.
+The `@phala/cloud` JS SDK also reads the API key and prefix directly when
+`createClient()` is called without explicit config. Request pacing is a CLI
+policy and does not change the SDK's standalone behavior.
 
 ## On-chain KMS
 
