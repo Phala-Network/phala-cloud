@@ -228,7 +228,7 @@ jobs:
 
       - name: Run Go tests (exclude live-API e2e)
         working-directory: go
-        run: go test $(go list ./... | grep -v /e2e) -count=1
+        run: go test -race $(go list ./... | grep -v /e2e) -count=1
 
   compatibility-checks:
     name: Compatibility Checks
