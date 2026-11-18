@@ -7,12 +7,14 @@ on:
       - 'js/**'
       - 'python/**'
       - 'go/**'
+      - '.bun-version'
       - '.github/workflows/pr-checks.yml'
   push:
     paths:
       - 'js/**'
       - 'python/**'
       - 'go/**'
+      - '.bun-version'
       - '.github/workflows/pr-checks.yml'
 
 jobs:
@@ -32,6 +34,7 @@ jobs:
           filters: |
             js:
               - 'js/**'
+              - '.bun-version'
               - '.github/workflows/pr-checks.yml'
             python:
               - 'python/**'
