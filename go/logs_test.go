@@ -9,10 +9,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -30,6 +32,81 @@ func TestWaitBackoffCancelReturnsPromptly(t *testing.T) {
 	if time.Since(start) > 500*time.Millisecond {
 		t.Fatalf("took %v", time.Since(start))
 	}
+}
+
+func TestFetchCVMLogsRetriesNodeLookup(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		c, tr := newFakeClient(t, 2, rateLimited60,
+			fakeReply{status: 200, body: `{"logs":{"serial":"https://logs.invalid/serial"}}`},
+			fakeReply{status: 200, body: "booted\n"},
+		)
+		got, err := c.FetchCVMLogs(context.Background(), "app_test", LogSource{Type: "node", Channel: CVMLogSerial}, nil)
+		if err != nil || got != "booted\n" {
+			t.Fatalf("FetchCVMLogs = %q, %v; want booted log and no error", got, err)
+		}
+		infoPath := cvmPath("app_test")
+		if want := []string{infoPath, infoPath, "/serial"}; !slices.Equal(tr.paths, want) {
+			t.Fatalf("paths = %v, want %v", tr.paths, want)
+		}
+	})
+}
+
+func TestFetchCVMLogsRetriesContainerLookups(t *testing.T) {
+	info := fakeReply{status: 200, body: `{"public_logs":true,"logs":{"container_log_base":"https://logs.invalid/container"}}`}
+	composition := fakeReply{status: 200, body: `{"containers":[{"id":"container-id","names":["/app"]}]}`}
+	log := fakeReply{status: 200, body: "started\n"}
+	infoPath, compositionPath := cvmPath("app_test"), cvmPath("app_test", "composition")
+	for _, tc := range []struct {
+		name  string
+		reply []fakeReply
+		paths []string
+	}{
+		{
+			name:  "info 429 then 200",
+			reply: []fakeReply{rateLimited60, info, composition, log},
+			paths: []string{infoPath, infoPath, compositionPath, "/container/app"},
+		},
+		{
+			name:  "composition 503 then 200",
+			reply: []fakeReply{info, {status: 503}, composition, log},
+			paths: []string{infoPath, compositionPath, compositionPath, "/container/app"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				c, tr := newFakeClient(t, 2, tc.reply...)
+				source := LogSource{Type: "container", Name: "app"}
+				got, err := c.FetchCVMLogs(context.Background(), "app_test", source, &LogsOptions{Format: "text"})
+				if err != nil || got != "started\n" {
+					t.Fatalf("FetchCVMLogs = %q, %v; want started log and no error", got, err)
+				}
+				if !slices.Equal(tr.paths, tc.paths) {
+					t.Fatalf("paths = %v, want %v", tr.paths, tc.paths)
+				}
+			})
+		})
+	}
+}
+
+func TestFetchCVMLogsLookupExhaustionReturnsLast429(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const maxRetries = 2
+		c, tr := newFakeClient(t, maxRetries,
+			fakeReply{status: 200, body: `{"public_logs":true}`},
+			rateLimited60, rateLimited60,
+			fakeReply{status: 429, body: `{"detail":"Last rate limit"}`},
+		)
+		_, err := c.FetchCVMLogs(context.Background(), "app_test", LogSource{Type: "container"}, nil)
+		apiErr := requireAPIStatus(t, err, http.StatusTooManyRequests)
+		if apiErr.Message != "Last rate limit" {
+			t.Errorf("message = %q, want the last 429's message", apiErr.Message)
+		}
+		compositionPath := cvmPath("app_test", "composition")
+		want := append([]string{cvmPath("app_test")}, slices.Repeat([]string{compositionPath}, maxRetries+1)...)
+		if !slices.Equal(tr.paths, want) {
+			t.Fatalf("paths = %v, want %v", tr.paths, want)
+		}
+	})
 }
 
 func TestFetchCVMLogsStructuredError(t *testing.T) {

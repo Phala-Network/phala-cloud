@@ -338,7 +338,8 @@ What is retried:
 | --- | --- |
 | Read calls (plain `GET`, such as `GetCVMInfo`, `GetCVMState`, `ListWorkspaces`) | `429`, `503` |
 | Write calls that retry (lifecycle actions, config and compose updates) | `409`, `429`, `503` |
-| Other write calls, `WatchCVMState`, and log fetch and follow | none by the request retry; the watch and follow loops reconnect on their own rules |
+| Cloud API lookups for one-shot logs (`FetchCVMLogs`, `FetchCVMLogEntries`): CVM info and, for containers, composition | `429`, `503` |
+| Other write calls, `WatchCVMState`, log follow, and the signed log URL for one-shot fetches | No request retries. Watch and follow reconnect under their own rules. |
 
 A `409` that carries a structured `error_code` is never retried. A read is never retried on `409`.
 

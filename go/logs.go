@@ -539,17 +539,31 @@ func (c *Client) containerLogInfo(ctx context.Context, cvmID string) (*cvmLogInf
 
 // resolveContainer checks Public Logs, then resolves the container from the
 // composition: an exact name first, else a unique container ID prefix, else
-// the first container when no name is given.
-func (c *Client) resolveContainer(ctx context.Context, cvmID, name string) (*containerTarget, error) {
-	info, err := c.containerLogInfo(ctx, cvmID)
-	if err != nil {
+// the first container when no name is given. Only one-shot fetches retry each
+// lookup; follows rely on the reconnect loop instead.
+func (c *Client) resolveContainer(ctx context.Context, cvmID, name string, retryLookups bool) (*containerTarget, error) {
+	read := func(lookup func() error) error {
+		if retryLookups {
+			return c.doReadWithRetry(ctx, lookup)
+		}
+		return lookup()
+	}
+
+	var info *cvmLogInfo
+	if err := read(func() error {
+		var err error
+		info, err = c.containerLogInfo(ctx, cvmID)
+		return err
+	}); err != nil {
 		return nil, err
 	}
 	var composition struct {
 		Containers []compositionContainer `json:"containers"`
 		Error      *string                `json:"error"`
 	}
-	if err := c.doJSON(ctx, "GET", cvmPath(cvmID, "composition"), nil, &composition); err != nil {
+	if err := read(func() error {
+		return c.doJSON(ctx, "GET", cvmPath(cvmID, "composition"), nil, &composition)
+	}); err != nil {
 		return nil, err
 	}
 	containers := composition.Containers
@@ -626,7 +640,7 @@ func (c *Client) lazyContainerTarget(cvmID, name string) *lazyTarget {
 
 func (l *lazyTarget) url(ctx context.Context) (string, error) {
 	if l.target == nil {
-		target, err := l.c.resolveContainer(ctx, l.cvmID, l.name)
+		target, err := l.c.resolveContainer(ctx, l.cvmID, l.name, false)
 		if err != nil {
 			return "", err
 		}
@@ -637,7 +651,7 @@ func (l *lazyTarget) url(ctx context.Context) (string, error) {
 
 // containerLogURL resolves the container and returns a signed URL (one-shot fetch).
 func (c *Client) containerLogURL(ctx context.Context, cvmID, name string) (string, error) {
-	target, err := c.resolveContainer(ctx, cvmID, name)
+	target, err := c.resolveContainer(ctx, cvmID, name, true)
 	if err != nil {
 		return "", err
 	}
@@ -713,7 +727,12 @@ func (c *Client) FetchCVMLogs(ctx context.Context, cvmID string, source LogSourc
 	if err := assertNodeLogOptions(opts); err != nil {
 		return "", err
 	}
-	base, err := c.nodeLogURL(ctx, cvmID, source.Channel)
+	var base string
+	err := c.doReadWithRetry(ctx, func() error {
+		var err error
+		base, err = c.nodeLogURL(ctx, cvmID, source.Channel)
+		return err
+	})
 	if err != nil {
 		return "", err
 	}
