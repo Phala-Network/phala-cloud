@@ -1,3 +1,43 @@
+## [1.2.8](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.7...cli-v1.2.8) (2026-11-17)
+
+### docs
+
+* **cli:** document phala domains and add it to the phala-cli skill ([982abb3](https://github.com/Phala-Network/phala-cloud/commit/982abb316d4af0257754d4e4f61aa7919e1adc66))
+* **cli:** document request pacing ([0b75f36](https://github.com/Phala-Network/phala-cloud/commit/0b75f36eaca90b96902fab010c7ddfebfd27e3ae))
+* **cli:** present --dev and drop the --image requirement ([fb1ad3a](https://github.com/Phala-Network/phala-cloud/commit/fb1ad3a3e6744f07c48f7b97ef3afc9e31cdb61c))
+* **cli:** say --dev-os edits the local compose file ([8c41f02](https://github.com/Phala-Network/phala-cloud/commit/8c41f0270054bfb3b61e89cfbb5b606239580a43))
+
+### feat
+
+* **cli:** accept --dev and default it to the newest dstack release ([f4d9e8b](https://github.com/Phala-Network/phala-cloud/commit/f4d9e8b17e6f21f254523a723d9e1728524f7ea8))
+* **cli:** add phala domains commands ([96b124e](https://github.com/Phala-Network/phala-cloud/commit/96b124e4dce1ddb93abe181f8e02876f92491e1e))
+* **cli:** expose app epochs in allow-devices and on-chain writes ([c70b46c](https://github.com/Phala-Network/phala-cloud/commit/c70b46c2e73388365ebe6cbb9182cde2cd504688))
+* **cli:** inject the SSH dev box for --dev-os on dstack 0.6 ([a0670f3](https://github.com/Phala-Network/phala-cloud/commit/a0670f3999bc2aa1bd5ba99f1a0dbcac93eadff0))
+* **cli:** pace API request starts ([9826244](https://github.com/Phala-Network/phala-cloud/commit/98262448b0dc848fb3a271f31749b490df1263b2))
+* **cli:** select the app by CVM in phala domains ([ddcfd30](https://github.com/Phala-Network/phala-cloud/commit/ddcfd302b9e8edff1c69fbac720692a441603c77))
+* **cli:** support multipart API uploads ([b243745](https://github.com/Phala-Network/phala-cloud/commit/b243745dcecd3d465737f0d9ce29a760cbb9ada5))
+* **cli:** write the --dev-os dev box back to the local compose file ([17536c4](https://github.com/Phala-Network/phala-cloud/commit/17536c40ec96bbab25ee2d16036eb0846e5e86b1))
+
+### fix
+
+* **cli:** close dev-box bypasses in the key channel, detection, and redeploy ([535313b](https://github.com/Phala-Network/phala-cloud/commit/535313b26b7ece5a0aad784c0df72025d53ef77d))
+* **cli:** close the dev-os state and key-channel loopholes ([b480474](https://github.com/Phala-Network/phala-cloud/commit/b4804742594428efe3246d8435718b1e0f275f5c))
+* **cli:** explain compose deployment conflicts ([1fdc5ce](https://github.com/Phala-Network/phala-cloud/commit/1fdc5ced444c51f97164d1ae1f5cb9e15ecc756c))
+* **cli:** keep the app ID's case in phala domains ([dce365a](https://github.com/Phala-Network/phala-cloud/commit/dce365a921fa79725eb39a43555ff90c832925ba))
+* **cli:** keep the binding default from crossing the closing brace ([1dba4e7](https://github.com/Phala-Network/phala-cloud/commit/1dba4e70ebb7f0dcb148bab18c3e7089170d0f03))
+* **cli:** pin the dev-box image to the build with the 0.6 SSH behavior ([7f72058](https://github.com/Phala-Network/phala-cloud/commit/7f720589e843da391318802fa55e24ec42c5aabe))
+* **cli:** remove -i --epoch considers devices removed at the current epoch ([2af76a1](https://github.com/Phala-Network/phala-cloud/commit/2af76a1527d33c98d5f7553137d4f02890bab22a))
+* **cli:** require the bare true token for the privileged dev-box marker ([fdacb77](https://github.com/Phala-Network/phala-cloud/commit/fdacb77b45f92ae8ae3efc980a7bac129cf3b1da))
+* **cli:** retry rate-limited wait polls ([4c0de69](https://github.com/Phala-Network/phala-cloud/commit/4c0de69b8067bc548b16df95418b71789ac4291b))
+* **cli:** show the compose path outside the working directory as absolute ([10e6cd6](https://github.com/Phala-Network/phala-cloud/commit/10e6cd69c8ee998949ab938f530b4f713c0739e3))
+* **cli:** strict injection path and hard stop on undecidable SSH state ([8c3aa2f](https://github.com/Phala-Network/phala-cloud/commit/8c3aa2f8bca62a4b6db3f30585b7cf4ed3772a74))
+* **cli:** tell a domain that cannot be bound from DNS that is not ready in domains check ([d4080cc](https://github.com/Phala-Network/phala-cloud/commit/d4080cc8a2d08c4b1d2515f26028710450678238))
+* **cli:** thread --epoch through wait verification and interactive picks ([9a2d012](https://github.com/Phala-Network/phala-cloud/commit/9a2d012e681077eaebb669bd2cf2f817a750cb6f))
+* **cli:** word the dev-box write-back note for updates that carry the box ([e17383b](https://github.com/Phala-Network/phala-cloud/commit/e17383b5aaaadc8b539d8f662421b690d01897be))
+
+### refactor
+
+* **cli:** share compose text insertion between deploy and domains setup ([51ec6a3](https://github.com/Phala-Network/phala-cloud/commit/51ec6a3321bd9e090fea2e1088b61ff10cf832c9))
 ## [1.2.7](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.6...cli-v1.2.7) (2026-11-12)
 
 ### feat
