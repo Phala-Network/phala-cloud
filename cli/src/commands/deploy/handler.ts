@@ -1291,18 +1291,23 @@ export const buildProvisionPayload = (
 		payload.skip_gateway = true;
 	}
 
-	// Add prefer_dev flag based on --dev / --no-dev-os
-	// For on-chain KMS (ETHEREUM/BASE), default to non-dev since dev images may not be available.
-	// dstack 0.6+ has no dev image at all: there `--dev` injected the
-	// dev-box service into the compose, so the release image is the right one
-	// and prefer_dev must stay false.
+	// Set prefer_dev from --dev / --no-dev-os, and ask for a production image
+	// when the user names none. The API treats an omitted prefer_dev with no
+	// image as "prefer a development image", so the CLI states the preference
+	// itself; the web console does the same.
+	// - On-chain KMS (ETHEREUM/BASE) always sends false: dev images may not be
+	//   available there.
+	// - With --image the preference is not needed (the API ignores it for a named
+	//   image), so it stays omitted except for the cases above.
+	// - dstack 0.6+ has no dev image at all: there `--dev` injected the
+	//   dev-box service into the compose, so the release image is the right one
+	//   and prefer_dev must stay false.
 	const isOnchainKms = kmsType === "ETHEREUM" || kmsType === "BASE";
 	if (options.devOs !== undefined) {
 		payload.prefer_dev = devOsMode === "dev-image";
-	} else if (isOnchainKms) {
+	} else if (isOnchainKms || !options.image) {
 		payload.prefer_dev = false;
 	}
-	// If devOs is undefined and not on-chain KMS, don't add prefer_dev (let backend auto-select)
 
 	// Add custom app_id if specified
 	if (options.customAppId) {
@@ -1362,6 +1367,39 @@ const reportMrConfigV3 = (input: MrConfigV3Input, mayHaveGpus: boolean) => {
 		logger.info("  gpu_policy_hash: bound at boot when the node attaches GPUs");
 	}
 };
+
+/**
+ * Explain a "no matching node" failure that follows from asking for a
+ * production OS image by default.
+ *
+ * The CLI sends `prefer_dev: false` when the user names no image. The API
+ * reports a node with no production image as the generic "no resources
+ * available" error (ERR-02-002), the same error as a capacity shortage, so
+ * the hint only says what the CLI asked for and how to ask for a development
+ * image; it does not claim to know the cause. The CLI never falls back to a
+ * dev image on its own.
+ */
+export function addNoProductionImageHint(
+	error: unknown,
+	payload: { image?: string; prefer_dev?: unknown },
+): unknown {
+	if (payload.image || payload.prefer_dev !== false) return error;
+	if (!(error instanceof Error)) return error;
+	const { errorCode, structuredDetails } = error as {
+		errorCode?: string;
+		structuredDetails?: Array<{ field?: string }>;
+	};
+	if (errorCode !== "ERR-02-002") return error;
+	if (!structuredDetails?.some((detail) => detail.field === "prefer_dev")) {
+		return error;
+	}
+	Object.defineProperty(error, "message", {
+		value: `${error.message}\nNo image was named, so the CLI asked for a production OS image. If the node and KMS you want offer only development images, name one with --image (run \`phala os-images\` to list the images).`,
+		configurable: true,
+		writable: true,
+	});
+	return error;
+}
 
 const deployNewCvm = async (
 	validatedOptions: Options,
@@ -1425,7 +1463,7 @@ const deployNewCvm = async (
 	// Provision - backend will auto-match resources
 	const provision_result = await safeProvisionCvm(client, payload);
 	if (!provision_result.success) {
-		throw provision_result.error;
+		throw addNoProductionImageHint(provision_result.error, payload);
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
 	const app = provision_result.data as any;
@@ -1556,6 +1594,15 @@ const deployNewCvm = async (
 		}
 	}
 
+	// The OS image the API chose; shown because the default is not the user's
+	// pick unless --image was passed.
+	const osImage: string | undefined =
+		typeof cvm.base_image === "string" && cvm.base_image
+			? cvm.base_image
+			: typeof cvm.os?.name === "string" && cvm.os.name
+				? cvm.os.name
+				: undefined;
+
 	if (validatedOptions?.json !== false) {
 		stdout.write(
 			`${JSON.stringify(
@@ -1565,6 +1612,7 @@ const deployNewCvm = async (
 					name: cvm.name,
 					app_id: cvm.app_id,
 					dashboard_url: `${CLOUD_URL}/dashboard/cvms/${cvm.vm_uuid}`,
+					...(osImage ? { os_image: osImage } : {}),
 					...(cvm.launch_token ? { launch_token: cvm.launch_token } : {}),
 					...composeFileUpdatedField(validatedOptions),
 				},
@@ -1582,6 +1630,9 @@ const deployNewCvm = async (
       Dashboard URL:  ${CLOUD_URL}/dashboard/cvms/${cvm.vm_uuid}
     `;
 		stdout.write(`${successMessage}\n`);
+		if (osImage) {
+			stdout.write(`OS image:  ${osImage}\n`);
+		}
 		if (cvm.launch_token) {
 			stdout.write(
 				`Launch token:   ${cvm.launch_token}\nThis is the only time the launch token is shown. Store it.\n`,

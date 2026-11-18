@@ -98,7 +98,8 @@ export const deployCommandMeta: CommandMeta = {
 		},
 		{
 			name: "image",
-			description: "OS image version (auto-selected if omitted)",
+			description:
+				"OS image name (the newest production image if omitted; name a dev image to use one)",
 			type: "string",
 			target: "image",
 			group: "advanced",

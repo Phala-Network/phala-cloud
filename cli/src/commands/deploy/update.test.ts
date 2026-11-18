@@ -388,6 +388,16 @@ describe("phala deploy --cvm-id", () => {
 		});
 	});
 
+	test("sends no image and no OS image preference when the update names none", async () => {
+		const { exitCode, failure } = await deploy({});
+
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		const body = updateRequest().body as Record<string, unknown>;
+		expect("image" in body).toBe(false);
+		expect("prefer_dev" in body).toBe(false);
+	});
+
 	test("adds the dev box recorded at create when the update passes no --dev-os", async () => {
 		// What `phala deploy --dev-os --image dstack-0.6.0` recorded: the server's
 		// vm_uuid, which a create and an update can both agree on.
