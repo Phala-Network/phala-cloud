@@ -182,7 +182,7 @@ async function runCvmsResizeCommand(
 				`Resizing CVM with App ID app_${resolvedAppId}`,
 			);
 			await retryOnConflict(
-				() => resizeCvm(resolvedAppId, vcpu, memory, diskSize),
+				() => resizeCvm(context, resolvedAppId, vcpu, memory, diskSize),
 				{ spinner },
 			);
 			spinner.stop(true);
@@ -194,7 +194,7 @@ ${CLOUD_URL}/dashboard/cvms/app_${resolvedAppId}`,
 			);
 		} else {
 			await retryOnConflict(() =>
-				resizeCvm(resolvedAppId, vcpu, memory, diskSize),
+				resizeCvm(context, resolvedAppId, vcpu, memory, diskSize),
 			);
 			context.success({
 				app_id: resolvedAppId,

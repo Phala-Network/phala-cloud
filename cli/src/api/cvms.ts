@@ -1,4 +1,4 @@
-import { getClient } from "@/src/lib/client";
+import { type AuthContextLike, getClient } from "@/src/lib/client";
 import { logger } from "@/src/utils/logger";
 import {
 	type CvmInfoDetailV20260522,
@@ -33,9 +33,10 @@ import type {
  * @returns CVM details
  */
 export async function getCvmByAppId(
+	context: AuthContextLike,
 	appId: string,
 ): Promise<CvmInfoDetailV20260522> {
-	const client = await getClient();
+	const client = await getClient(context);
 	// Remove app_ prefix if present, SDK will add it back
 	const cleanAppId = appId.replace(/^app_/, "");
 	const result = await safeGetCvmInfo(client, { app_id: cleanAppId });
@@ -53,9 +54,10 @@ export async function getCvmByAppId(
  * @returns Network information
  */
 export async function getCvmNetwork(
+	context: AuthContextLike,
 	appId: string,
 ): Promise<GetCvmNetworkResponse> {
-	const client = await getClient();
+	const client = await getClient(context);
 	const cleanAppId = appId.replace(/^app_/, "");
 	const response = await client.get<GetCvmNetworkResponse>(
 		`cvms/app_${cleanAppId}/network`,
@@ -67,9 +69,11 @@ export async function getCvmNetwork(
  * Presents a list of CVMs to the user and allows them to select one
  * @returns The selected CVM app ID or undefined if no CVMs exist
  */
-export async function selectCvm(): Promise<string | undefined> {
+export async function selectCvm(
+	context: AuthContextLike,
+): Promise<string | undefined> {
 	const listSpinner = logger.startSpinner("Fetching available CVMs");
-	const client = await getClient();
+	const client = await getClient(context);
 	const result = await safeGetCvmList(client);
 	listSpinner.stop(true);
 
@@ -108,9 +112,10 @@ export async function selectCvm(): Promise<string | undefined> {
  * @returns Attestation information
  */
 export async function getCvmAttestation(
+	context: AuthContextLike,
 	appId: string,
 ): Promise<CvmAttestationResponse> {
-	const client = await getClient();
+	const client = await getClient(context);
 	const cleanAppId = appId.replace(/^app_/, "");
 	const response = await client.get<CvmAttestationResponse>(
 		`cvms/app_${cleanAppId}/attestation`,
@@ -162,12 +167,13 @@ export interface ResizeCvmPayload {
  * @returns Success status
  */
 export async function resizeCvm(
+	context: AuthContextLike,
 	appId: string,
 	vcpu?: number,
 	memory?: number,
 	diskSize?: number,
 ): Promise<boolean> {
-	const client = await getClient();
+	const client = await getClient(context);
 	const cleanAppId = appId.replace(/^app_/, "");
 	// Only include defined parameters in the payload
 	const resizePayload: Record<string, unknown> = {};
@@ -189,8 +195,10 @@ export async function resizeCvm(
  * Get the CVM create resource graph.
  * @returns Nodes, KMS resources, gateway resources, and instance types for CVM creation
  */
-export async function getCvmCreateResources(): Promise<CvmCreateResourcesResponse> {
-	const client = await getClient();
+export async function getCvmCreateResources(
+	context: AuthContextLike,
+): Promise<CvmCreateResourcesResponse> {
+	const client = await getClient(context);
 	const response = await client.get("teepods/cvm-create-resources");
 	return response as CvmCreateResourcesResponse;
 }
@@ -220,43 +228,48 @@ function toSdkOptions(
 }
 
 export async function getCvmLogEndpoint(
+	context: AuthContextLike,
 	appId: string,
 	channel: CvmLogChannel,
 ): Promise<string> {
-	const client = await getClient();
+	const client = await getClient(context);
 	return sdkGetCvmLogEndpoint(client, appId, channel);
 }
 
 export async function fetchSerialLogs(
+	context: AuthContextLike,
 	appId: string,
 	options: SerialLogsOptions = {},
 ): Promise<string> {
-	return fetchCvmChannelLogs(appId, "serial", options);
+	return fetchCvmChannelLogs(context, appId, "serial", options);
 }
 
 export async function fetchContainerLogs(
+	context: AuthContextLike,
 	appId: string,
 	options: ContainerLogsOptions = {},
 ): Promise<string> {
-	const client = await getClient();
+	const client = await getClient(context);
 	return sdkFetchContainerLogs(client, appId, toSdkOptions(options));
 }
 
 export async function fetchContainerLogsEntries(
+	context: AuthContextLike,
 	appId: string,
 	options: ContainerLogsOptions = {},
 ): Promise<LogEntry[]> {
-	const client = await getClient();
+	const client = await getClient(context);
 	return sdkFetchContainerLogsEntries(client, appId, toSdkOptions(options));
 }
 
 export async function streamContainerLogsEntries(
+	context: AuthContextLike,
 	appId: string,
 	onEntry: (entry: LogEntry) => void,
 	options: ContainerLogsOptions = {},
 	signal?: AbortSignal,
 ): Promise<void> {
-	const client = await getClient();
+	const client = await getClient(context);
 	return sdkStreamContainerLogsEntries(
 		client,
 		appId,
@@ -267,21 +280,30 @@ export async function streamContainerLogsEntries(
 }
 
 export async function streamSerialLogs(
+	context: AuthContextLike,
 	appId: string,
 	onData: (data: string) => void,
 	options: SerialLogsOptions = {},
 	signal?: AbortSignal,
 ): Promise<void> {
-	return streamCvmChannelLogs(appId, "serial", onData, options, signal);
+	return streamCvmChannelLogs(
+		context,
+		appId,
+		"serial",
+		onData,
+		options,
+		signal,
+	);
 }
 
 export async function streamContainerLogs(
+	context: AuthContextLike,
 	appId: string,
 	onData: (data: string) => void,
 	options: ContainerLogsOptions = {},
 	signal?: AbortSignal,
 ): Promise<void> {
-	const client = await getClient();
+	const client = await getClient(context);
 	return sdkStreamContainerLogs(
 		client,
 		appId,
@@ -292,22 +314,24 @@ export async function streamContainerLogs(
 }
 
 export async function fetchCvmChannelLogs(
+	context: AuthContextLike,
 	appId: string,
 	channel: CvmLogChannel,
 	options: SerialLogsOptions = {},
 ): Promise<string> {
-	const client = await getClient();
+	const client = await getClient(context);
 	return sdkFetchCvmChannelLogs(client, appId, channel, toSdkOptions(options));
 }
 
 export async function streamCvmChannelLogs(
+	context: AuthContextLike,
 	appId: string,
 	channel: CvmLogChannel,
 	onData: (data: string) => void,
 	options: SerialLogsOptions = {},
 	signal?: AbortSignal,
 ): Promise<void> {
-	const client = await getClient();
+	const client = await getClient(context);
 	return sdkStreamCvmChannelLogs(
 		client,
 		appId,
@@ -319,8 +343,11 @@ export async function streamCvmChannelLogs(
 }
 
 /** Get CVM status string (e.g. "running", "stopped") */
-export async function getCvmStatus(appId: string): Promise<string> {
-	const client = await getClient();
+export async function getCvmStatus(
+	context: AuthContextLike,
+	appId: string,
+): Promise<string> {
+	const client = await getClient(context);
 	const cleanAppId = appId.replace(/^app_/, "");
 	const result = await safeGetCvmInfo(client, { app_id: cleanAppId });
 	if (!result.success) {

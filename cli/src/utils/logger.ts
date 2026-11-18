@@ -41,6 +41,17 @@ export interface CliErrorPresentationOptions {
 	readonly debug?: boolean;
 	/** Human-mode only guidance appended after the normalized fields. */
 	readonly guidance?: string;
+	/**
+	 * Credentials the failed request used. Shown on HTTP 404 so a lookup that
+	 * hit the wrong profile or workspace is distinguishable from a missing resource.
+	 */
+	readonly authScope?: CliErrorAuthScope;
+}
+
+export interface CliErrorAuthScope {
+	readonly profile: string;
+	readonly apiUrl: string;
+	readonly workspace?: string;
 }
 
 export type HumanErrorRenderOptions = CliErrorPresentationOptions;
@@ -366,6 +377,14 @@ export function renderHumanCliError(
 	if (envelope.httpStatus !== undefined) {
 		const statusText = envelope.statusText ? ` ${envelope.statusText}` : "";
 		lines.push(`HTTP: ${envelope.httpStatus}${statusText}`);
+	}
+
+	if (envelope.httpStatus === 404 && options.authScope) {
+		lines.push(`Profile: ${options.authScope.profile}`);
+		if (options.authScope.workspace) {
+			lines.push(`Workspace: ${options.authScope.workspace}`);
+		}
+		lines.push(`API: ${options.authScope.apiUrl}`);
 	}
 
 	if (envelope.requestId) {

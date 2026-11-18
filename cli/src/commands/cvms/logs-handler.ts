@@ -1,7 +1,7 @@
 import { CvmIdSchema, safeGetCvmInfo } from "@phala/cloud";
 import type { CommandContext } from "@/src/core/types";
 import { logger } from "@/src/utils/logger";
-import { getClient } from "@/src/lib/client";
+import { type AuthContextLike, getClient } from "@/src/lib/client";
 
 /**
  * Check if logs are disabled for a CVM and warn the user if so.
@@ -9,7 +9,7 @@ import { getClient } from "@/src/lib/client";
  */
 export async function checkAndWarnIfLogsDisabled(
 	appId: string,
-	context?: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
+	context: AuthContextLike,
 ): Promise<boolean> {
 	try {
 		const client = await getClient(context);
@@ -30,13 +30,17 @@ export async function checkAndWarnIfLogsDisabled(
 
 export interface LogsHandlerConfig<TOptions> {
 	logType: "container" | "serial";
-	fetchLogs: (appId: string, options: TOptions) => Promise<string>;
+	fetchLogs: (
+		context: CommandContext,
+		appId: string,
+		options: TOptions,
+	) => Promise<string>;
 	streamLogs: (
+		context: CommandContext,
 		appId: string,
 		onData: (data: string) => void,
 		options: TOptions,
 		signal?: AbortSignal,
-		context?: CommandContext,
 	) => Promise<void>;
 }
 
@@ -99,11 +103,11 @@ export function createLogsHandler<TInput extends BaseLogsInput, TOptions>(
 
 				try {
 					await config.streamLogs(
+						context,
 						appId,
 						(data) => context.stdout.write(data),
 						options,
 						abortController.signal,
-						context,
 					);
 				} catch (error) {
 					if ((error as Error).name === "AbortError") {
@@ -125,7 +129,7 @@ export function createLogsHandler<TInput extends BaseLogsInput, TOptions>(
 			}
 
 			// Non-streaming mode - no spinner to support piping (e.g., phala cvms logs xx | grep foo)
-			const logs = await config.fetchLogs(appId, options);
+			const logs = await config.fetchLogs(context, appId, options);
 
 			if (input.json) {
 				context.success({ logs, cvm_id: appId });

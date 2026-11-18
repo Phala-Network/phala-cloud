@@ -119,7 +119,7 @@ beforeAll(async () => {
 	composePath = path.join(tmpDir, "docker-compose.yml");
 	await fs.writeFile(composePath, COMPOSE);
 
-	// resizeCvm builds its client from process.env, not from the context.
+	// PHALA_CLOUD_DIR is read from process.env by the credentials store.
 	for (const key of ENV_KEYS) savedEnv[key] = process.env[key];
 	process.env.PHALA_CLOUD_API_KEY = "test-key";
 	process.env.PHALA_CLOUD_API_PREFIX = `http://127.0.0.1:${server.port}/api/v1`;

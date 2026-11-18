@@ -5,7 +5,6 @@ import {
 } from "@phala/cloud";
 import { getApiVersionOverride } from "@/src/core/api-version";
 import type { CommandContext } from "@/src/core/types";
-import { getProjectConfig } from "@/src/utils/project-config";
 import { resolveAuth, type ResolvedAuth } from "@/src/utils/credentials";
 import { CLI_USER_AGENT } from "@/src/utils/cli-version";
 
@@ -97,46 +96,43 @@ export interface ClientWithAuth {
 	readonly auth: ResolvedAuth;
 }
 
-type AuthContextLike = Pick<
+/**
+ * The slice of the command context that decides which credentials, profile and
+ * API endpoint a request uses. Every client is built from one of these, so a
+ * helper that needs a client must be handed the context of the command that
+ * called it; there is no ambient fallback to the default profile.
+ */
+export type AuthContextLike = Pick<
 	CommandContext,
 	"env" | "projectConfig" | "globalOptions"
 >;
 
-function getDefaultContext(): AuthContextLike {
-	return {
-		env: process.env,
-		projectConfig: getProjectConfig(),
-	};
-}
-
 export function resolveAuthForContext(
-	context?: AuthContextLike,
+	context: AuthContextLike,
 	options?: {
 		apiToken?: string;
 		profile?: string;
 	},
 ): ResolvedAuth {
-	const ctx = context ?? getDefaultContext();
 	return resolveAuth({
-		env: ctx.env,
-		apiToken: options?.apiToken ?? ctx.globalOptions?.apiToken,
-		profile: options?.profile ?? ctx.globalOptions?.profile,
-		projectProfile: ctx.projectConfig.profile,
+		env: context.env,
+		apiToken: options?.apiToken ?? context.globalOptions?.apiToken,
+		profile: options?.profile ?? context.globalOptions?.profile,
+		projectProfile: context.projectConfig.profile,
 	});
 }
 
 export async function getClient(
-	context?: AuthContextLike,
+	context: AuthContextLike,
 	options?: {
 		apiToken?: string;
 		profile?: string;
 	},
 ): Promise<CliApiClient> {
-	const ctx = context ?? getDefaultContext();
-	const auth = resolveAuthForContext(ctx, options);
+	const auth = resolveAuthForContext(context, options);
 	const version = getApiVersionOverride() ?? API_VERSION;
-	const timeoutSeconds = resolveTimeoutSeconds(ctx);
-	const pacer = getRequestPacer(auth, ctx.env);
+	const timeoutSeconds = resolveTimeoutSeconds(context);
+	const pacer = getRequestPacer(auth, context.env);
 	return createClient({
 		apiKey: auth.apiKey ?? undefined,
 		bearerToken: auth.bearerToken ?? undefined,
@@ -154,7 +150,7 @@ export async function getClient(
 }
 
 export async function getClientWithAuth(
-	context?: AuthContextLike,
+	context: AuthContextLike,
 	options?: {
 		apiToken?: string;
 		profile?: string;
