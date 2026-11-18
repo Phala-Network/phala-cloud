@@ -56,7 +56,7 @@ func (c *Client) CommitCVMProvisionV20260121(ctx context.Context, req *CommitCVM
 func (c *Client) GetCVMList(ctx context.Context, opts *GetCVMListOptions) (*PaginatedCVMInfos, error) {
 	path := buildCVMListPath(opts)
 	var result PaginatedCVMInfos
-	if err := c.doJSON(ctx, "GET", path, nil, &result); err != nil {
+	if err := c.getJSON(ctx, path, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -67,7 +67,7 @@ func (c *Client) GetCVMListV20260121(ctx context.Context, opts *GetCVMListOption
 	c = c.withVersion("2026-01-21")
 	path := buildCVMListPath(opts)
 	var result PaginatedCVMInfosV20260121
-	if err := c.doJSON(ctx, "GET", path, nil, &result); err != nil {
+	if err := c.getJSON(ctx, path, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -117,7 +117,7 @@ func (c *Client) GetCVMInfoWithOptions(ctx context.Context, cvmID string, opts *
 		path += "?" + q.Encode()
 	}
 	var result CVMInfo
-	if err := c.doJSON(ctx, "GET", path, nil, &result); err != nil {
+	if err := c.getJSON(ctx, path, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -126,7 +126,7 @@ func (c *Client) GetCVMInfoWithOptions(ctx context.Context, cvmID string, opts *
 // GetCVMGPUStatus returns observed GPU status for a CVM. CPU-only CVMs return 404.
 func (c *Client) GetCVMGPUStatus(ctx context.Context, cvmID string) (*CVMGPUStatus, error) {
 	var result CVMGPUStatus
-	if err := c.doJSON(ctx, "GET", cvmPath(cvmID, "gpu-status"), nil, &result); err != nil {
+	if err := c.getJSON(ctx, cvmPath(cvmID, "gpu-status"), &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -136,7 +136,7 @@ func (c *Client) GetCVMGPUStatus(ctx context.Context, cvmID string) (*CVMGPUStat
 func (c *Client) GetCVMInfoV20260121(ctx context.Context, cvmID string) (*CVMInfoV20260121, error) {
 	c = c.withVersion("2026-01-21")
 	var result CVMInfoV20260121
-	if err := c.doJSON(ctx, "GET", cvmPath(cvmID), nil, &result); err != nil {
+	if err := c.getJSON(ctx, cvmPath(cvmID), &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -145,7 +145,7 @@ func (c *Client) GetCVMInfoV20260121(ctx context.Context, cvmID string) (*CVMInf
 // GetCVMState returns the current state of a CVM.
 func (c *Client) GetCVMState(ctx context.Context, cvmID string) (*CVMState, error) {
 	var result CVMState
-	if err := c.doJSON(ctx, "GET", cvmPath(cvmID, "state"), nil, &result); err != nil {
+	if err := c.getJSON(ctx, cvmPath(cvmID, "state"), &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -154,7 +154,7 @@ func (c *Client) GetCVMState(ctx context.Context, cvmID string) (*CVMState, erro
 // GetCVMStats returns statistics for a CVM.
 func (c *Client) GetCVMStats(ctx context.Context, cvmID string) (*CVMStats, error) {
 	var result CVMStats
-	if err := c.doJSON(ctx, "GET", cvmPath(cvmID, "stats"), nil, &result); err != nil {
+	if err := c.getJSON(ctx, cvmPath(cvmID, "stats"), &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -163,7 +163,7 @@ func (c *Client) GetCVMStats(ctx context.Context, cvmID string) (*CVMStats, erro
 // GetCVMNetwork returns network information for a CVM.
 func (c *Client) GetCVMNetwork(ctx context.Context, cvmID string) (*CVMNetwork, error) {
 	var result CVMNetwork
-	if err := c.doJSON(ctx, "GET", cvmPath(cvmID, "network"), nil, &result); err != nil {
+	if err := c.getJSON(ctx, cvmPath(cvmID, "network"), &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -172,7 +172,7 @@ func (c *Client) GetCVMNetwork(ctx context.Context, cvmID string) (*CVMNetwork, 
 // GetCVMContainersStats returns container statistics for a CVM.
 func (c *Client) GetCVMContainersStats(ctx context.Context, cvmID string) (*CVMContainersStats, error) {
 	var result CVMContainersStats
-	if err := c.doJSON(ctx, "GET", cvmPath(cvmID, "composition"), nil, &result); err != nil {
+	if err := c.getJSON(ctx, cvmPath(cvmID, "composition"), &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -181,7 +181,7 @@ func (c *Client) GetCVMContainersStats(ctx context.Context, cvmID string) (*CVMC
 // GetCVMAttestation returns attestation data for a CVM.
 func (c *Client) GetCVMAttestation(ctx context.Context, cvmID string) (*CVMAttestation, error) {
 	var result CVMAttestation
-	if err := c.doJSON(ctx, "GET", cvmPath(cvmID, "attestation"), nil, &result); err != nil {
+	if err := c.getJSON(ctx, cvmPath(cvmID, "attestation"), &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -190,7 +190,7 @@ func (c *Client) GetCVMAttestation(ctx context.Context, cvmID string) (*CVMAttes
 // GetCVMUserConfig returns user configuration for a CVM.
 func (c *Client) GetCVMUserConfig(ctx context.Context, cvmID string) (*CVMUserConfig, error) {
 	var result CVMUserConfig
-	if err := c.doJSON(ctx, "GET", cvmPath(cvmID, "user_config"), nil, &result); err != nil {
+	if err := c.getJSON(ctx, cvmPath(cvmID, "user_config"), &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -199,7 +199,7 @@ func (c *Client) GetCVMUserConfig(ctx context.Context, cvmID string) (*CVMUserCo
 // GetAvailableOSImages returns available OS images for a CVM.
 func (c *Client) GetAvailableOSImages(ctx context.Context, cvmID string) ([]CvmAvailableOSImage, error) {
 	var result []CvmAvailableOSImage
-	if err := c.doJSON(ctx, "GET", cvmPath(cvmID, "available-os-images"), nil, &result); err != nil {
+	if err := c.getJSON(ctx, cvmPath(cvmID, "available-os-images"), &result); err != nil {
 		return nil, err
 	}
 	return result, nil

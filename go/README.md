@@ -324,13 +324,35 @@ if err != nil {
 
 ## Automatic Retries
 
-The client automatically retries on `409`, `429`, and `503` responses with exponential backoff (1s base, 20s max). Configure with `WithMaxRetries`:
+Retries use exponential backoff (1s base, 20s max). The attempt budget is set with `WithMaxRetries`:
 
 ```go
 client, _ := phala.NewClient(
 	phala.WithMaxRetries(10), // default: 30
 )
 ```
+
+What is retried:
+
+| Call | Retried statuses |
+| --- | --- |
+| Read calls (plain `GET`, such as `GetCVMInfo`, `GetCVMState`, `ListWorkspaces`) | `429`, `503` |
+| Write calls that retry (lifecycle actions, config and compose updates) | `409`, `429`, `503` |
+| Other write calls, `WatchCVMState`, and log fetch and follow | none by the request retry; the watch and follow loops reconnect on their own rules |
+
+A `409` that carries a structured `error_code` is never retried. A read is never retried on `409`.
+
+When the response has a `Retry-After` header (delta-seconds or an HTTP date), the client waits that long instead of using the backoff. The wait is capped at 5 minutes. A missing, zero, negative, past or unparsable value is ignored and the backoff applies. After the retries are used up, the last `*phala.APIError` is returned, and `RetryAfter()` on it reports the capped hint.
+
+With the default budget and a server that keeps answering `Retry-After: 60`, a call can wait about 30 minutes before it fails. Pass a context with a deadline to bound the total time:
+
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+defer cancel()
+state, err := client.GetCVMState(ctx, cvmID)
+```
+
+If the deadline would pass before the next read retry, the read returns immediately instead of waiting for it. The returned error wraps both the last `*phala.APIError` (use `errors.As`) and `context.DeadlineExceeded` (use `errors.Is`). Cancelling the context during a wait returns `context.Canceled`.
 
 ## Pointer Helpers
 

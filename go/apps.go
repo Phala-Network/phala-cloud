@@ -9,7 +9,7 @@ import (
 // GetAppList returns the list of applications.
 func (c *Client) GetAppList(ctx context.Context) (*GetAppListResponse, error) {
 	var result GetAppListResponse
-	if err := c.doJSON(ctx, "GET", "/apps", nil, &result); err != nil {
+	if err := c.getJSON(ctx, "/apps", &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -19,7 +19,7 @@ func (c *Client) GetAppList(ctx context.Context) (*GetAppListResponse, error) {
 func (c *Client) GetAppListV20260121(ctx context.Context) (*GetAppListResponseV20260121, error) {
 	c = c.withVersion("2026-01-21")
 	var result GetAppListResponseV20260121
-	if err := c.doJSON(ctx, "GET", "/apps", nil, &result); err != nil {
+	if err := c.getJSON(ctx, "/apps", &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -28,7 +28,7 @@ func (c *Client) GetAppListV20260121(ctx context.Context) (*GetAppListResponseV2
 // GetAppInfo returns information about a specific application.
 func (c *Client) GetAppInfo(ctx context.Context, appID string) (*AppInfo, error) {
 	var result AppInfo
-	if err := c.doJSON(ctx, "GET", "/apps/"+appID, nil, &result); err != nil {
+	if err := c.getJSON(ctx, "/apps/"+appID, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -38,7 +38,7 @@ func (c *Client) GetAppInfo(ctx context.Context, appID string) (*AppInfo, error)
 func (c *Client) GetAppInfoV20260121(ctx context.Context, appID string) (*AppInfoV20260121, error) {
 	c = c.withVersion("2026-01-21")
 	var result AppInfoV20260121
-	if err := c.doJSON(ctx, "GET", "/apps/"+appID, nil, &result); err != nil {
+	if err := c.getJSON(ctx, "/apps/"+appID, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -47,7 +47,7 @@ func (c *Client) GetAppInfoV20260121(ctx context.Context, appID string) (*AppInf
 // GetAppCVMs returns CVMs associated with an application.
 func (c *Client) GetAppCVMs(ctx context.Context, appID string) ([]CVMInfoV20260522, error) {
 	var result []CVMInfoV20260522
-	if err := c.doJSON(ctx, "GET", "/apps/"+appID+"/cvms", nil, &result); err != nil {
+	if err := c.getJSON(ctx, "/apps/"+appID+"/cvms", &result); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -57,7 +57,7 @@ func (c *Client) GetAppCVMs(ctx context.Context, appID string) ([]CVMInfoV202605
 func (c *Client) GetAppCVMsV20260121(ctx context.Context, appID string) ([]CVMInfoV20260121, error) {
 	c = c.withVersion("2026-01-21")
 	var result []CVMInfoV20260121
-	if err := c.doJSON(ctx, "GET", "/apps/"+appID+"/cvms", nil, &result); err != nil {
+	if err := c.getJSON(ctx, "/apps/"+appID+"/cvms", &result); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -121,7 +121,7 @@ func (c *Client) GetAppRevisions(ctx context.Context, appID string, opts *Pagina
 		}
 	}
 	var result AppRevisionsResponse
-	if err := c.doJSON(ctx, "GET", path, nil, &result); err != nil {
+	if err := c.getJSON(ctx, path, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -131,7 +131,7 @@ func (c *Client) GetAppRevisions(ctx context.Context, appID string, opts *Pagina
 func (c *Client) GetAppRevisionDetail(ctx context.Context, appID, revisionID string) (*AppRevisionDetail, error) {
 	var result AppRevisionDetail
 	path := fmt.Sprintf("/apps/%s/revisions/%s", appID, revisionID)
-	if err := c.doJSON(ctx, "GET", path, nil, &result); err != nil {
+	if err := c.getJSON(ctx, path, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -189,7 +189,7 @@ func (c *Client) RedeployAppRevision(ctx context.Context, appID, revisionID stri
 // GetAppAttestation returns attestation data for an application.
 func (c *Client) GetAppAttestation(ctx context.Context, appID string) (*AppAttestationResponse, error) {
 	var result AppAttestationResponse
-	if err := c.doJSON(ctx, "GET", "/apps/"+appID+"/attestations", nil, &result); err != nil {
+	if err := c.getJSON(ctx, "/apps/"+appID+"/attestations", &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -198,7 +198,7 @@ func (c *Client) GetAppAttestation(ctx context.Context, appID string) (*AppAttes
 // GetAppDeviceAllowlist returns the device allowlist for an application.
 func (c *Client) GetAppDeviceAllowlist(ctx context.Context, appID string) (*DeviceAllowlistResponse, error) {
 	var result DeviceAllowlistResponse
-	if err := c.doJSON(ctx, "GET", "/apps/"+appID+"/device-allowlist", nil, &result); err != nil {
+	if err := c.getJSON(ctx, "/apps/"+appID+"/device-allowlist", &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -208,7 +208,7 @@ func (c *Client) GetAppDeviceAllowlist(ctx context.Context, appID string) (*Devi
 func (c *Client) GetAppDeviceAllowlistV20260121(ctx context.Context, appID string) (*DeviceAllowlistResponseV20260121, error) {
 	c = c.withVersion("2026-01-21")
 	var result DeviceAllowlistResponseV20260121
-	if err := c.doJSON(ctx, "GET", "/apps/"+appID+"/device-allowlist", nil, &result); err != nil {
+	if err := c.getJSON(ctx, "/apps/"+appID+"/device-allowlist", &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -217,7 +217,7 @@ func (c *Client) GetAppDeviceAllowlistV20260121(ctx context.Context, appID strin
 // GetAppFilterOptions returns filter options for application listings.
 func (c *Client) GetAppFilterOptions(ctx context.Context) (*AppFilterOptions, error) {
 	var result AppFilterOptions
-	if err := c.doJSON(ctx, "GET", "/apps/filter-options", nil, &result); err != nil {
+	if err := c.getJSON(ctx, "/apps/filter-options", &result); err != nil {
 		return nil, err
 	}
 	return &result, nil

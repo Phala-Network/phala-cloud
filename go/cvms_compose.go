@@ -5,7 +5,7 @@ import "context"
 // GetCVMComposeFile returns the compose file for a CVM.
 func (c *Client) GetCVMComposeFile(ctx context.Context, cvmID string) (*ComposeFile, error) {
 	var result ComposeFile
-	if err := c.doJSON(ctx, "GET", cvmPath(cvmID, "compose_file"), nil, &result); err != nil {
+	if err := c.getJSON(ctx, cvmPath(cvmID, "compose_file"), &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -14,14 +14,14 @@ func (c *Client) GetCVMComposeFile(ctx context.Context, cvmID string) (*ComposeF
 // GetCVMDockerCompose returns the raw docker-compose YAML for a CVM.
 func (c *Client) GetCVMDockerCompose(ctx context.Context, cvmID string) (string, error) {
 	var result string
-	err := c.doText(ctx, "GET", cvmPath(cvmID, "docker-compose.yml"), "", "", nil, &result)
+	err := c.getText(ctx, cvmPath(cvmID, "docker-compose.yml"), &result)
 	return result, err
 }
 
 // GetCVMPreLaunchScript returns the pre-launch script for a CVM.
 func (c *Client) GetCVMPreLaunchScript(ctx context.Context, cvmID string) (string, error) {
 	var result string
-	err := c.doText(ctx, "GET", cvmPath(cvmID, "pre-launch-script"), "", "", nil, &result)
+	err := c.getText(ctx, cvmPath(cvmID, "pre-launch-script"), &result)
 	return result, err
 }
 

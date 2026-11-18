@@ -2,6 +2,7 @@ package phala
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -127,23 +128,42 @@ func (e *APIError) ComposePrecondition() (*ComposeHashPreconditionResponse, bool
 	}, true
 }
 
-// RetryAfter returns the duration to wait before retrying, based on the Retry-After header.
-// Returns 0 if the header is not present or cannot be parsed.
+// maxRetryAfter bounds the wait taken from a Retry-After header. The API's
+// rate limiter sends 60 seconds, so the bound leaves ample headroom while
+// keeping a malformed or hostile header from stalling a caller for hours.
+const maxRetryAfter = 5 * time.Minute
+
+// RetryAfter returns the duration to wait before retrying, based on the
+// Retry-After header. Both delta-seconds and HTTP-date forms are honoured.
+// The result is never negative and never exceeds five minutes.
+//
+// It returns 0 ("no hint") when the header is absent, unparsable, negative,
+// zero, or an HTTP-date that is not in the future; the retry loops then fall
+// back to exponential backoff.
 func (e *APIError) RetryAfter() time.Duration {
 	if e.Headers == nil {
 		return 0
 	}
-	ra := e.Headers.Get("Retry-After")
+	ra := strings.TrimSpace(e.Headers.Get("Retry-After"))
 	if ra == "" {
 		return 0
 	}
-	// Try parsing as seconds first.
-	if secs, err := strconv.Atoi(ra); err == nil {
+	// Delta-seconds: digits only, so signs are rejected.
+	if secs, err := strconv.ParseUint(ra, 10, 64); err == nil {
+		if secs > uint64(maxRetryAfter/time.Second) {
+			return maxRetryAfter
+		}
 		return time.Duration(secs) * time.Second
+	} else if errors.Is(err, strconv.ErrRange) {
+		// All digits but beyond uint64: an absurdly large wait.
+		return maxRetryAfter
 	}
-	// Try parsing as HTTP date.
+	// HTTP-date.
 	if t, err := http.ParseTime(ra); err == nil {
 		d := time.Until(t)
+		if d > maxRetryAfter {
+			return maxRetryAfter
+		}
 		if d > 0 {
 			return d
 		}
