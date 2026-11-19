@@ -41,9 +41,24 @@ func main() {
 }
 ```
 
+### Public endpoints without an API key
+
+An API key is required only for authenticated endpoints. Public lookups work on a client created without credentials, for example fetching an app's environment encryption public key:
+
+```go
+client, err := phala.NewClient() // no API key
+if err != nil {
+	log.Fatal(err)
+}
+
+pubKey, err := client.GetAppEnvEncryptPubKey(ctx, "kms-slug", "app-id")
+```
+
+A keyless client sends no authentication header. Calling an authenticated endpoint returns an `*APIError` with the server's 401 response.
+
 ## Environment Variables
 
-- `PHALA_CLOUD_API_KEY` — API key for authentication
+- `PHALA_CLOUD_API_KEY` — API key for authentication (optional; only authenticated endpoints need it)
 - `PHALA_CLOUD_API_PREFIX` — Override base URL (default: `https://cloud-api.phala.com/api/v1`)
 
 ```go
@@ -407,7 +422,7 @@ PHALA_CLOUD_E2E_API_KEY=your-key go test -tags e2e -v -timeout 30m ./e2e/
 - The module path is now `github.com/Phala-Network/phala-cloud/go`. Earlier releases declared `github.com/Phala-Network/phala-cloud/sdks/go`, which `go get` could never resolve. Replace the old path in your imports and `go.mod`, then run `go get github.com/Phala-Network/phala-cloud/go@latest`.
 - Remove `EncryptedEnv` from `ProvisionComposeUpdateRequest`. Send encrypted environment variables through `CommitComposeUpdateRequest`.
 - `GetComposeHash` now normalizes the compose by default. Hashes computed before the upgrade can differ from new ones. Pass `false` as the second argument to keep the old unnormalized value.
-- `NewClient` now returns an error for a negative `WithMaxRetries`, for a base URL that contains userinfo, and when neither an API key nor a bearer token is set.
+- `NewClient` now returns an error for a negative `WithMaxRetries`, and for a base URL that contains userinfo. A client no longer needs an API key or bearer token to be created; only authenticated endpoints require one.
 - `WatchCVMState` reconnects when the stream ends without a `complete` event. `MaxRetries` defaults to nil, which means unlimited reconnects, so pass a cancellable context or set `MaxRetries`.
 - `[]string` request fields now use `omitzero` instead of `omitempty`. A non-nil empty slice is sent as `[]`; only a nil slice is omitted.
 - `ConfirmCVMPatch` now sends `X-Compose-Hash` and `X-Transaction-Hash` headers with an empty JSON object body, and the response includes `correlation_id`.

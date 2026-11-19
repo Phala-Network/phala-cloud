@@ -8,7 +8,8 @@ import (
 // Option configures the Client.
 type Option func(*Client)
 
-// WithAPIKey sets the API key for authentication.
+// WithAPIKey sets the API key for authentication. It is only needed for
+// authenticated endpoints; public endpoints work without one.
 func WithAPIKey(key string) Option {
 	return func(c *Client) { c.apiKey = key }
 }
