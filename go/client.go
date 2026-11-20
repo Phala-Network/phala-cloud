@@ -37,6 +37,9 @@ func (c *Client) withVersion(version string) *Client {
 
 // NewClient creates a new Phala Cloud API client with the given options.
 // API key is resolved from options or the PHALA_CLOUD_API_KEY environment variable.
+// Credentials are optional: a client without an API key or bearer token sends no
+// authentication header, which is enough for public endpoints such as
+// GetAppEnvEncryptPubKey. Authenticated endpoints then fail with a 401 *APIError.
 // Base URL is resolved from options or the PHALA_CLOUD_API_PREFIX environment variable.
 func NewClient(opts ...Option) (*Client, error) {
 	c := &Client{
@@ -69,9 +72,6 @@ func NewClient(opts ...Option) (*Client, error) {
 		}
 	}
 
-	if c.apiKey == "" && c.bearerToken == "" {
-		return nil, fmt.Errorf("phala: API key or bearer token is required")
-	}
 	if c.maxRetries < 0 {
 		return nil, fmt.Errorf("phala: max retries must be non-negative")
 	}

@@ -1,25 +1,69 @@
 package phala
 
 import (
+	"context"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
 )
 
-func TestNewClient_RequiresAPIKey(t *testing.T) {
-	// Ensure env var doesn't interfere.
-	orig := os.Getenv("PHALA_CLOUD_API_KEY")
-	os.Unsetenv("PHALA_CLOUD_API_KEY")
-	defer func() {
-		if orig != "" {
-			os.Setenv("PHALA_CLOUD_API_KEY", orig)
-		}
-	}()
+func TestNewClient_WithoutCredentials(t *testing.T) {
+	t.Setenv("PHALA_CLOUD_API_KEY", "")
+	t.Setenv("PHALA_OIDC_TOKEN", "")
 
-	_, err := NewClient()
-	if err == nil {
-		t.Fatal("expected error when no API key, got nil")
+	c, err := NewClient()
+	if err != nil {
+		t.Fatalf("unexpected error without credentials: %v", err)
+	}
+	if c.apiKey != "" || c.bearerToken != "" {
+		t.Errorf("expected empty credentials, got apiKey=%q bearerToken=%q", c.apiKey, c.bearerToken)
+	}
+}
+
+func TestKeylessClientSendsNoAuthHeaders(t *testing.T) {
+	t.Setenv("PHALA_CLOUD_API_KEY", "")
+	t.Setenv("PHALA_OIDC_TOKEN", "")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := r.Header["X-Api-Key"]; ok {
+			t.Errorf("unexpected X-API-Key header: %v", r.Header)
+		}
+		if _, ok := r.Header["Authorization"]; ok {
+			t.Errorf("unexpected Authorization header: %v", r.Header)
+		}
+		w.Write([]byte(`{"public_key":"pk","signature":"sig"}`))
+	}))
+	defer server.Close()
+
+	c, err := NewClient(WithBaseURL(server.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.GetAppEnvEncryptPubKey(context.Background(), "kms", "app"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestClientWithAPIKeySendsKeyHeader(t *testing.T) {
+	t.Setenv("PHALA_OIDC_TOKEN", "")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("X-API-Key"); got != "test-key" {
+			t.Errorf("X-API-Key = %q, want test-key", got)
+		}
+		if _, ok := r.Header["Authorization"]; ok {
+			t.Errorf("unexpected Authorization header: %v", r.Header)
+		}
+		w.Write([]byte(`{"public_key":"pk","signature":"sig"}`))
+	}))
+	defer server.Close()
+
+	c, err := NewClient(WithBaseURL(server.URL), WithAPIKey("test-key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.GetAppEnvEncryptPubKey(context.Background(), "kms", "app"); err != nil {
+		t.Fatal(err)
 	}
 }
 
