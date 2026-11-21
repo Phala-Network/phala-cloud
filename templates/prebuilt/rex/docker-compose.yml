@@ -1,0 +1,51 @@
+services:
+  dev-box:
+    image: ghcr.io/dstack-tee/dstack-dev-box:sha-7725235@sha256:0dc661ea51fcbd70007d117b9e60883d9a96bac510a80683f5bdd6b7947b0291
+    restart: unless-stopped
+    privileged: true
+    pid: host
+    network_mode: host
+    uts: host
+    environment:
+      - SSH_AUTHORIZED_KEYS=${DSTACK_AUTHORIZED_KEYS}
+      - REX_CHANNEL=${REX_CHANNEL:-preview}
+    # The wrapper starts the Rex server, then hands over to the image's
+    # original entrypoint, which merges SSH keys and runs sshd.
+    entrypoint: ["/bin/sh", "/opt/rex-dev-box-init.sh"]
+    volumes:
+      - /:/host:rslave
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /dev/pts:/dev/pts
+      - ssh-host-keys:/etc/ssh/host-keys
+      - home:/root
+    configs:
+      - source: rex_dev_box_init
+        target: /opt/rex-dev-box-init.sh
+
+volumes:
+  ssh-host-keys:
+  home:
+
+configs:
+  rex_dev_box_init:
+    content: |
+      #!/bin/sh
+      # Install Rex into the persistent home volume on first boot and start a
+      # personal server, then run the dev-box entrypoint (key merge + sshd).
+      # Never fail hard: SSH access must survive a Rex install problem.
+      PATH="/root/.local/bin:$PATH"
+
+      if ! command -v rex >/dev/null 2>&1; then
+        curl -fsSL https://pkgs.superlogical.com/rex/install.sh |
+          sh -s -- --user --channel "${REX_CHANNEL:-preview}" ||
+          echo "rex install failed; continuing without rex" >&2
+      fi
+
+      if command -v rex >/dev/null 2>&1; then
+        # Idempotent: exits 0 when a server is already running. Server state
+        # lives under /root/.local/state/rex, which is on the persistent
+        # `home` volume, so sessions survive container and CVM restarts.
+        rex server start || echo "rex server start failed" >&2
+      fi
+
+      exec /usr/local/bin/entrypoint
