@@ -121,6 +121,27 @@
     "tags": ["AI Agents", "Automation"]
   },
   {
+    "id": "rex",
+    "name": "Rex",
+    "description": "Rex is a terminal multiplexer whose sessions live in a server, not a window. This template runs a Rex server inside a confidential VM with persistent state, reachable over Phala Cloud's SSH access. Shells and coding agents keep running when you close your laptop, and every session is scriptable through the rex CLI or the server's HTTP API — inside a TEE, covered by remote attestation.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/rex",
+    "author": "superlogical",
+    "envs": [
+      {
+        "key": "REX_CHANNEL",
+        "required": false,
+        "default": "preview",
+        "description": "Rex release channel installed on first boot. Rex has no stable release yet; preview is recommended. Only takes effect on first install."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 20
+    },
+    "tags": ["Developer Tools", "AI Agents", "Automation"]
+  },
+  {
     "id": "crewai",
     "name": "crewAIInc/crewAI",
     "description": "Role-playing multi-agent framework. This CPU-safe demo installs and imports the real CrewAI Python package, exposes package metadata through Caddy, and avoids external LLM calls or provider credentials by default.",
