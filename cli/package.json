@@ -46,7 +46,7 @@
 	"dependencies": {
 		"@iarna/toml": "^2.2.5",
 		"@michaelhomer/jqjs": "^1.6.0",
-		"@noble/curves": "^2.4.0",
+		"@noble/curves": "1.9.7",
 		"@phala/cloud": "workspace:*",
 		"arg": "^5.0.2",
 		"chalk": "6.0.1",
@@ -61,7 +61,8 @@
 		"semver": "^7.8.6",
 		"viem": "^2.58.1",
 		"yaml": "^2.9.1",
-		"zod": "^4.6.7"
+		"zod": "^4.6.7",
+		"@noble/hashes": "1.8.0"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.6.8",

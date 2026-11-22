@@ -19,19 +19,19 @@ List CVMs in your workspace with filtering and pagination.
 
 #### Options
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--page` | 1 | Page number for pagination |
-| `--page-size` | 30 | Number of items per page |
-| `--search <query>` | | Search CVMs by name or ID |
-| `--status <status>` | | Filter by status (repeatable: pending, starting, running, stopping, stopped, error) |
-| `--listed` / `--no-listed` | | Filter by listed status |
-| `--base-image <image>` | | Filter by base image |
-| `--instance-type <type>` | | Filter by instance type |
-| `--kms-type <type>` | | Filter by KMS type |
-| `--node <node>` | | Filter by worker node |
-| `--region <region>` | | Filter by region |
-| `--json` / `-j` | false | JSON output |
+| Flag                       | Default | Description                                                                         |
+| -------------------------- | ------- | ----------------------------------------------------------------------------------- |
+| `--page`                   | 1       | Page number for pagination                                                          |
+| `--page-size`              | 30      | Number of items per page                                                            |
+| `--search <query>`         |         | Search CVMs by name or ID                                                           |
+| `--status <status>`        |         | Filter by status (repeatable: pending, starting, running, stopping, stopped, error) |
+| `--listed` / `--no-listed` |         | Filter by listed status                                                             |
+| `--base-image <image>`     |         | Filter by base image                                                                |
+| `--instance-type <type>`   |         | Filter by instance type                                                             |
+| `--kms-type <type>`        |         | Filter by KMS type                                                                  |
+| `--node <node>`            |         | Filter by worker node                                                               |
+| `--region <region>`        |         | Filter by region                                                                    |
+| `--json` / `-j`            | false   | JSON output                                                                         |
 
 #### Examples
 
@@ -52,17 +52,17 @@ Get detailed information about a specific CVM. API version `2026-11-11` is used 
 
 #### Arguments
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `cvm-id` | No | CVM ID, UUID, or name (uses linked CVM if omitted) |
+| Name     | Required | Description                                        |
+| -------- | -------- | -------------------------------------------------- |
+| `cvm-id` | No       | CVM ID, UUID, or name (uses linked CVM if omitted) |
 
 #### Options
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--json` / `-j` | false | JSON output |
-| `--interactive` / `-i` | false | Interactive mode |
-| `--include-compose` | false | Include the compose configuration |
+| Flag                   | Default | Description                       |
+| ---------------------- | ------- | --------------------------------- |
+| `--json` / `-j`        | false   | JSON output                       |
+| `--interactive` / `-i` | false   | Interactive mode                  |
+| `--include-compose`    | false   | Include the compose configuration |
 
 #### Examples
 
@@ -94,15 +94,15 @@ Start a stopped CVM.
 
 #### Arguments
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `cvm-id` | No | CVM ID, UUID, or name (uses linked CVM if omitted) |
+| Name     | Required | Description                                        |
+| -------- | -------- | -------------------------------------------------- |
+| `cvm-id` | No       | CVM ID, UUID, or name (uses linked CVM if omitted) |
 
 #### Options
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--interactive` / `-i` | false | Interactive mode |
+| Flag                   | Default | Description      |
+| ---------------------- | ------- | ---------------- |
+| `--interactive` / `-i` | false   | Interactive mode |
 
 #### Examples
 
@@ -122,15 +122,15 @@ Stop a running CVM.
 
 #### Arguments
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `cvm-id` | No | CVM ID, UUID, or name (uses linked CVM if omitted) |
+| Name     | Required | Description                                        |
+| -------- | -------- | -------------------------------------------------- |
+| `cvm-id` | No       | CVM ID, UUID, or name (uses linked CVM if omitted) |
 
 #### Options
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--interactive` / `-i` | false | Interactive mode |
+| Flag                   | Default | Description      |
+| ---------------------- | ------- | ---------------- |
+| `--interactive` / `-i` | false   | Interactive mode |
 
 #### Examples
 
@@ -150,15 +150,15 @@ Restart a CVM (stop then start).
 
 #### Arguments
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `cvm-id` | No | CVM ID, UUID, or name (uses linked CVM if omitted) |
+| Name     | Required | Description                                        |
+| -------- | -------- | -------------------------------------------------- |
+| `cvm-id` | No       | CVM ID, UUID, or name (uses linked CVM if omitted) |
 
 #### Options
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--interactive` / `-i` | false | Interactive mode |
+| Flag                   | Default | Description      |
+| ---------------------- | ------- | ---------------- |
+| `--interactive` / `-i` | false   | Interactive mode |
 
 #### Examples
 
@@ -178,17 +178,17 @@ Delete a CVM permanently.
 
 #### Arguments
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `cvm-id` | No | CVM ID, UUID, or name (uses linked CVM if omitted) |
+| Name     | Required | Description                                        |
+| -------- | -------- | -------------------------------------------------- |
+| `cvm-id` | No       | CVM ID, UUID, or name (uses linked CVM if omitted) |
 
 #### Options
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--interactive` / `-i` | false | Interactive mode |
-| `--force` / `-f` | false | Force delete without confirmation |
-| `--yes` / `-y` | false | Skip confirmation prompt |
+| Flag                   | Default | Description                       |
+| ---------------------- | ------- | --------------------------------- |
+| `--interactive` / `-i` | false   | Interactive mode                  |
+| `--force` / `-f`       | false   | Force delete without confirmation |
+| `--yes` / `-y`         | false   | Skip confirmation prompt          |
 
 #### Examples
 
@@ -209,21 +209,21 @@ Resize CVM resources (vCPU, memory, disk).
 
 #### Arguments
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `cvm-id` | No | CVM ID, UUID, or name (uses linked CVM if omitted) |
+| Name     | Required | Description                                        |
+| -------- | -------- | -------------------------------------------------- |
+| `cvm-id` | No       | CVM ID, UUID, or name (uses linked CVM if omitted) |
 
 #### Options
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--interactive` / `-i` | false | Interactive mode |
-| `--vcpu <cores>` / `-v` | | Number of vCPU cores |
-| `--memory <mb>` / `-m` | | Memory in MB |
-| `--disk-size <gb>` / `-d` | | Disk size in GB |
-| `--allow-restart` / `-r` | | Deprecated and ignored. The CVM restarts when the resize needs it |
-| `--yes` / `-y` | false | Skip confirmation prompt |
-| `--json` | false | JSON output |
+| Flag                      | Default | Description                                                       |
+| ------------------------- | ------- | ----------------------------------------------------------------- |
+| `--interactive` / `-i`    | false   | Interactive mode                                                  |
+| `--vcpu <cores>` / `-v`   |         | Number of vCPU cores                                              |
+| `--memory <mb>` / `-m`    |         | Memory in MB                                                      |
+| `--disk-size <gb>` / `-d` |         | Disk size in GB                                                   |
+| `--allow-restart` / `-r`  |         | Deprecated and ignored. The CVM restarts when the resize needs it |
+| `--yes` / `-y`            | false   | Skip confirmation prompt                                          |
+| `--json`                  | false   | JSON output                                                       |
 
 #### Examples
 
@@ -244,17 +244,17 @@ Create a replica of an existing CVM.
 
 #### Arguments
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `cvm-id` | No | CVM UUID to replicate (uses linked CVM if omitted) |
+| Name     | Required | Description                                        |
+| -------- | -------- | -------------------------------------------------- |
+| `cvm-id` | No       | CVM UUID to replicate (uses linked CVM if omitted) |
 
 #### Options
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--node <name>` | | Physical node name, such as `usw5` |
-| `--env-file <file>` / `-e` | | Environment file to override variables |
-| `--interactive` / `-i` | false | Interactive mode |
+| Flag                       | Default | Description                            |
+| -------------------------- | ------- | -------------------------------------- |
+| `--node <name>`            |         | Physical node name, such as `usw5`     |
+| `--env-file <file>` / `-e` |         | Environment file to override variables |
+| `--interactive` / `-i`     | false   | Interactive mode                       |
 
 #### Examples
 
@@ -275,16 +275,16 @@ Get CVM attestation data for verification.
 
 #### Arguments
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `cvm-id` | No | CVM ID, UUID, or name (uses linked CVM if omitted) |
+| Name     | Required | Description                                        |
+| -------- | -------- | -------------------------------------------------- |
+| `cvm-id` | No       | CVM ID, UUID, or name (uses linked CVM if omitted) |
 
 #### Options
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--json` / `-j` | false | JSON output |
-| `--interactive` / `-i` | false | Interactive mode |
+| Flag                   | Default | Description      |
+| ---------------------- | ------- | ---------------- |
+| `--json` / `-j`        | false   | JSON output      |
+| `--interactive` / `-i` | false   | Interactive mode |
 
 #### Examples
 

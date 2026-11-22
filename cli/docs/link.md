@@ -8,15 +8,15 @@ Link a local directory to a CVM by creating or updating `phala.toml` in the curr
 
 ## Arguments
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `cvm-id` | No | CVM ID or name (launches interactive picker if omitted) |
+| Name     | Required | Description                                             |
+| -------- | -------- | ------------------------------------------------------- |
+| `cvm-id` | No       | CVM ID or name (launches interactive picker if omitted) |
 
 ## Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--json` | `-j` | false | JSON output |
+| Flag     | Short | Default | Description |
+| -------- | ----- | ------- | ----------- |
+| `--json` | `-j`  | false   | JSON output |
 
 ## Examples
 

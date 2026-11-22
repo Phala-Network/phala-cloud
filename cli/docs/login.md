@@ -10,19 +10,19 @@ phala login [api-key] [options]
 
 ## Arguments
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `api-key` | No | API key starting with `phak_`. If omitted, triggers device flow authentication |
+| Name      | Required | Description                                                                    |
+| --------- | -------- | ------------------------------------------------------------------------------ |
+| `api-key` | No       | API key starting with `phak_`. If omitted, triggers device flow authentication |
 
 ## Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--manual` | | false | Enter API key manually instead of device flow |
-| `--no-open` | | false | Skip automatic browser launch during device flow |
-| `--profile <name>` | | workspace slug | Save credentials to named profile |
-| `--print-token` | | false | Print token to stdout without saving |
-| `--url <url>` | | https://api.phala.cloud | Custom API endpoint URL |
+| Flag               | Short | Default                 | Description                                      |
+| ------------------ | ----- | ----------------------- | ------------------------------------------------ |
+| `--manual`         |       | false                   | Enter API key manually instead of device flow    |
+| `--no-open`        |       | false                   | Skip automatic browser launch during device flow |
+| `--profile <name>` |       | workspace slug          | Save credentials to named profile                |
+| `--print-token`    |       | false                   | Print token to stdout without saving             |
+| `--url <url>`      |       | https://api.phala.cloud | Custom API endpoint URL                          |
 
 ## Authentication Methods
 

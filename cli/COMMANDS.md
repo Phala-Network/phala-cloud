@@ -13,15 +13,18 @@ phala [command] [subcommand] [options]
 ### `phala status`
 
 Check your authentication status with Phala Cloud. Displays the following information:
+
 - Integrated API endpoint
 - Logged in username
 - Current workspace
 
 **Options:**
+
 - `-j, --json`: Output in JSON format
 - `-d, --debug`: Enable debug output
 
 **Example:**
+
 ```bash
 phala status
 phala status --json
@@ -40,7 +43,7 @@ Authenticate with Phala Cloud.
 
 - **`logout`**: Remove the saved API key
 
-- **`status`**: *(Deprecated)* Check the current authentication status (use `phala status` instead)
+- **`status`**: _(Deprecated)_ Check the current authentication status (use `phala status` instead)
 
 ## Node Management
 
@@ -49,16 +52,19 @@ Authenticate with Phala Cloud.
 List and manage TEE nodes. When run without subcommands, it will list all available worker nodes.
 
 #### Usage:
+
 ```bash
 phala nodes [command]
 ```
 
 #### Commands:
+
 - **`list`, `ls`**: List all available worker nodes and their details
   - Shows TEEPod IDs that can be used with the `replicate` command
   - Example: `phala nodes` or `phala nodes list` or `phala nodes ls`
 
 #### Examples:
+
 ```bash
 # List all available nodes
 phala nodes
@@ -77,7 +83,7 @@ Manage Phala Confidential Virtual Machines (CVMs).
 #### Subcommands:
 
 - **`list`**: List all CVMs
-  
+
 - **`get <id>`**: Get details of a specific CVM
   - Arguments:
     - `id`: ID of the CVM to get details for
@@ -133,8 +139,6 @@ Manage Phala Confidential Virtual Machines (CVMs).
     - `--memory <memory>`: New memory allocation in MB
     - `--disk-size <diskSize>`: New disk size in GB
 
-
-
 - **`replicate <id>`**: Create a replica of an existing CVM
   - Arguments:
     - `id`: ID of the CVM to replicate (which can be found with `phala cvms ls`)
@@ -142,6 +146,7 @@ Manage Phala Confidential Virtual Machines (CVMs).
     - `--node <name>`: Physical node name for the replica (optional; use `phala nodes list` to see available nodes)
     - `-e, --env-file <envFile>`: Path to environment file for the replica (optional)
   - Example:
+
     ```bash
     # List available nodes and choose a physical node name
     phala nodes list
@@ -168,26 +173,31 @@ TEE simulator commands. When run without subcommands, shows the current status o
 #### Usage Examples:
 
 Check simulator status:
+
 ```bash
 phala simulator
 ```
 
 Start the simulator:
+
 ```bash
 phala simulator start
 ```
 
 Start with verbose output:
+
 ```bash
 phala simulator start --verbose
 ```
 
 Stop the simulator:
+
 ```bash
 phala simulator stop
 ```
 
 When the simulator is running, you'll need to set these environment variables to use it:
+
 ```bash
 export DSTACK_SIMULATOR_ENDPOINT=/path/to/dstack.sock
 export TAPPD_SIMULATOR_ENDPOINT=/path/to/tappd.sock

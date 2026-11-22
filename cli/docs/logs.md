@@ -8,26 +8,26 @@ Fetch logs from a CVM with multiple log sources: container logs (default), seria
 
 ## Arguments
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `container-name` | No | Container name to fetch logs from (container mode only) |
+| Name             | Required | Description                                             |
+| ---------------- | -------- | ------------------------------------------------------- |
+| `container-name` | No       | Container name to fetch logs from (container mode only) |
 
 ## Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--serial` | | false | Fetch CVM serial console logs (boot, kernel, docker-compose) |
-| `--cvm-stdout` | | false | Fetch CVM stdout channel |
-| `--cvm-stderr` | | false | Fetch CVM stderr channel |
-| `--stderr` | | false | Include container stderr (container mode only) |
-| `--tail <lines>` | `-n` | | Number of lines from end |
-| `--follow` | `-f` | false | Stream logs in real-time |
-| `--timestamps` | `-t` | false | Show timestamps |
-| `--since <time>` | | | Start time (RFC3339 or relative, e.g., 42m) |
-| `--until <time>` | | | End time (RFC3339 or relative) |
-| `--cvm-id <id>` | | | CVM ID override |
-| `--json` | `-j` | false | JSON output |
-| `--interactive` | `-i` | false | Interactive mode |
+| Flag             | Short | Default | Description                                                  |
+| ---------------- | ----- | ------- | ------------------------------------------------------------ |
+| `--serial`       |       | false   | Fetch CVM serial console logs (boot, kernel, docker-compose) |
+| `--cvm-stdout`   |       | false   | Fetch CVM stdout channel                                     |
+| `--cvm-stderr`   |       | false   | Fetch CVM stderr channel                                     |
+| `--stderr`       |       | false   | Include container stderr (container mode only)               |
+| `--tail <lines>` | `-n`  |         | Number of lines from end                                     |
+| `--follow`       | `-f`  | false   | Stream logs in real-time                                     |
+| `--timestamps`   | `-t`  | false   | Show timestamps                                              |
+| `--since <time>` |       |         | Start time (RFC3339 or relative, e.g., 42m)                  |
+| `--until <time>` |       |         | End time (RFC3339 or relative)                               |
+| `--cvm-id <id>`  |       |         | CVM ID override                                              |
+| `--json`         | `-j`  | false   | JSON output                                                  |
+| `--interactive`  | `-i`  | false   | Interactive mode                                             |
 
 ## Log Sources
 

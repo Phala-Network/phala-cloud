@@ -39,21 +39,21 @@ bun test test/interface-compat/flag-compatibility.test.ts
 
 ## Test Files
 
-| File | Purpose |
-|------|---------|
-| `command-existence.test.ts` | Verifies all v1.0.40 commands still exist |
+| File                         | Purpose                                                |
+| ---------------------------- | ------------------------------------------------------ |
+| `command-existence.test.ts`  | Verifies all v1.0.40 commands still exist              |
 | `flag-compatibility.test.ts` | Validates all flags are supported (long & short forms) |
-| `help-text.test.ts` | Ensures help text is complete and accurate |
-| `error-messages.test.ts` | Validates error handling and exit codes |
-| `json-output.test.ts` | Verifies JSON output stability |
-| `defaults.test.ts` | Confirms default values haven't changed |
+| `help-text.test.ts`          | Ensures help text is complete and accurate             |
+| `error-messages.test.ts`     | Validates error handling and exit codes                |
+| `json-output.test.ts`        | Verifies JSON output stability                         |
+| `defaults.test.ts`           | Confirms default values haven't changed                |
 
 ## Helpers
 
-| File | Purpose |
-|------|---------|
-| `helpers/command-runner.ts` | Utilities for running CLI commands in tests |
-| `helpers/v1-0-40-baseline.ts` | v1.0.40 interface specification baseline |
+| File                          | Purpose                                     |
+| ----------------------------- | ------------------------------------------- |
+| `helpers/command-runner.ts`   | Utilities for running CLI commands in tests |
+| `helpers/v1-0-40-baseline.ts` | v1.0.40 interface specification baseline    |
 
 ## How It Works
 
@@ -104,6 +104,7 @@ When updating to a new major version:
 All tests passing = 100% backward compatible with v1.0.40
 
 If tests fail:
+
 - **Command existence failure** → Breaking change (command removed/renamed)
 - **Flag compatibility failure** → Breaking change (flag removed/renamed)
 - **Help text failure** → Documentation regression

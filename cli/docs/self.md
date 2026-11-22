@@ -16,18 +16,18 @@ Update the Phala CLI to the latest version
 
 #### Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--json` | `-j` | false | Output result in JSON format |
-| `--yes` | `-y` | false | Skip confirmation prompt |
-| `--dry-run` | | false | Print update command without executing |
-| `--package-manager` | | auto-detect | Override package manager (npm, pnpm, yarn, bun) |
-| `--channel` | | latest | Release channel/dist-tag (e.g. latest, beta, next) |
+| Flag                | Short | Default     | Description                                        |
+| ------------------- | ----- | ----------- | -------------------------------------------------- |
+| `--json`            | `-j`  | false       | Output result in JSON format                       |
+| `--yes`             | `-y`  | false       | Skip confirmation prompt                           |
+| `--dry-run`         |       | false       | Print update command without executing             |
+| `--package-manager` |       | auto-detect | Override package manager (npm, pnpm, yarn, bun)    |
+| `--channel`         |       | latest      | Release channel/dist-tag (e.g. latest, beta, next) |
 
 #### Environment Variables
 
-| Variable | Description |
-|----------|-------------|
+| Variable               | Description                                             |
+| ---------------------- | ------------------------------------------------------- |
 | `PHALA_UPDATE_CHANNEL` | Set the release channel (alternative to --channel flag) |
 
 #### Examples

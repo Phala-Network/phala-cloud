@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { execaCommand } from "execa";
+import { execa, parseCommandString } from "execa";
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "dotenv";
@@ -57,7 +57,8 @@ async function runCliCommand(
 	logger.info(`🔧 Running: ${fullCommand}`);
 
 	try {
-		const result = await execaCommand(fullCommand, {
+		const [file, ...args] = parseCommandString(fullCommand);
+		const result = await execa(file, args, {
 			env: {
 				...process.env,
 				PHALA_CLOUD_API_KEY: TEST_API_KEY,

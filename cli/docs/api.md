@@ -8,25 +8,25 @@ Make authenticated HTTP requests to the Phala Cloud API with automatic credentia
 
 ## Arguments
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `endpoint` | Yes | API endpoint path (e.g., `/api/v1/cvms`) |
+| Name       | Required | Description                              |
+| ---------- | -------- | ---------------------------------------- |
+| `endpoint` | Yes      | API endpoint path (e.g., `/api/v1/cvms`) |
 
 ## Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--method <method>` | `-X` | GET | HTTP method (GET, POST, PUT, DELETE, PATCH, etc.) |
-| `--query <param>` | `-f` | | Query parameter: `key=value` (use `key=@file` for file). Repeatable |
-| `--field <field>` | `-F` | | Body field: `key=value` (string) or `key:=value` (typed JSON). Supports `@file`. Repeatable |
-| `--multipart` | | false | Send `-F` fields as multipart/form-data; in this mode `key=@path` attaches a file |
-| `--header <header>` | `-H` | | HTTP header `key:value`. Repeatable |
-| `--data <data>` | `-d` | | Request body (cURL-style). Repeatable |
-| `--input <file>` | | | Read body from file (use `-` for stdin) |
-| `--include` | `-i` | false | Print response headers |
-| `--jq <expression>` | `-q` | | Filter output with jq expression |
-| `--silent` | | false | Suppress response body |
-| `--api-token <token>` | | | Override API token |
+| Flag                  | Short | Default | Description                                                                                 |
+| --------------------- | ----- | ------- | ------------------------------------------------------------------------------------------- |
+| `--method <method>`   | `-X`  | GET     | HTTP method (GET, POST, PUT, DELETE, PATCH, etc.)                                           |
+| `--query <param>`     | `-f`  |         | Query parameter: `key=value` (use `key=@file` for file). Repeatable                         |
+| `--field <field>`     | `-F`  |         | Body field: `key=value` (string) or `key:=value` (typed JSON). Supports `@file`. Repeatable |
+| `--multipart`         |       | false   | Send `-F` fields as multipart/form-data; in this mode `key=@path` attaches a file           |
+| `--header <header>`   | `-H`  |         | HTTP header `key:value`. Repeatable                                                         |
+| `--data <data>`       | `-d`  |         | Request body (cURL-style). Repeatable                                                       |
+| `--input <file>`      |       |         | Read body from file (use `-` for stdin)                                                     |
+| `--include`           | `-i`  | false   | Print response headers                                                                      |
+| `--jq <expression>`   | `-q`  |         | Filter output with jq expression                                                            |
+| `--silent`            |       | false   | Suppress response body                                                                      |
+| `--api-token <token>` |       |         | Override API token                                                                          |
 
 ## Flag Semantics
 

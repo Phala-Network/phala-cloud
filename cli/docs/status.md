@@ -10,11 +10,11 @@ phala status [options]
 
 ## Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--json` | `-j` | false | Output in JSON format |
-| `--debug` | `-d` | false | Enable debug output |
-| `--api-token <token>` | | | Override API token for this command |
+| Flag                  | Short | Default | Description                         |
+| --------------------- | ----- | ------- | ----------------------------------- |
+| `--json`              | `-j`  | false   | Output in JSON format               |
+| `--debug`             | `-d`  | false   | Enable debug output                 |
+| `--api-token <token>` |       |         | Override API token for this command |
 
 ## Examples
 
@@ -68,4 +68,3 @@ $ phala status --api-token phak_abc123...
 
 - `0` - Authenticated successfully
 - `1` - Not authenticated or error occurred
-

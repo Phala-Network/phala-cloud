@@ -10,10 +10,10 @@ phala completion [options]
 
 ## Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--shell` | | auto-detect | Shell type (bash, zsh, fish) |
-| `--fig` | | | Generate Fig/Amazon Q completion spec |
+| Flag      | Short | Default     | Description                           |
+| --------- | ----- | ----------- | ------------------------------------- |
+| `--shell` |       | auto-detect | Shell type (bash, zsh, fish)          |
+| `--fig`   |       |             | Generate Fig/Amazon Q completion spec |
 
 If `--shell` is omitted, the CLI will auto-detect the shell from the `$SHELL` environment variable.
 

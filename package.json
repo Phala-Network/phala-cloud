@@ -16,7 +16,9 @@
     "rollup": "4.61.1",
     "source-map-js": "1.2.2",
     "vite": "8.1.6",
-    "yaml": "2.8.3"
+    "yaml": "2.8.3",
+    "@noble/curves": "1.9.7",
+    "@noble/hashes": "1.8.0"
   },
   "patchedDependencies": {
     "tsup@9.0.0": "patches/tsup@9.0.0.patch"

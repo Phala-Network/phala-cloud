@@ -8,17 +8,17 @@ List containers running in a CVM.
 
 ## Arguments
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `cvm-id` | No | CVM ID, UUID, or name (uses linked CVM if omitted) |
+| Name     | Required | Description                                        |
+| -------- | -------- | -------------------------------------------------- |
+| `cvm-id` | No       | CVM ID, UUID, or name (uses linked CVM if omitted) |
 
 ## Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--cvm-id <id>` | | | Override CVM ID |
-| `--json` | `-j` | false | JSON output |
-| `--interactive` | `-i` | false | Interactive mode |
+| Flag            | Short | Default | Description      |
+| --------------- | ----- | ------- | ---------------- |
+| `--cvm-id <id>` |       |         | Override CVM ID  |
+| `--json`        | `-j`  | false   | JSON output      |
+| `--interactive` | `-i`  | false   | Interactive mode |
 
 ## Examples
 

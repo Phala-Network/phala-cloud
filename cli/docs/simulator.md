@@ -18,10 +18,10 @@ Start the TEE simulator
 
 #### Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--port` | `-p` | 8090 | Port number for the simulator |
-| `--verbose` | `-v` | false | Enable verbose logging |
+| Flag        | Short | Default | Description                   |
+| ----------- | ----- | ------- | ----------------------------- |
+| `--port`    | `-p`  | 8090    | Port number for the simulator |
+| `--verbose` | `-v`  | false   | Enable verbose logging        |
 
 #### Examples
 
