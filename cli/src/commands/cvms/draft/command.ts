@@ -4,7 +4,11 @@ import {
 	rpcUrlOption,
 	transactionHashOption,
 } from "@/src/core/common-flags";
-import type { CommandGroup, CommandMeta } from "@/src/core/types";
+import type {
+	CommandGroup,
+	CommandMeta,
+	CommandOption,
+} from "@/src/core/types";
 import { z } from "zod";
 
 export const draftGroup: CommandGroup = {
@@ -23,8 +27,18 @@ export const draftListMeta: CommandMeta = {
 };
 
 const draftCvmArgument = { ...cvmIdArgument, required: true };
+const expectedEntryIdOption: CommandOption = {
+	name: "expected-entry-id",
+	description:
+		"Require the draft to match the reviewed entry IDs. Repeat for each ID, oldest first.",
+	type: "string[]",
+	target: "expectedEntryIds",
+};
 export const emptySchema = z.object({});
 export const draftCvmSchema = z.object({ cvmId: z.string().min(1) });
+export const draftReviewedCvmSchema = draftCvmSchema.extend({
+	expectedEntryIds: z.array(z.string().min(1)).min(1).optional(),
+});
 
 export const draftShowMeta: CommandMeta = {
 	name: "show",
@@ -95,6 +109,7 @@ export const draftDiscardMeta: CommandMeta = {
 		"Discard all staged changes without changing on-chain registrations",
 	stability: "stable",
 	arguments: [draftCvmArgument],
+	options: [expectedEntryIdOption],
 };
 
 export const draftApplyMeta: CommandMeta = {
@@ -104,6 +119,7 @@ export const draftApplyMeta: CommandMeta = {
 	stability: "stable",
 	arguments: [draftCvmArgument],
 	options: [
+		expectedEntryIdOption,
 		{
 			name: "wait",
 			description: "Wait until Phala Cloud finishes applying this update",
@@ -127,7 +143,7 @@ export const draftApplyMeta: CommandMeta = {
 		},
 	],
 };
-export const draftApplySchema = draftCvmSchema
+export const draftApplySchema = draftReviewedCvmSchema
 	.extend({
 		wait: z.boolean().default(false),
 		privateKey: z.string().optional(),
