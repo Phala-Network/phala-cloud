@@ -13,11 +13,29 @@ import {
 	describe,
 	expect,
 	mock,
+	spyOn,
 	test,
 } from "bun:test";
 import os from "node:os";
 import path from "node:path";
 import fs from "fs-extra";
+import {
+	concatHex,
+	encodeEventTopics,
+	getAddress,
+	keccak256,
+	parseAbi,
+	parseSignature,
+	stringToHex,
+	toHex,
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { deployCommandMeta } from "./command";
+import { parseCommandArguments } from "@/src/core/parser";
+import {
+	getChainFinalityEtaSeconds,
+	getFinalityTimeoutMs,
+} from "@/src/utils/finality";
 import { buildJsonCliError, normalizeCliError } from "@/src/utils/logger";
 import type { CommandContext } from "@/src/core/types";
 
@@ -39,6 +57,7 @@ const { recallDevOsMode } = await import("./dev-os-selection");
 type Recorded = {
 	method: string;
 	path: string;
+	search: string;
 	body: Record<string, unknown> | undefined;
 };
 
@@ -49,6 +68,91 @@ const APP_COMPOSE = JSON.stringify({
 	secure_time: true,
 });
 const LAUNCH_TOKEN = "t".repeat(32);
+const PRIVATE_KEY = `0x${"0".repeat(63)}1` as const;
+const APP_ID = getAddress(`0x${"aa".repeat(20)}`);
+const KMS_CONTRACT = `0x${"bb".repeat(20)}` as const;
+const TX_HASH = `0x${"cc".repeat(32)}` as const;
+const COMPOSE_HASH = "dd".repeat(32);
+const DEVICE_ID = "ee".repeat(16);
+const REGISTERED_BLOCK = 39000000;
+const DEPLOYER = privateKeyToAccount(PRIVATE_KEY).address;
+const KMS_INFO = {
+	id: "kms_test",
+	slug: "base-test",
+	url: "https://kms.example.com",
+	version: "0.6.5",
+	chain_id: 8453,
+	kms_contract_address: KMS_CONTRACT,
+	gateway_app_id: null,
+	// Compressed secp256k1 public key for the fixture signing key.
+	k256_pubkey:
+		"0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+};
+const CREATE_FINALITY = {
+	operation: "create",
+	correlation_id: "create-correlation-exact",
+	phase: "awaiting_finality",
+	stage: "submitted",
+	transaction: {
+		hash: TX_HASH,
+		block_number: REGISTERED_BLOCK,
+		chain_id: 8453,
+	},
+	finality: {
+		block_tag: "finalized",
+		policy_block_number: null,
+		blocks_remaining: null,
+		eta_seconds: 1235,
+	},
+};
+const REGISTERED_EVENT_TOPICS = encodeEventTopics({
+	abi: parseAbi([
+		"event AppDeployedViaFactory(address indexed appId, address indexed deployer)",
+	]),
+	args: { appId: APP_ID, deployer: DEPLOYER },
+});
+
+const RPC_RESULTS: Record<string, unknown> = {
+	eth_chainId: toHex(8453),
+	eth_getBalance: toHex(10n ** 18n),
+	eth_getCode: "0x1234",
+	eth_getTransactionCount: "0x0",
+	eth_getBlockByNumber: { baseFeePerGas: "0x1" },
+	eth_maxPriorityFeePerGas: "0x1",
+	eth_gasPrice: "0x1",
+	eth_estimateGas: "0x100000",
+	eth_sendRawTransaction: TX_HASH,
+	eth_getTransactionReceipt: {
+		transactionHash: TX_HASH,
+		blockHash: `0x${"11".repeat(32)}`,
+		blockNumber: toHex(REGISTERED_BLOCK),
+		from: DEPLOYER,
+		to: KMS_CONTRACT,
+		status: "0x1",
+		gasUsed: "0x1",
+		logs: [
+			{ address: KMS_CONTRACT, topics: REGISTERED_EVENT_TOPICS, data: "0x" },
+		],
+	},
+};
+
+async function signedPubkey() {
+	const key = `0x${"11".repeat(32)}` as const;
+	const hash = keccak256(
+		concatHex([stringToHex("dstack-env-encrypt-pubkey:"), APP_ID, key]),
+	);
+	const signed = parseSignature(
+		await privateKeyToAccount(PRIVATE_KEY).sign({ hash }),
+	);
+	return {
+		public_key: key.slice(2),
+		signature: concatHex([
+			signed.r,
+			signed.s,
+			toHex(signed.yParity, { size: 1 }),
+		]).slice(2),
+	};
+}
 
 const OS_IMAGES = {
 	items: [
@@ -138,6 +242,9 @@ let stderr = "";
 // Per-test response for GET requests (CVM info, operations); defaults to 404.
 let osImagesResponse: unknown = OS_IMAGES;
 let respondGet: ((path: string) => Response) | undefined;
+let provisionOverride: Record<string, unknown> | undefined;
+let commitOverride: Record<string, unknown> | undefined;
+let rpcCalls: string[] = [];
 
 beforeAll(async () => {
 	server = Bun.serve({
@@ -146,16 +253,37 @@ beforeAll(async () => {
 			const url = new URL(req.url);
 			const text = await req.text();
 			const body = text ? JSON.parse(text) : undefined;
-			requests.push({ method: req.method, path: url.pathname, body });
+			if (url.pathname === "/mock-rpc") {
+				const { method, id } = body;
+				rpcCalls.push(method);
+				return Response.json({
+					jsonrpc: "2.0",
+					id,
+					...(Object.prototype.hasOwnProperty.call(RPC_RESULTS, method)
+						? { result: RPC_RESULTS[method] }
+						: { error: { code: -32601, message: "Method not found" } }),
+				});
+			}
+			requests.push({
+				method: req.method,
+				path: url.pathname,
+				search: url.search,
+				body,
+			});
 			if (req.method === "POST" && url.pathname === "/api/v1/cvms") {
 				// Commit carries the prepare token; prepare does not.
 				return body?.token
-					? Response.json({ ...CREATED_CVM, launch_token: LAUNCH_TOKEN })
+					? Response.json({
+							...CREATED_CVM,
+							launch_token: LAUNCH_TOKEN,
+							...commitOverride,
+						})
 					: Response.json({
 							app_id: "abc",
 							app_env_encrypt_pubkey: "11".repeat(32),
 							compose_hash: "hash-1",
 							token: "prepare-token",
+							...provisionOverride,
 						});
 			}
 			if (req.method === "GET" && url.pathname === "/api/v1/os-images") {
@@ -198,16 +326,21 @@ afterEach(() => {
 	stderr = "";
 	respondGet = undefined;
 	osImagesResponse = OS_IMAGES;
+	provisionOverride = undefined;
+	commitOverride = undefined;
+	rpcCalls = [];
 });
 
-async function deploy(input: Record<string, unknown>) {
+async function deploy(input: Record<string, unknown>, argv: string[] = []) {
 	let failure: unknown;
 	const context = {
 		env: {
 			PHALA_CLOUD_API_KEY: "test-key",
 			PHALA_CLOUD_API_PREFIX: `http://127.0.0.1:${server.port}/api/v1`,
 			PHALA_CLOUD_DIR: tmpDir,
+			PHALA_CLOUD_REQUESTS_PER_MINUTE: "60000",
 		},
+		rawFlags: parseCommandArguments(argv, deployCommandMeta.options).flags,
 		projectConfig: {},
 		cvmId: undefined,
 		stdout: {
@@ -243,6 +376,277 @@ function prepareRequest(): Recorded {
 	expect(prepare).toHaveLength(1);
 	return prepare[0] as Recorded;
 }
+
+describe("phala deploy on-chain create finality", () => {
+	const rpcUrl = () => `http://127.0.0.1:${server.port}/mock-rpc`;
+	const input = () => ({
+		compose: composePath,
+		kms: "base",
+		privateKey: PRIVATE_KEY,
+		rpcUrl: rpcUrl(),
+	});
+	const pubkeyPath = `/api/v1/kms/base-test/pubkey/${APP_ID}`;
+	const configureProvision = (existing = false) => {
+		provisionOverride = {
+			app_id: existing ? APP_ID : null,
+			compose_hash: COMPOSE_HASH,
+			device_id: DEVICE_ID,
+			kms_info: KMS_INFO,
+		};
+	};
+	const accept = () => {
+		commitOverride = {
+			app_id: APP_ID,
+			status: "awaiting_finality",
+			correlation_id: CREATE_FINALITY.correlation_id,
+			finality_wait: CREATE_FINALITY,
+		};
+	};
+	const commit = () => requests.find((request) => request.body?.token);
+
+	test("uses measured mainnet ETAs and a 45-minute fallback for unknown tags or chains", () => {
+		expect(getChainFinalityEtaSeconds(8453, "safe")).toBe(73);
+		expect(getChainFinalityEtaSeconds(8453, "finalized")).toBe(1235);
+		expect(getChainFinalityEtaSeconds(1, "safe")).toBe(733);
+		expect(getChainFinalityEtaSeconds(1, "finalized")).toBe(1117);
+		expect(getChainFinalityEtaSeconds(84532, "finalized")).toBeNull();
+		expect(getChainFinalityEtaSeconds(1, "unknown-policy")).toBeNull();
+		expect(getFinalityTimeoutMs(1235)).toBe(2_135_000);
+		expect(getFinalityTimeoutMs(null)).toBe(2_700_000);
+	});
+
+	test("submits the actual registration transaction and skips the public key when there is no environment", async () => {
+		configureProvision();
+		accept();
+		const result = await deploy(input());
+		expect(result).toEqual({ exitCode: 0, failure: undefined });
+		expect(
+			rpcCalls.filter((method) => method === "eth_sendRawTransaction"),
+		).toHaveLength(1);
+		expect(requests.some((request) => request.path === pubkeyPath)).toBe(false);
+		expect(commit()?.body).toMatchObject({
+			app_id: APP_ID,
+			contract_address: APP_ID,
+			transaction_hash: TX_HASH,
+			kms_id: "base-test",
+		});
+		expect(commit()?.body).not.toHaveProperty("encrypted_env");
+		expect(JSON.parse(stdout)).toMatchObject({
+			success: true,
+			status: "awaiting_finality",
+			correlation_id: CREATE_FINALITY.correlation_id,
+			eta_seconds: 1235,
+			transaction_hash: TX_HASH,
+		});
+		expect(JSON.parse(stdout).status_command).toContain(
+			`?correlation_id=${CREATE_FINALITY.correlation_id}`,
+		);
+	});
+
+	test("waits for the exact accepted operation, including apply failure after chain finality", async () => {
+		configureProvision();
+		accept();
+		respondGet = () =>
+			Response.json({
+				items: [
+					{
+						correlation_id: "a-different-create",
+						status: "completed",
+						operation_type: "create",
+					},
+					{
+						correlation_id: CREATE_FINALITY.correlation_id,
+						status: "failed",
+						operation_type: "create",
+						failure_reason: "boot_failed",
+						error_message: "The new CVM failed to boot.",
+					},
+				],
+			});
+		const { exitCode, failure } = await deploy({ ...input(), wait: true });
+		expect(exitCode).toBe(1);
+		expect(String(failure)).toContain("The new CVM failed to boot.");
+		expect(stdout).toBe("");
+		expect(
+			requests.find((request) => request.path.endsWith("/operations"))?.search,
+		).toBe(`?correlation_id=${CREATE_FINALITY.correlation_id}`);
+	});
+
+	test("retries a fresh registration's key without --wait and submits after key verification", async () => {
+		configureProvision();
+		const keyResponse = await signedPubkey();
+		let keyReads = 0;
+		respondGet = (urlPath) => {
+			expect(urlPath).toBe(pubkeyPath);
+			return ++keyReads === 1
+				? Response.json(
+						{
+							error_code: "ERR-02-023",
+							message: "KMS authorization backend unavailable",
+						},
+						{ status: 502 },
+					)
+				: Response.json(keyResponse);
+		};
+		const nativeTimeout = globalThis.setTimeout;
+		const fastPoll = spyOn(globalThis, "setTimeout").mockImplementation(((
+			fn,
+			delay,
+			...args
+		) =>
+			nativeTimeout(
+				fn,
+				delay === 15_000 ? 1 : delay,
+				...args,
+			)) as typeof setTimeout);
+		try {
+			const { exitCode, failure } = await deploy({
+				...input(),
+				json: false,
+				env: ["SETTINGS=some-value"],
+			});
+			expect(failure).toBeUndefined();
+			expect(exitCode).toBe(0);
+			expect(keyReads).toBe(2);
+			expect(stderr).toContain(
+				"Waiting for the KMS environment encryption public key",
+			);
+			expect(
+				rpcCalls.filter((method) => method === "eth_sendRawTransaction"),
+			).toHaveLength(1);
+			expect(commit()?.body?.encrypted_env).toEqual(expect.any(String));
+		} finally {
+			fastPoll.mockRestore();
+		}
+	});
+
+	test("preserves the original API error on the deadline and gives a secret-free existing-contract resume", async () => {
+		configureProvision();
+		const originalError =
+			"KMS RPC failed: authorization backend unavailable. App registration may not be visible yet.";
+		respondGet = () =>
+			Response.json(
+				{ error_code: "ERR-02-023", message: originalError },
+				{ status: 502 },
+			);
+		const nativeTimeout = globalThis.setTimeout;
+		const expectedTimeout = getFinalityTimeoutMs(
+			getChainFinalityEtaSeconds(8453, "finalized"),
+		);
+		const shortDeadline = spyOn(globalThis, "setTimeout").mockImplementation(((
+			fn,
+			delay,
+			...args
+		) =>
+			nativeTimeout(
+				fn,
+				delay === expectedTimeout ? 100 : delay,
+				...args,
+			)) as typeof setTimeout);
+		const env = "SETTINGS=never-print-this";
+		const apiToken = "never-print-the-api-token";
+		try {
+			const { exitCode, failure } = await deploy(
+				{
+					...input(),
+					json: false,
+					env: [env],
+					launchToken: LAUNCH_TOKEN,
+					apiToken,
+				},
+				[
+					"--kms=base",
+					"-c",
+					composePath,
+					"--private-key",
+					PRIVATE_KEY,
+					`--rpc-url=${rpcUrl()}`,
+					"-e",
+					env,
+					"--launch-token",
+					LAUNCH_TOKEN,
+					"--api-key",
+					apiToken,
+					"--no-public-logs",
+					"--instance-type",
+					"tdx.small",
+				],
+			);
+			expect(exitCode).toBe(1);
+			const message = String(failure);
+			expect(message).toContain(originalError);
+			expect(message).toContain(TX_HASH);
+			expect(message).toContain(`App ID: ${APP_ID}`);
+			expect(message).toContain(`App contract: ${APP_ID}`);
+			expect(message).toContain("The CVM was not submitted.");
+			expect(message).toContain("No new signature is needed");
+			expect(message).toContain(`--compose ${composePath}`);
+			expect(message).toContain(
+				`--kms-contract ${KMS_CONTRACT} --custom-app-id ${APP_ID}`,
+			);
+			expect(message).toContain("--no-public-logs");
+			expect(message).toContain("--instance-type tdx.small");
+			expect(message).toContain('"${PHALA_DEPLOY_ENV_1:?}"');
+			for (const secret of [
+				env,
+				apiToken,
+				LAUNCH_TOKEN,
+				PRIVATE_KEY,
+				rpcUrl(),
+			]) {
+				expect(message).not.toContain(secret);
+			}
+			expect(
+				rpcCalls.filter((method) => method === "eth_sendRawTransaction"),
+			).toHaveLength(1);
+			expect(commit()).toBeUndefined();
+		} finally {
+			shortDeadline.mockRestore();
+		}
+	});
+
+	test("does not retry an explicit KMS mismatch or sign again", async () => {
+		configureProvision();
+		respondGet = () =>
+			Response.json(
+				{
+					error_code: "ERR-12-005",
+					message: "This app is bound to a different KMS.",
+				},
+				{ status: 409 },
+			);
+		const { exitCode, failure } = await deploy({
+			...input(),
+			env: ["SETTINGS=some-value"],
+		});
+		expect(exitCode).toBe(1);
+		expect(failure).toMatchObject({
+			message: "This app is bound to a different KMS.",
+		});
+		expect(
+			requests.filter((request) => request.path === pubkeyPath),
+		).toHaveLength(1);
+		expect(
+			rpcCalls.filter((method) => method === "eth_sendRawTransaction"),
+		).toHaveLength(1);
+		expect(commit()).toBeUndefined();
+	});
+
+	test("does not make RPC or separate key calls for an existing contract", async () => {
+		configureProvision(true);
+		const { exitCode, failure } = await deploy({
+			...input(),
+			customAppId: APP_ID,
+			privateKey: undefined,
+			env: ["SETTINGS=some-value"],
+		});
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(rpcCalls).toEqual([]);
+		expect(requests.some((request) => request.path === pubkeyPath)).toBe(false);
+		expect(commit()?.body).not.toHaveProperty("transaction_hash");
+	});
+});
 
 describe("phala deploy (create)", () => {
 	test("sends runner, init scripts, launch token and compose fields", async () => {

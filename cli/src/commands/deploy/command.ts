@@ -190,7 +190,8 @@ export const deployCommandMeta: CommandMeta = {
 		},
 		{
 			name: "custom-app-id",
-			description: "Custom App ID (requires --nonce for PHALA KMS)",
+			description:
+				"Custom App ID (requires --nonce for PHALA KMS) or an existing on-chain app contract",
 			type: "string",
 			target: "customAppId",
 			group: "advanced",
@@ -312,7 +313,7 @@ export const deployCommandMeta: CommandMeta = {
 		{
 			name: "wait",
 			description:
-				"Wait for the deployment to finish and fail if it failed. New CVM: wait until it is running. Update (--cvm-id): wait until the CVM is running again, or stays stopped if it was not running before the update",
+				"Wait for the deployment to finish, including on-chain finality when required. New CVM: wait until it is running. Update (--cvm-id): wait until the CVM is running again, or stays stopped if it was not running before the update. With --commit, requires an API key that can read the CVM",
 			type: "boolean",
 			target: "wait",
 			group: "basic",
