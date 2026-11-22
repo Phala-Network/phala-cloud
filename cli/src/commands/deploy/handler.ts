@@ -103,6 +103,7 @@ import {
 	createRecoveryError,
 	getNewContractEnvPubkey,
 	isDefinitiveCreateRejection,
+	untrackedCreateAcceptanceError,
 } from "./create-finality";
 
 type PrivacyConfig = Pick<
@@ -1416,15 +1417,21 @@ export function addNoProductionImageHint(
 	return error;
 }
 
-function readFinalityAcceptance(result: {
-	status?: string;
-	correlationId?: string | null;
-	finalityWait?: CvmFinalityWait | null;
-}): CvmFinalityWaitAccepted | undefined {
+function readFinalityAcceptance(
+	result: {
+		status?: string;
+		correlationId?: string | null;
+		finalityWait?: CvmFinalityWait | null;
+	},
+	missingCorrelationError?: () => Error,
+): CvmFinalityWaitAccepted | undefined {
 	if (result.status !== "awaiting_finality" && !result.finalityWait) return;
 	if (!result.correlationId) {
-		throw new Error(
-			"Phala Cloud accepted the CVM operation but did not return a correlation ID. Check the CVM status before retrying.",
+		throw (
+			missingCorrelationError?.() ??
+			new Error(
+				"Phala Cloud accepted the CVM operation but did not return a correlation ID. Check the CVM status before retrying.",
+			)
 		);
 	}
 	return {
@@ -1523,9 +1530,14 @@ const deployNewCvm = async (
 			);
 		}
 		const chain = SUPPORTED_CHAINS[provisionKmsInfo.chain_id];
-		if (!chain || !app.device_id) {
+		if (!chain) {
 			throw new Error(
-				"KMS chain info is missing from provision response. Please retry or contact support.",
+				`KMS chain ID ${provisionKmsInfo.chain_id} is not supported by this CLI build.`,
+			);
+		}
+		if (!app.device_id) {
+			throw new Error(
+				"The provision response did not include the device ID required to register the app on-chain.",
 			);
 		}
 		if (!provisionKmsInfo?.kms_contract_address) {
@@ -1639,13 +1651,21 @@ const deployNewCvm = async (
 		throw commit_result.error;
 	}
 	const cvm = commit_result.data;
-	const acceptance = readFinalityAcceptance({
-		status: cvm.status,
-		correlationId: cvm.correlation_id,
-		finalityWait: cvm.finality_wait,
-	});
-	const chainId = provisionKmsInfo?.chain_id ?? undefined;
 	const cvmId = cvm.vm_uuid ?? cvm.id;
+	const acceptance = readFinalityAcceptance(
+		{
+			status: cvm.status,
+			correlationId: cvm.correlation_id,
+			finalityWait: cvm.finality_wait,
+		},
+		() =>
+			untrackedCreateAcceptanceError(
+				cvmId,
+				cvm.app_id || registration?.appId || app.app_id,
+				registration,
+			),
+	);
+	const chainId = provisionKmsInfo?.chain_id ?? undefined;
 
 	if (validatedOptions.experimentalKeyProviderType) {
 		reportMrConfigV3(
