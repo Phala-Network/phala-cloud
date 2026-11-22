@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { type Client } from "../../client";
 import { CvmIdObjectSchema, CvmIdSchema, refineCvmId } from "../../types/cvm_id";
+import { CvmFinalityWaitAcceptedSchema } from "../../types/cvm_finality";
 import { KmsInfoSchema } from "../../types/kms_info";
 import { defineAction } from "../../utils/define-action";
 import { PhalaCloudError } from "../../utils/errors";
@@ -62,6 +63,7 @@ import { PhalaCloudError } from "../../utils/errors";
  *
  * Returns either:
  * - `{ status: "in_progress", ... }` - Update initiated successfully
+ * - `{ status: "awaiting_finality", ... }` - Update accepted and waiting for on-chain finality
  * - `{ status: "precondition_required", compose_hash: "...", ... }` - Compose hash verification required
  *
  * Return type depends on schema parameter.
@@ -176,6 +178,7 @@ export const UpdatePreLaunchScriptResultSchema = z.union([
   UpdatePreLaunchScriptInProgressSchema,
   UpdatePreLaunchScriptPreconditionRequiredSchema,
   UpdatePreLaunchScriptNoChangeSchema,
+  CvmFinalityWaitAcceptedSchema.extend({ message: z.string() }),
 ]);
 
 export type UpdatePreLaunchScriptRequest = z.input<typeof UpdatePreLaunchScriptRequestSchema>;
@@ -191,7 +194,7 @@ export type UpdatePreLaunchScriptPreconditionRequired = z.infer<
  * @param client - The API client
  * @param request - Request parameters containing CVM ID and pre-launch script content
  * @param parameters - Optional behavior parameters
- * @returns Update result (either in_progress or precondition_required)
+ * @returns Whether registration is required, the update was accepted, or nothing changed
  */
 const { action: updatePreLaunchScript, safeAction: safeUpdatePreLaunchScript } = defineAction<
   UpdatePreLaunchScriptRequest,
@@ -214,7 +217,7 @@ const { action: updatePreLaunchScript, safeAction: safeUpdatePreLaunchScript } =
 
   try {
     // Make the PATCH request with plain text body and headers
-    const response = await client.patch<UpdatePreLaunchScriptInProgress>(
+    const response = await client.patch(
       `/cvms/${validatedRequest.cvmId}/pre-launch-script`,
       validatedRequest.request.pre_launch_script,
       { headers },

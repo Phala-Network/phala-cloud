@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CvmFinalityWaitAcceptedSchema } from "../../types/cvm_finality";
 import { CvmIdObjectSchema, CvmIdSchema, refineCvmId } from "../../types/cvm_id";
 import { KmsInfoSchema } from "../../types/kms_info";
 import { defineAction } from "../../utils/define-action";
@@ -78,6 +79,7 @@ const UpgradePreLaunchScriptPreconditionRequiredSchema = z.object({
 export const UpgradePreLaunchScriptResultSchema = z.union([
   UpgradePreLaunchScriptInProgressSchema,
   UpgradePreLaunchScriptPreconditionRequiredSchema,
+  CvmFinalityWaitAcceptedSchema.extend({ message: z.string() }),
 ]);
 
 export type UpgradePreLaunchScriptRequest = z.input<typeof UpgradePreLaunchScriptRequestSchema>;
@@ -104,7 +106,7 @@ const { action: upgradePreLaunchScript, safeAction: safeUpgradePreLaunchScript }
   }
 
   try {
-    const response = await client.post<UpgradePreLaunchScriptInProgress>(
+    const response = await client.post(
       `/cvms/${validated.cvmId}/pre-launch-script/upgrade-to-latest-official`,
       undefined,
       { headers },

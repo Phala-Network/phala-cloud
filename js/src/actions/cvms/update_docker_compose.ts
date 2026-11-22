@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { type Client } from "../../client";
 import { CvmIdObjectSchema, CvmIdSchema, refineCvmId } from "../../types/cvm_id";
+import { CvmFinalityWaitAcceptedSchema } from "../../types/cvm_finality";
 import { KmsInfoSchema } from "../../types/kms_info";
 import { defineAction } from "../../utils/define-action";
 import { PhalaCloudError } from "../../utils/errors";
@@ -65,6 +66,7 @@ import { PhalaCloudError } from "../../utils/errors";
  *
  * Returns either:
  * - `{ status: "in_progress", ... }` - Update initiated successfully
+ * - `{ status: "awaiting_finality", ... }` - Update accepted and waiting for on-chain finality
  * - `{ status: "precondition_required", compose_hash: "...", ... }` - Compose hash verification required
  *
  * Return type depends on schema parameter.
@@ -179,6 +181,7 @@ export const UpdateDockerComposeResultSchema = z.union([
   UpdateDockerComposeInProgressSchema,
   UpdateDockerComposePreconditionRequiredSchema,
   UpdateDockerComposeNoChangeSchema,
+  CvmFinalityWaitAcceptedSchema.extend({ message: z.string() }),
 ]);
 
 export type UpdateDockerComposeRequest = z.input<typeof UpdateDockerComposeRequestSchema>;
@@ -194,7 +197,7 @@ export type UpdateDockerComposePreconditionRequired = z.infer<
  * @param client - The API client
  * @param request - Request parameters containing CVM ID and Docker Compose content
  * @param parameters - Optional behavior parameters
- * @returns Update result (either in_progress or precondition_required)
+ * @returns Whether registration is required, the update was accepted, or nothing changed
  */
 const { action: updateDockerCompose, safeAction: safeUpdateDockerCompose } = defineAction<
   UpdateDockerComposeRequest,
@@ -217,7 +220,7 @@ const { action: updateDockerCompose, safeAction: safeUpdateDockerCompose } = def
 
   try {
     // Make the PATCH request with YAML body and headers
-    const response = await client.patch<UpdateDockerComposeInProgress>(
+    const response = await client.patch(
       `/cvms/${validatedRequest.cvmId}/docker-compose`,
       validatedRequest.request.docker_compose_file,
       { headers },

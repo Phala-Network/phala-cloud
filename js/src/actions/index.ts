@@ -106,6 +106,17 @@ export {
 } from "./blockchains/remove_device";
 
 export {
+  removeComposeHash,
+  safeRemoveComposeHash,
+  RemoveComposeHashSchema,
+  type RemoveComposeHash,
+  type RemoveComposeHashParameters,
+  type RemoveComposeHashRequest,
+  type RemoveComposeHashReturnType,
+  type SafeRemoveComposeHashResult,
+} from "./blockchains/remove_compose_hash";
+
+export {
   setAllowAnyDevice,
   safeSetAllowAnyDevice,
   type SetAllowAnyDeviceParameters,
@@ -443,6 +454,19 @@ export {
 } from "./cvms/watch_cvm_state";
 
 export {
+  waitForCvmFinality,
+  safeWaitForCvmFinality,
+  CvmFinalityOperationSchema,
+  CvmFinalityWaitError,
+  type CvmFinalityOperation,
+  type CvmFinalityWaitErrorReason,
+  type WaitForCvmFinalityError,
+  type WaitForCvmFinalityOptions,
+  type WaitForCvmFinalityRequest,
+  type WaitForCvmFinalityResult,
+} from "./cvms/wait_for_cvm_finality";
+
+export {
   getCvmAttestation,
   safeGetCvmAttestation,
   CvmAttestationSchema,
@@ -496,6 +520,37 @@ export {
   type CommitCvmUpdateRequest,
   type CommitCvmUpdateResult,
 } from "./cvms/commit_cvm_update";
+
+export {
+  applyCvmDraft,
+  discardCvmDraft,
+  getCvmDraft,
+  listCvmDrafts,
+  safeApplyCvmDraft,
+  safeDiscardCvmDraft,
+  safeGetCvmDraft,
+  safeListCvmDrafts,
+  safeStageCvmDraft,
+  safeUndoCvmDraftEntry,
+  stageCvmDraft,
+  undoCvmDraftEntry,
+  ApplyCvmDraftRequestSchema,
+  ApplyCvmDraftResultSchema,
+  CvmDraftEntrySchema,
+  CvmDraftListItemSchema,
+  CvmDraftListSchema,
+  CvmDraftSchema,
+  StageCvmDraftRequestSchema,
+  UndoCvmDraftEntryRequestSchema,
+  type ApplyCvmDraftRequest,
+  type ApplyCvmDraftResult,
+  type CvmDraft,
+  type CvmDraftEntry,
+  type CvmDraftList,
+  type CvmDraftListItem,
+  type StageCvmDraftRequest,
+  type UndoCvmDraftEntryRequest,
+} from "./cvms/cvm_draft";
 
 // CVM Update Operations
 export {
@@ -786,6 +841,19 @@ export {
   GetAppRevisionsRequestSchema,
   type GetAppRevisionsRequest,
 } from "./apps/get_app_revisions";
+
+export {
+  getAppPendingUpdates,
+  safeGetAppPendingUpdates,
+  AppPendingUpdateSchema,
+  AppPendingUpdatesSchema,
+  GetAppPendingUpdatesRequestSchema,
+  RegisteredUnusedComposeHashSchema,
+  type AppPendingUpdate,
+  type AppPendingUpdates,
+  type GetAppPendingUpdatesRequest,
+  type RegisteredUnusedComposeHash,
+} from "./apps/get_app_pending_updates";
 
 export {
   getAppRevisionDetail,
