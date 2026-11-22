@@ -20,6 +20,7 @@ import {
 } from "@/src/utils/cvms";
 import {
 	acceptedCvmOperationFields,
+	acceptedCvmOperationWaitError,
 	formatAcceptedCvmOperation,
 	formatCvmOperationStatusCommand,
 	waitForAcceptedCvmOperation,
@@ -98,7 +99,11 @@ import {
 } from "./dev-os-selection";
 import { runTwoPhaseComposeUpdate } from "@/src/lib/on-chain-update";
 import type { DeployCommandInput } from "./command";
-import { getNewContractEnvPubkey } from "./create-finality";
+import {
+	createRecoveryError,
+	getNewContractEnvPubkey,
+	isDefinitiveCreateRejection,
+} from "./create-finality";
 
 type PrivacyConfig = Pick<
 	RuntimeProjectConfig,
@@ -1429,9 +1434,9 @@ function readFinalityAcceptance(result: {
 	};
 }
 
-function deployProgress(options: Options, stderr: NodeJS.WriteStream) {
+function deployProgress(stderr: NodeJS.WriteStream) {
 	return (message: string) => {
-		if (options.json === false) stderr.write(`${message}\n`);
+		stderr.write(`${message}\n`);
 	};
 }
 
@@ -1449,7 +1454,7 @@ const deployNewCvm = async (
 	context: CommandContext,
 ) => {
 	const { stdout, stderr } = context;
-	const onProgress = deployProgress(validatedOptions, stderr);
+	const onProgress = deployProgress(stderr);
 	// Resolve KMS selection once at the start to avoid duplicate calls and warnings
 	const kmsSelection = resolveKmsSelection(validatedOptions);
 
@@ -1557,38 +1562,54 @@ const deployNewCvm = async (
 
 		registration = deploy_result.data;
 		const kmsRef = provisionKmsInfo.slug || provisionKmsInfo.id;
-		let encryptedEnv: string | undefined;
-		if (envsWithSshKey.length > 0) {
-			const response = await getNewContractEnvPubkey(
-				client,
+		let submission: "not_submitted" | "unknown" = "not_submitted";
+		try {
+			let encryptedEnv: string | undefined;
+			if (envsWithSshKey.length > 0) {
+				const response = await getNewContractEnvPubkey(
+					client,
+					registration,
+					{ reference: kmsRef, chainId: provisionKmsInfo.chain_id },
+					onProgress,
+				);
+				const pubkey = verifyAndExtractEnvEncryptPubkey(
+					response,
+					registration.appId,
+					provisionKmsInfo.k256_pubkey,
+				);
+				encryptedEnv = await encryptEnvVars(envsWithSshKey, pubkey);
+			}
+
+			submission = "unknown";
+			commit_result = await safeCommitCvmProvision(client, {
+				// Same-path two-phase create: prefer the one-time commit token.
+				token: app.token,
+				app_id: registration.appId,
+				encrypted_env: encryptedEnv,
+				compose_hash: app.compose_hash,
+				kms_id: kmsRef,
+				contract_address: registration.appAuthAddress,
+				deployer_address: registration.deployer,
+				transaction_hash: registration.transactionHash,
+			});
+			if (!commit_result.success) {
+				if (isDefinitiveCreateRejection(commit_result.error)) {
+					submission = "not_submitted";
+				}
+				throw commit_result.error;
+			}
+		} catch (error) {
+			throw createRecoveryError(
+				error,
 				registration,
 				{
-					reference: kmsRef,
 					chainId: provisionKmsInfo.chain_id,
 					address: provisionKmsInfo.kms_contract_address,
 				},
 				{ flags: context.rawFlags, composeFilePath },
-				onProgress,
+				submission,
 			);
-			const pubkey = verifyAndExtractEnvEncryptPubkey(
-				response,
-				registration.appId,
-				provisionKmsInfo.k256_pubkey,
-			);
-			encryptedEnv = await encryptEnvVars(envsWithSshKey, pubkey);
 		}
-
-		commit_result = await safeCommitCvmProvision(client, {
-			// Same-path two-phase create: prefer the one-time commit token.
-			token: app.token,
-			app_id: registration.appId,
-			encrypted_env: encryptedEnv,
-			compose_hash: app.compose_hash,
-			kms_id: kmsRef,
-			contract_address: registration.appAuthAddress,
-			deployer_address: registration.deployer,
-			transaction_hash: registration.transactionHash,
-		});
 	} else {
 		// Centralized KMS or provision already has app_id
 		let encrypted_env_vars: string | undefined;
@@ -1653,9 +1674,12 @@ const deployNewCvm = async (
 		} catch (error: unknown) {
 			// Name the CVM: it exists even though the wait failed. No `cause`:
 			// the error envelope unwraps a cause and would drop this message.
-			throw new Error(
+			const waitError = new Error(
 				`The CVM ${cvmId} ${acceptance ? "deployment was accepted, but completion was not confirmed" : "was created but did not start"}: ${error instanceof Error ? error.message : String(error)}`,
 			);
+			throw !acceptance && cvm.correlation_id
+				? acceptedCvmOperationWaitError(waitError, cvmId, cvm.correlation_id)
+				: waitError;
 		}
 	}
 
@@ -1916,40 +1940,52 @@ const updateCvm = async (
 		Boolean(trackedOperation),
 	);
 
-	if (validatedOptions.wait && trackedOperation) {
-		await waitForAcceptedCvmOperation(client, cvmId, trackedOperation, {
-			chainId,
-			onProgress: deployProgress(validatedOptions, context.stderr),
-		});
-	} else if (validatedOptions.wait) {
-		logger.info("Waiting for update to complete...");
-		try {
-			const timeoutMs = 300000; // 5 minutes
-			const startedAt = Date.now();
-			// The operation's outcome comes first: a failed update can leave the
-			// CVM in a state other than the pre-update one, and the state wait
-			// would then only time out without naming the failure.
-			if (correlationId) {
-				await waitForCvmOperation(
-					client,
-					validatedOptions.uuid as string,
-					correlationId,
-					timeoutMs,
-				);
-			}
-			// The backend keeps the power state of the live VM, and only a
-			// running CVM is known to have a running VM. A stopped CVM, or one
-			// in error after a failed boot, stays stopped through the update.
-			await waitForCvmReady(
-				validatedOptions.uuid as string,
-				timeoutMs - (Date.now() - startedAt),
+	if (validatedOptions.wait) {
+		// A CVM that is not running (including a failed boot) stays stopped.
+		const expectedStatus = cvm.status === "running" ? "running" : "stopped";
+		if (trackedOperation) {
+			await waitForAcceptedCvmOperation(client, cvmId, trackedOperation, {
+				chainId,
+				onProgress: deployProgress(context.stderr),
+			});
+			await waitForUpdatedCvmReady(
+				client,
+				cvmId,
+				trackedOperation.correlation_id,
 				context,
-				cvm.status === "running" ? "running" : "stopped",
+				expectedStatus,
 			);
-		} catch (error: unknown) {
-			throw new Error(
-				`Wait failed: ${error instanceof Error ? error.message : String(error)}`,
-			);
+		} else {
+			logger.info("Waiting for update to complete...");
+			try {
+				const timeoutMs = 300_000;
+				const startedAt = Date.now();
+				// Check the operation before waiting for power state so that a
+				// failed update surfaces its own error rather than just a timeout.
+				if (correlationId) {
+					await waitForCvmOperation(
+						client,
+						target.id,
+						correlationId,
+						timeoutMs,
+					);
+				}
+				await waitForCvmReady(
+					target.id,
+					timeoutMs - (Date.now() - startedAt),
+					context,
+					expectedStatus,
+					false,
+					client,
+				);
+			} catch (error: unknown) {
+				const waitError = new Error(
+					`Wait failed: ${error instanceof Error ? error.message : String(error)}`,
+				);
+				throw correlationId
+					? acceptedCvmOperationWaitError(waitError, cvmId, correlationId)
+					: waitError;
+			}
 		}
 	}
 
@@ -2003,6 +2039,27 @@ const updateCvm = async (
 	return !pending;
 };
 
+async function waitForUpdatedCvmReady(
+	client: CliApiClient,
+	cvmId: string,
+	correlationId: string,
+	context: CommandContext,
+	expectedStatus: "running" | "stopped",
+): Promise<void> {
+	try {
+		await waitForCvmReady(
+			cvmId,
+			300_000,
+			context,
+			expectedStatus,
+			false,
+			client,
+		);
+	} catch (error) {
+		throw acceptedCvmOperationWaitError(error, cvmId, correlationId);
+	}
+}
+
 /**
  * Commit a previously prepared CVM update using a commit token.
  * Skips compose file reading and env processing — goes straight to the API.
@@ -2020,6 +2077,7 @@ const commitCvmUpdate = async (
 		throw new Error("--cvm-id is required for --commit mode");
 	}
 	const cvmId = validatedOptions.uuid;
+	let expectedStatus: "running" | "stopped" = "running";
 	if (validatedOptions.wait) {
 		const auth = resolveAuthForContext(context, {
 			apiToken: validatedOptions.apiToken,
@@ -2034,6 +2092,10 @@ const commitCvmUpdate = async (
 			await client.get(`/cvms/${encodeURIComponent(cvmId)}/operations`, {
 				query: { limit: 1 },
 			});
+			const current = await safeGetCvmInfo(client, { id: cvmId });
+			if (!current.success) throw current.error;
+			expectedStatus =
+				current.data.status === "running" ? "running" : "stopped";
 		} catch (error) {
 			throw new Error(
 				`Could not verify read access to CVM ${cvmId} before committing. The update was not submitted. ${error instanceof Error ? error.message : String(error)}`,
@@ -2075,7 +2137,7 @@ const commitCvmUpdate = async (
 	if (validatedOptions.wait) {
 		if (acceptance) {
 			await waitForAcceptedCvmOperation(client, cvmId, acceptance, {
-				onProgress: deployProgress(validatedOptions, stderr),
+				onProgress: deployProgress(stderr),
 			});
 		} else if (correlationId) {
 			// Older API versions accept the update without a finality payload.
@@ -2085,12 +2147,21 @@ const commitCvmUpdate = async (
 				{ correlation_id: correlationId },
 				{
 					timeoutMs: 300_000,
-					onProgress: deployProgress(validatedOptions, stderr),
+					onProgress: deployProgress(stderr),
 				},
 			);
 		} else if (status !== "no_change") {
 			throw new Error(
 				`The update to CVM ${cvmId} was committed without a correlation ID. Check the CVM status to confirm completion.`,
+			);
+		}
+		if (correlationId) {
+			await waitForUpdatedCvmReady(
+				client,
+				cvmId,
+				correlationId,
+				context,
+				expectedStatus,
 			);
 		}
 	}

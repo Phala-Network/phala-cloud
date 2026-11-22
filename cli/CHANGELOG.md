@@ -1,3 +1,7 @@
+## Unreleased
+
+* `phala deploy --commit --wait` waits for the update to complete and reports `status: "completed"` in JSON output.
+
 ## [1.2.8](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.7...cli-v1.2.8) (2026-11-17)
 
 ### docs
