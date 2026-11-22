@@ -1,4 +1,4 @@
-import type { PatchCvmResult } from "@phala/cloud";
+import type { CvmFinalityWait, PatchCvmResult } from "@phala/cloud";
 import {
 	SUPPORTED_CHAINS,
 	safeAddComposeHash,
@@ -12,10 +12,16 @@ import {
 } from "@/src/lib/app-epoch";
 import { logger } from "@/src/utils/logger";
 
+type UpdateAcceptance = {
+	correlationId: string;
+	status?: string;
+	finalityWait?: CvmFinalityWait | null;
+};
+
 export type OnChainPhase2 = (
 	composeHash: string,
 	transactionHash: string,
-) => Promise<{ correlationId: string }>;
+) => Promise<UpdateAcceptance>;
 
 export type OnChainUpdateOptions = {
 	prepareOnly: boolean;
@@ -29,7 +35,12 @@ export type OnChainUpdateOptions = {
 
 export type OnChainUpdateOutcome =
 	| { prepared: true }
-	| { prepared: false; correlationId: string };
+	| ({
+			prepared: false;
+			chainId?: number;
+			transactionHash?: string;
+			composeHash?: string;
+	  } & UpdateAcceptance);
 
 /**
  * Run a compose-hash-affecting CVM update through on-chain KMS two-phase flow.
@@ -52,13 +63,19 @@ export async function runTwoPhaseComposeUpdate(args: {
 			options.composeHash,
 			options.transactionHash,
 		);
-		return { prepared: false, correlationId: confirmed.correlationId };
+		return {
+			...confirmed,
+			prepared: false,
+			composeHash: options.composeHash,
+			transactionHash: options.transactionHash,
+		};
 	}
 
 	const result = await args.phase1();
-	const correlationId = "correlationId" in result ? result.correlationId : "";
 	if (!result.requiresOnChainHash) {
-		return { prepared: false, correlationId };
+		return "correlationId" in result
+			? { ...result, prepared: false }
+			: { prepared: false, correlationId: "" };
 	}
 
 	const appId = args.appId || result.appId;
@@ -124,7 +141,7 @@ export async function runTwoPhaseComposeUpdate(args: {
 		});
 		if (!deviceResult.success) {
 			throw new Error(
-				`Failed to register device on-chain (device: ${result.deviceId.slice(0, 10)}...): ${errorMessage(deviceResult)}`,
+				`Failed to register device on-chain (device: ${result.deviceId}): ${errorMessage(deviceResult)}`,
 			);
 		}
 		logEpochRange(
@@ -145,7 +162,7 @@ export async function runTwoPhaseComposeUpdate(args: {
 	});
 	if (!receipt_result.success) {
 		throw new Error(
-			`Failed to register compose hash on-chain (hash: ${result.composeHash.slice(0, 10)}...): ${errorMessage(receipt_result)}`,
+			`Failed to register compose hash on-chain (hash: ${result.composeHash}): ${errorMessage(receipt_result)}`,
 		);
 	}
 
@@ -164,7 +181,13 @@ export async function runTwoPhaseComposeUpdate(args: {
 	);
 
 	const confirmed = await args.phase2(result.composeHash, transactionHash);
-	return { prepared: false, correlationId: confirmed.correlationId };
+	return {
+		...confirmed,
+		prepared: false,
+		chainId: cvmChain.id,
+		transactionHash,
+		composeHash: result.composeHash,
+	};
 }
 
 /**

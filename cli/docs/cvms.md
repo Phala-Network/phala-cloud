@@ -42,6 +42,28 @@ List CVMs in your workspace with filtering and pagination.
 
 ---
 
+### cvms draft
+
+Stage changes without updating the CVM. Review each entry's diff, then apply the entries together as one update.
+
+    phala cvms draft list
+    phala cvms draft stage my-cvm --compose docker-compose.yml
+    phala cvms draft stage my-cvm --patch-file update.json
+    phala cvms draft show my-cvm
+    phala cvms draft undo my-cvm [entry-id]
+    phala cvms draft discard my-cvm
+    phala cvms draft apply my-cvm [--wait]
+
+Use either `--compose` for a Docker Compose file or `--patch-file` for CVM update fields, for example `{"memory":8192,"public_logs":false}`. Undo removes the newest entry. If you pass an entry ID, it must match the newest entry.
+
+If the CVM's compose changed since you started the draft, apply refuses to use the old draft. Review the live configuration, discard the stale draft, and stage the changes again.
+
+If the update needs a new on-chain registration, set `PRIVATE_KEY` to the app owner's key. Registration is irreversible. Undo, discard, and cancel do not remove it or take back keys already released. Changing the draft while an update waits for finality can replace that update. If you already have the registration transaction for this draft, retry apply with both `--compose-hash` and `--transaction-hash`.
+
+Without `--wait`, apply returns once Phala Cloud accepts the update. Use `--wait` to follow that exact update until it finishes. Stopping the CLI does not cancel the update.
+
+---
+
 ### cvms get
 
 Get detailed information about a specific CVM. API version `2026-11-11` is used by default. Compose is omitted by default; request it explicitly with `--include-compose`.

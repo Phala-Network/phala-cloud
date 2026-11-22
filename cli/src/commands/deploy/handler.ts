@@ -18,11 +18,17 @@ import {
 	waitForCvmOperation,
 	waitForCvmReady,
 } from "@/src/utils/cvms";
+import {
+	acceptedCvmOperationFields,
+	formatAcceptedCvmOperation,
+	formatCvmOperationStatusCommand,
+	waitForAcceptedCvmOperation,
+} from "@/src/utils/finality";
 import { logger } from "@/src/utils/logger";
 
 import {
 	getEncryptPubkey,
-	getOnchainEnvEncryptPubkey,
+	verifyAndExtractEnvEncryptPubkey,
 } from "@/src/commands/envs/get-encrypt-pubkey";
 import { dedupeEnvVars, parseEnvInputs } from "@/src/utils/env-parsing";
 import type { RuntimeProjectConfig } from "@/src/utils/project-config";
@@ -33,11 +39,16 @@ import {
 	parseSizeWithUnit,
 } from "@/src/utils/units";
 import {
+	type CvmFinalityWait,
+	type CvmFinalityWaitAccepted,
 	CvmIdSchema,
+	type DeployAppAuth,
+	DeployAppAuthSchema,
 	type EnvVar,
 	MAX_COMPOSE_PAYLOAD_BYTES,
 	type MrConfigV3Input,
 	type ProvisionCvmRequest,
+	SUPPORTED_CHAINS,
 	buildMrConfigV3Document,
 	canonicalizeMrConfigV3Document,
 	convertToHostname,
@@ -50,7 +61,6 @@ import {
 	safeConfirmCvmPatch,
 	safeDeployAppAuth,
 	safeGetAvailableNodes,
-	safeGetCurrentUser,
 	safeGetCvmInfo,
 	safeGetCvmList,
 	safeGetOsImages,
@@ -88,6 +98,7 @@ import {
 } from "./dev-os-selection";
 import { runTwoPhaseComposeUpdate } from "@/src/lib/on-chain-update";
 import type { DeployCommandInput } from "./command";
+import { getNewContractEnvPubkey } from "./create-finality";
 
 type PrivacyConfig = Pick<
 	RuntimeProjectConfig,
@@ -1400,20 +1411,45 @@ export function addNoProductionImageHint(
 	return error;
 }
 
+function readFinalityAcceptance(result: {
+	status?: string;
+	correlationId?: string | null;
+	finalityWait?: CvmFinalityWait | null;
+}): CvmFinalityWaitAccepted | undefined {
+	if (result.status !== "awaiting_finality" && !result.finalityWait) return;
+	if (!result.correlationId) {
+		throw new Error(
+			"Phala Cloud accepted the CVM operation but did not return a correlation ID. Check the CVM status before retrying.",
+		);
+	}
+	return {
+		status: "awaiting_finality",
+		correlation_id: result.correlationId,
+		finality_wait: result.finalityWait,
+	};
+}
+
+function deployProgress(options: Options, stderr: NodeJS.WriteStream) {
+	return (message: string) => {
+		if (options.json === false) stderr.write(`${message}\n`);
+	};
+}
+
 const deployNewCvm = async (
 	validatedOptions: Options,
 	docker_compose_yml: string,
 	envs: EnvVar[],
 	client: CliApiClient,
-	stdout: NodeJS.WriteStream,
-	stderr: NodeJS.WriteStream,
+	composeFilePath: string | undefined,
 	projectConfig: PrivacyConfig | undefined,
 	preLaunchScriptContent: string | undefined,
 	initScriptContents: string[],
 	devOsMode: DevOsMode | undefined,
 	sshKeyChannel: SshKeyChannel,
-	context: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
+	context: CommandContext,
 ) => {
+	const { stdout, stderr } = context;
+	const onProgress = deployProgress(validatedOptions, stderr);
 	// Resolve KMS selection once at the start to avoid duplicate calls and warnings
 	const kmsSelection = resolveKmsSelection(validatedOptions);
 
@@ -1464,9 +1500,9 @@ const deployNewCvm = async (
 	if (!provision_result.success) {
 		throw addNoProductionImageHint(provision_result.error, payload);
 	}
-	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
-	const app = provision_result.data as any;
+	const app = provision_result.data;
 	let commit_result;
+	let registration: DeployAppAuth | undefined;
 
 	const provisionKmsInfo = app.kms_info;
 
@@ -1476,7 +1512,13 @@ const deployNewCvm = async (
 		!!provisionKmsInfo?.kms_contract_address;
 
 	if (needsOnchainKms) {
-		if (!provisionKmsInfo?.chain_id || !provisionKmsInfo?.chain) {
+		if (validatedOptions.customAppId) {
+			throw new Error(
+				`Phala Cloud did not return the existing app ${validatedOptions.customAppId}. No new contract was registered.`,
+			);
+		}
+		const chain = SUPPORTED_CHAINS[provisionKmsInfo.chain_id];
+		if (!chain || !app.device_id) {
 			throw new Error(
 				"KMS chain info is missing from provision response. Please retry or contact support.",
 			);
@@ -1493,55 +1535,74 @@ const deployNewCvm = async (
 			provisionKmsInfo.chain_id,
 		);
 
-		// Deploy contract
-		const deploy_result = await safeDeployAppAuth({
-			chain: provisionKmsInfo.chain,
-			rpcUrl: validatedOptions.rpcUrl,
-			kmsContractAddress: provisionKmsInfo.kms_contract_address,
-			privateKey: privateKey as `0x${string}`,
-			deviceId: app.device_id,
-			composeHash: app.compose_hash,
-		});
+		onProgress(
+			"Registering the app on-chain. Canceling the deployment later will not undo this transaction.",
+		);
+		const deploy_result = await safeDeployAppAuth(
+			{
+				chain,
+				rpcUrl: validatedOptions.rpcUrl,
+				kmsContractAddress: provisionKmsInfo.kms_contract_address,
+				privateKey: privateKey as `0x${string}`,
+				deviceId: app.device_id,
+				composeHash: app.compose_hash,
+			},
+			{ schema: DeployAppAuthSchema },
+		);
 
 		if (!deploy_result.success) {
 			const failure = deploy_result as { error?: unknown };
 			throw failure.error ?? new Error("Deployment contract failed");
 		}
 
-		// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
-		const deployed_contract = deploy_result.data as any;
-
-		// Get encryption key
+		registration = deploy_result.data;
 		const kmsRef = provisionKmsInfo.slug || provisionKmsInfo.id;
-		if (!kmsRef) {
-			throw new Error(
-				"KMS reference (slug or id) is missing from provision response",
+		let encryptedEnv: string | undefined;
+		if (envsWithSshKey.length > 0) {
+			const response = await getNewContractEnvPubkey(
+				client,
+				registration,
+				{
+					reference: kmsRef,
+					chainId: provisionKmsInfo.chain_id,
+					address: provisionKmsInfo.kms_contract_address,
+				},
+				{ flags: context.rawFlags, composeFilePath },
+				onProgress,
 			);
+			const pubkey = verifyAndExtractEnvEncryptPubkey(
+				response,
+				registration.appId,
+				provisionKmsInfo.k256_pubkey,
+			);
+			encryptedEnv = await encryptEnvVars(envsWithSshKey, pubkey);
 		}
-		const pubkey = await getOnchainEnvEncryptPubkey(
-			client,
-			{ app_id: deployed_contract.appId, kms: kmsRef },
-			provisionKmsInfo.k256_pubkey,
-			{ retryLegacyTransientErrors: true },
-		);
-		const encrypted_env_vars = await encryptEnvVars(envsWithSshKey, pubkey);
 
 		commit_result = await safeCommitCvmProvision(client, {
 			// Same-path two-phase create: prefer the one-time commit token.
 			token: app.token,
-			app_id: deployed_contract.appId,
-			encrypted_env: encrypted_env_vars,
+			app_id: registration.appId,
+			encrypted_env: encryptedEnv,
 			compose_hash: app.compose_hash,
 			kms_id: kmsRef,
-			contract_address: deployed_contract.appAuthAddress,
-			deployer_address: deployed_contract.deployer,
+			contract_address: registration.appAuthAddress,
+			deployer_address: registration.deployer,
+			transaction_hash: registration.transactionHash,
 		});
 	} else {
 		// Centralized KMS or provision already has app_id
-		const encrypted_env_vars =
-			envsWithSshKey && envsWithSshKey.length > 0
-				? await encryptEnvVars(envsWithSshKey, app.app_env_encrypt_pubkey)
-				: undefined;
+		let encrypted_env_vars: string | undefined;
+		if (envsWithSshKey.length > 0) {
+			if (!app.app_env_encrypt_pubkey) {
+				throw new Error(
+					"Provisioning did not return an environment encryption public key.",
+				);
+			}
+			encrypted_env_vars = await encryptEnvVars(
+				envsWithSshKey,
+				app.app_env_encrypt_pubkey,
+			);
+		}
 
 		commit_result = await safeCommitCvmProvision(client, {
 			// Same-path two-phase create: prefer the one-time commit token.
@@ -1556,8 +1617,14 @@ const deployNewCvm = async (
 	if (!commit_result.success) {
 		throw commit_result.error;
 	}
-	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
-	const cvm = commit_result.data as any;
+	const cvm = commit_result.data;
+	const acceptance = readFinalityAcceptance({
+		status: cvm.status,
+		correlationId: cvm.correlation_id,
+		finalityWait: cvm.finality_wait,
+	});
+	const chainId = provisionKmsInfo?.chain_id ?? undefined;
+	const cvmId = cvm.vm_uuid ?? cvm.id;
 
 	if (validatedOptions.experimentalKeyProviderType) {
 		reportMrConfigV3(
@@ -1575,24 +1642,32 @@ const deployNewCvm = async (
 	if (validatedOptions.wait) {
 		logger.info("Waiting for the CVM to start...");
 		try {
-			await waitForCvmCreated(client, cvm.vm_uuid, context, 300000);
+			if (acceptance) {
+				await waitForAcceptedCvmOperation(client, cvmId, acceptance, {
+					chainId,
+					onProgress,
+				});
+			} else {
+				await waitForCvmCreated(client, cvmId, context, 300000);
+			}
 		} catch (error: unknown) {
 			// Name the CVM: it exists even though the wait failed. No `cause`:
 			// the error envelope unwraps a cause and would drop this message.
 			throw new Error(
-				`The CVM ${cvm.vm_uuid} was created but did not start: ${error instanceof Error ? error.message : String(error)}`,
+				`The CVM ${cvmId} ${acceptance ? "deployment was accepted, but completion was not confirmed" : "was created but did not start"}: ${error instanceof Error ? error.message : String(error)}`,
 			);
 		}
 	}
 
 	// The OS image the API chose; shown because the default is not the user's
 	// pick unless --image was passed.
-	const osImage: string | undefined =
-		typeof cvm.base_image === "string" && cvm.base_image
-			? cvm.base_image
-			: typeof cvm.os?.name === "string" && cvm.os.name
-				? cvm.os.name
-				: undefined;
+	const os = cvm.os;
+	const osImage =
+		cvm.base_image ||
+		(os && typeof os === "object" && "name" in os && typeof os.name === "string"
+			? os.name
+			: undefined);
+	const pending = acceptance && !validatedOptions.wait;
 
 	if (validatedOptions?.json !== false) {
 		stdout.write(
@@ -1601,8 +1676,25 @@ const deployNewCvm = async (
 					success: true,
 					vm_uuid: cvm.vm_uuid,
 					name: cvm.name,
-					app_id: cvm.app_id,
-					dashboard_url: `${CLOUD_URL}/dashboard/cvms/${cvm.vm_uuid}`,
+					app_id: cvm.app_id ?? registration?.appId,
+					dashboard_url: `${CLOUD_URL}/dashboard/cvms/${cvmId}`,
+					...(acceptance
+						? {
+								status: pending ? acceptance.status : "completed",
+								...acceptedCvmOperationFields(
+									cvmId,
+									pending
+										? acceptance
+										: { correlation_id: acceptance.correlation_id },
+								),
+							}
+						: {}),
+					...(registration
+						? {
+								transaction_hash: registration.transactionHash,
+								app_contract_address: registration.appAuthAddress,
+							}
+						: {}),
 					...(osImage ? { os_image: osImage } : {}),
 					...(cvm.launch_token ? { launch_token: cvm.launch_token } : {}),
 					...composeFileUpdatedField(validatedOptions),
@@ -1612,15 +1704,20 @@ const deployNewCvm = async (
 			)}\n`,
 		);
 	} else {
-		const successMessage = dedent`
-      CVM created successfully!
-
-      CVM ID:    ${cvm.vm_uuid}
-      Name:      ${cvm.name}
-      App ID:    ${cvm.app_id}
-      Dashboard URL:  ${CLOUD_URL}/dashboard/cvms/${cvm.vm_uuid}
-    `;
-		stdout.write(`${successMessage}\n`);
+		const resultMessage = pending
+			? formatAcceptedCvmOperation(cvmId, acceptance)
+			: `CVM created successfully!\n\nCVM ID:    ${cvmId}`;
+		stdout.write(
+			`${resultMessage}\nName:      ${cvm.name}\nApp ID:    ${cvm.app_id ?? registration?.appId}\nDashboard URL:  ${CLOUD_URL}/dashboard/cvms/${cvmId}\n`,
+		);
+		if (registration) {
+			stdout.write(`App contract: ${registration.appAuthAddress}\n`);
+			if (!pending || !acceptance.finality_wait?.transaction) {
+				stdout.write(
+					`Registration transaction hash: ${registration.transactionHash}\n`,
+				);
+			}
+		}
 		if (osImage) {
 			stdout.write(`OS image:  ${osImage}\n`);
 		}
@@ -1644,6 +1741,7 @@ const deployNewCvm = async (
 async function applyListedAfterUpdate(
 	client: CliApiClient,
 	options: Options,
+	awaitingFinality = false,
 ): Promise<void> {
 	if (options.listed === undefined) return;
 	try {
@@ -1653,7 +1751,7 @@ async function applyListedAfterUpdate(
 	} catch (error) {
 		const reason = error instanceof Error ? error.message : String(error);
 		throw new Error(
-			`The CVM update was already applied, but setting the Trust Center listing failed: ${reason}. Retry with an API key: phala api -X PATCH /cvms/${options.uuid}/listed -F listed:=${options.listed}`,
+			`The CVM update ${awaitingFinality ? "was accepted and may still be pending" : "was already applied"}, but setting the Trust Center listing failed: ${reason}. Retry with an API key: phala api -X PATCH /cvms/${options.uuid}/listed -F listed:=${options.listed}`,
 			{ cause: error },
 		);
 	}
@@ -1675,9 +1773,7 @@ const updateCvm = async (
 	envs: EnvVar[] | undefined,
 	client: CliApiClient,
 	stdout: NodeJS.WriteStream,
-	context:
-		| Pick<CommandContext, "env" | "projectConfig" | "globalOptions">
-		| undefined,
+	context: CommandContext,
 	preLaunchScriptContent: string | undefined,
 	target: UpdateTarget,
 ): Promise<boolean> => {
@@ -1714,9 +1810,6 @@ const updateCvm = async (
 	}
 
 	const result = patchResult.data;
-	// Empty for no_change (no operation to follow); the on-chain path sets it on confirm.
-	let correlationId = "correlationId" in result ? result.correlationId : "";
-
 	if (validatedOptions.prepareOnly && validatedOptions.listed !== undefined) {
 		logger.warn(
 			"--listed is not applied with --prepare-only. Pass it again with --commit.",
@@ -1802,12 +1895,33 @@ const updateCvm = async (
 		// --prepare-only on an on-chain CVM: registered, not applied yet.
 		return false;
 	}
-	correlationId = outcome.correlationId;
+	const correlationId = outcome.correlationId;
+	const acceptance = readFinalityAcceptance(outcome);
+	const kmsChainId = readMapping(readMapping(target.cvm)?.kms_info)?.chain_id;
+	const chainId =
+		outcome.chainId ??
+		(typeof kmsChainId === "number" ? kmsChainId : undefined);
+	const cvmId = target.vmUuid;
+	// Older responses and SDK versions may omit finality progress from a phase-two acceptance.
+	const trackedOperation =
+		acceptance ??
+		(outcome.transactionHash && correlationId
+			? { correlation_id: correlationId }
+			: undefined);
+	const pending = trackedOperation && !validatedOptions.wait;
 
-	await applyListedAfterUpdate(client, validatedOptions);
+	await applyListedAfterUpdate(
+		client,
+		validatedOptions,
+		Boolean(trackedOperation),
+	);
 
-	// Wait for update to complete if --wait flag is set
-	if (validatedOptions.wait) {
+	if (validatedOptions.wait && trackedOperation) {
+		await waitForAcceptedCvmOperation(client, cvmId, trackedOperation, {
+			chainId,
+			onProgress: deployProgress(validatedOptions, context.stderr),
+		});
+	} else if (validatedOptions.wait) {
 		logger.info("Waiting for update to complete...");
 		try {
 			const timeoutMs = 300000; // 5 minutes
@@ -1848,16 +1962,45 @@ const updateCvm = async (
 					name: cvm.name,
 					app_id: cvm.app_id,
 					dashboard_url: `${CLOUD_URL}/dashboard/cvms/${cvm.vm_uuid}`,
+					...(trackedOperation
+						? {
+								status: pending
+									? (acceptance?.status ?? "accepted")
+									: "completed",
+								...acceptedCvmOperationFields(
+									cvmId,
+									pending
+										? trackedOperation
+										: { correlation_id: correlationId },
+								),
+								transaction_hash:
+									acceptance?.finality_wait?.transaction?.hash ??
+									outcome.transactionHash,
+								compose_hash: outcome.composeHash,
+							}
+						: {}),
 					...composeFileUpdatedField(validatedOptions),
 				},
 				null,
 				2,
 			)}\n`,
 		);
+	} else if (pending) {
+		const message = acceptance
+			? formatAcceptedCvmOperation(cvmId, acceptance)
+			: `CVM update accepted. Completion has not been confirmed.\nCVM ID: ${cvmId}\nCorrelation ID: ${correlationId}\nCheck this operation: ${formatCvmOperationStatusCommand(cvmId, correlationId)}`;
+		stdout.write(`${message}\nApp ID: ${cvm.app_id}\n`);
+		if (outcome.composeHash)
+			stdout.write(`Compose hash: ${outcome.composeHash}\n`);
+		if (outcome.transactionHash && !acceptance?.finality_wait?.transaction) {
+			stdout.write(
+				`Registration transaction hash: ${outcome.transactionHash}\n`,
+			);
+		}
 	} else {
 		stdout.write("CVM updated successfully!\n");
 	}
-	return true;
+	return !pending;
 };
 
 /**
@@ -1867,13 +2010,35 @@ const updateCvm = async (
 const commitCvmUpdate = async (
 	validatedOptions: Options,
 	client: CliApiClient,
-	stdout: NodeJS.WriteStream,
+	context: CommandContext,
 ) => {
+	const { stdout, stderr } = context;
 	if (!validatedOptions.token) {
 		throw new Error("--token is required for --commit mode");
 	}
 	if (!validatedOptions.uuid) {
 		throw new Error("--cvm-id is required for --commit mode");
+	}
+	const cvmId = validatedOptions.uuid;
+	if (validatedOptions.wait) {
+		const auth = resolveAuthForContext(context, {
+			apiToken: validatedOptions.apiToken,
+		});
+		if (!auth.apiKey) {
+			throw new Error(
+				"--commit --wait requires an API key with read access to the CVM. Run phala login, select a workspace profile, or set PHALA_CLOUD_API_KEY. The update was not submitted.",
+			);
+		}
+		try {
+			// A commit token alone can submit this update, but cannot read its result.
+			await client.get(`/cvms/${encodeURIComponent(cvmId)}/operations`, {
+				query: { limit: 1 },
+			});
+		} catch (error) {
+			throw new Error(
+				`Could not verify read access to CVM ${cvmId} before committing. The update was not submitted. ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
 	}
 	if (!validatedOptions.transactionHash) {
 		logger.info(
@@ -1881,7 +2046,7 @@ const commitCvmUpdate = async (
 		);
 	}
 
-	logger.info(`Committing CVM update for ${validatedOptions.uuid}...`);
+	logger.info(`Committing CVM update for ${cvmId}...`);
 
 	const commitResult = await safeCommitCvmUpdate(client, {
 		id: validatedOptions.uuid,
@@ -1902,24 +2067,71 @@ const commitCvmUpdate = async (
 		throw new Error(`Failed to commit CVM update: ${errMsg}${hint}`);
 	}
 
-	await applyListedAfterUpdate(client, validatedOptions);
+	const { correlationId, status } = commitResult.data;
+	const acceptance = readFinalityAcceptance(commitResult.data);
+	const pending = acceptance && !validatedOptions.wait;
+	await applyListedAfterUpdate(client, validatedOptions, Boolean(acceptance));
 
+	if (validatedOptions.wait) {
+		if (acceptance) {
+			await waitForAcceptedCvmOperation(client, cvmId, acceptance, {
+				onProgress: deployProgress(validatedOptions, stderr),
+			});
+		} else if (correlationId) {
+			// Older API versions accept the update without a finality payload.
+			await waitForAcceptedCvmOperation(
+				client,
+				cvmId,
+				{ correlation_id: correlationId },
+				{
+					timeoutMs: 300_000,
+					onProgress: deployProgress(validatedOptions, stderr),
+				},
+			);
+		} else if (status !== "no_change") {
+			throw new Error(
+				`The update to CVM ${cvmId} was committed without a correlation ID. Check the CVM status to confirm completion.`,
+			);
+		}
+	}
+
+	const transactionHash =
+		acceptance?.finality_wait?.transaction?.hash ??
+		(validatedOptions.transactionHash === "already-registered"
+			? undefined
+			: validatedOptions.transactionHash);
 	if (validatedOptions.json !== false) {
 		stdout.write(
 			`${JSON.stringify(
 				{
 					success: true,
-					vm_uuid: validatedOptions.uuid,
-					correlation_id: commitResult.data.correlationId,
-					status: commitResult.data.status,
+					vm_uuid: cvmId,
+					correlation_id: correlationId,
+					status: validatedOptions.wait && correlationId ? "completed" : status,
+					...(acceptance
+						? {
+								...acceptedCvmOperationFields(
+									cvmId,
+									pending ? acceptance : { correlation_id: correlationId },
+								),
+								transaction_hash: transactionHash,
+								compose_hash: validatedOptions.composeHash,
+							}
+						: {}),
 				},
 				null,
 				2,
 			)}\n`,
 		);
+	} else if (pending) {
+		stdout.write(`${formatAcceptedCvmOperation(cvmId, acceptance)}\n`);
+		if (transactionHash && !acceptance.finality_wait?.transaction)
+			stdout.write(`Registration transaction hash: ${transactionHash}\n`);
+		if (validatedOptions.composeHash)
+			stdout.write(`Compose hash: ${validatedOptions.composeHash}\n`);
 	} else {
 		stdout.write(
-			`CVM update committed successfully! Correlation ID: ${commitResult.data.correlationId}\n`,
+			`CVM update ${validatedOptions.wait ? "completed" : "committed"} successfully! Correlation ID: ${correlationId}\n`,
 		);
 	}
 };
@@ -2055,7 +2267,7 @@ export async function runDeploy(
 				? CvmIdSchema.parse(context.cvmId).cvmId
 				: undefined;
 
-			await commitCvmUpdate({ ...input, uuid }, client, context.stdout);
+			await commitCvmUpdate({ ...input, uuid }, client, context);
 			return 0;
 		}
 
@@ -2260,8 +2472,7 @@ export async function runDeploy(
 				docker_compose_yml,
 				envs ?? [],
 				client,
-				context.stdout,
-				context.stderr,
+				composeFilePath,
 				context.projectConfig,
 				preLaunchScriptContent,
 				initScriptContents,

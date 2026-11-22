@@ -2,6 +2,7 @@ import { cvmsAttestationCommand } from "./attestation";
 import { cvmsGroup } from "./command";
 import { cvmsDeleteCommand } from "./delete";
 import { cvmsDeviceAllowlistCommand } from "./device-allowlist";
+import { cvmsDraftCommands } from "./draft";
 import { cvmsGetCommand } from "./get";
 import { cvmsGpuStatusCommand } from "./gpu-status";
 import { cvmsInitScriptsCommand } from "./init-scripts";
@@ -36,7 +37,7 @@ export const cvmsCommands = {
 		cvmsStopCommand,
 		cvmsUpgradeCommand,
 	],
-	subgroups: [],
+	subgroups: [cvmsDraftCommands],
 };
 
 export default cvmsCommands;

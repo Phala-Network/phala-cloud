@@ -199,3 +199,14 @@ phala deploy --cvm-id app_123 --launch-token-hash <printed hash>
 ```
 
 Before `clear`, remove the hash from every CVM of the app with `phala deploy --cvm-id <id> --launch-token-hash ""`. Phala Cloud and the node operator can read the token, so it only protects against parties who know the public compose.
+
+## List and revoke registered compose hashes
+
+    phala apps compose-hashes list 0123456789abcdef0123456789abcdef01234567
+    phala apps compose-hashes revoke <app-id> <compose-hash>
+
+The list shows registered compose hashes that are outside a CVM's running or previous versions. It reads registration from the latest block, not what the KMS honors yet. A hash marked `pending` may still be used by a draft or deployment. You can revoke only a hash marked `unused`.
+
+To revoke, set `PRIVATE_KEY` to the app owner's wallet key. Review the hash, app contract, and chain before confirming. Use `--yes` to confirm in a script or with `--json`. Revocation cannot take back keys already released.
+
+The command waits for a transaction receipt, not finality. It reports the block that includes the revocation. It does not check whether the KMS has stopped honoring the hash.

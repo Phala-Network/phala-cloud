@@ -74,6 +74,11 @@ phala nodes list
 phala nodes ls
 ```
 
+## App Management
+
+- **`phala apps compose-hashes list <app-id>`**: List pending and unused registered compose hashes.
+- **`phala apps compose-hashes revoke <app-id> <compose-hash>`**: Revoke an unused hash with the app owner's wallet. See the [revocation command reference](docs/apps.md#list-and-revoke-registered-compose-hashes).
+
 ## CVM Management
 
 ### `phala cvms`
@@ -100,6 +105,8 @@ Manage Phala Confidential Virtual Machines (CVMs).
     - `-e, --env-file <envFile>`: Path to environment file
     - `--skip-env`: Skip environment variable prompt
     - `--debug`: Enable debug mode
+
+- **`draft {list,stage,show,undo,discard,apply}`**: Stage and apply CVM changes together. See the [draft command reference](docs/cvms.md#cvms-draft).
 
 - **`upgrade <id>`**: Upgrade a CVM
   - Arguments:
