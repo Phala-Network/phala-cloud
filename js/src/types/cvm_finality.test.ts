@@ -1,5 +1,5 @@
-import { expect, it } from "vitest";
-import { CvmFinalityWaitAcceptedSchema, CvmFinalityWaitSchema } from "./cvm_finality";
+import { expect, expectTypeOf, it } from "vitest";
+import { type CvmFinalityStage, CvmFinalityWaitAcceptedSchema, CvmFinalityWaitSchema } from "./cvm_finality";
 
 const finalityWait = {
   operation: "create",
@@ -24,7 +24,7 @@ it("parses finality progress for a create operation without changing the wire fi
   expect(CvmFinalityWaitAcceptedSchema.parse(response)).toEqual(response);
 });
 
-it("accepts unknown state-based estimates but not an unknown stage", () => {
+it("keeps future finality strings without accepting non-string enums", () => {
   const stateBasedWait = {
     ...finalityWait,
     operation: "update",
@@ -38,5 +38,22 @@ it("accepts unknown state-based estimates but not an unknown stage", () => {
     },
   };
   expect(CvmFinalityWaitSchema.parse(stateBasedWait)).toEqual(stateBasedWait);
-  expect(CvmFinalityWaitSchema.safeParse({ ...stateBasedWait, stage: "confirmed" }).success).toBe(false);
+  const futureWait = {
+    ...stateBasedWait,
+    operation: "redeploy",
+    stage: "verified",
+    phase: "queued",
+    finality: { ...stateBasedWait.finality, block_tag: "confirmed" },
+  };
+  expect(CvmFinalityWaitSchema.parse(futureWait)).toEqual(futureWait);
+  expect(CvmFinalityWaitSchema.safeParse({ ...stateBasedWait, stage: 3 }).success).toBe(false);
+  expectTypeOf<CvmFinalityStage>().toEqualTypeOf<
+    "submitted" | "safe" | "finalized" | (string & Record<never, never>)
+  >();
+});
+
+it("retains the acceptance correlation ID when progress is missing or malformed", () => {
+  const acceptance = { status: "awaiting_finality", correlation_id: "update-correlation-id" };
+  expect(CvmFinalityWaitAcceptedSchema.parse(acceptance)).toEqual(acceptance);
+  expect(CvmFinalityWaitAcceptedSchema.parse({ ...acceptance, finality_wait: { stage: 3 } })).toEqual(acceptance);
 });

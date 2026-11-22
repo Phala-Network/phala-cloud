@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { type Client, type SafeResult } from "../../client";
 import type { ApiVersion } from "../../types/client";
-import { CvmFinalityWaitSchema } from "../../types/cvm_finality";
+import { OptionalCvmFinalityWaitSchema } from "../../types/cvm_finality";
 import type { CommitCvmProvisionResponse } from "../../types/version-mappings";
 
 /**
@@ -156,7 +156,7 @@ const CommitCvmProvisionBaseSchema = z
     name: z.string(),
     status: z.string(),
     correlation_id: z.string().nullish(),
-    finality_wait: CvmFinalityWaitSchema.nullish(),
+    finality_wait: OptionalCvmFinalityWaitSchema,
     teepod_id: z.number(),
     teepod: z
       .object({

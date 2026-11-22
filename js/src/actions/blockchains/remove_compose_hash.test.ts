@@ -43,6 +43,7 @@ function clients({
     getChainId: vi.fn().mockResolvedValue(walletChainId),
     writeContract,
   } as unknown as WalletClient;
+  const getCode = vi.fn().mockResolvedValue(ownerCode);
   const publicClient = {
     chain: base,
     getChainId: vi.fn().mockResolvedValue(base.id),
@@ -61,7 +62,7 @@ function clients({
         }
       },
     ),
-    getCode: vi.fn().mockResolvedValue(ownerCode),
+    getCode,
     getTransactionReceipt: vi.fn().mockResolvedValue(receipt),
   } as unknown as PublicClient;
   const request: RemoveComposeHashRequest = {
@@ -70,7 +71,7 @@ function clients({
     walletClient,
     publicClient,
   };
-  return { request, writeContract, receipt };
+  return { request, writeContract, receipt, getCode };
 }
 
 it("revokes the compose hash at every writable epoch, including history and the next epoch", async () => {
@@ -158,12 +159,15 @@ it("refuses to sign when the connected wallet does not own the app contract", as
   expect(writeContract).not.toHaveBeenCalled();
 });
 
-it("refuses to send a revocation through a contract wallet", async () => {
-  const { request, writeContract } = clients({ ownerCode: "0x60806040" });
+it("accepts an EIP-7702 delegated owner without checking its bytecode", async () => {
+  const { request, writeContract, getCode } = clients({ ownerCode: `0xef0100${APP_ADDRESS.slice(2)}` });
 
-  await expect(removeComposeHash(request)).rejects.toThrow("Contract wallets are not supported");
+  await expect(removeComposeHash(request)).resolves.toMatchObject({ transactionHash: TX_HASH });
 
-  expect(writeContract).not.toHaveBeenCalled();
+  expect(writeContract).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ account: expect.objectContaining({ address: OWNER }) }),
+  );
+  expect(getCode).not.toHaveBeenCalled();
 });
 
 it("does not use owner information from a different chain than the signing wallet", async () => {

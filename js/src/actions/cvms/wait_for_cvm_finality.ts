@@ -17,7 +17,7 @@ export const CvmFinalityOperationSchema = z
     operation_type: z.string(),
     status: z.enum(["in_progress", "completed", "failed", "cancelled"]),
     finality_wait: CvmFinalityWaitSchema.nullish(),
-    reason: z.string().nullish(),
+    failure_reason: z.string().nullish(),
     error_message: z.string().nullish(),
   })
   .refine(
@@ -31,7 +31,7 @@ export const CvmFinalityOperationSchema = z
   );
 export type CvmFinalityOperation = z.infer<typeof CvmFinalityOperationSchema>;
 
-const OperationPageSchema = z.object({ items: z.array(CvmFinalityOperationSchema) });
+const OperationPageSchema = z.object({ items: z.array(z.unknown()) });
 
 export type WaitForCvmFinalityRequest = CvmIdInput & {
   /** The correlation ID returned when Phala Cloud accepted the operation. */
@@ -73,7 +73,7 @@ export class CvmFinalityWaitError extends Error {
   constructor(
     public readonly reason: CvmFinalityWaitErrorReason,
     message: string,
-    /** Terminal operation, including the raw server reason if it is unrecognized. */
+    /** Terminal operation, including the raw server failure reason if it is unrecognized. */
     public readonly operation?: CvmFinalityOperation,
     public readonly cause?: unknown,
   ) {
@@ -111,14 +111,31 @@ async function readOperation(
     });
   } catch (error) {
     signal.throwIfAborted();
-    if (error instanceof PhalaCloudError && (error.status === 429 || error.status === 503)) {
-      return { retryAfterMs: parseRetryAfter(error.response?.headers.get("Retry-After")) };
+    if (error instanceof PhalaCloudError) {
+      if (error.status === 429) {
+        return { retryAfterMs: parseRetryAfter(error.response?.headers.get("Retry-After")) };
+      }
+      if (error.status >= 400 && error.status < 500) throw error;
+      // Fetch failures are wrapped as status 0 by the client. Wait until the
+      // next poll, including for server errors, without extending the deadline.
+      return { retryAfterMs: 0 };
     }
+    if (error instanceof TypeError) return { retryAfterMs: 0 };
     throw error;
   }
   signal.throwIfAborted();
   const { items } = OperationPageSchema.parse(data);
-  return { operation: items.find((item) => item.correlation_id === correlationId), retryAfterMs };
+  const match = items.find(
+    (item) =>
+      typeof item === "object" &&
+      item !== null &&
+      "correlation_id" in item &&
+      item.correlation_id === correlationId,
+  );
+  return {
+    operation: match === undefined ? undefined : CvmFinalityOperationSchema.parse(match),
+    retryAfterMs,
+  };
 }
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -140,6 +157,8 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
  * Wait for the operation identified by its acceptance correlation ID to complete.
  * On-chain finality alone is not completion: Phala Cloud still has to apply the change.
  * A missing operation or an absent finality status is not a terminal result.
+ * If the correlation ID does not appear in the operation history, polling continues
+ * until `timeoutMs`; there is no separate grace period.
  */
 export async function waitForCvmFinality(
   client: Client<ApiVersion>,
@@ -183,7 +202,7 @@ export async function waitForCvmFinality(
       }
       if (operation?.status === "failed" || operation?.status === "cancelled") {
         const reason =
-          OperationFailureReasonSchema.safeParse(operation.reason).data ?? operation.status;
+          OperationFailureReasonSchema.safeParse(operation.failure_reason).data ?? operation.status;
         const detail = reason === operation.status ? "" : ` (${reason})`;
         const message = `CVM operation ${correlationId} ${operation.status}${detail}.`;
         throw new CvmFinalityWaitError(

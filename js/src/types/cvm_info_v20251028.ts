@@ -5,7 +5,7 @@
  */
 
 import { z } from "zod";
-import { CvmFinalityWaitSchema } from "./cvm_finality";
+import { OptionalCvmFinalityWaitSchema } from "./cvm_finality";
 import { KmsInfoSchema } from "./kms_info";
 
 const TableIdSchema = z.union([z.number(), z.string()]);
@@ -88,7 +88,7 @@ export const CvmDetailV20251028Schema = z.object({
   name: z.string(),
   status: z.string(),
   in_progress: z.boolean().optional().default(false),
-  finality_wait: CvmFinalityWaitSchema.nullish(),
+  finality_wait: OptionalCvmFinalityWaitSchema,
   teepod_id: z.number().nullable(),
   teepod: CvmNodeV20251028Schema.optional().nullable(),
   app_id: z.string(),

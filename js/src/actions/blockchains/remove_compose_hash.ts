@@ -52,7 +52,7 @@ export type RemoveComposeHashRequest = {
   epoch?: number;
   /** The app owner's private key. Set either this or `walletClient`, not both. */
   privateKey?: Hex;
-  /** A wallet client with the app owner's account. Wallets with deployed code are not supported. */
+  /** A wallet client that can send a transaction from the app owner's account. */
   walletClient?: WalletClient;
   publicClient?: PublicClient;
   /** Time to wait for a receipt, in milliseconds. Defaults to 120,000. */
@@ -163,12 +163,6 @@ export async function removeComposeHash<T extends z.ZodTypeAny | false | undefin
   });
   if (!isAddressEqual(owner, account.address)) {
     throw new Error(`Wallet ${account.address} is not the owner of app contract ${appAddress}.`);
-  }
-  const ownerCode = await publicClient.getCode({ address: owner, blockTag: "latest" });
-  if (ownerCode && ownerCode !== "0x") {
-    throw new Error(
-      "Contract wallets are not supported. This action requires an owner account without deployed code.",
-    );
   }
 
   const writePlan = await resolveAppEpochWritePlan(publicClient, appAddress, epoch, "remove");
