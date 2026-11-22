@@ -18,7 +18,12 @@
     },
     "./package.json": "./package.json"
   },
-  "files": ["dist/**/*", "!dist/**/*.map", "README.md", "LICENSE"],
+  "files": [
+    "dist/**/*",
+    "!dist/**/*.map",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsup src/index.ts src/webhook.ts --format cjs,esm && tsc --emitDeclarationOnly --declaration --outDir dist",
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
@@ -39,7 +44,14 @@
     "prepublish-beta": "npm run build && npm run check",
     "publish-beta": "npm run prepublish-beta && npm publish --access public --tag beta"
   },
-  "keywords": ["phala", "cloud", "cvm", "tee", "blockchain", "deployment"],
+  "keywords": [
+    "phala",
+    "cloud",
+    "cvm",
+    "tee",
+    "blockchain",
+    "deployment"
+  ],
   "author": "Leechael Yim",
   "license": "Apache-2.0",
   "dependencies": {
@@ -52,6 +64,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.8",
+    "@typescript/typescript6": "^6.0.2",
     "@types/debug": "^4.1.13",
     "@types/node": "^26.6.6",
     "dotenv": "^18.0.10",

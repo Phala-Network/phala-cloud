@@ -17,5 +17,8 @@
     "source-map-js": "1.2.2",
     "vite": "8.1.6",
     "yaml": "2.8.3"
+  },
+  "patchedDependencies": {
+    "tsup@9.0.0": "patches/tsup@9.0.0.patch"
   }
 }

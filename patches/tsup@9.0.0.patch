@@ -1,0 +1,11 @@
+--- a/dist/rollup.js
++++ b/dist/rollup.js
+@@ -9669,7 +9669,7 @@
+ // src/rollup.ts
+ var _worker_threads = require('worker_threads');
+ var _path = require('path'); var _path2 = _interopRequireDefault(_path);
+-var _typescript = require('typescript'); var _typescript2 = _interopRequireDefault(_typescript);
++var _typescript = (() => { const ts = require('typescript'); return typeof ts.parseJsonConfigFileContent === 'function' ? ts : require('@typescript/typescript6'); })(); var _typescript2 = _interopRequireDefault(_typescript);
+ 
+ // node_modules/.pnpm/@rollup+pluginutils@5.4.0_rollup@4.64.6/node_modules/@rollup/pluginutils/dist/es/index.js
+ 

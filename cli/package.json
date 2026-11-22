@@ -18,7 +18,11 @@
 		"LICENSE",
 		"README.md"
 	],
-	"keywords": ["tee", "phala", "cloud"],
+	"keywords": [
+		"tee",
+		"phala",
+		"cloud"
+	],
 	"license": "Apache-2.0",
 	"type": "module",
 	"exports": "./dist/index.js",
@@ -61,6 +65,7 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.6.8",
+		"@typescript/typescript6": "^6.0.2",
 		"@types/bun": "latest",
 		"@types/dedent": "^1.7.2",
 		"@types/fs-extra": "^11.0.1",

@@ -269,9 +269,17 @@ jobs:
           bun audit 2>&1 | sed 's/\x1b\[[0-9;]*m//g' || true
           bun audit --audit-level=high
 
-      - name: Build for Node.js ${{ matrix.node-version }}
+      # tsup 9 requires Node >= 22.18 at build time (the dist output is still
+      # compatible with all tested Node versions, verified below).
+      - name: Build the SDK (build-time Node 22)
         working-directory: js
-        run: bun run build
+        run: |
+          source "$HOME/.nvm/nvm.sh" 2>/dev/null || true
+          if command -v nvm >/dev/null 2>&1; then
+            nvm install 22
+            nvm use 22
+          fi
+          bun run build
 
       - name: Test Node.js compatibility
         working-directory: js

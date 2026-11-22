@@ -797,9 +797,9 @@ export interface Client<V extends ApiVersion = DefaultApiVersion>
   revokeCurrentApiToken<T extends z.ZodTypeAny>(parameters: { schema: T }): Promise<z.infer<T>>;
   revokeCurrentApiToken(parameters: { schema: false }): Promise<unknown>;
   safeRevokeCurrentApiToken(): Promise<SafeResult<void>>;
-  safeRevokeCurrentApiToken<T extends z.ZodTypeAny>(parameters: { schema: T }): Promise<
-    SafeResult<z.infer<T>>
-  >;
+  safeRevokeCurrentApiToken<T extends z.ZodTypeAny>(parameters: {
+    schema: T;
+  }): Promise<SafeResult<z.infer<T>>>;
   safeRevokeCurrentApiToken(parameters: { schema: false }): Promise<SafeResult<unknown>>;
   getAppList(
     request?: actions.GetAppListRequest,
@@ -848,9 +848,9 @@ export interface Client<V extends ApiVersion = DefaultApiVersion>
   getCurrentUser(parameters: { schema: false }): Promise<unknown>;
 
   safeGetCurrentUser(): Promise<SafeResult<GetCurrentUserResponse<V>>>;
-  safeGetCurrentUser<T extends z.ZodTypeAny>(parameters: { schema: T }): Promise<
-    SafeResult<z.infer<T>>
-  >;
+  safeGetCurrentUser<T extends z.ZodTypeAny>(parameters: {
+    schema: T;
+  }): Promise<SafeResult<z.infer<T>>>;
   safeGetCurrentUser(parameters: { schema: false }): Promise<SafeResult<unknown>>;
 
   getAvailableNodes(): Promise<AvailableNodes>;
@@ -858,9 +858,9 @@ export interface Client<V extends ApiVersion = DefaultApiVersion>
   getAvailableNodes(parameters: { schema: false }): Promise<unknown>;
 
   safeGetAvailableNodes(): Promise<SafeResult<AvailableNodes>>;
-  safeGetAvailableNodes<T extends z.ZodTypeAny>(parameters: { schema: T }): Promise<
-    SafeResult<z.infer<T>>
-  >;
+  safeGetAvailableNodes<T extends z.ZodTypeAny>(parameters: {
+    schema: T;
+  }): Promise<SafeResult<z.infer<T>>>;
   safeGetAvailableNodes(parameters: { schema: false }): Promise<SafeResult<unknown>>;
 
   getCvmCreateResources(): Promise<GetCvmCreateResourcesResponse<V>>;
@@ -868,22 +868,22 @@ export interface Client<V extends ApiVersion = DefaultApiVersion>
   getCvmCreateResources(parameters: { schema: false }): Promise<unknown>;
 
   safeGetCvmCreateResources(): Promise<SafeResult<GetCvmCreateResourcesResponse<V>>>;
-  safeGetCvmCreateResources<T extends z.ZodTypeAny>(parameters: { schema: T }): Promise<
-    SafeResult<z.infer<T>>
-  >;
+  safeGetCvmCreateResources<T extends z.ZodTypeAny>(parameters: {
+    schema: T;
+  }): Promise<SafeResult<z.infer<T>>>;
   safeGetCvmCreateResources(parameters: { schema: false }): Promise<SafeResult<unknown>>;
 
   // Instance type actions - no parameters
   listAllInstanceTypeFamilies(): Promise<AllFamiliesResponse>;
-  listAllInstanceTypeFamilies<T extends z.ZodTypeAny>(parameters: { schema: T }): Promise<
-    z.infer<T>
-  >;
+  listAllInstanceTypeFamilies<T extends z.ZodTypeAny>(parameters: {
+    schema: T;
+  }): Promise<z.infer<T>>;
   listAllInstanceTypeFamilies(parameters: { schema: false }): Promise<unknown>;
 
   safeListAllInstanceTypeFamilies(): Promise<SafeResult<AllFamiliesResponse>>;
-  safeListAllInstanceTypeFamilies<T extends z.ZodTypeAny>(parameters: { schema: T }): Promise<
-    SafeResult<z.infer<T>>
-  >;
+  safeListAllInstanceTypeFamilies<T extends z.ZodTypeAny>(parameters: {
+    schema: T;
+  }): Promise<SafeResult<z.infer<T>>>;
   safeListAllInstanceTypeFamilies(parameters: { schema: false }): Promise<SafeResult<unknown>>;
 
   listFamilyInstanceTypes(
@@ -1031,12 +1031,12 @@ export interface Client<V extends ApiVersion = DefaultApiVersion>
   safeGetWorkspace(teamSlug: string, parameters: { schema: false }): Promise<SafeResult<unknown>>;
 
   getCvmInfo(request: GetCvmInfoRequest): Promise<GetCvmInfoResponse<V>>;
-  getCvmGpuStatus(request: { cvmId: string }): Promise<
-    import("./types/cvm_info_v20260121").CvmGpuStatus
-  >;
-  safeGetCvmGpuStatus(request: { cvmId: string }): Promise<
-    SafeResult<import("./types/cvm_info_v20260121").CvmGpuStatus>
-  >;
+  getCvmGpuStatus(request: {
+    cvmId: string;
+  }): Promise<import("./types/cvm_info_v20260121").CvmGpuStatus>;
+  safeGetCvmGpuStatus(request: {
+    cvmId: string;
+  }): Promise<SafeResult<import("./types/cvm_info_v20260121").CvmGpuStatus>>;
 
   safeGetCvmInfo(request: GetCvmInfoRequest): Promise<SafeResult<GetCvmInfoResponse<V>>>;
 
@@ -1626,9 +1626,9 @@ export interface Client<V extends ApiVersion = DefaultApiVersion>
   listSshKeys(parameters: { schema: false }): Promise<unknown>;
 
   safeListSshKeys(): Promise<SafeResult<ListSshKeysResponse>>;
-  safeListSshKeys<T extends z.ZodTypeAny>(parameters: { schema: T }): Promise<
-    SafeResult<z.infer<T>>
-  >;
+  safeListSshKeys<T extends z.ZodTypeAny>(parameters: {
+    schema: T;
+  }): Promise<SafeResult<z.infer<T>>>;
   safeListSshKeys(parameters: { schema: false }): Promise<SafeResult<unknown>>;
 
   importGithubProfileSshKeys(
@@ -1694,9 +1694,9 @@ export interface Client<V extends ApiVersion = DefaultApiVersion>
   syncGithubSshKeys(parameters: { schema: false }): Promise<unknown>;
 
   safeSyncGithubSshKeys(): Promise<SafeResult<SyncGithubSshKeysResponse>>;
-  safeSyncGithubSshKeys<T extends z.ZodTypeAny>(parameters: { schema: T }): Promise<
-    SafeResult<z.infer<T>>
-  >;
+  safeSyncGithubSshKeys<T extends z.ZodTypeAny>(parameters: {
+    schema: T;
+  }): Promise<SafeResult<z.infer<T>>>;
   safeSyncGithubSshKeys(parameters: { schema: false }): Promise<SafeResult<unknown>>;
 
   // Custom Domains
