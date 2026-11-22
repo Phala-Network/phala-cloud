@@ -239,14 +239,9 @@ jobs:
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     strategy:
       matrix:
-        node-version: ['18', '20', '22']
+        node-version: ['18', '20', '22', '24']
     steps:
       - uses: actions/checkout@v7
-
-      - name: Set up Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v7
-        with:
-          node-version: ${{ matrix.node-version }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -269,17 +264,23 @@ jobs:
           bun audit 2>&1 | sed 's/\x1b\[[0-9;]*m//g' || true
           bun audit --audit-level=high
 
-      # tsup 9 requires Node >= 22.18 at build time (the dist output is still
-      # compatible with all tested Node versions, verified below).
-      - name: Build the SDK (build-time Node 22)
+      # tsup 9 requires Node >= 22.18 at build time. Build with the active
+      # LTS (24) for every matrix leg; the runtime import checks below then
+      # verify the dist output on each supported Node release.
+      - name: Set up build-time Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Build the SDK
         working-directory: js
-        run: |
-          source "$HOME/.nvm/nvm.sh" 2>/dev/null || true
-          if command -v nvm >/dev/null 2>&1; then
-            nvm install 22
-            nvm use 22
-          fi
-          bun run build
+        run: bun run build
+
+      # Restore the matrix Node for the runtime checks.
+      - name: Set up runtime Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
 
       - name: Test Node.js compatibility
         working-directory: js
