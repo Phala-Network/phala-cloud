@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createClient } from "../../client";
+import { createClient } from "../../index";
 import { commitCvmComposeFileUpdate } from "./commit_cvm_compose_file_update";
 import { commitCvmUpdate } from "./commit_cvm_update";
 import { confirmCvmPatch } from "./confirm_cvm_patch";
@@ -57,6 +57,7 @@ const finalityWait = {
 } as const;
 
 const futureFinalityWait = { ...finalityWait, stage: "verified" };
+const draftChanged = { error_code: "ERR-03-054", message: "Draft entries changed." };
 
 function setupHttp(...responses: Response[]) {
   const requests: Array<{ url: string; method: string; headers: Headers; body: unknown }> = [];
@@ -161,11 +162,39 @@ describe("CVM drafts", () => {
     expect(requests).toMatchObject([
       { url: `${endpoint}${draftPath}/entries/${latestEntryId}`, method: "DELETE" },
       { url: `${endpoint}${draftPath}/entries/${entry.id}`, method: "DELETE" },
-      { url: `${endpoint}${draftPath}`, method: "DELETE" },
+      { url: `${endpoint}${draftPath}`, method: "DELETE", body: undefined },
     ]);
   });
 
-  it("preserves every 465 registration field and submits both phase 2 headers to draft apply", async () => {
+  it("sends reviewed entry IDs when discarding and preserves conflicts on a versioned client", async () => {
+    const { client, requests } = setupHttp(
+      new Response(null, { status: 204 }),
+      Response.json(draftChanged, { status: 409 }),
+    );
+    const versioned = client.withVersion("2026-06-23");
+
+    await expect(
+      versioned.safeDiscardCvmDraft({ id: cvmId, expectedEntryIds: ["entry-b", "entry-a"] }),
+    ).resolves.toEqual({ success: true, data: undefined });
+    await expect(
+      versioned.discardCvmDraft({ id: cvmId, expectedEntryIds: [] }),
+    ).rejects.toMatchObject({ status: 409, detail: draftChanged });
+    expect(requests).toMatchObject([
+      { url: `${endpoint}${draftPath}`, method: "DELETE" },
+      { url: `${endpoint}${draftPath}`, method: "DELETE" },
+    ]);
+    expect(requests.map(({ body }) => body)).toEqual([
+      { expected_entry_ids: ["entry-b", "entry-a"] },
+      { expected_entry_ids: [] },
+    ]);
+    expect(requests.map(({ headers }) => headers.get("X-Phala-Version"))).toEqual([
+      "2026-06-23",
+      "2026-06-23",
+    ]);
+  });
+
+  it("preserves registration fields and sends reviewed entry IDs in both apply phases", async () => {
+    const expectedEntryIds = ["f0e34f0a8d1f14a3b88b30333d4fb9be", "096e9acd491a45ff92461b577d4b4202"];
     const appId = "35".repeat(20);
     const deviceId = "dd".repeat(32);
     const kmsInfo = {
@@ -201,7 +230,12 @@ describe("CVM drafts", () => {
         { status: 202 },
       ),
     );
-    const prepared = await applyCvmDraft(client, { id: cvmId, baseComposeHash: baseHash, prepareOnly: true });
+    const prepared = await applyCvmDraft(client, {
+      id: cvmId,
+      baseComposeHash: baseHash,
+      expectedEntryIds,
+      prepareOnly: true,
+    });
     expect(prepared).toMatchObject({
       requiresOnChainHash: true,
       composeHash: previewHash,
@@ -213,10 +247,10 @@ describe("CVM drafts", () => {
       apiCommitUrl: "https://example.test/api/v1/commit",
       onchainStatus,
     });
-    expect(requests[0]).toMatchObject({
-      url: `${endpoint}${draftPath}/apply`,
-      method: "POST",
-      body: { base_compose_hash: baseHash },
+    expect(requests[0]).toMatchObject({ url: `${endpoint}${draftPath}/apply`, method: "POST" });
+    expect(requests[0]?.body).toEqual({
+      base_compose_hash: baseHash,
+      expected_entry_ids: ["f0e34f0a8d1f14a3b88b30333d4fb9be", "096e9acd491a45ff92461b577d4b4202"],
     });
     expect(requests[0]?.headers.get("X-Prepare-Only")).toBe("true");
     expect(requests[0]?.headers.has("X-Compose-Hash")).toBe(false);
@@ -224,6 +258,7 @@ describe("CVM drafts", () => {
     expect(await applyCvmDraft(client, {
       id: cvmId,
       baseComposeHash: baseHash,
+      expectedEntryIds,
       composeHash: previewHash,
       transactionHash: "already-registered",
     })).toEqual({
@@ -232,27 +267,44 @@ describe("CVM drafts", () => {
       correlationId: finalityWait.correlation_id,
       finalityWait: futureFinalityWait,
     });
-    expect(requests[1]).toMatchObject({
-      url: `${endpoint}${draftPath}/apply`,
-      method: "POST",
-      body: { base_compose_hash: baseHash },
+    expect(requests[1]).toMatchObject({ url: `${endpoint}${draftPath}/apply`, method: "POST" });
+    expect(requests[1]?.body).toEqual({
+      base_compose_hash: baseHash,
+      expected_entry_ids: ["f0e34f0a8d1f14a3b88b30333d4fb9be", "096e9acd491a45ff92461b577d4b4202"],
     });
     expect(requests[1]?.headers.get("X-Compose-Hash")).toBe(previewHash);
     expect(requests[1]?.headers.get("X-Transaction-Hash")).toBe("already-registered");
     expect(requests[1]?.headers.has("X-Prepare-Only")).toBe(false);
   });
 
+  it("sends an empty reviewed list on apply and preserves conflicts as safe errors", async () => {
+    const { client, requests } = setupHttp(Response.json(draftChanged, { status: 409 }));
+    const versioned = client.withVersion("2026-06-23");
+
+    await expect(
+      versioned.safeApplyCvmDraft({ id: cvmId, expectedEntryIds: [] }),
+    ).resolves.toMatchObject({ success: false, error: { status: 409, detail: draftChanged } });
+    expect(requests).toMatchObject([{ url: `${endpoint}${draftPath}/apply`, method: "POST" }]);
+    expect(requests[0]?.body).toEqual({ expected_entry_ids: [] });
+    expect(requests[0]?.headers.get("X-Phala-Version")).toBe("2026-06-23");
+  });
+
   it("preserves legacy no-op responses and rejects an incomplete commit before sending it", async () => {
-    const { client, requests } = setupHttp(Response.json({ status: "no_change" }, { status: 202 }));
+    const noChange = { status: "no_change" };
+    const { client, requests } = setupHttp(
+      Response.json(noChange, { status: 202 }),
+      Response.json(noChange, { status: 202 }),
+    );
     expect(await applyCvmDraft(client, { id: cvmId })).toEqual({
       requiresOnChainHash: false,
       status: "no_change",
       correlationId: "",
     });
+    await applyCvmDraft(client, { id: cvmId, baseComposeHash: baseHash });
     const malformed = { id: cvmId, composeHash: previewHash };
     // @ts-expect-error An incomplete commit is invalid at both the type and HTTP boundaries.
     await expect(safeApplyCvmDraft(client, malformed)).resolves.toMatchObject({ success: false });
-    expect(requests).toHaveLength(1);
+    expect(requests.map(({ body }) => body)).toEqual([undefined, { base_compose_hash: baseHash }]);
   });
 
   it("preserves finality on direct and token-based commits", async () => {

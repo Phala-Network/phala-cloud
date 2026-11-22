@@ -61,8 +61,14 @@ export const UndoCvmDraftEntryRequestSchema = refineCvmId(
 );
 export type UndoCvmDraftEntryRequest = z.input<typeof UndoCvmDraftEntryRequestSchema>;
 
+export const DiscardCvmDraftRequestSchema = refineCvmId(
+  CvmIdObjectSchema.extend({ expectedEntryIds: z.array(z.string()).optional() }),
+);
+export type DiscardCvmDraftRequest = z.input<typeof DiscardCvmDraftRequestSchema>;
+
 const ApplyCvmDraftBaseRequestSchema = CvmIdObjectSchema.extend({
   baseComposeHash: z.string().optional(),
+  expectedEntryIds: z.array(z.string()).optional(),
   prepareOnly: z.boolean().optional(),
 });
 
@@ -129,28 +135,46 @@ const { action: undoCvmDraftEntry, safeAction: safeUndoCvmDraftEntry } = defineA
 
 const DiscardCvmDraftResultSchema = z.void();
 
-/** Discard the draft without changing any on-chain registrations. */
+/**
+ * Discard the draft without changing any on-chain registrations. Pass entry IDs
+ * in draft order to discard only if the entries are unchanged.
+ */
 const { action: discardCvmDraft, safeAction: safeDiscardCvmDraft } = defineAction<
-  CvmIdInput,
+  DiscardCvmDraftRequest,
   typeof DiscardCvmDraftResultSchema
->(DiscardCvmDraftResultSchema, (client, request) => client.delete(cvmDraftPath(request)));
+>(DiscardCvmDraftResultSchema, (client, request) => {
+  const { expectedEntryIds, ...identifier } = DiscardCvmDraftRequestSchema.parse(request);
+  const options =
+    expectedEntryIds === undefined ? undefined : { body: { expected_entry_ids: expectedEntryIds } };
+  return client.delete(cvmDraftPath(identifier), options);
+});
 
 /**
  * Apply all staged changes as one update. If registration is required, register the
- * returned compose hash and call this action again with both hashes. Acceptance
- * does not mean the update has finished.
+ * returned compose hash and call this action again with both hashes. Pass the
+ * reviewed entry IDs in draft order on both calls to guard against draft changes.
+ * Acceptance does not mean the update has finished.
  */
 const { action: applyCvmDraft, safeAction: safeApplyCvmDraft } = defineAction<
   ApplyCvmDraftRequest,
   typeof ApplyCvmDraftResultSchema
 >(ApplyCvmDraftResultSchema, (client, request) => {
-  const { baseComposeHash, prepareOnly, composeHash, transactionHash, ...identifier } =
-    ApplyCvmDraftRequestSchema.parse(request);
+  const {
+    baseComposeHash,
+    expectedEntryIds,
+    prepareOnly,
+    composeHash,
+    transactionHash,
+    ...identifier
+  } = ApplyCvmDraftRequestSchema.parse(request);
   const headers = {
     ...(prepareOnly ? { "X-Prepare-Only": "true" } : {}),
     ...(composeHash && transactionHash ? cvmUpdateCommitHeaders(composeHash, transactionHash) : {}),
   };
-  const body = baseComposeHash === undefined ? undefined : { base_compose_hash: baseComposeHash };
+  const body =
+    baseComposeHash === undefined && expectedEntryIds === undefined
+      ? undefined
+      : { base_compose_hash: baseComposeHash, expected_entry_ids: expectedEntryIds };
   return submitCvmUpdate(() => client.post(`${cvmDraftPath(identifier)}/apply`, body, { headers }));
 });
 
