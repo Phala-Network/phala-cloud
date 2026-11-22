@@ -75,13 +75,13 @@ describe("commitCvmProvision", () => {
     expect(mockPost).toHaveBeenNthCalledWith(2, "/cvms", { token: "actual-token", encrypted_env: "encrypted" });
   });
 
-  it("passes through the existing signing transaction and returns typed create finality", async () => {
+  it("passes through the signing transaction and preserves future create finality stages", async () => {
     const transactionHash = `0x${"ca".repeat(32)}`;
     const finality = {
       operation: "create",
       correlation_id: "create-operation",
       phase: "awaiting_finality",
-      stage: "safe",
+      stage: "verified",
       transaction: { hash: transactionHash, block_number: 39133800, chain_id: 8453 },
       finality: { block_tag: "finalized", policy_block_number: 39133700, blocks_remaining: 100, eta_seconds: 90 },
     } as const;

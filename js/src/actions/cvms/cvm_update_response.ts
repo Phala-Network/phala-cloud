@@ -1,19 +1,14 @@
 import { z } from "zod";
-import { CvmFinalityWaitAcceptedSchema, CvmFinalityWaitSchema } from "../../types/cvm_finality";
+import { CvmFinalityWaitSchema, OptionalCvmFinalityWaitSchema } from "../../types/cvm_finality";
 import { KmsInfoSchema } from "../../types/kms_info";
 import { PhalaCloudError } from "../../utils/errors";
 
-const CvmUpdateAcceptanceWireSchema = z.union([
-  CvmFinalityWaitAcceptedSchema,
-  z.object({
-    // Older API responses may omit status or omit the correlation ID for a no-op.
-    status: z
-      .string()
-      .refine((status) => status !== "awaiting_finality")
-      .optional(),
-    correlation_id: z.string().optional(),
-  }),
-]);
+const CvmUpdateAcceptanceWireSchema = z.object({
+  // Older API responses may omit status or omit the correlation ID for a no-op.
+  status: z.string().optional(),
+  correlation_id: z.string().optional(),
+  finality_wait: OptionalCvmFinalityWaitSchema,
+});
 
 export const CvmUpdateAcceptedFieldsSchema = z.object({
   correlationId: z.string(),
@@ -43,7 +38,7 @@ export function readCvmUpdateAcceptance(response: unknown) {
   return {
     correlationId: wire.correlation_id,
     ...(wire.status === undefined ? {} : { status: wire.status }),
-    ...("finality_wait" in wire ? { finalityWait: wire.finality_wait } : {}),
+    ...(wire.finality_wait ? { finalityWait: wire.finality_wait } : {}),
   };
 }
 

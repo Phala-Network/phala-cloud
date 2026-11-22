@@ -5,7 +5,16 @@ export * from "./cvm_info";
 export * from "./cvm_info_v20251028";
 export * from "./cvm_info_v20260121";
 export * from "./cvm_id";
-export * from "./cvm_finality";
+export {
+  CvmFinalityStageSchema,
+  CvmFinalityWaitAcceptedSchema,
+  CvmFinalityWaitPhaseSchema,
+  CvmFinalityWaitSchema,
+  type CvmFinalityStage,
+  type CvmFinalityWait,
+  type CvmFinalityWaitAccepted,
+  type CvmFinalityWaitPhase,
+} from "./cvm_finality";
 export * from "./common";
 export * from "./supported_chains";
 export * from "./version-mappings";

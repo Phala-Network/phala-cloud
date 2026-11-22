@@ -10,10 +10,12 @@ import {
   listCvmDrafts,
   safeApplyCvmDraft,
   safeGetCvmDraft,
+  safeStageCvmDraft,
   stageCvmDraft,
   undoCvmDraftEntry,
 } from "./cvm_draft";
 import { getCvmInfo } from "./get_cvm_info";
+import { patchCvm } from "./patch_cvm";
 import { updateDockerCompose } from "./update_docker_compose";
 import { updatePreLaunchScript } from "./update_prelaunch_script";
 import { upgradePreLaunchScript } from "./upgrade_prelaunch_script";
@@ -54,6 +56,8 @@ const finalityWait = {
   },
 } as const;
 
+const futureFinalityWait = { ...finalityWait, stage: "verified" };
+
 function setupHttp(...responses: Response[]) {
   const requests: Array<{ url: string; method: string; headers: Headers; body: unknown }> = [];
   vi.stubGlobal("fetch", async (url: RequestInfo | URL, init?: RequestInit) => {
@@ -83,6 +87,15 @@ describe("CVM drafts", () => {
     const { client, requests } = setupHttp(Response.json(draft));
     expect(await stageCvmDraft(client, { id: cvmId, ...patch })).toEqual(draft);
     expect(requests[0]).toMatchObject({ url: `${endpoint}${draftPath}`, method: "PATCH", body: patch });
+  });
+
+  it("rejects prepareOnly when staging; only draft apply prepares a commit", async () => {
+    const { client, requests } = setupHttp();
+    const request = { id: cvmId, ...patch, prepareOnly: true };
+    // @ts-expect-error Staging does not accept apply options.
+    const result = await safeStageCvmDraft(client, request);
+    expect(result).toMatchObject({ success: false, error: { issues: [{ path: ["prepareOnly"] }] } });
+    expect(requests).toHaveLength(0);
   });
 
   it("reads the draft and preserves a draft-not-found error", async () => {
@@ -184,7 +197,7 @@ describe("CVM drafts", () => {
         { status: 465 },
       ),
       Response.json(
-        { status: "awaiting_finality", correlation_id: finalityWait.correlation_id, finality_wait: finalityWait },
+        { status: "awaiting_finality", correlation_id: finalityWait.correlation_id, finality_wait: futureFinalityWait },
         { status: 202 },
       ),
     );
@@ -217,7 +230,7 @@ describe("CVM drafts", () => {
       requiresOnChainHash: false,
       status: "awaiting_finality",
       correlationId: finalityWait.correlation_id,
-      finalityWait,
+      finalityWait: futureFinalityWait,
     });
     expect(requests[1]).toMatchObject({
       url: `${endpoint}${draftPath}/apply`,
@@ -262,25 +275,39 @@ describe("CVM drafts", () => {
   });
 });
 
-it("retains finality in CVM details independently of the CVM runtime status", async () => {
+it("retains future finality stages in CVM details independently of the runtime status", async () => {
   const { client } = setupHttp(Response.json({
     id: cvmId,
     name: "my-cvm",
     status: "running",
     resource: { memory_in_mb: 4096 },
     gateway: {},
-    finality_wait: finalityWait,
+    finality_wait: futureFinalityWait,
   }));
   const result = await getCvmInfo(client.withVersion("2026-11-11"), { id: cvmId });
   expect(result.status).toBe("running");
-  expect(result.finality_wait).toEqual(finalityWait);
+  expect(result.finality_wait).toEqual(futureFinalityWait);
 });
 
-it("preserves finality responses and routes for existing compose and script updates", async () => {
+it("keeps a patch correlation ID with future, missing, or malformed finality data", async () => {
+  const wire = { status: "awaiting_finality", correlation_id: finalityWait.correlation_id };
+  const { client } = setupHttp(
+    Response.json({ ...wire, finality_wait: futureFinalityWait }, { status: 202 }),
+    Response.json(wire, { status: 202 }),
+    Response.json({ ...wire, finality_wait: { stage: 3 } }, { status: 202 }),
+  );
+  const request = { id: cvmId, ...patch };
+  const accepted = { requiresOnChainHash: false, correlationId: finalityWait.correlation_id };
+  expect(await patchCvm(client, request)).toEqual({ ...accepted, finalityWait: futureFinalityWait });
+  expect(await patchCvm(client, request)).toEqual(accepted);
+  expect(await patchCvm(client, request)).toEqual(accepted);
+});
+
+it("preserves future finality stages and routes for existing compose and script updates", async () => {
   const wire = {
     status: "awaiting_finality",
     correlation_id: finalityWait.correlation_id,
-    finality_wait: finalityWait,
+    finality_wait: futureFinalityWait,
   };
   const withMessage = { ...wire, message: "Update accepted." };
   const { client, requests } = setupHttp(

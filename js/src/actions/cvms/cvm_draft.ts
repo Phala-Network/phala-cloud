@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { CvmFinalityWaitSchema } from "../../types/cvm_finality";
+import {
+  CvmFinalityWaitPhaseSchema,
+  OptionalCvmFinalityWaitSchema,
+} from "../../types/cvm_finality";
 import { CvmIdObjectSchema, CvmIdSchema, type CvmIdInput, refineCvmId } from "../../types/cvm_id";
 import { defineAction, defineSimpleAction } from "../../utils/define-action";
 import {
@@ -36,12 +39,12 @@ export const CvmDraftListItemSchema = z.object({
   vm_uuid: z.string(),
   name: z.string().nullable(),
   app_id: z.string().nullable(),
-  state: z.enum(["staged", "awaiting_finality", "applying"]),
+  state: z.union([z.literal("staged"), CvmFinalityWaitPhaseSchema]),
   corrupt: z.boolean(),
   entry_count: z.number().int().nonnegative().nullable(),
   base_compose_hash: z.string().nullable(),
   preview_compose_hash: z.string().nullable(),
-  finality_wait: CvmFinalityWaitSchema.nullish(),
+  finality_wait: OptionalCvmFinalityWaitSchema,
 });
 export type CvmDraftListItem = z.infer<typeof CvmDraftListItemSchema>;
 
@@ -49,7 +52,7 @@ export const CvmDraftListSchema = z.object({ items: z.array(CvmDraftListItemSche
 export type CvmDraftList = z.infer<typeof CvmDraftListSchema>;
 
 export const StageCvmDraftRequestSchema = refineCvmId(
-  CvmIdObjectSchema.extend(CvmPatchBodySchema.shape),
+  CvmIdObjectSchema.extend({ ...CvmPatchBodySchema.shape, prepareOnly: z.never().optional() }),
 );
 export type StageCvmDraftRequest = z.input<typeof StageCvmDraftRequestSchema>;
 
