@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: Apache-2.0
+version: 2
+
+# Weekly, grouped by ecosystem. Security updates are separate and immediate --
+# those are what the 7-day Critical SLA applies to.
+updates:
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      js:
+        patterns: ["*"]
+
+  - package-ecosystem: gomod
+    directory: /go
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      go:
+        patterns: ["*"]
+
+  - package-ecosystem: gomod
+    directory: /terraform
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      terraform-provider:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

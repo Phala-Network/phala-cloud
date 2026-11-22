@@ -68,7 +68,6 @@ jobs:
           fi
 
       - name: Audit dependencies
-        continue-on-error: true
         run: |
           bun audit 2>&1 | sed 's/\x1b\[[0-9;]*m//g' || true
           bun audit --audit-level=high
@@ -266,7 +265,6 @@ jobs:
           fi
 
       - name: Audit dependencies
-        continue-on-error: true
         run: |
           bun audit 2>&1 | sed 's/\x1b\[[0-9;]*m//g' || true
           bun audit --audit-level=high
@@ -334,7 +332,6 @@ jobs:
           fi
 
       - name: Audit dependencies
-        continue-on-error: true
         run: |
           bun audit 2>&1 | sed 's/\x1b\[[0-9;]*m//g' || true
           bun audit --audit-level=high
