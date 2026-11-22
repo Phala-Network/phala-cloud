@@ -454,6 +454,30 @@ describe("phala deploy on-chain create finality", () => {
 		expect(getFinalityTimeoutMs(null)).toBe(2_700_000);
 	});
 
+	test.each([
+		[999, DEVICE_ID, "KMS chain ID 999 is not supported by this CLI build."],
+		[
+			8453,
+			null,
+			"The provision response did not include the device ID required to register the app on-chain.",
+		],
+	])(
+		"distinguishes unsupported chain %s from missing device %s before signing",
+		async (chainId, deviceId, message) => {
+			configureProvision();
+			provisionOverride = {
+				...provisionOverride,
+				device_id: deviceId,
+				kms_info: { ...KMS_INFO, chain_id: chainId },
+			};
+			const { exitCode, failure } = await deploy(input());
+			expect(exitCode).toBe(1);
+			expect(failure).toMatchObject({ message });
+			expect(rpcCalls).toEqual([]);
+			expect(commit()).toBeUndefined();
+		},
+	);
+
 	test("submits the actual registration transaction and skips the public key when there is no environment", async () => {
 		configureProvision();
 		accept();
@@ -585,7 +609,7 @@ describe("phala deploy on-chain create finality", () => {
 			}
 			if (keyReads === 2) {
 				return Response.json(
-					{ detail: { message: latestError } },
+					{ detail: { error_code: "ERR-02-023", message: latestError } },
 					{ status: 503 },
 				);
 			}
@@ -646,6 +670,12 @@ describe("phala deploy on-chain create finality", () => {
 			const message = expectRecovery(failure);
 			expect(message).toContain(latestError);
 			expect(message).not.toContain(firstError);
+			expect(buildJsonCliError(normalizeCliError(failure))).toMatchObject({
+				error_code: "ERR-02-023",
+				error: expect.stringContaining(
+					"Stopped waiting for the KMS environment encryption public key.",
+				),
+			});
 			expect(message).toContain("The CVM was not submitted.");
 			expect(message).toContain(
 				"No new signature is needed for the original compose hash",
@@ -761,6 +791,11 @@ describe("phala deploy on-chain create finality", () => {
 		"resumes a provisioned existing contract through finality with env=%j",
 		async (env) => {
 			configureProvision(true);
+			if (!env)
+				provisionOverride = {
+					...provisionOverride,
+					app_env_encrypt_pubkey: null,
+				};
 			accept(true);
 			respondGet = (pathname) => {
 				expect(pathname).toBe(`/api/v1/cvms/${CREATED_CVM.vm_uuid}/operations`);
@@ -818,28 +853,86 @@ describe("phala deploy on-chain create finality", () => {
 		},
 	);
 
-	test("a definitive create rejection reports that nothing was submitted", async () => {
+	test("JSON recovery preserves the API code and explains how to recover a generated launch token after rejection", async () => {
 		configureProvision();
 		respondCommit = () =>
 			Response.json(
-				{ detail: "The compose hash does not match." },
+				{
+					error_code: "ERR-01-006",
+					message: "The compose hash does not match.",
+					request_id: "create-rejection-request-id",
+					details: [{ field: "launch_token", value: LAUNCH_TOKEN }],
+				},
 				{ status: 422 },
 			);
 		const { exitCode, failure } = await deploy(
-			{ ...input(), generateLaunchToken: true },
-			["--kms", "base", "--generate-launch-token"],
+			{ ...input(), json: true, generateLaunchToken: true },
+			["--json", "--kms", "base", "--generate-launch-token"],
 		);
 		expect(exitCode).toBe(1);
-		const message = expectRecovery(failure);
-		expect(message).toContain("The compose hash does not match.");
-		expect(message).toContain("The CVM was not submitted.");
-		expect(message).toContain(
-			"the compose hash will change and the app owner must register the new hash",
+		const json = buildJsonCliError(normalizeCliError(failure), {
+			operation: "CVM deployment",
+		});
+		expect(json).toMatchObject({
+			success: false,
+			error_code: "ERR-01-006",
+			http_status: 422,
+			request_id: "create-rejection-request-id",
+		});
+		expect(json.error).toContain("The compose hash does not match.");
+		expect(json.error).toContain("The CVM was not submitted.");
+		expect(json.error).toContain(`App ID: ${APP_ID}`);
+		expect(json.error).toContain(`App contract: ${APP_ID}`);
+		expect(json.error).toContain(`Registration transaction hash: ${TX_HASH}`);
+		expect(json.error).toContain(
+			"To reuse that hash, you need the original token.",
 		);
-		expect(message).toContain("--generate-launch-token");
-		expect(message).not.toContain("No new signature is needed");
+		expect(json.error).toContain(
+			"prepare a deployment with a replacement token and register the new compose hash on the existing app contract",
+		);
+		expect(json.error).not.toContain("--generate-launch-token");
+		expect(json.error).not.toContain("No new signature is needed");
+		expect(json.error).not.toMatch(/^phala deploy /m);
+		expect(JSON.stringify(json)).not.toContain(LAUNCH_TOKEN);
 		expect(requests.filter((request) => request.body?.token)).toHaveLength(1);
 	});
+
+	test.each([false, true])(
+		"a 202 without correlation reports the accepted CVM without offering a retry, existing=%s",
+		async (existing) => {
+			configureProvision(existing);
+			commitOverride = {
+				app_id: APP_ID,
+				status: "awaiting_finality",
+				correlation_id: null,
+			};
+			const { exitCode, failure } = await deploy({
+				...(existing
+					? { compose: composePath, kms: "base", customAppId: APP_ID }
+					: input()),
+				wait: true,
+			});
+			expect(exitCode).toBe(1);
+			const message = String(failure);
+			expect(message).toContain(
+				"Phala Cloud accepted the CVM create request but did not return a correlation ID.",
+			);
+			expect(message).toContain(`CVM ID: ${CREATED_CVM.vm_uuid}`);
+			expect(message).toContain(`App ID: ${APP_ID}`);
+			expect(message).toContain(
+				"Check the CVM list (`phala cvms list`) and the operations of the matching CVM.",
+			);
+			expect(message).toContain("Do not resubmit this deployment.");
+			if (existing) expect(message).not.toContain(TX_HASH);
+			else
+				expect(message).toContain(`Registration transaction hash: ${TX_HASH}`);
+			expect(message).not.toContain("not submitted");
+			expect(message).not.toContain("--custom-app-id");
+			expect(message).not.toContain(LAUNCH_TOKEN);
+			expect(requests.filter((request) => request.body?.token)).toHaveLength(1);
+			expect(requests.some((request) => request.method === "GET")).toBe(false);
+		},
+	);
 
 	test("a lost create response reports the recovery block but does not claim rejection or safe retry", async () => {
 		configureProvision();

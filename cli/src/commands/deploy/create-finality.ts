@@ -12,6 +12,7 @@ import {
 	getChainFinalityEtaSeconds,
 	getFinalityTimeoutMs,
 } from "@/src/utils/finality";
+import { normalizeCliError } from "@/src/utils/logger";
 import {
 	getRateLimitRetryDelayMs,
 	sleepWithinDeadline,
@@ -49,7 +50,14 @@ function existingContractCommand(
 		),
 	);
 	for (const option of options.values()) {
-		if (["private-key", "rpc-url", "custom-app-id"].includes(option.name))
+		if (
+			[
+				"private-key",
+				"rpc-url",
+				"custom-app-id",
+				"generate-launch-token",
+			].includes(option.name)
+		)
 			continue;
 		const flag = `--${option.name}`;
 		const value = flags[flag];
@@ -102,9 +110,7 @@ function existingContractCommand(
 					`Set ${secretVariables.join(", ")} to the original values before resuming. For inline environment variables, use the full NAME=VALUE argument.`,
 				]
 			: []),
-		flags["--generate-launch-token"]
-			? "If Phala Cloud generates a new launch token on resume, the compose hash will change and the app owner must register the new hash."
-			: "No new signature is needed for the original compose hash.",
+		"No new signature is needed for the original compose hash.",
 		`Resume from the same directory with the existing app contract:\n${command.join(" ")}`,
 	].join("\n");
 }
@@ -160,6 +166,24 @@ function errorMessage(error: unknown): string {
 	return String(error);
 }
 
+function addCreateErrorContext(
+	error: unknown,
+	lines: readonly string[],
+): Error {
+	const message = [errorMessage(error), ...lines].join("\n");
+	if (!(error instanceof PhalaCloudError)) return new Error(message);
+	// The CLI renderer prefers the API body or cause over Error.message. Keep
+	// the semantic code without either, so the recovery text reaches stdout in
+	// JSON mode and raw response fields do not expose credentials.
+	const { errorCode, requestId } = normalizeCliError(error);
+	return new PhalaCloudError(message, {
+		status: error.status,
+		statusText: error.statusText,
+		requestId,
+		code: errorCode,
+	});
+}
+
 export function isDefinitiveCreateRejection(error: unknown): boolean {
 	// A lost response, server error, or unreadable success response cannot
 	// tell us whether the POST took effect. A conflict may mean the commit
@@ -179,28 +203,51 @@ export function createRecoveryError(
 	resume: { flags: CommandContext["rawFlags"]; composeFilePath?: string },
 	submission: "not_submitted" | "unknown",
 ): Error {
-	const { appId, appAuthAddress, transactionHash } = registration;
+	const { appId } = registration;
+	const { flags, composeFilePath } = resume;
 	const eta = getChainFinalityEtaSeconds(kms.chainId);
+	const generatedToken =
+		flags["--generate-launch-token"] && !flags["--launch-token"];
+	return addCreateErrorContext(error, [
+		submission === "not_submitted"
+			? "The CVM was not submitted."
+			: "Phala Cloud may have accepted the CVM create request. Check the CVM list (`phala cvms list`) and the operations of any matching CVM before retrying. Do not rerun if the request was accepted.",
+		`App ID: ${appId}`,
+		...registrationProof(registration),
+		...(generatedToken
+			? [
+					"The registered compose hash is tied to a generated launch token. To reuse that hash, you need the original token. If you have it, pass it privately with --launch-token and use the original compose settings with --custom-app-id.",
+					"If you cannot recover the original token, prepare a deployment with a replacement token and register the new compose hash on the existing app contract. Then deploy with the same replacement token and --custom-app-id.",
+				]
+			: [
+					existingContractCommand(flags, appId, kms.address, composeFilePath),
+					...(eta == null
+						? []
+						: [
+								`If the key is still unavailable, wait about ${Math.ceil(eta / 60)} min and rerun.`,
+							]),
+				]),
+	]);
+}
+
+function registrationProof(registration: DeployAppAuth): string[] {
+	return [
+		`App contract: ${registration.appAuthAddress}`,
+		`Registration transaction hash: ${registration.transactionHash}`,
+	];
+}
+
+export function untrackedCreateAcceptanceError(
+	cvmId: string,
+	appId: string | null | undefined,
+	registration: DeployAppAuth | undefined,
+): Error {
 	return new Error(
 		[
-			errorMessage(error),
-			submission === "not_submitted"
-				? "The CVM was not submitted."
-				: "Phala Cloud may have accepted the CVM create request. Check the CVM list (`phala cvms list`) and the operations of any matching CVM before retrying. Do not rerun if the request was accepted.",
-			`App ID: ${appId}`,
-			`App contract: ${appAuthAddress}`,
-			`Registration transaction hash: ${transactionHash}`,
-			existingContractCommand(
-				resume.flags,
-				appId,
-				kms.address,
-				resume.composeFilePath,
-			),
-			...(eta == null
-				? []
-				: [
-						`If the key is still unavailable, wait about ${Math.ceil(eta / 60)} min and rerun.`,
-					]),
+			"Phala Cloud accepted the CVM create request but did not return a correlation ID. Check the CVM list (`phala cvms list`) and the operations of the matching CVM. Do not resubmit this deployment.",
+			`CVM ID: ${cvmId}`,
+			...(appId ? [`App ID: ${appId}`] : []),
+			...(registration ? registrationProof(registration) : []),
 		].join("\n"),
 	);
 }
@@ -267,12 +314,11 @@ export async function getNewContractEnvPubkey(
 		});
 		const key = await Promise.race([poll(), expired]);
 		if (key) return key;
-		throw new Error(
-			[
-				...(lastError ? [errorMessage(lastError)] : []),
-				"Stopped waiting for the KMS environment encryption public key.",
-			].join("\n"),
-		);
+		const message =
+			"Stopped waiting for the KMS environment encryption public key.";
+		throw lastError
+			? addCreateErrorContext(lastError, [message])
+			: new Error(message);
 	} finally {
 		clearTimeout(timer);
 		controller.abort();
