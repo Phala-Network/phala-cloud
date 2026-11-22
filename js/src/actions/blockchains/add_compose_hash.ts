@@ -348,7 +348,6 @@ function parseComposeHashResult(
   appId: Address,
   writtenEpochs: EpochsWritten | undefined,
 ): AddComposeHash {
-  console.log(receipt.logs);
   try {
     // Parse ComposeHashAdded event
     const logs = parseEventLogs({
