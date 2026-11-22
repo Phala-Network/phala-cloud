@@ -4,7 +4,18 @@ import type { GetAppInfoResponse, RefreshCvmInstanceIdResponse } from "./types/v
 import type { CvmSshKeysResponse } from "./actions/ssh_keys/get_cvm_ssh_keys";
 import { z } from "zod";
 import * as namedActions from "./actions";
-import { createClient, createBaseClient, getCvmInfo, type ApiVersion } from "./index";
+import {
+  createClient,
+  createBaseClient,
+  getCvmInfo,
+  removeComposeHash,
+  safeRemoveComposeHash,
+  type ApiVersion,
+  type CvmDraftList,
+  type SafeResult,
+  type WaitForCvmFinalityError,
+  type WaitForCvmFinalityResult,
+} from "./index";
 
 function checkGenericVersion<V extends ApiVersion>(version: V) {
   const base = createBaseClient({ version });
@@ -45,6 +56,35 @@ it("exposes every missing named action on the default client and its version clo
   for (const instance of [client, client.withVersion("2025-10-28")]) {
     for (const name of [...missingActions, ...exportedFunctions]) expect(typeof Reflect.get(instance, name), name).toBe("function");
   }
+});
+
+it("binds draft and finality actions with their signatures and selected API version", async () => {
+  const operation = { operation_type: "compose_update", correlation_id: "correlation", status: "completed" };
+  const versions: Array<string | null> = [];
+  vi.stubGlobal("fetch", async (url: RequestInfo | URL, init?: RequestInit) => {
+    versions.push(new Headers(init?.headers).get("x-phala-version"));
+    if (String(url).includes("/operations?correlation_id=correlation")) {
+      return Response.json({ items: [operation] });
+    }
+    if (String(url).endsWith("/cvms/drafts")) {
+      return Response.json({ items: [], marker: "custom" });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  const client = createClient({ baseURL: "https://example.test" }).withVersion("2026-01-21");
+  const schema = z.object({ marker: z.string() });
+  const request = { id: "cvm-123", correlationId: "correlation" };
+  expectTypeOf(client.listCvmDrafts).toBeCallableWith();
+  expectTypeOf(client.safeWaitForCvmFinality).returns.toEqualTypeOf<
+    Promise<SafeResult<WaitForCvmFinalityResult, WaitForCvmFinalityError>>
+  >();
+  const list: CvmDraftList = await client.listCvmDrafts();
+  expect(list).toEqual({ items: [] });
+  expect(await client.safeListCvmDrafts({ schema })).toEqual({ success: true, data: { marker: "custom" } });
+  expect(await client.safeWaitForCvmFinality(request, { timeoutMs: 1000 })).toEqual({ success: true, data: operation });
+  expect(versions).toEqual(["2026-01-21", "2026-01-21", "2026-01-21"]);
+  expect(client.removeComposeHash).toBe(removeComposeHash);
+  expect(client.safeRemoveComposeHash).toBe(safeRemoveComposeHash);
 });
 
 it.each(["x-phala-version", "X-PHALA-VERSION"])("uses the selected version for ordinary requests despite %s", async headerName => {
