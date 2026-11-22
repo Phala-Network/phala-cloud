@@ -303,6 +303,19 @@ it("keeps a patch correlation ID with future, missing, or malformed finality dat
   expect(await patchCvm(client, request)).toEqual(accepted);
 });
 
+it("keeps the default compose commit result when a 2xx response lacks a usable correlation ID", async () => {
+  const response = { status: "awaiting_finality", finality_wait: futureFinalityWait };
+  const { client } = setupHttp(
+    Response.json(response, { status: 202 }),
+    Response.json({ ...response, correlation_id: "" }, { status: 202 }),
+    Response.json({ ...response, correlation_id: "  " }, { status: 202 }),
+  );
+  const request = { id: cvmId, compose_hash: previewHash, encrypted_env: undefined, env_keys: undefined };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await expect(commitCvmComposeFileUpdate(client, request)).resolves.toBeUndefined();
+  }
+});
+
 it("preserves future finality stages and routes for existing compose and script updates", async () => {
   const wire = {
     status: "awaiting_finality",

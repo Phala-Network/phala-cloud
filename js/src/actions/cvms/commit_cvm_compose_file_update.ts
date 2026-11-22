@@ -25,8 +25,8 @@ import { defineAction } from "../../utils/define-action";
  *
  * ## Returns
  *
- * The update is processed asynchronously. If it is waiting for on-chain finality,
- * the response has `status: "awaiting_finality"`, `correlation_id`, and `finality_wait`.
+ * The update is processed asynchronously. If the response reports `status: "awaiting_finality"`
+ * and includes a correlation ID, the SDK returns that ID and any usable `finality_wait` data.
  * Otherwise the default return value is `undefined`.
  *
  * ## Parameters
@@ -117,13 +117,10 @@ export const CommitCvmComposeFileUpdateRequestSchema = z
     _raw: data,
   }));
 
-export const CommitCvmComposeFileUpdateSchema = z.preprocess(
-  (value) =>
-    value && typeof value === "object" && "status" in value && value.status === "awaiting_finality"
-      ? value
-      : undefined,
-  CvmFinalityWaitAcceptedSchema.optional(),
-);
+export const CommitCvmComposeFileUpdateSchema = z.unknown().transform((value) => {
+  const accepted = CvmFinalityWaitAcceptedSchema.safeParse(value);
+  return accepted.success && accepted.data.correlation_id.trim() ? accepted.data : undefined;
+});
 
 export type CommitCvmComposeFileUpdateRequest = Omit<
   z.infer<typeof CommitCvmComposeFileUpdateRequestSchema>,

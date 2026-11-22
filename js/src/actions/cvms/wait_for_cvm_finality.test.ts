@@ -145,6 +145,26 @@ describe("waitForCvmFinality", () => {
     },
   );
 
+  it.each([0, 408, 425, 429, 502])("attaches the last transient error (%i) to a timeout", async (status) => {
+    vi.useFakeTimers();
+    const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValueOnce(new TypeError("First network error"));
+    if (status === 0) {
+      fetch.mockRejectedValueOnce(new TypeError("Last network error"));
+    } else {
+      fetch.mockResolvedValueOnce(Response.json({ detail: "Last HTTP error" }, { status }));
+    }
+    fetch.mockResolvedValueOnce(operations(operation("in_progress")));
+    vi.stubGlobal("fetch", fetch);
+
+    const result = safeWaitForCvmFinality(client, request, { pollIntervalMs: 100, timeoutMs: 250 });
+    await vi.advanceTimersByTimeAsync(250);
+    await expect(result).resolves.toMatchObject({
+      success: false,
+      error: { reason: "timeout", cause: { status, message: expect.stringContaining("Last ") } },
+    });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
   it("bounds even a request that never settles and aborts its transport", async () => {
     vi.useFakeTimers();
     const fetch = vi.fn<typeof globalThis.fetch>(() => new Promise(() => {}));
@@ -192,29 +212,26 @@ describe("waitForCvmFinality", () => {
     },
   );
 
-  it("rejects a finality status belonging to another correlation", async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValueOnce(
-      operations(
-        operation("in_progress", {
-          finality_wait: { ...waitStatus("submitted"), correlation_id: "other-operation" },
-        }),
-      ),
-    );
+  it("keeps polling through unknown status and drops malformed or mismatched progress", async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(operations(operation("queued", { finality_wait: { stage: 42 } })))
+      .mockResolvedValueOnce(operations(operation("in_progress", {
+        finality_wait: { ...waitStatus("submitted"), correlation_id: "other-operation" },
+      })))
+      .mockResolvedValueOnce(operations(operation("completed", { finality_wait: 42 })));
     vi.stubGlobal("fetch", fetch);
     const onStage = vi.fn();
 
-    await expect(safeWaitForCvmFinality(client, request, { onStage })).resolves.toMatchObject({
-      success: false,
-      error: {
-        issues: [
-          expect.objectContaining({ path: ["finality_wait", "correlation_id"] }),
-        ],
-      },
-    });
+    const result = waitForCvmFinality(client, request, { onStage, pollIntervalMs: 100 });
+    const completion = expect(result).resolves.toMatchObject({ status: "completed", finality_wait: undefined });
+    await vi.advanceTimersByTimeAsync(200);
+    await completion;
+    expect(fetch).toHaveBeenCalledTimes(3);
     expect(onStage).not.toHaveBeenCalled();
   });
 
-  it("honors Retry-After from a rate limit and then from a pending response", async () => {
+  it.each([429, 503])("honors Retry-After from HTTP %i and then from a pending response", async (status) => {
     vi.useFakeTimers();
     const start = Date.parse("2026-11-25T00:00:00Z");
     vi.setSystemTime(start);
@@ -224,9 +241,9 @@ describe("waitForCvmFinality", () => {
       .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(
         Response.json(
-          { detail: "Too many requests" },
+          { detail: "Retry later" },
           {
-            status: 429,
+            status,
             headers: { "Retry-After": "2" },
           },
         ),
@@ -264,7 +281,7 @@ describe("waitForCvmFinality", () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(
-        Response.json({ detail: "Rate limited" }, { status: 429, headers: { "Retry-After": "30" } }),
+        Response.json({ detail: "Unavailable" }, { status: 503, headers: { "Retry-After": "30" } }),
       );
     vi.stubGlobal("fetch", fetch);
     const controller = new AbortController();
