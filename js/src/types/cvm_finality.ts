@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // Keep autocomplete for known values without rejecting future strings from the API.
-function openEnum<const T extends readonly [string, ...string[]]>(values: T) {
+export function openEnum<const T extends readonly [string, ...string[]]>(values: T) {
   return z.union([
     z.enum(values),
     z.custom<string & Record<never, never>>((value) => typeof value === "string"),

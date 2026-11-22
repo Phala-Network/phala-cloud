@@ -1,6 +1,10 @@
 import { z } from "zod";
 import type { ApiVersion, Client, SafeResult } from "../../client";
-import { type CvmFinalityWait, CvmFinalityWaitSchema } from "../../types/cvm_finality";
+import {
+  type CvmFinalityWait,
+  OptionalCvmFinalityWaitSchema,
+  openEnum,
+} from "../../types/cvm_finality";
 import { type CvmIdInput, CvmIdSchema } from "../../types/cvm_id";
 import { PhalaCloudError } from "../../utils/errors";
 
@@ -15,20 +19,20 @@ export const CvmFinalityOperationSchema = z
   .object({
     correlation_id: z.string(),
     operation_type: z.string(),
-    status: z.enum(["in_progress", "completed", "failed", "cancelled"]),
-    finality_wait: CvmFinalityWaitSchema.nullish(),
+    status: openEnum(["in_progress", "completed", "failed", "cancelled"]),
+    finality_wait: OptionalCvmFinalityWaitSchema,
     failure_reason: z.string().nullish(),
     error_message: z.string().nullish(),
   })
-  .refine(
-    (operation) =>
-      !operation.finality_wait ||
-      operation.finality_wait.correlation_id === operation.correlation_id,
-    {
-      path: ["finality_wait", "correlation_id"],
-      message: "Finality status must belong to the same operation.",
-    },
-  );
+  .transform((operation) => {
+    if (
+      operation.finality_wait &&
+      operation.finality_wait.correlation_id !== operation.correlation_id
+    ) {
+      return { ...operation, finality_wait: undefined };
+    }
+    return operation;
+  });
 export type CvmFinalityOperation = z.infer<typeof CvmFinalityOperationSchema>;
 
 const OperationPageSchema = z.object({ items: z.array(z.unknown()) });
@@ -90,12 +94,18 @@ function parseRetryAfter(value: string | null | undefined): number {
   return Number.isNaN(delay) ? 0 : Math.max(0, Math.min(delay, MAX_TIMER_MS));
 }
 
+type TransientPollError = PhalaCloudError | TypeError;
+
 async function readOperation(
   client: Client<ApiVersion>,
   path: string,
   correlationId: string,
   signal: AbortSignal,
-): Promise<{ operation?: CvmFinalityOperation; retryAfterMs: number }> {
+): Promise<{
+  operation?: CvmFinalityOperation;
+  retryAfterMs: number;
+  transientError?: TransientPollError;
+}> {
   let retryAfterMs = 0;
   let data: unknown;
   try {
@@ -112,15 +122,18 @@ async function readOperation(
   } catch (error) {
     signal.throwIfAborted();
     if (error instanceof PhalaCloudError) {
-      if (error.status === 429) {
-        return { retryAfterMs: parseRetryAfter(error.response?.headers.get("Retry-After")) };
+      const { status } = error;
+      if (status >= 400 && status < 500 && status !== 408 && status !== 425 && status !== 429) {
+        throw error;
       }
-      if (error.status >= 400 && error.status < 500) throw error;
-      // Fetch failures are wrapped as status 0 by the client. Wait until the
-      // next poll, including for server errors, without extending the deadline.
-      return { retryAfterMs: 0 };
+      // Fetch failures are wrapped as status 0 by the client.
+      const retryAfterMs =
+        status === 429 || (status >= 500 && status < 600)
+          ? parseRetryAfter(error.response?.headers.get("Retry-After"))
+          : 0;
+      return { retryAfterMs, transientError: error };
     }
-    if (error instanceof TypeError) return { retryAfterMs: 0 };
+    if (error instanceof TypeError) return { retryAfterMs: 0, transientError: error };
     throw error;
   }
   signal.throwIfAborted();
@@ -158,7 +171,8 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
  * On-chain finality alone is not completion: Phala Cloud still has to apply the change.
  * A missing operation or an absent finality status is not a terminal result.
  * If the correlation ID does not appear in the operation history, polling continues
- * until `timeoutMs`; there is no separate grace period.
+ * until `timeoutMs`; there is no separate grace period. A timeout error's `cause`
+ * is the last transient polling error, if there was one.
  */
 export async function waitForCvmFinality(
   client: Client<ApiVersion>,
@@ -184,27 +198,30 @@ export async function waitForCvmFinality(
   const pollSignal = controller.signal;
   pollSignal.throwIfAborted();
   signal?.addEventListener("abort", onAbort, { once: true });
+  let lastTransientError: TransientPollError | undefined;
 
   async function poll(): Promise<WaitForCvmFinalityResult> {
     let previousStage: CvmFinalityWait["stage"] | undefined;
     let previousPhase: CvmFinalityWait["phase"] | undefined;
     for (;;) {
       pollSignal.throwIfAborted();
-      const { operation, retryAfterMs } = await readOperation(
+      const { operation, retryAfterMs, transientError } = await readOperation(
         client,
         path,
         correlationId,
         pollSignal,
       );
       pollSignal.throwIfAborted();
+      if (transientError) lastTransientError = transientError;
       if (operation?.status === "completed") {
-        return { ...operation, status: operation.status };
+        return { ...operation, status: "completed" };
       }
       if (operation?.status === "failed" || operation?.status === "cancelled") {
+        const terminalStatus = operation.status === "failed" ? "failed" : "cancelled";
         const reason =
-          OperationFailureReasonSchema.safeParse(operation.failure_reason).data ?? operation.status;
-        const detail = reason === operation.status ? "" : ` (${reason})`;
-        const message = `CVM operation ${correlationId} ${operation.status}${detail}.`;
+          OperationFailureReasonSchema.safeParse(operation.failure_reason).data ?? terminalStatus;
+        const detail = reason === terminalStatus ? "" : ` (${reason})`;
+        const message = `CVM operation ${correlationId} ${terminalStatus}${detail}.`;
         throw new CvmFinalityWaitError(
           reason,
           operation.error_message ? `${message} ${operation.error_message}` : message,
@@ -236,6 +253,8 @@ export async function waitForCvmFinality(
         new CvmFinalityWaitError(
           "timeout",
           `Stopped waiting for CVM operation ${correlationId} after ${timeoutMs} ms. The operation may still be in progress.`,
+          undefined,
+          lastTransientError,
         ),
       ),
     timeoutMs,
