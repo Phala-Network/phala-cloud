@@ -136,8 +136,7 @@ const RPC_RESULTS: Record<string, unknown> = {
 	},
 };
 
-async function signedPubkey() {
-	const key = `0x${"11".repeat(32)}` as const;
+async function signedPubkey(key = `0x${"11".repeat(32)}` as const) {
 	const hash = keccak256(
 		concatHex([stringToHex("dstack-env-encrypt-pubkey:"), APP_ID, key]),
 	);
@@ -243,7 +242,9 @@ let stderr = "";
 let osImagesResponse: unknown = OS_IMAGES;
 let respondGet: ((path: string) => Response) | undefined;
 let provisionOverride: Record<string, unknown> | undefined;
+let prepareError: Response | undefined;
 let commitOverride: Record<string, unknown> | undefined;
+let respondCommit: (() => Response | Promise<Response>) | undefined;
 let rpcCalls: string[] = [];
 
 beforeAll(async () => {
@@ -273,18 +274,26 @@ beforeAll(async () => {
 			if (req.method === "POST" && url.pathname === "/api/v1/cvms") {
 				// Commit carries the prepare token; prepare does not.
 				return body?.token
-					? Response.json({
-							...CREATED_CVM,
-							launch_token: LAUNCH_TOKEN,
-							...commitOverride,
-						})
-					: Response.json({
-							app_id: "abc",
-							app_env_encrypt_pubkey: "11".repeat(32),
-							compose_hash: "hash-1",
-							token: "prepare-token",
-							...provisionOverride,
-						});
+					? (respondCommit?.() ??
+							Response.json(
+								{
+									...CREATED_CVM,
+									launch_token: LAUNCH_TOKEN,
+									...commitOverride,
+								},
+								{
+									status:
+										commitOverride?.status === "awaiting_finality" ? 202 : 200,
+								},
+							))
+					: (prepareError ??
+							Response.json({
+								app_id: "abc",
+								app_env_encrypt_pubkey: "11".repeat(32),
+								compose_hash: "hash-1",
+								token: "prepare-token",
+								...provisionOverride,
+							}));
 			}
 			if (req.method === "GET" && url.pathname === "/api/v1/os-images") {
 				return Response.json(osImagesResponse);
@@ -327,7 +336,9 @@ afterEach(() => {
 	respondGet = undefined;
 	osImagesResponse = OS_IMAGES;
 	provisionOverride = undefined;
+	prepareError = undefined;
 	commitOverride = undefined;
+	respondCommit = undefined;
 	rpcCalls = [];
 });
 
@@ -342,6 +353,7 @@ async function deploy(input: Record<string, unknown>, argv: string[] = []) {
 		},
 		rawFlags: parseCommandArguments(argv, deployCommandMeta.options).flags,
 		projectConfig: {},
+		globalOptions: { timeout: 1 },
 		cvmId: undefined,
 		stdout: {
 			write: (chunk: string) => {
@@ -389,20 +401,46 @@ describe("phala deploy on-chain create finality", () => {
 	const configureProvision = (existing = false) => {
 		provisionOverride = {
 			app_id: existing ? APP_ID : null,
+			app_env_encrypt_pubkey: existing ? "11".repeat(32) : null,
 			compose_hash: COMPOSE_HASH,
 			device_id: DEVICE_ID,
 			kms_info: KMS_INFO,
 		};
 	};
-	const accept = () => {
+	const accept = (stateOnly = false) => {
 		commitOverride = {
 			app_id: APP_ID,
 			status: "awaiting_finality",
 			correlation_id: CREATE_FINALITY.correlation_id,
-			finality_wait: CREATE_FINALITY,
+			finality_wait: stateOnly
+				? {
+						...CREATE_FINALITY,
+						transaction: null,
+						finality: { ...CREATE_FINALITY.finality, eta_seconds: null },
+					}
+				: CREATE_FINALITY,
 		};
 	};
 	const commit = () => requests.find((request) => request.body?.token);
+	const statusCommand = `phala api '/cvms/${CREATED_CVM.vm_uuid}/operations?correlation_id=${CREATE_FINALITY.correlation_id}'`;
+	const completedOperation = () =>
+		Response.json({
+			items: [
+				{
+					correlation_id: CREATE_FINALITY.correlation_id,
+					status: "completed",
+					operation_type: "create",
+				},
+			],
+		});
+	const expectRecovery = (failure: unknown) => {
+		const message = String(failure);
+		expect(message).toContain(`App ID: ${APP_ID}`);
+		expect(message).toContain(`App contract: ${APP_ID}`);
+		expect(message).toContain(`Registration transaction hash: ${TX_HASH}`);
+		expect(message).toContain(`--custom-app-id ${APP_ID}`);
+		return message;
+	};
 
 	test("uses measured mainnet ETAs and a 45-minute fallback for unknown tags or chains", () => {
 		expect(getChainFinalityEtaSeconds(8453, "safe")).toBe(73);
@@ -412,6 +450,7 @@ describe("phala deploy on-chain create finality", () => {
 		expect(getChainFinalityEtaSeconds(84532, "finalized")).toBeNull();
 		expect(getChainFinalityEtaSeconds(1, "unknown-policy")).toBeNull();
 		expect(getFinalityTimeoutMs(1235)).toBe(2_135_000);
+		expect(getFinalityTimeoutMs(1117)).toBe(2_017_000);
 		expect(getFinalityTimeoutMs(null)).toBe(2_700_000);
 	});
 
@@ -441,6 +480,7 @@ describe("phala deploy on-chain create finality", () => {
 		expect(JSON.parse(stdout).status_command).toContain(
 			`?correlation_id=${CREATE_FINALITY.correlation_id}`,
 		);
+		expect(stderr).toContain("Registering the app on-chain.");
 	});
 
 	test("waits for the exact accepted operation, including apply failure after chain finality", async () => {
@@ -466,69 +506,91 @@ describe("phala deploy on-chain create finality", () => {
 		const { exitCode, failure } = await deploy({ ...input(), wait: true });
 		expect(exitCode).toBe(1);
 		expect(String(failure)).toContain("The new CVM failed to boot.");
+		expect(String(failure)).toContain(statusCommand);
+		expect(String(failure)).not.toContain("not submitted");
 		expect(stdout).toBe("");
 		expect(
 			requests.find((request) => request.path.endsWith("/operations"))?.search,
 		).toBe(`?correlation_id=${CREATE_FINALITY.correlation_id}`);
 	});
 
-	test("retries a fresh registration's key without --wait and submits after key verification", async () => {
-		configureProvision();
-		const keyResponse = await signedPubkey();
-		let keyReads = 0;
-		respondGet = (urlPath) => {
-			expect(urlPath).toBe(pubkeyPath);
-			return ++keyReads === 1
-				? Response.json(
-						{
-							error_code: "ERR-02-023",
-							message: "KMS authorization backend unavailable",
-						},
-						{ status: 502 },
-					)
-				: Response.json(keyResponse);
-		};
-		const nativeTimeout = globalThis.setTimeout;
-		const fastPoll = spyOn(globalThis, "setTimeout").mockImplementation(((
-			fn,
-			delay,
-			...args
-		) =>
-			nativeTimeout(
+	test.each([false, true])(
+		"retries and verifies a fresh registration's key with wait=%s",
+		async (wait) => {
+			configureProvision();
+			accept();
+			const keyResponse = await signedPubkey();
+			let keyReads = 0;
+			respondGet = (urlPath) => {
+				if (urlPath.endsWith("/operations")) return completedOperation();
+				expect(urlPath).toBe(pubkeyPath);
+				return ++keyReads === 1
+					? Response.json(
+							{
+								error_code: "ERR-02-023",
+								message: "KMS authorization backend unavailable",
+							},
+							{ status: 502 },
+						)
+					: Response.json(keyResponse);
+			};
+			const nativeTimeout = globalThis.setTimeout;
+			const fastPoll = spyOn(globalThis, "setTimeout").mockImplementation(((
 				fn,
-				delay === 15_000 ? 1 : delay,
-				...args,
-			)) as typeof setTimeout);
-		try {
-			const { exitCode, failure } = await deploy({
-				...input(),
-				json: false,
-				env: ["SETTINGS=some-value"],
-			});
-			expect(failure).toBeUndefined();
-			expect(exitCode).toBe(0);
-			expect(keyReads).toBe(2);
-			expect(stderr).toContain(
-				"Waiting for the KMS environment encryption public key",
-			);
-			expect(
-				rpcCalls.filter((method) => method === "eth_sendRawTransaction"),
-			).toHaveLength(1);
-			expect(commit()?.body?.encrypted_env).toEqual(expect.any(String));
-		} finally {
-			fastPoll.mockRestore();
-		}
-	});
+				delay,
+				...args
+			) =>
+				nativeTimeout(
+					fn,
+					delay === 15_000 ? 1 : delay,
+					...args,
+				)) as typeof setTimeout);
+			try {
+				const { exitCode, failure } = await deploy({
+					...input(),
+					wait,
+					env: ["SETTINGS=some-value"],
+				});
+				expect(failure).toBeUndefined();
+				expect(exitCode).toBe(0);
+				expect(keyReads).toBe(2);
+				expect(stderr).toContain(
+					"Waiting for the KMS environment encryption public key",
+				);
+				expect(
+					rpcCalls.filter((method) => method === "eth_sendRawTransaction"),
+				).toHaveLength(1);
+				expect(commit()?.body?.encrypted_env).toEqual(expect.any(String));
+				expect(JSON.parse(stdout).status).toBe(
+					wait ? "completed" : "awaiting_finality",
+				);
+				expect(stdout).not.toContain("Waiting for the KMS");
+				expect(
+					requests.some((request) => request.path.endsWith("/operations")),
+				).toBe(wait);
+			} finally {
+				fastPoll.mockRestore();
+			}
+		},
+	);
 
-	test("preserves the original API error on the deadline and gives a secret-free existing-contract resume", async () => {
+	test("preserves the latest API message on deadline and round-trips the secret-free resume flags", async () => {
 		configureProvision();
-		const originalError =
-			"KMS RPC failed: authorization backend unavailable. App registration may not be visible yet.";
-		respondGet = () =>
-			Response.json(
-				{ error_code: "ERR-02-023", message: originalError },
-				{ status: 502 },
-			);
+		const firstError = "App registration is not visible yet.";
+		const latestError = "KMS RPC failed: authorization backend unavailable.";
+		let keyReads = 0;
+		respondGet = () => {
+			if (++keyReads === 1) {
+				return Response.json({ detail: firstError }, { status: 502 });
+			}
+			if (keyReads === 2) {
+				return Response.json(
+					{ detail: { message: latestError } },
+					{ status: 503 },
+				);
+			}
+			return new Response(new ReadableStream());
+		};
 		const nativeTimeout = globalThis.setTimeout;
 		const expectedTimeout = getFinalityTimeoutMs(
 			getChainFinalityEtaSeconds(8453, "finalized"),
@@ -540,11 +602,35 @@ describe("phala deploy on-chain create finality", () => {
 		) =>
 			nativeTimeout(
 				fn,
-				delay === expectedTimeout ? 100 : delay,
+				delay === expectedTimeout ? 250 : delay === 15_000 ? 1 : delay,
 				...args,
 			)) as typeof setTimeout);
 		const env = "SETTINGS=never-print-this";
-		const apiToken = "never-print-the-api-token";
+		const apiToken = "-never-print-the-api-token";
+		const flags = [
+			"--kms=base",
+			"-c",
+			composePath,
+			"--private-key",
+			PRIVATE_KEY,
+			`--rpc-url=${rpcUrl()}`,
+			"-e",
+			env,
+			"--env=--settings.env",
+			"--env",
+			"another env's file",
+			"--launch-token",
+			LAUNCH_TOKEN,
+			`--api-key=${apiToken}`,
+			"--no-public-logs",
+			"--instance-type",
+			"tdx.small",
+			"--no-dev-os",
+			"--no-json",
+			"--wait",
+			"--timeout",
+			"9",
+		];
 		try {
 			const { exitCode, failure } = await deploy(
 				{
@@ -554,39 +640,51 @@ describe("phala deploy on-chain create finality", () => {
 					launchToken: LAUNCH_TOKEN,
 					apiToken,
 				},
-				[
-					"--kms=base",
-					"-c",
-					composePath,
-					"--private-key",
-					PRIVATE_KEY,
-					`--rpc-url=${rpcUrl()}`,
-					"-e",
-					env,
-					"--launch-token",
-					LAUNCH_TOKEN,
-					"--api-key",
-					apiToken,
-					"--no-public-logs",
-					"--instance-type",
-					"tdx.small",
-				],
+				flags,
 			);
 			expect(exitCode).toBe(1);
-			const message = String(failure);
-			expect(message).toContain(originalError);
-			expect(message).toContain(TX_HASH);
-			expect(message).toContain(`App ID: ${APP_ID}`);
-			expect(message).toContain(`App contract: ${APP_ID}`);
+			const message = expectRecovery(failure);
+			expect(message).toContain(latestError);
+			expect(message).not.toContain(firstError);
 			expect(message).toContain("The CVM was not submitted.");
-			expect(message).toContain("No new signature is needed");
-			expect(message).toContain(`--compose ${composePath}`);
 			expect(message).toContain(
-				`--kms-contract ${KMS_CONTRACT} --custom-app-id ${APP_ID}`,
+				"No new signature is needed for the original compose hash",
 			);
-			expect(message).toContain("--no-public-logs");
-			expect(message).toContain("--instance-type tdx.small");
-			expect(message).toContain('"${PHALA_DEPLOY_ENV_1:?}"');
+			expect(message).toContain(
+				"If the key is still unavailable, wait about 21 min and rerun.",
+			);
+			const resume = message
+				.split("\n")
+				.find((line) => line.startsWith("phala deploy "));
+			expect(resume).toBeDefined();
+			const shell = Bun.spawnSync(
+				["sh", "-c", `phala() { printf '%s\\0' "$@"; }; ${resume}`],
+				{
+					env: {
+						PHALA_CLOUD_API_KEY: apiToken,
+						PHALA_DEPLOY_LAUNCH_TOKEN: LAUNCH_TOKEN,
+						PHALA_DEPLOY_ENV_1: env,
+					},
+				},
+			);
+			expect(shell.exitCode).toBe(0);
+			const [command, ...argv] = shell.stdout.toString().split("\0");
+			expect(command).toBe("deploy");
+			const parsed = parseCommandArguments(
+				argv.slice(0, -1),
+				deployCommandMeta.options,
+			);
+			const {
+				"--private-key": _signingKey,
+				"--rpc-url": _rpcUrl,
+				...originalFlags
+			} = parseCommandArguments(flags, deployCommandMeta.options).flags;
+			expect(parsed.positionals).toEqual([]);
+			expect(parsed.flags).toEqual({
+				...originalFlags,
+				"--custom-app-id": APP_ID,
+				"--kms-contract": KMS_CONTRACT,
+			});
 			for (const secret of [
 				env,
 				apiToken,
@@ -605,6 +703,33 @@ describe("phala deploy on-chain create finality", () => {
 		}
 	});
 
+	test("uses the last KMS error's message if its response has no safe API message", async () => {
+		configureProvision();
+		respondGet = () => Response.json({}, { status: 502 });
+		const nativeTimeout = globalThis.setTimeout;
+		const deadline = spyOn(globalThis, "setTimeout").mockImplementation(((
+			fn,
+			delay,
+			...args
+		) =>
+			nativeTimeout(
+				fn,
+				delay === 2_135_000 || delay === 15_000 ? 250 : delay,
+				...args,
+			)) as typeof setTimeout);
+		try {
+			const { exitCode, failure } = await deploy({
+				...input(),
+				env: ["SETTINGS=some-value"],
+			});
+			expect(exitCode).toBe(1);
+			expect(String(failure)).toContain("502 Bad Gateway");
+			expect(commit()).toBeUndefined();
+		} finally {
+			deadline.mockRestore();
+		}
+	});
+
 	test("does not retry an explicit KMS mismatch or sign again", async () => {
 		configureProvision();
 		respondGet = () =>
@@ -620,9 +745,9 @@ describe("phala deploy on-chain create finality", () => {
 			env: ["SETTINGS=some-value"],
 		});
 		expect(exitCode).toBe(1);
-		expect(failure).toMatchObject({
-			message: "This app is bound to a different KMS.",
-		});
+		const message = expectRecovery(failure);
+		expect(message).toContain("This app is bound to a different KMS.");
+		expect(message).toContain("The CVM was not submitted.");
 		expect(
 			requests.filter((request) => request.path === pubkeyPath),
 		).toHaveLength(1);
@@ -632,19 +757,158 @@ describe("phala deploy on-chain create finality", () => {
 		expect(commit()).toBeUndefined();
 	});
 
-	test("does not make RPC or separate key calls for an existing contract", async () => {
-		configureProvision(true);
+	test.each([[undefined], [["SETTINGS=some-value"]]])(
+		"resumes a provisioned existing contract through finality with env=%j",
+		async (env) => {
+			configureProvision(true);
+			accept(true);
+			respondGet = (pathname) => {
+				expect(pathname).toBe(`/api/v1/cvms/${CREATED_CVM.vm_uuid}/operations`);
+				return completedOperation();
+			};
+			const { exitCode, failure } = await deploy({
+				compose: composePath,
+				kms: "base",
+				customAppId: APP_ID,
+				wait: true,
+				env,
+			});
+			expect(failure).toBeUndefined();
+			expect(exitCode).toBe(0);
+			expect(prepareRequest().body?.app_id).toBe(APP_ID);
+			expect(rpcCalls).toEqual([]);
+			expect(commit()?.body).not.toHaveProperty("transaction_hash");
+			if (env)
+				expect(commit()?.body?.encrypted_env).toEqual(expect.any(String));
+			else expect(commit()?.body).not.toHaveProperty("encrypted_env");
+			expect(JSON.parse(stdout)).toMatchObject({
+				status: "completed",
+				app_id: APP_ID,
+			});
+		},
+	);
+
+	test.each(["verification", "encryption"])(
+		"reports the recovery block when key %s fails",
+		async (failureStage) => {
+			configureProvision();
+			const key = await signedPubkey(
+				failureStage === "encryption" ? `0x${"0".repeat(64)}` : undefined,
+			);
+			respondGet = () =>
+				Response.json({
+					...key,
+					...(failureStage === "verification"
+						? { signature: "invalid-signature" }
+						: {}),
+				});
+			const { exitCode, failure } = await deploy({
+				...input(),
+				env: ["SETTINGS=some-value"],
+			});
+			expect(exitCode).toBe(1);
+			const message = expectRecovery(failure);
+			expect(message).toContain("The CVM was not submitted.");
+			expect(message).toMatch(
+				failureStage === "verification"
+					? /Invalid encryption public key signature/
+					: /invalid private or public key received/,
+			);
+			expect(commit()).toBeUndefined();
+		},
+	);
+
+	test("a definitive create rejection reports that nothing was submitted", async () => {
+		configureProvision();
+		respondCommit = () =>
+			Response.json(
+				{ detail: "The compose hash does not match." },
+				{ status: 422 },
+			);
+		const { exitCode, failure } = await deploy(
+			{ ...input(), generateLaunchToken: true },
+			["--kms", "base", "--generate-launch-token"],
+		);
+		expect(exitCode).toBe(1);
+		const message = expectRecovery(failure);
+		expect(message).toContain("The compose hash does not match.");
+		expect(message).toContain("The CVM was not submitted.");
+		expect(message).toContain(
+			"the compose hash will change and the app owner must register the new hash",
+		);
+		expect(message).toContain("--generate-launch-token");
+		expect(message).not.toContain("No new signature is needed");
+		expect(requests.filter((request) => request.body?.token)).toHaveLength(1);
+	});
+
+	test("a lost create response reports the recovery block but does not claim rejection or safe retry", async () => {
+		configureProvision();
+		respondCommit = () => new Response(new ReadableStream());
+		const { exitCode, failure } = await deploy(input());
+		expect(exitCode).toBe(1);
+		const message = expectRecovery(failure);
+		expect(message).toContain(
+			"Check the CVM list (`phala cvms list`) and the operations of any matching CVM before retrying.",
+		);
+		expect(message).toContain("Do not rerun if the request was accepted.");
+		expect(message).not.toContain("not submitted");
+		expect(requests.filter((request) => request.body?.token)).toHaveLength(1);
+	});
+
+	test("on a 202 wait timeout prints the exact operation without recommending a repeat", async () => {
+		configureProvision();
+		accept();
+		respondGet = () => Response.json({ items: [] });
+		const nativeTimeout = globalThis.setTimeout;
+		const budget = 2_135_000;
+		const deadline = spyOn(globalThis, "setTimeout").mockImplementation(((
+			fn,
+			delay,
+			...args
+		) =>
+			nativeTimeout(
+				fn,
+				delay === budget ? 100 : delay,
+				...args,
+			)) as typeof setTimeout);
+		try {
+			const { exitCode, failure } = await deploy({ ...input(), wait: true });
+			expect(exitCode).toBe(1);
+			const message = String(failure);
+			expect(message).toContain(
+				"deployment was accepted, but completion was not confirmed",
+			);
+			expect(message).toContain(`after ${budget} ms`);
+			expect(message).toContain(statusCommand);
+			expect(message).not.toContain("not submitted");
+			expect(message).not.toContain("--custom-app-id");
+			expect(stdout).toBe("");
+			expect(stderr).toContain("On-chain stage: submitted.");
+		} finally {
+			deadline.mockRestore();
+		}
+	});
+
+	test("an existing contract still fails immediately when the prepare route cannot serve its key", async () => {
+		prepareError = Response.json(
+			{
+				error_code: "ERR-02-009",
+				message: "The existing app's key is unavailable.",
+			},
+			{ status: 400 },
+		);
 		const { exitCode, failure } = await deploy({
-			...input(),
+			compose: composePath,
+			kms: "base",
 			customAppId: APP_ID,
-			privateKey: undefined,
-			env: ["SETTINGS=some-value"],
+			wait: true,
 		});
-		expect(failure).toBeUndefined();
-		expect(exitCode).toBe(0);
+		expect(exitCode).toBe(1);
+		expect(String(failure)).toContain("The existing app's key is unavailable.");
+		expect(requests).toEqual([
+			expect.objectContaining({ method: "POST", path: "/api/v1/cvms" }),
+		]);
 		expect(rpcCalls).toEqual([]);
-		expect(requests.some((request) => request.path === pubkeyPath)).toBe(false);
-		expect(commit()?.body).not.toHaveProperty("transaction_hash");
 	});
 });
 

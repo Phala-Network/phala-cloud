@@ -16,6 +16,7 @@ class CvmWaitError extends Error {}
  * @param cvmId CVM identifier (UUID, app_id, name, or any format accepted by CvmIdSchema)
  * @param timeoutMs Maximum time to wait in milliseconds
  * @param expectedStatus Status that counts as ready (default: running)
+ * @param existingClient Reuse the caller's client when it already has credentials.
  * @returns Promise that resolves when CVM is in expectedStatus and not in_progress, or rejects on timeout.
  * With failOnError, a CVM that settles in error rejects at once; only use it
  * when the CVM cannot start from error (a restart of an error CVM would fail
@@ -27,8 +28,9 @@ export async function waitForCvmReady(
 	context: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
 	expectedStatus = "running",
 	failOnError = false,
+	existingClient?: CliApiClient,
 ): Promise<void> {
-	const client = await getClient(context);
+	const client = existingClient ?? (await getClient(context));
 	const startTime = Date.now();
 	const deadline = startTime + Math.max(0, timeoutMs);
 	let rateLimitAttempt = 0;
@@ -198,5 +200,12 @@ export async function waitForCvmCreated(
 			"Create",
 		);
 	}
-	await waitForCvmReady(cvmId, deadline - Date.now(), context, "running", true);
+	await waitForCvmReady(
+		cvmId,
+		deadline - Date.now(),
+		context,
+		"running",
+		true,
+		client,
+	);
 }

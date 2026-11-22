@@ -5,10 +5,12 @@ import { join } from "node:path";
 import {
 	type Hex,
 	encodeAbiParameters,
+	numberToHex,
 	parseTransaction,
 	toFunctionSelector,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { anvil, base } from "viem/chains";
 
 const CVM = "example-cvm";
 const APP_ID = "a".repeat(40);
@@ -241,10 +243,10 @@ test("applies without a basis override or prepare-only header and waits for the 
 	]);
 });
 
-function appKmsInfo() {
+function appKmsInfo(chainId: number | null = base.id) {
 	return Response.json({
 		is_onchain_kms: true,
-		chain_id: 8453,
+		chain_id: chainId,
 		app_contract_address: APP_CONTRACT,
 	});
 }
@@ -294,6 +296,33 @@ test("noninteractive revocation requires explicit confirmation before making req
 	expect(result.stdout).toContain("Pass --yes");
 	expect(requests).toEqual([]);
 });
+
+for (const [chainId, message] of [
+	[
+		999999,
+		"The app's KMS uses unsupported chain ID 999999. No revocation transaction was sent.",
+	],
+	[null, "The app's KMS chain is unknown."],
+] as const) {
+	test(`rejects ${chainId === null ? "an unknown KMS chain" : `unsupported KMS chain ID ${chainId}`} before any wallet request`, async () => {
+		route = () => appKmsInfo(chainId);
+		const result = await run(
+			"apps",
+			"compose-hashes",
+			"revoke",
+			APP_ID,
+			PREVIEW_HASH,
+			"--yes",
+			"--json",
+		);
+		expect(result.code).toBe(1);
+		expect(JSON.parse(result.stdout)).toMatchObject({
+			success: false,
+			error: message,
+		});
+		expect(requests).toEqual([{ method: "GET", path: `${APP_PATH}/kms-info` }]);
+	});
+}
 
 for (const [state, message] of [
 	["pending", "This compose hash is pending"],
@@ -380,6 +409,7 @@ test.skipIf(process.platform === "win32")(
 function walletRpc(
 	onWrite: (to: Hex | undefined, calldata: Hex | undefined) => void,
 	onRequest?: (method: string) => void,
+	chainId: number = base.id,
 ) {
 	const bool = (value: boolean) =>
 		encodeAbiParameters([{ type: "bool" }], [value]);
@@ -394,7 +424,7 @@ function walletRpc(
 			Response.json({ jsonrpc: "2.0", id: rpc.id, result });
 		switch (rpc.method) {
 			case "eth_chainId":
-				return reply("0x2105");
+				return reply(numberToHex(chainId));
 			case "eth_getBalance":
 				return reply("0x1000000000000000");
 			case "eth_getTransactionCount":
@@ -517,13 +547,60 @@ test("revokes on the API-selected chain and contract, then reports receipt inclu
 	]);
 	expect(rpcMethods).not.toContain("eth_getCode");
 	expect(
-		rpcMethods.slice(rpcMethods.indexOf("eth_sendRawTransaction")),
-	).not.toContain("eth_call");
+		rpcMethods.slice(rpcMethods.indexOf("eth_sendRawTransaction") + 1),
+	).toEqual(["eth_getTransactionReceipt"]);
 	expect(requests.filter(({ path }) => path !== "/rpc")).toEqual([
 		{ method: "GET", path: `${APP_PATH}/kms-info` },
 		{ method: "GET", path: `${APP_PATH}/pending-updates` },
 	]);
 });
+
+for (const json of [false, true]) {
+	test(`reports revocation receipt inclusion without a finality estimate on Anvil (${json ? "JSON" : "text"})`, async () => {
+		const rpcMethods: string[] = [];
+		const rpc = walletRpc(
+			() => {},
+			(method) => rpcMethods.push(method),
+			anvil.id,
+		);
+		route = (request, url) => {
+			if (url.pathname === "/rpc") return rpc(request);
+			return url.pathname.endsWith("/kms-info")
+				? appKmsInfo(anvil.id)
+				: hashList("unused");
+		};
+		const result = await run(
+			"apps",
+			"compose-hashes",
+			"revoke",
+			APP_ID,
+			PREVIEW_HASH,
+			"--yes",
+			...(json ? ["--json"] : []),
+		);
+		expect(result.code).toBe(0);
+		if (json) {
+			expect(JSON.parse(result.stdout)).toEqual({
+				success: true,
+				app_id: APP_ID,
+				app_contract_address: APP_CONTRACT,
+				compose_hash: `0x${PREVIEW_HASH}`,
+				chain_id: anvil.id,
+				transaction_hash: TX,
+				block_number: "42",
+				eta_seconds: null,
+			});
+		} else {
+			expect(result.stdout).toBe(
+				"Revocation included in block 42. The KMS stops honoring this hash once that block is final.\n",
+			);
+		}
+		expect(result.stderr).not.toMatch(/verif/i);
+		expect(
+			rpcMethods.slice(rpcMethods.indexOf("eth_sendRawTransaction") + 1),
+		).toEqual(["eth_getTransactionReceipt"]);
+	});
+}
 
 test("signs one compose registration for the draft, submits the receipt proof and emits only one JSON object", async () => {
 	let signed = 0;

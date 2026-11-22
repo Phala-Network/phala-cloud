@@ -24,6 +24,13 @@ function shellQuote(value: string): string {
 		: `'${value.replace(/'/g, "'\\''")}'`;
 }
 
+function appendArgument(command: string[], flag: string, value: string) {
+	// A separate token starting with '-' is parsed as another flag, even if
+	// the shell had to unquote it first.
+	if (value.startsWith("-")) command.push(`${flag}=${shellQuote(value)}`);
+	else command.push(flag, shellQuote(value));
+}
+
 function existingContractCommand(
 	flags: CommandContext["rawFlags"],
 	appId: string,
@@ -52,7 +59,7 @@ function existingContractCommand(
 		} else if (value === true) {
 			command.push(flag);
 		} else if (typeof value === "number") {
-			command.push(flag, String(value));
+			appendArgument(command, flag, String(value));
 		} else if (typeof value === "string") {
 			const secret = {
 				"api-token": "PHALA_CLOUD_API_KEY",
@@ -60,37 +67,45 @@ function existingContractCommand(
 				token: "PHALA_DEPLOY_COMMIT_TOKEN",
 			};
 			const variable = secret[option.name as keyof typeof secret];
-			command.push(flag, variable ? secretArg(variable) : shellQuote(value));
+			if (variable) {
+				const substitution = secretArg(variable);
+				if (value.startsWith("-")) command.push(`${flag}=${substitution}`);
+				else command.push(flag, substitution);
+			} else {
+				appendArgument(command, flag, value);
+			}
 		} else if (option.name === "env" && Array.isArray(value)) {
 			for (const [index, item] of value.entries()) {
 				if (typeof item !== "string") continue;
-				command.push(
-					flag,
-					isKeyValueFormat(item)
-						? secretArg(`PHALA_DEPLOY_ENV_${index + 1}`)
-						: shellQuote(item),
-				);
+				if (isKeyValueFormat(item)) {
+					command.push(flag, secretArg(`PHALA_DEPLOY_ENV_${index + 1}`));
+				} else {
+					appendArgument(command, flag, item);
+				}
 			}
 		} else if (Array.isArray(value)) {
 			for (const item of value) {
-				if (typeof item === "string") command.push(flag, shellQuote(item));
+				if (typeof item === "string") appendArgument(command, flag, item);
 			}
 		}
 	}
 	if (composeFilePath && !flags["--compose"]) {
-		command.push("--compose", shellQuote(composeFilePath));
+		appendArgument(command, "--compose", composeFilePath);
 	}
 	if (!flags["--kms-contract"] && !flags["--kms-contract-id"]) {
-		command.push("--kms-contract", shellQuote(kmsContract));
+		appendArgument(command, "--kms-contract", kmsContract);
 	}
-	command.push("--custom-app-id", shellQuote(appId));
+	appendArgument(command, "--custom-app-id", appId);
 	return [
 		...(secretVariables.length
 			? [
 					`Set ${secretVariables.join(", ")} to the original values before resuming. For inline environment variables, use the full NAME=VALUE argument.`,
 				]
 			: []),
-		`When the KMS can serve the key, resume from the same directory with the existing app contract. No new signature is needed:\n${command.join(" ")}`,
+		flags["--generate-launch-token"]
+			? "If Phala Cloud generates a new launch token on resume, the compose hash will change and the app owner must register the new hash."
+			: "No new signature is needed for the original compose hash.",
+		`Resume from the same directory with the existing app contract:\n${command.join(" ")}`,
 	].join("\n");
 }
 
@@ -107,39 +122,104 @@ function isRetryablePubkeyError(error: unknown): error is PhalaCloudError {
 	);
 }
 
-function readPubkeyApiMessage(data: unknown): string | undefined {
+function readApiMessage(data: unknown): string | undefined {
 	if (!data || typeof data !== "object") return;
-	if ("message" in data && typeof data.message === "string")
+	if (
+		"message" in data &&
+		typeof data.message === "string" &&
+		data.message.trim()
+	)
 		return data.message;
 	if ("detail" in data) {
-		if (typeof data.detail === "string") return data.detail;
+		if (typeof data.detail === "string" && data.detail.trim())
+			return data.detail;
 		if (
 			data.detail &&
 			typeof data.detail === "object" &&
 			"message" in data.detail &&
-			typeof data.detail.message === "string"
+			typeof data.detail.message === "string" &&
+			data.detail.message.trim()
 		) {
 			return data.detail.message;
 		}
 	}
 }
 
+function errorMessage(error: unknown): string {
+	if (error instanceof PhalaCloudError) {
+		return readApiMessage(error.data) ?? error.message;
+	}
+	if (
+		error &&
+		typeof error === "object" &&
+		"message" in error &&
+		typeof error.message === "string"
+	) {
+		return error.message;
+	}
+	return String(error);
+}
+
+export function isDefinitiveCreateRejection(error: unknown): boolean {
+	// A lost response, server error, or unreadable success response cannot
+	// tell us whether the POST took effect. A conflict may mean the commit
+	// is already being processed.
+	return (
+		error instanceof PhalaCloudError &&
+		error.status >= 400 &&
+		error.status < 500 &&
+		![408, 409, 425].includes(error.status)
+	);
+}
+
+export function createRecoveryError(
+	error: unknown,
+	registration: DeployAppAuth,
+	kms: { chainId: number; address: string },
+	resume: { flags: CommandContext["rawFlags"]; composeFilePath?: string },
+	submission: "not_submitted" | "unknown",
+): Error {
+	const { appId, appAuthAddress, transactionHash } = registration;
+	const eta = getChainFinalityEtaSeconds(kms.chainId);
+	return new Error(
+		[
+			errorMessage(error),
+			submission === "not_submitted"
+				? "The CVM was not submitted."
+				: "Phala Cloud may have accepted the CVM create request. Check the CVM list (`phala cvms list`) and the operations of any matching CVM before retrying. Do not rerun if the request was accepted.",
+			`App ID: ${appId}`,
+			`App contract: ${appAuthAddress}`,
+			`Registration transaction hash: ${transactionHash}`,
+			existingContractCommand(
+				resume.flags,
+				appId,
+				kms.address,
+				resume.composeFilePath,
+			),
+			...(eta == null
+				? []
+				: [
+						`If the key is still unavailable, wait about ${Math.ceil(eta / 60)} min and rerun.`,
+					]),
+		].join("\n"),
+	);
+}
+
 /** A fresh registration is the only case in which a key read waits for finality. */
 export async function getNewContractEnvPubkey(
 	client: CliApiClient,
 	registration: DeployAppAuth,
-	kms: { reference: string; chainId: number; address: string },
-	resume: { flags: CommandContext["rawFlags"]; composeFilePath?: string },
+	kms: { reference: string; chainId: number },
 	onProgress: (message: string) => void,
 ) {
-	const { appId, appAuthAddress, transactionHash } = registration;
+	const { appId, transactionHash } = registration;
 	const eta = getChainFinalityEtaSeconds(kms.chainId);
 	const timeoutMs = getFinalityTimeoutMs(eta);
 	const startedAt = Date.now();
 	const deadline = startedAt + timeoutMs;
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), timeoutMs);
-	let originalApiMessage: string | undefined;
+	let lastError: PhalaCloudError | undefined;
 	let nextProgressAt = startedAt;
 	let rateLimitAttempt = 0;
 
@@ -157,9 +237,7 @@ export async function getNewContractEnvPubkey(
 			} catch (error) {
 				if (controller.signal.aborted) return;
 				if (!isRetryablePubkeyError(error)) throw error;
-				// Keep the first HTTP API error verbatim. Do not include raw
-				// transport/URL/response metadata in recovery output.
-				originalApiMessage ??= readPubkeyApiMessage(error.data);
+				lastError = error;
 				const now = Date.now();
 				if (now >= nextProgressAt && now < deadline) {
 					onProgress(
@@ -191,18 +269,8 @@ export async function getNewContractEnvPubkey(
 		if (key) return key;
 		throw new Error(
 			[
-				originalApiMessage ??
-					"The KMS environment encryption public key could not be read.",
-				"Stopped waiting for the KMS environment encryption public key. The CVM was not submitted.",
-				`App ID: ${appId}`,
-				`App contract: ${appAuthAddress}`,
-				`Registration transaction hash: ${transactionHash}`,
-				existingContractCommand(
-					resume.flags,
-					appId,
-					kms.address,
-					resume.composeFilePath,
-				),
+				...(lastError ? [errorMessage(lastError)] : []),
+				"Stopped waiting for the KMS environment encryption public key.",
 			].join("\n"),
 		);
 	} finally {

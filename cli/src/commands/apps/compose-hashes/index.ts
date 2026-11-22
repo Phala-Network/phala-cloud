@@ -75,7 +75,7 @@ async function getAppContract(client: CliApiClient, appId: string) {
 		throw new Error(
 			info.chain_id == null
 				? "The app's KMS chain is unknown."
-				: `Chain ID ${info.chain_id} is not supported.`,
+				: `The app's KMS uses unsupported chain ID ${info.chain_id}. No revocation transaction was sent.`,
 		);
 	}
 	const rawAddress = info.app_contract_address;

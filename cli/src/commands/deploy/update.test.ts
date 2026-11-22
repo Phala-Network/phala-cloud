@@ -241,6 +241,7 @@ function makeContext(
 	const context = {
 		env: {
 			...auth,
+			PHALA_CLOUD_REQUESTS_PER_MINUTE: "60000",
 			PHALA_CLOUD_API_PREFIX: `http://127.0.0.1:${server.port}/api/v1`,
 			PHALA_CLOUD_DIR: tmpDir,
 		},
@@ -310,6 +311,7 @@ async function runCli(
 			...process.env,
 			PHALA_DISABLE_UPDATE_CHECK: "1",
 			...auth,
+			PHALA_CLOUD_REQUESTS_PER_MINUTE: "60000",
 			PHALA_CLOUD_API_PREFIX: `http://127.0.0.1:${server.port}/api/v1`,
 			PHALA_CLOUD_DIR: tmpDir,
 		},
@@ -376,7 +378,7 @@ describe("phala deploy update finality", () => {
 		});
 	});
 
-	test("reports stage changes and waits through finalized and applying until the exact update completes", async () => {
+	test("reports stages on stderr for JSON and waits for the running CVM after finality", async () => {
 		const stages = [
 			{ stage: "submitted", phase: "awaiting_finality" },
 			{ stage: "safe", phase: "awaiting_finality" },
@@ -415,9 +417,10 @@ describe("phala deploy update finality", () => {
 				...args,
 			)) as typeof setTimeout);
 		try {
-			const result = await runCli([...args(), "--wait"]);
+			const result = await runCli([...args(), "--wait", "--json"]);
 			expect(result.code).toBe(0);
-			expect(result.stdout).toContain("CVM updated successfully!");
+			expect(JSON.parse(result.stdout)).toMatchObject({ status: "completed" });
+			expect(result.stdout).not.toContain("On-chain stage:");
 			expect(result.stderr.match(/On-chain stage: submitted/g)).toHaveLength(1);
 			expect(result.stderr).toContain("On-chain stage: safe");
 			expect(result.stderr).toContain("On-chain stage: finalized. Waiting");
@@ -430,9 +433,160 @@ describe("phala deploy update finality", () => {
 			expect(reads.map((request) => request.search)).toEqual(
 				Array.from({ length: 5 }, () => scopedQuery),
 			);
+			expect(requests.at(-1)).toMatchObject({
+				method: "GET",
+				path: `/api/v1/cvms/${VM_UUID}`,
+				search: "",
+			});
 		} finally {
 			fastPoll.mockRestore();
 		}
+	});
+
+	test("an OIDC deploy waits for the scoped operation then for the stopped CVM without unscoped history reads", async () => {
+		let updated = false;
+		let readinessReads = 0;
+		respond = (method, pathname, query) => {
+			if (method === "PATCH") {
+				updated = true;
+				return accepted();
+			}
+			if (pathname.endsWith("/operations")) {
+				expect(query.get("correlation_id")).toBe(UPDATE_CORRELATION_ID);
+				return Response.json({
+					items: [
+						{
+							correlation_id: UPDATE_CORRELATION_ID,
+							status: "completed",
+							operation_type: "update",
+						},
+					],
+				});
+			}
+			if (pathname.startsWith("/api/v1/cvms/")) {
+				return Response.json(
+					cvmInfo({
+						status: "stopped",
+						in_progress: updated && ++readinessReads === 1,
+					}),
+				);
+			}
+		};
+		const nativeTimeout = globalThis.setTimeout;
+		const fastPoll = spyOn(globalThis, "setTimeout").mockImplementation(((
+			fn,
+			delay,
+			...args
+		) =>
+			nativeTimeout(
+				fn,
+				delay === 2_000 ? 1 : delay,
+				...args,
+			)) as typeof setTimeout);
+		try {
+			const result = await runCli([...args(), "--wait"], {
+				PHALA_CLOUD_API_KEY: undefined,
+				PHALA_OIDC_TOKEN: "oidc-deploy-token",
+			});
+			expect(result.code).toBe(0);
+			expect(readinessReads).toBe(2);
+			const cvmRequests = requests.filter((request) =>
+				request.path.startsWith("/api/v1/cvms/"),
+			);
+			expect(
+				cvmRequests.map(({ method, path, search }) => [method, path, search]),
+			).toEqual([
+				["GET", `/api/v1/cvms/${CVM_ID}`, ""],
+				["PATCH", `/api/v1/cvms/${CVM_ID}`, ""],
+				["GET", `/api/v1/cvms/${VM_UUID}/operations`, scopedQuery],
+				["GET", `/api/v1/cvms/${VM_UUID}`, ""],
+				["GET", `/api/v1/cvms/${VM_UUID}`, ""],
+			]);
+			expect(
+				cvmRequests.every(
+					({ authorization }) => authorization === "Bearer oidc-deploy-token",
+				),
+			).toBe(true);
+		} finally {
+			fastPoll.mockRestore();
+		}
+	});
+
+	test.each([
+		[1, 2_017_000],
+		[8453, 2_135_000],
+		[999, 2_700_000],
+	])(
+		"uses the operation's chain %s for its local wait budget when server ETA is null",
+		async (chainId, budget) => {
+			respond = (method, pathname) => {
+				if (method === "PATCH")
+					return Response.json(
+						{
+							...UPDATE_ACCEPTANCE,
+							finality_wait: {
+								...UPDATE_FINALITY,
+								transaction: {
+									...UPDATE_FINALITY.transaction,
+									chain_id: chainId,
+								},
+								finality: { ...UPDATE_FINALITY.finality, eta_seconds: null },
+							},
+						},
+						{ status: 202 },
+					);
+				if (pathname.endsWith("/operations"))
+					return Response.json({ items: [] });
+			};
+			const nativeTimeout = globalThis.setTimeout;
+			const deadline = spyOn(globalThis, "setTimeout").mockImplementation(((
+				fn,
+				delay,
+				...args
+			) =>
+				nativeTimeout(
+					fn,
+					delay === budget ? 100 : delay,
+					...args,
+				)) as typeof setTimeout);
+			try {
+				const result = await runCli([...args(), "--wait"]);
+				expect(result.code).toBe(1);
+				expect(result.stderr).toContain(`after ${budget} ms`);
+				expect(result.stderr).toContain(
+					`phala api '/cvms/${VM_UUID}/operations${scopedQuery}'`,
+				);
+				expect(result.stderr).not.toContain("not submitted");
+				expect(requests.at(-1)?.search).toBe(scopedQuery);
+			} finally {
+				deadline.mockRestore();
+			}
+		},
+	);
+
+	test("reports an operation failure before waiting for the CVM to be ready", async () => {
+		respond = (method, pathname) => {
+			if (method === "PATCH") return accepted();
+			if (pathname.endsWith("/operations"))
+				return Response.json({
+					items: [
+						{
+							operation_type: "update",
+							correlation_id: UPDATE_CORRELATION_ID,
+							status: "failed",
+							failure_reason: "apply_failed",
+							error_message: "The update could not be applied.",
+						},
+					],
+				});
+		};
+		const result = await runCli([...args(), "--wait"]);
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("The update could not be applied.");
+		expect(result.stderr).toContain(
+			`phala api '/cvms/${VM_UUID}/operations${scopedQuery}'`,
+		);
+		expect(requests.at(-1)?.search).toBe(scopedQuery);
 	});
 
 	test("rejects --commit --wait before any request without workspace read credentials", async () => {
@@ -476,7 +630,7 @@ describe("phala deploy update finality", () => {
 		expect(requests.map((request) => request.method)).toEqual(["POST"]);
 	});
 
-	test("commit --wait verifies read access, sends the token once and follows the exact correlation", async () => {
+	test("commit --wait verifies read access, follows the exact correlation and checks the stopped CVM", async () => {
 		respond = (method, pathname, query) => {
 			if (method === "POST")
 				return Response.json(
@@ -486,6 +640,8 @@ describe("phala deploy update finality", () => {
 					},
 					{ status: 202 },
 				);
+			if (pathname === `/api/v1/cvms/${CVM_ID}`)
+				return Response.json(cvmInfo({ status: "stopped" }));
 			if (pathname.endsWith("/operations"))
 				return Response.json({
 					items: query.has("correlation_id")
@@ -505,10 +661,14 @@ describe("phala deploy update finality", () => {
 			status: "completed",
 			correlation_id: UPDATE_CORRELATION_ID,
 		});
-		expect(requests.map(({ method, search }) => [method, search])).toEqual([
-			["GET", "?limit=1"],
-			["POST", ""],
-			["GET", scopedQuery],
+		expect(
+			requests.map(({ method, path, search }) => [method, path, search]),
+		).toEqual([
+			["GET", `/api/v1/cvms/${CVM_ID}/operations`, "?limit=1"],
+			["GET", `/api/v1/cvms/${CVM_ID}`, ""],
+			["POST", `/api/v1/cvms/${CVM_ID}/commit-update`, ""],
+			["GET", `/api/v1/cvms/${CVM_ID}/operations`, scopedQuery],
+			["GET", `/api/v1/cvms/${CVM_ID}`, ""],
 		]);
 	});
 });
