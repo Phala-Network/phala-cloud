@@ -543,6 +543,7 @@ export {
   CvmDraftListItemSchema,
   CvmDraftListSchema,
   CvmDraftSchema,
+  DiscardCvmDraftRequestSchema,
   StageCvmDraftRequestSchema,
   UndoCvmDraftEntryRequestSchema,
   type ApplyCvmDraftRequest,
@@ -551,6 +552,7 @@ export {
   type CvmDraftEntry,
   type CvmDraftList,
   type CvmDraftListItem,
+  type DiscardCvmDraftRequest,
   type StageCvmDraftRequest,
   type UndoCvmDraftEntryRequest,
 } from "./cvms/cvm_draft";
