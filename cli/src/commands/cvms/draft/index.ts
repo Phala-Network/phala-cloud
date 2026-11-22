@@ -38,6 +38,7 @@ import {
 	draftDiscardMeta,
 	draftGroup,
 	draftListMeta,
+	draftReviewedCvmSchema,
 	draftShowMeta,
 	draftStageMeta,
 	draftStageSchema,
@@ -220,11 +221,14 @@ const draftUndo = draftCommand(
 
 const draftDiscard = draftCommand(
 	draftDiscardMeta,
-	draftCvmSchema,
+	draftReviewedCvmSchema,
 	"Discard CVM draft",
 	async (input, context) => {
 		const id = cvmId(input, context);
-		await discardCvmDraft(await getClient(context), { id });
+		await discardCvmDraft(await getClient(context), {
+			id,
+			expectedEntryIds: input.expectedEntryIds,
+		});
 		if (context.globalOptions?.json) {
 			context.success({ discarded: true });
 		} else {
@@ -283,8 +287,14 @@ async function registerDraftHash(
 				appId: address,
 				composeHash: result.composeHash,
 				privateKey,
-				onTransactionSubmitted: (hash) =>
-					context.stderr.write(`Registration transaction submitted: ${hash}\n`),
+				onTransactionSubmitted: (hash) => {
+					context.stderr.write(`Registration transaction submitted: ${hash}\n`);
+					if (input.expectedEntryIds) {
+						context.stderr.write(
+							"If you retry with --compose-hash and --transaction-hash, keep the same --expected-entry-id flags in the same order.\n",
+						);
+					}
+				},
 			},
 			{ schema: AddComposeHashSchema },
 		);
@@ -303,17 +313,18 @@ const draftApply = draftCommand(
 		const id = cvmId(input, context);
 		const json = context.globalOptions?.json;
 		let chainId: number | undefined;
+		const draftRequest = { id, expectedEntryIds: input.expectedEntryIds };
 		// Never override the draft's original basis. The first request may apply the draft
 		// immediately if no transaction is required, so there is no prepare-only CLI mode.
 		let result = await applyCvmDraft(
 			client,
 			input.composeHash && input.transactionHash
 				? {
-						id,
+						...draftRequest,
 						composeHash: input.composeHash,
 						transactionHash: input.transactionHash,
 					}
-				: { id },
+				: draftRequest,
 		);
 		if (result.requiresOnChainHash === true) {
 			if (input.composeHash && input.transactionHash) {
@@ -324,7 +335,7 @@ const draftApply = draftCommand(
 			chainId = result.kmsInfo.chain_id ?? undefined;
 			const transactionHash = await registerDraftHash(result, input, context);
 			result = await applyCvmDraft(client, {
-				id,
+				...draftRequest,
 				composeHash: result.composeHash,
 				transactionHash,
 			});

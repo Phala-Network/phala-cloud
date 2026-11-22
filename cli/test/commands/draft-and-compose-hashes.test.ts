@@ -136,8 +136,12 @@ test("stages a compose file without applying and undoes only the newest entry", 
 	const file = join(dir, "compose.yml");
 	writeFileSync(file, compose);
 	let body: unknown;
-	route = async (request) => {
+	let discardBody: string | undefined;
+	route = async (request, url) => {
 		if (request.method === "PATCH") body = await request.json();
+		if (request.method === "DELETE" && url.pathname === DRAFT_PATH) {
+			discardBody = await request.text();
+		}
 		return request.method === "DELETE"
 			? new Response(null, { status: 204 })
 			: Response.json(draft);
@@ -165,6 +169,7 @@ test("stages a compose file without applying and undoes only the newest entry", 
 	const discard = await run("cvms", "draft", "discard", CVM);
 	expect(discard.code).toBe(0);
 	expect(discard.stdout).toContain("On-chain registrations were not changed.");
+	expect(discardBody).toBe("");
 	expect(requests).toEqual([
 		{ method: "PATCH", path: DRAFT_PATH },
 		{ method: "GET", path: DRAFT_PATH },
@@ -172,6 +177,52 @@ test("stages a compose file without applying and undoes only the newest entry", 
 		{ method: "DELETE", path: DRAFT_PATH },
 	]);
 });
+
+test.each([
+	["discard", [], "DELETE", DRAFT_PATH],
+	[
+		"apply",
+		["--compose-hash", PREVIEW_HASH, "--transaction-hash", TX],
+		"POST",
+		`${DRAFT_PATH}/apply`,
+	],
+] as const)(
+	"%s sends the reviewed IDs in order and does not retry a changed draft",
+	async (action, proof, method, path) => {
+		let submitted: unknown;
+		route = async (request) => {
+			submitted = {
+				body: await request.json(),
+				compose: request.headers.get("X-Compose-Hash"),
+				tx: request.headers.get("X-Transaction-Hash"),
+			};
+			return Response.json(
+				{ error_code: "ERR-03-054", message: "The draft changed" },
+				{ status: 409 },
+			);
+		};
+		const result = await run(
+			"cvms",
+			"draft",
+			action,
+			CVM,
+			"--expected-entry-id",
+			"entry-z",
+			"--expected-entry-id=entry-a",
+			...proof,
+			"--json",
+		);
+		expect(result.code).toBe(1);
+		expect(JSON.parse(result.stdout)).toMatchObject({ success: false });
+		expect(result.stdout).toContain("ERR-03-054");
+		expect(submitted).toEqual({
+			body: { expected_entry_ids: ["entry-z", "entry-a"] },
+			compose: action === "apply" ? PREVIEW_HASH : null,
+			tx: action === "apply" ? TX : null,
+		});
+		expect(requests).toEqual([{ method, path }]);
+	},
+);
 
 test("rejects prepare-only and baseline overrides without requesting an apply", async () => {
 	for (const args of [["--prepare-only"], ["--base-compose-hash", BASE_HASH]]) {
@@ -602,16 +653,17 @@ for (const json of [false, true]) {
 	});
 }
 
-test("signs one compose registration for the draft, submits the receipt proof and emits only one JSON object", async () => {
+test("keeps the reviewed entry order through registration and emits only one JSON object", async () => {
 	let signed = 0;
-	let applies = 0;
+	const applyBodies: unknown[] = [];
 	let proof: unknown;
 	const rpc = walletRpc(() => {
 		signed += 1;
 	});
-	route = (request, url) => {
+	route = async (request, url) => {
 		if (url.pathname === "/rpc") return rpc(request);
-		if (applies++ === 0) {
+		applyBodies.push(await request.json());
+		if (applyBodies.length === 1) {
 			return Response.json(
 				{
 					error_code: "ERR-01-005",
@@ -646,16 +698,33 @@ test("signs one compose registration for the draft, submits the receipt proof an
 			{ status: 202 },
 		);
 	};
-	const result = await run("cvms", "draft", "apply", CVM, "--json");
-	expect(result).toMatchObject({ code: 0 });
+	const result = await run(
+		"cvms",
+		"draft",
+		"apply",
+		CVM,
+		"--expected-entry-id",
+		"entry-z",
+		"--expected-entry-id",
+		"entry-a",
+		"--json",
+	);
+	expect(result.code).toBe(0);
 	expect(JSON.parse(result.stdout)).toMatchObject({
 		success: true,
 		correlation_id: CORRELATION,
 		status: "awaiting_finality",
 	});
 	expect(result.stderr).toContain("is irreversible");
+	expect(result.stderr).toContain(
+		"keep the same --expected-entry-id flags in the same order",
+	);
+	expect(result.stdout).not.toContain(PRIVATE_KEY);
 	expect(result.stderr).not.toContain(PRIVATE_KEY);
 	expect(signed).toBe(1);
-	expect(applies).toBe(2);
+	expect(applyBodies).toEqual([
+		{ expected_entry_ids: ["entry-z", "entry-a"] },
+		{ expected_entry_ids: ["entry-z", "entry-a"] },
+	]);
 	expect(proof).toEqual({ compose: PREVIEW_HASH, tx: TX });
 });
