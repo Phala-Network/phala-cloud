@@ -52,6 +52,12 @@ it("keeps future finality strings without accepting non-string enums", () => {
   >();
 });
 
+it("keeps unknown timeline stages and ignores a malformed timeline without losing the wait", () => {
+  const stages = ["submitted", "future_stage", "applying"];
+  expect(CvmFinalityWaitSchema.parse({ ...finalityWait, stages })).toEqual({ ...finalityWait, stages });
+  expect(CvmFinalityWaitSchema.parse({ ...finalityWait, stages: ["submitted", 3] })).toEqual(finalityWait);
+});
+
 it("retains the acceptance correlation ID when progress is missing or malformed", () => {
   const acceptance = { status: "awaiting_finality", correlation_id: "update-correlation-id" };
   expect(CvmFinalityWaitAcceptedSchema.parse(acceptance)).toEqual(acceptance);

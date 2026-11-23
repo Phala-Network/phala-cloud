@@ -25,9 +25,9 @@ import { defineAction } from "../../utils/define-action";
  *
  * ## Returns
  *
- * The update is processed asynchronously. If the response reports `status: "awaiting_finality"`
- * and includes a correlation ID, the SDK returns that ID and any usable `finality_wait` data.
- * Otherwise the default return value is `undefined`.
+ * The update is processed asynchronously. If the response includes a correlation ID,
+ * the SDK returns the acknowledgment, including any usable `finality_wait` data.
+ * Older servers may return no body; the default return value in that case is `undefined`.
  *
  * ## Parameters
  *

@@ -14,6 +14,8 @@ export type CvmFinalityWaitPhase = z.infer<typeof CvmFinalityWaitPhaseSchema>;
 export const CvmFinalityStageSchema = openEnum(["submitted", "safe", "finalized"]);
 export type CvmFinalityStage = z.infer<typeof CvmFinalityStageSchema>;
 
+const CvmFinalityTimelineStageSchema = openEnum(["submitted", "safe", "finalized", "applying"]);
+
 const CvmFinalityTransactionSchema = z.object({
   hash: z.string(),
   block_number: z.number().int().nonnegative(),
@@ -33,6 +35,8 @@ export const CvmFinalityWaitSchema = z.object({
   correlation_id: z.string(),
   phase: CvmFinalityWaitPhaseSchema,
   stage: CvmFinalityStageSchema,
+  // Optional display order for this policy. An invalid list does not invalidate the wait.
+  stages: z.array(CvmFinalityTimelineStageSchema).optional().catch(undefined),
   // Null when Phala Cloud tracks the on-chain state without a known transaction.
   transaction: CvmFinalityTransactionSchema.nullable(),
   finality: CvmFinalityProgressSchema,
@@ -43,8 +47,12 @@ export type CvmFinalityWait = z.infer<typeof CvmFinalityWaitSchema>;
 export const OptionalCvmFinalityWaitSchema = CvmFinalityWaitSchema.nullish().catch(undefined);
 
 export const CvmFinalityWaitAcceptedSchema = z.object({
-  status: z.literal("awaiting_finality"),
-  correlation_id: z.string(),
+  status: openEnum(["in_progress"]),
+  message: z.string().optional(),
+  correlation_id: z
+    .string()
+    .nullish()
+    .transform((value) => value ?? ""),
   finality_wait: OptionalCvmFinalityWaitSchema,
 });
 export type CvmFinalityWaitAccepted = z.infer<typeof CvmFinalityWaitAcceptedSchema>;

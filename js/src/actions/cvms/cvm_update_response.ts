@@ -4,14 +4,15 @@ import { KmsInfoSchema } from "../../types/kms_info";
 import { PhalaCloudError } from "../../utils/errors";
 
 const CvmUpdateAcceptanceWireSchema = z.object({
-  // Older API responses may omit status or omit the correlation ID for a no-op.
+  // Older API responses may omit status. A successful response may not have an operation ID.
   status: z.string().optional(),
-  correlation_id: z.string().optional(),
+  correlation_id: z.string().nullish(),
   finality_wait: OptionalCvmFinalityWaitSchema,
 });
 
 export const CvmUpdateAcceptedFieldsSchema = z.object({
   correlationId: z.string(),
+  status: z.string().optional(),
   finalityWait: CvmFinalityWaitSchema.optional(),
 });
 
@@ -36,7 +37,7 @@ export const CvmUpdateHashRequiredSchema = z.object({
 export function readCvmUpdateAcceptance(response: unknown) {
   const wire = CvmUpdateAcceptanceWireSchema.parse(response);
   return {
-    correlationId: wire.correlation_id,
+    correlationId: wire.correlation_id ?? "",
     ...(wire.status === undefined ? {} : { status: wire.status }),
     ...(wire.finality_wait ? { finalityWait: wire.finality_wait } : {}),
   };
@@ -76,7 +77,6 @@ export async function submitCvmUpdate(send: () => Promise<unknown>) {
     return {
       ...accepted,
       requiresOnChainHash: false as const,
-      correlationId: accepted.correlationId ?? "",
     };
   } catch (error) {
     if (!(error instanceof PhalaCloudError) || error.status !== 465) throw error;

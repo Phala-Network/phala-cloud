@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CvmFinalityWaitAcceptedSchema, openEnum } from "../../types/cvm_finality";
 import { type Client } from "../../client";
 import { CvmIdObjectSchema, CvmIdSchema, refineCvmId } from "../../types/cvm_id";
 import { KmsInfoSchema } from "../../types/kms_info";
@@ -30,7 +31,7 @@ import { PhalaCloudError } from "../../utils/errors";
  *   env_keys: ['API_KEY', 'DATABASE_URL']
  * })
  *
- * if (result.status === 'precondition_required') {
+ * if ('compose_hash' in result) {
  *   // Register compose hash on-chain and get transaction hash
  *   const txHash = await registerComposeHashOnChain(
  *     result.compose_hash,
@@ -150,11 +151,10 @@ export const UpdateCvmEnvsRequestSchema = refineCvmId(
   };
 });
 
-// Response when update is successfully initiated (200)
-const UpdateCvmEnvsInProgressSchema = z.object({
-  status: z.literal("in_progress"),
+// HTTP 202 acknowledges an accepted update or confirms the environment is unchanged.
+const UpdateCvmEnvsInProgressSchema = CvmFinalityWaitAcceptedSchema.extend({
   message: z.string(),
-  correlation_id: z.string(),
+  status: openEnum(["in_progress", "no_change"]),
   allowed_envs_changed: z.boolean(),
 });
 
@@ -170,8 +170,8 @@ const UpdateCvmEnvsPreconditionRequiredSchema = z.object({
 
 // Union type for the result
 export const UpdateCvmEnvsResultSchema = z.union([
-  UpdateCvmEnvsInProgressSchema,
   UpdateCvmEnvsPreconditionRequiredSchema,
+  UpdateCvmEnvsInProgressSchema,
 ]);
 
 export type UpdateCvmEnvsRequest = z.input<typeof UpdateCvmEnvsRequestSchema>;
@@ -187,7 +187,7 @@ export type UpdateCvmEnvsPreconditionRequired = z.infer<
  * @param client - The API client
  * @param request - Request parameters containing CVM ID and environment data
  * @param parameters - Optional behavior parameters
- * @returns Update result (either in_progress or precondition_required)
+ * @returns Whether the update was accepted, nothing changed, or registration is required
  */
 const { action: updateCvmEnvs, safeAction: safeUpdateCvmEnvs } = defineAction<
   UpdateCvmEnvsRequest,

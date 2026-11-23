@@ -17,6 +17,12 @@ import { PhalaCloudError } from "../../utils/errors";
  * `precondition_required` with a compose hash to register on-chain. After
  * registration, retry with `compose_hash` and `transaction_hash`.
  *
+ * Pass `confirmFinalityReplacement: "none"` to require confirmation before
+ * replacing a waiting update. If the API returns HTTP 412 (`ERR-03-067`),
+ * review the pending update identified by `correlation_id` in the error details.
+ * Pass that exact ID to confirm replacement. If the pending ID changes, review
+ * the new update and confirm again. Omitting the option preserves the server default.
+ *
  * @example
  * ```typescript
  * import { createClient, upgradePreLaunchScript } from '@phala/cloud'
@@ -26,7 +32,7 @@ import { PhalaCloudError } from "../../utils/errors";
  * // Phase 1: kick off the upgrade
  * const result = await upgradePreLaunchScript(client, { id: 'cvm-123' })
  *
- * if (result.status === 'precondition_required') {
+ * if ('compose_hash' in result) {
  *   // Register compose hash on-chain, then retry with the headers
  *   const txHash = await registerComposeHashOnChain(result.compose_hash, result.kms_info)
  *   await upgradePreLaunchScript(client, {
@@ -48,6 +54,7 @@ export const UpgradePreLaunchScriptRequestSchema = refineCvmId(
       .string()
       .optional()
       .describe("On-chain transaction hash for verification (Phase 2, contract-owned KMS only)"),
+    confirmFinalityReplacement: z.string().optional(),
   }),
 ).transform((data) => {
   const { cvmId } = CvmIdSchema.parse(data);
@@ -57,14 +64,13 @@ export const UpgradePreLaunchScriptRequestSchema = refineCvmId(
       compose_hash: data.compose_hash,
       transaction_hash: data.transaction_hash,
     },
+    confirmFinalityReplacement: data.confirmFinalityReplacement,
     _raw: data,
   };
 });
 
-const UpgradePreLaunchScriptInProgressSchema = z.object({
-  status: z.literal("in_progress"),
+const UpgradePreLaunchScriptInProgressSchema = CvmFinalityWaitAcceptedSchema.extend({
   message: z.string(),
-  correlation_id: z.string(),
 });
 
 const UpgradePreLaunchScriptPreconditionRequiredSchema = z.object({
@@ -77,9 +83,8 @@ const UpgradePreLaunchScriptPreconditionRequiredSchema = z.object({
 });
 
 export const UpgradePreLaunchScriptResultSchema = z.union([
-  UpgradePreLaunchScriptInProgressSchema,
   UpgradePreLaunchScriptPreconditionRequiredSchema,
-  CvmFinalityWaitAcceptedSchema.extend({ message: z.string() }),
+  UpgradePreLaunchScriptInProgressSchema,
 ]);
 
 export type UpgradePreLaunchScriptRequest = z.input<typeof UpgradePreLaunchScriptRequestSchema>;
@@ -103,6 +108,9 @@ const { action: upgradePreLaunchScript, safeAction: safeUpgradePreLaunchScript }
   }
   if (validated.request.transaction_hash) {
     headers["X-Transaction-Hash"] = validated.request.transaction_hash;
+  }
+  if (validated.confirmFinalityReplacement !== undefined) {
+    headers["X-Confirm-Finality-Replacement"] = validated.confirmFinalityReplacement;
   }
 
   try {

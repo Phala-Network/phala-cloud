@@ -4,15 +4,18 @@
 
 import { z } from "zod";
 import type { ApiVersion } from "./client";
+import { OptionalCvmFinalityWaitSchema } from "./cvm_finality";
 
 /**
  * VM schema - matches backend's VM model
- * Used by start/stop/shutdown/restart operations
+ * Used by lifecycle operations, including replica creation
  * This is an internal model, not a versioned API response
  */
 const VMBaseSchema = z.object({
   name: z.string(),
   status: z.string(),
+  correlation_id: z.string().nullish(),
+  finality_wait: OptionalCvmFinalityWaitSchema,
   teepod_id: z.number(),
   teepod: z
     .object({

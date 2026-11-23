@@ -222,14 +222,11 @@ const { action: patchCvm, safeAction: safePatchCvm } = defineAction<
   // Build request body excluding CVM identifier and meta fields
   const { id, uuid, app_id, instance_id, name, prepareOnly, ...body } = parsed;
 
-  const result = await submitCvmUpdate(() =>
+  return submitCvmUpdate(() =>
     prepareOnly
       ? client.patch(`/cvms/${cvmId}`, body, { headers: { "X-Prepare-Only": "true" } })
       : client.patch(`/cvms/${cvmId}`, body),
   );
-  if (result.requiresOnChainHash) return result;
-  const { status: _status, ...accepted } = result;
-  return accepted;
 });
 
 export { patchCvm, safePatchCvm };

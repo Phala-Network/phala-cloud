@@ -16,7 +16,15 @@ describe("replicateCvm", () => {
     const response = {
       id: "cvm_1",
       name: "replica",
-      status: "running",
+      status: "starting",
+      finality_wait: {
+        operation: "create",
+        correlation_id: "replica-operation",
+        phase: "awaiting_finality",
+        stage: "submitted",
+        transaction: { hash: "0xabc", block_number: 100, chain_id: 8453 },
+        finality: { block_tag: "safe", policy_block_number: 90, blocks_remaining: 10, eta_seconds: 20 },
+      },
       teepod_id: 1,
       teepod: { id: 1, name: "node" },
       app_id: "app_test",
@@ -31,11 +39,11 @@ describe("replicateCvm", () => {
     };
     (client.post as ReturnType<typeof vi.fn>).mockResolvedValue(response);
 
-    await replicateCvm(client, {
+    await expect(replicateCvm(client, {
       id: "source",
       node: "usw5",
       os_image: "dstack-0.5.8-target",
-    });
+    })).resolves.toEqual(response);
 
     expect(client.post).toHaveBeenCalledWith("/cvms/source/replicas", {
       node: "usw5",
