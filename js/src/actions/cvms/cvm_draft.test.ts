@@ -486,7 +486,11 @@ it.each(["in_progress", "future_status", "awaiting_finality"])(
     expect(await updateDockerCompose(client, { ...request, docker_compose_file: "services: {}" })).toEqual(wire);
     expect(await updatePreLaunchScript(client, { ...request, pre_launch_script: "true" })).toEqual(wire);
     expect(await upgradePreLaunchScript(client, request)).toEqual(wire);
-    expect(await updateCvmEnvs(client, { ...request, encrypted_env: "abcd" })).toEqual(envResult);
+    const envUpdate = await updateCvmEnvs(client, { ...request, encrypted_env: "abcd" });
+    expect(envUpdate).toEqual({ ...envResult, status: "in_progress" });
+    // Existing clients narrow by status to read the acceptance correlation ID.
+    if (envUpdate.status !== "in_progress") throw new Error("Expected an accepted environment update");
+    expect(envUpdate.correlation_id).toBe(finalityWait.correlation_id);
     expect(requests).toMatchObject([
       { url: `${endpoint}/cvms/${cvmId}/compose_file`, method: "PATCH", body: { transaction_hash: request.transaction_hash } },
       { url: `${endpoint}/cvms/${cvmId}/docker-compose`, method: "PATCH" },
