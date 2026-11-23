@@ -10,6 +10,8 @@ import { getClient } from "@/src/lib/client";
 import {
 	acceptedCvmOperationFields,
 	formatAcceptedCvmOperation,
+	getCvmOperationId,
+	untrackedCvmOperationFields,
 	waitForAcceptedCvmOperation,
 } from "@/src/utils/finality";
 import { resolveSigningKey, signingError } from "@/src/utils/signing-key";
@@ -345,17 +347,15 @@ const draftApply = draftCommand(
 				);
 			}
 		}
-		if (!result.correlationId && result.status !== "no_change") {
-			throw new Error(
-				"Phala Cloud accepted the draft apply but did not return an operation ID. Check the CVM before you retry.",
-			);
-		}
-
-		const acceptance = {
-			correlation_id: result.correlationId,
-			finality_wait: result.finalityWait,
-		};
-		if (input.wait && result.correlationId) {
+		const correlationId = getCvmOperationId(result.correlationId);
+		const acceptance = correlationId
+			? { correlation_id: correlationId, finality_wait: result.finalityWait }
+			: undefined;
+		const untracked =
+			!acceptance && result.status !== "no_change"
+				? untrackedCvmOperationFields(id)
+				: undefined;
+		if (input.wait && acceptance) {
 			const completed = await waitForAcceptedCvmOperation(
 				client,
 				id,
@@ -378,18 +378,20 @@ const draftApply = draftCommand(
 				);
 		} else if (json) {
 			context.success({
-				...(result.correlationId
+				...(acceptance
 					? acceptedCvmOperationFields(id, acceptance)
-					: {}),
+					: untracked),
 				status: result.status,
 			});
-		} else if (result.status === "awaiting_finality" || result.finalityWait) {
+		} else if (untracked) {
+			context.stdout.write(`${untracked.message}\n`);
+		} else if (acceptance?.finality_wait) {
 			context.stdout.write(`${formatAcceptedCvmOperation(id, acceptance)}\n`);
 		} else if (result.status === "no_change") {
 			context.stdout.write("No changes to apply. The draft was cleared.\n");
 		} else {
 			context.stdout.write(
-				`Draft update accepted. Operation: ${result.correlationId}\n`,
+				`Draft update accepted. Operation: ${correlationId}\n`,
 			);
 		}
 		return 0;

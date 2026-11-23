@@ -8,7 +8,13 @@ import { getClient } from "@/src/lib/client";
 import { logWrittenEpochRange, readEpochsWritten } from "@/src/lib/app-epoch";
 import { CLOUD_URL } from "@/src/utils/constants";
 import {
+	formatAcceptedCvmOperation,
+	getCvmOperationId,
+	untrackedCvmOperationFields,
+} from "@/src/utils/finality";
+import {
 	type Client,
+	CvmFinalityWaitSchema,
 	type EnvVar,
 	ResourceError,
 	SUPPORTED_CHAINS,
@@ -166,6 +172,26 @@ function formatReplicaOutput(
 		`Disk Size:       ${replica.disk_size} GB`,
 		`App URL:         ${appUrl}`,
 	];
+	if (replica.finality_wait != null) {
+		const { data: progress } = CvmFinalityWaitSchema.safeParse(
+			replica.finality_wait,
+		);
+		const correlationId =
+			getCvmOperationId(
+				typeof replica.correlation_id === "string"
+					? replica.correlation_id
+					: undefined,
+			) ?? getCvmOperationId(progress?.correlation_id);
+		const cvmId = vmUuid || String(replica.id);
+		lines.push(
+			correlationId
+				? formatAcceptedCvmOperation(cvmId, {
+						correlation_id: correlationId,
+						finality_wait: progress,
+					})
+				: untrackedCvmOperationFields(cvmId).message,
+		);
+	}
 	context.stdout.write(`${lines.join("\n")}\n`);
 }
 

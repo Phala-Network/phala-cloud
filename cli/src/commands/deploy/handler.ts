@@ -22,7 +22,8 @@ import {
 	acceptedCvmOperationFields,
 	acceptedCvmOperationWaitError,
 	formatAcceptedCvmOperation,
-	formatCvmOperationStatusCommand,
+	getCvmOperationId,
+	untrackedCvmOperationFields,
 	waitForAcceptedCvmOperation,
 } from "@/src/utils/finality";
 import { logger } from "@/src/utils/logger";
@@ -41,7 +42,6 @@ import {
 } from "@/src/utils/units";
 import {
 	type CvmFinalityWait,
-	type CvmFinalityWaitAccepted,
 	CvmIdSchema,
 	type DeployAppAuth,
 	DeployAppAuthSchema,
@@ -103,7 +103,6 @@ import {
 	createRecoveryError,
 	getNewContractEnvPubkey,
 	isDefinitiveCreateRejection,
-	untrackedCreateAcceptanceError,
 } from "./create-finality";
 
 type PrivacyConfig = Pick<
@@ -1418,27 +1417,11 @@ export function addNoProductionImageHint(
 }
 
 function readFinalityAcceptance(
-	result: {
-		status?: string;
-		correlationId?: string | null;
-		finalityWait?: CvmFinalityWait | null;
-	},
-	missingCorrelationError?: () => Error,
-): CvmFinalityWaitAccepted | undefined {
-	if (result.status !== "awaiting_finality" && !result.finalityWait) return;
-	if (!result.correlationId) {
-		throw (
-			missingCorrelationError?.() ??
-			new Error(
-				"Phala Cloud accepted the CVM operation but did not return a correlation ID. Check the CVM status before retrying.",
-			)
-		);
-	}
-	return {
-		status: "awaiting_finality",
-		correlation_id: result.correlationId,
-		finality_wait: result.finalityWait,
-	};
+	correlationId: string | undefined,
+	progress: CvmFinalityWait | null | undefined,
+) {
+	if (!correlationId || progress?.correlation_id !== correlationId) return;
+	return { correlation_id: correlationId, finality_wait: progress };
 }
 
 function deployProgress(stderr: NodeJS.WriteStream) {
@@ -1652,19 +1635,20 @@ const deployNewCvm = async (
 	}
 	const cvm = commit_result.data;
 	const cvmId = cvm.vm_uuid ?? cvm.id;
-	const acceptance = readFinalityAcceptance(
-		{
-			status: cvm.status,
-			correlationId: cvm.correlation_id,
-			finalityWait: cvm.finality_wait,
-		},
-		() =>
-			untrackedCreateAcceptanceError(
-				cvmId,
-				cvm.app_id || registration?.appId || app.app_id,
-				registration,
-			),
-	);
+	// Create keeps the legacy VM envelope; the waiting operation ID lives in the DTO.
+	const correlationId =
+		getCvmOperationId(cvm.correlation_id) ??
+		getCvmOperationId(cvm.finality_wait?.correlation_id);
+	const acceptance = readFinalityAcceptance(correlationId, cvm.finality_wait);
+	const trackedOperation =
+		acceptance ??
+		(correlationId ? { correlation_id: correlationId } : undefined);
+	// The SDK drops an invalid DTO but keeps the field when it was on the wire.
+	const hasFinalityWait = "finality_wait" in cvm && cvm.finality_wait !== null;
+	const untracked =
+		!correlationId && hasFinalityWait
+			? untrackedCvmOperationFields(cvmId)
+			: undefined;
 	const chainId = provisionKmsInfo?.chain_id ?? undefined;
 
 	if (validatedOptions.experimentalKeyProviderType) {
@@ -1680,11 +1664,11 @@ const deployNewCvm = async (
 		);
 	}
 
-	if (validatedOptions.wait) {
+	if (validatedOptions.wait && !untracked) {
 		logger.info("Waiting for the CVM to start...");
 		try {
-			if (acceptance) {
-				await waitForAcceptedCvmOperation(client, cvmId, acceptance, {
+			if (trackedOperation) {
+				await waitForAcceptedCvmOperation(client, cvmId, trackedOperation, {
 					chainId,
 					onProgress,
 				});
@@ -1695,11 +1679,9 @@ const deployNewCvm = async (
 			// Name the CVM: it exists even though the wait failed. No `cause`:
 			// the error envelope unwraps a cause and would drop this message.
 			const waitError = new Error(
-				`The CVM ${cvmId} ${acceptance ? "deployment was accepted, but completion was not confirmed" : "was created but did not start"}: ${error instanceof Error ? error.message : String(error)}`,
+				`The CVM ${cvmId} ${trackedOperation ? "deployment was accepted, but completion was not confirmed" : "was created but did not start"}: ${error instanceof Error ? error.message : String(error)}`,
 			);
-			throw !acceptance && cvm.correlation_id
-				? acceptedCvmOperationWaitError(waitError, cvmId, cvm.correlation_id)
-				: waitError;
+			throw waitError;
 		}
 	}
 
@@ -1711,7 +1693,7 @@ const deployNewCvm = async (
 		(os && typeof os === "object" && "name" in os && typeof os.name === "string"
 			? os.name
 			: undefined);
-	const pending = acceptance && !validatedOptions.wait;
+	const pending = trackedOperation && !validatedOptions.wait;
 
 	if (validatedOptions?.json !== false) {
 		stdout.write(
@@ -1722,17 +1704,18 @@ const deployNewCvm = async (
 					name: cvm.name,
 					app_id: cvm.app_id ?? registration?.appId,
 					dashboard_url: `${CLOUD_URL}/dashboard/cvms/${cvmId}`,
-					...(acceptance
+					...(trackedOperation
 						? {
-								status: pending ? acceptance.status : "completed",
+								status: pending ? cvm.status : "completed",
 								...acceptedCvmOperationFields(
 									cvmId,
 									pending
-										? acceptance
-										: { correlation_id: acceptance.correlation_id },
+										? trackedOperation
+										: { correlation_id: trackedOperation.correlation_id },
 								),
 							}
 						: {}),
+					...(untracked ? { status: cvm.status, ...untracked } : {}),
 					...(registration
 						? {
 								transaction_hash: registration.transactionHash,
@@ -1748,15 +1731,17 @@ const deployNewCvm = async (
 			)}\n`,
 		);
 	} else {
-		const resultMessage = pending
-			? formatAcceptedCvmOperation(cvmId, acceptance)
-			: `CVM created successfully!\n\nCVM ID:    ${cvmId}`;
+		const resultMessage = untracked
+			? untracked.message
+			: pending
+				? formatAcceptedCvmOperation(cvmId, trackedOperation)
+				: `CVM created successfully!\n\nCVM ID:    ${cvmId}`;
 		stdout.write(
 			`${resultMessage}\nName:      ${cvm.name}\nApp ID:    ${cvm.app_id ?? registration?.appId}\nDashboard URL:  ${CLOUD_URL}/dashboard/cvms/${cvmId}\n`,
 		);
 		if (registration) {
 			stdout.write(`App contract: ${registration.appAuthAddress}\n`);
-			if (!pending || !acceptance.finality_wait?.transaction) {
+			if (!pending || !acceptance?.finality_wait.transaction) {
 				stdout.write(
 					`Registration transaction hash: ${registration.transactionHash}\n`,
 				);
@@ -1939,8 +1924,11 @@ const updateCvm = async (
 		// --prepare-only on an on-chain CVM: registered, not applied yet.
 		return false;
 	}
-	const correlationId = outcome.correlationId;
-	const acceptance = readFinalityAcceptance(outcome);
+	const correlationId = getCvmOperationId(outcome.correlationId);
+	const acceptance = readFinalityAcceptance(
+		correlationId,
+		outcome.finalityWait,
+	);
 	const kmsChainId = readMapping(readMapping(target.cvm)?.kms_info)?.chain_id;
 	const chainId =
 		outcome.chainId ??
@@ -1953,14 +1941,18 @@ const updateCvm = async (
 			? { correlation_id: correlationId }
 			: undefined);
 	const pending = trackedOperation && !validatedOptions.wait;
+	const untracked =
+		!correlationId && outcome.status !== "no_change"
+			? untrackedCvmOperationFields(cvmId)
+			: undefined;
 
 	await applyListedAfterUpdate(
 		client,
 		validatedOptions,
-		Boolean(trackedOperation),
+		Boolean(trackedOperation || untracked),
 	);
 
-	if (validatedOptions.wait) {
+	if (validatedOptions.wait && !untracked) {
 		// A CVM that is not running (including a failed boot) stays stopped.
 		const expectedStatus = cvm.status === "running" ? "running" : "stopped";
 		if (trackedOperation) {
@@ -2021,17 +2013,25 @@ const updateCvm = async (
 					...(trackedOperation
 						? {
 								status: pending
-									? (acceptance?.status ?? "accepted")
+									? (outcome.status ?? "in_progress")
 									: "completed",
 								...acceptedCvmOperationFields(
 									cvmId,
 									pending
 										? trackedOperation
-										: { correlation_id: correlationId },
+										: { correlation_id: trackedOperation.correlation_id },
 								),
 								transaction_hash:
 									acceptance?.finality_wait?.transaction?.hash ??
 									outcome.transactionHash,
+								compose_hash: outcome.composeHash,
+							}
+						: {}),
+					...(untracked
+						? {
+								status: outcome.status ?? "in_progress",
+								...untracked,
+								transaction_hash: outcome.transactionHash,
 								compose_hash: outcome.composeHash,
 							}
 						: {}),
@@ -2041,10 +2041,10 @@ const updateCvm = async (
 				2,
 			)}\n`,
 		);
-	} else if (pending) {
-		const message = acceptance
-			? formatAcceptedCvmOperation(cvmId, acceptance)
-			: `CVM update accepted. Completion has not been confirmed.\nCVM ID: ${cvmId}\nCorrelation ID: ${correlationId}\nCheck this operation: ${formatCvmOperationStatusCommand(cvmId, correlationId)}`;
+	} else if (untracked || pending) {
+		const message = untracked
+			? untracked.message
+			: formatAcceptedCvmOperation(cvmId, trackedOperation);
 		stdout.write(`${message}\nApp ID: ${cvm.app_id}\n`);
 		if (outcome.composeHash)
 			stdout.write(`Compose hash: ${outcome.composeHash}\n`);
@@ -2056,7 +2056,7 @@ const updateCvm = async (
 	} else {
 		stdout.write("CVM updated successfully!\n");
 	}
-	return !pending;
+	return !pending && !untracked;
 };
 
 async function waitForUpdatedCvmReady(
@@ -2149,17 +2149,26 @@ const commitCvmUpdate = async (
 		throw new Error(`Failed to commit CVM update: ${errMsg}${hint}`);
 	}
 
-	const { correlationId, status } = commitResult.data;
-	const acceptance = readFinalityAcceptance(commitResult.data);
+	const { status, finalityWait } = commitResult.data;
+	const correlationId = getCvmOperationId(commitResult.data.correlationId);
+	const acceptance = readFinalityAcceptance(correlationId, finalityWait);
 	const pending = acceptance && !validatedOptions.wait;
-	await applyListedAfterUpdate(client, validatedOptions, Boolean(acceptance));
+	const untracked =
+		!correlationId && status !== "no_change"
+			? untrackedCvmOperationFields(cvmId)
+			: undefined;
+	await applyListedAfterUpdate(
+		client,
+		validatedOptions,
+		Boolean(acceptance || untracked),
+	);
 
-	if (validatedOptions.wait) {
+	if (validatedOptions.wait && correlationId) {
 		if (acceptance) {
 			await waitForAcceptedCvmOperation(client, cvmId, acceptance, {
 				onProgress: deployProgress(stderr),
 			});
-		} else if (correlationId) {
+		} else {
 			// Older API versions accept the update without a finality payload.
 			await waitForAcceptedCvmOperation(
 				client,
@@ -2170,20 +2179,14 @@ const commitCvmUpdate = async (
 					onProgress: deployProgress(stderr),
 				},
 			);
-		} else if (status !== "no_change") {
-			throw new Error(
-				`The update to CVM ${cvmId} was committed without a correlation ID. Check the CVM status to confirm completion.`,
-			);
 		}
-		if (correlationId) {
-			await waitForUpdatedCvmReady(
-				client,
-				cvmId,
-				correlationId,
-				context,
-				expectedStatus,
-			);
-		}
+		await waitForUpdatedCvmReady(
+			client,
+			cvmId,
+			correlationId,
+			context,
+			expectedStatus,
+		);
 	}
 
 	const transactionHash =
@@ -2203,8 +2206,17 @@ const commitCvmUpdate = async (
 						? {
 								...acceptedCvmOperationFields(
 									cvmId,
-									pending ? acceptance : { correlation_id: correlationId },
+									pending
+										? acceptance
+										: { correlation_id: acceptance.correlation_id },
 								),
+								transaction_hash: transactionHash,
+								compose_hash: validatedOptions.composeHash,
+							}
+						: {}),
+					...(untracked
+						? {
+								...untracked,
 								transaction_hash: transactionHash,
 								compose_hash: validatedOptions.composeHash,
 							}
@@ -2214,12 +2226,17 @@ const commitCvmUpdate = async (
 				2,
 			)}\n`,
 		);
-	} else if (pending) {
-		stdout.write(`${formatAcceptedCvmOperation(cvmId, acceptance)}\n`);
-		if (transactionHash && !acceptance.finality_wait?.transaction)
+	} else if (untracked || pending) {
+		const message = untracked
+			? untracked.message
+			: formatAcceptedCvmOperation(cvmId, acceptance);
+		stdout.write(`${message}\n`);
+		if (transactionHash && !acceptance?.finality_wait.transaction)
 			stdout.write(`Registration transaction hash: ${transactionHash}\n`);
 		if (validatedOptions.composeHash)
 			stdout.write(`Compose hash: ${validatedOptions.composeHash}\n`);
+	} else if (status === "no_change") {
+		stdout.write("No changes to apply.\n");
 	} else {
 		stdout.write(
 			`CVM update ${validatedOptions.wait ? "completed" : "committed"} successfully! Correlation ID: ${correlationId}\n`,

@@ -275,17 +275,11 @@ beforeAll(async () => {
 				// Commit carries the prepare token; prepare does not.
 				return body?.token
 					? (respondCommit?.() ??
-							Response.json(
-								{
-									...CREATED_CVM,
-									launch_token: LAUNCH_TOKEN,
-									...commitOverride,
-								},
-								{
-									status:
-										commitOverride?.status === "awaiting_finality" ? 202 : 200,
-								},
-							))
+							Response.json({
+								...CREATED_CVM,
+								launch_token: LAUNCH_TOKEN,
+								...commitOverride,
+							}))
 					: (prepareError ??
 							Response.json({
 								app_id: "abc",
@@ -410,8 +404,7 @@ describe("phala deploy on-chain create finality", () => {
 	const accept = (stateOnly = false) => {
 		commitOverride = {
 			app_id: APP_ID,
-			status: "awaiting_finality",
-			correlation_id: CREATE_FINALITY.correlation_id,
+			status: "starting",
 			finality_wait: stateOnly
 				? {
 						...CREATE_FINALITY,
@@ -496,7 +489,7 @@ describe("phala deploy on-chain create finality", () => {
 		expect(commit()?.body).not.toHaveProperty("encrypted_env");
 		expect(JSON.parse(stdout)).toMatchObject({
 			success: true,
-			status: "awaiting_finality",
+			status: "starting",
 			correlation_id: CREATE_FINALITY.correlation_id,
 			eta_seconds: 1235,
 			transaction_hash: TX_HASH,
@@ -585,9 +578,7 @@ describe("phala deploy on-chain create finality", () => {
 					rpcCalls.filter((method) => method === "eth_sendRawTransaction"),
 				).toHaveLength(1);
 				expect(commit()?.body?.encrypted_env).toEqual(expect.any(String));
-				expect(JSON.parse(stdout).status).toBe(
-					wait ? "completed" : "awaiting_finality",
-				);
+				expect(JSON.parse(stdout).status).toBe(wait ? "completed" : "starting");
 				expect(stdout).not.toContain("Waiting for the KMS");
 				expect(
 					requests.some((request) => request.path.endsWith("/operations")),
@@ -898,13 +889,13 @@ describe("phala deploy on-chain create finality", () => {
 	});
 
 	test.each([false, true])(
-		"a 202 without correlation reports the accepted CVM without offering a retry, existing=%s",
+		"a 200 without an operation ID reports the accepted CVM as untracked, existing=%s",
 		async (existing) => {
 			configureProvision(existing);
 			commitOverride = {
 				app_id: APP_ID,
-				status: "awaiting_finality",
-				correlation_id: null,
+				status: "starting",
+				finality_wait: { ...CREATE_FINALITY, correlation_id: undefined },
 			};
 			const { exitCode, failure } = await deploy({
 				...(existing
@@ -912,23 +903,22 @@ describe("phala deploy on-chain create finality", () => {
 					: input()),
 				wait: true,
 			});
-			expect(exitCode).toBe(1);
-			const message = String(failure);
-			expect(message).toContain(
-				"Phala Cloud accepted the CVM create request but did not return a correlation ID.",
-			);
-			expect(message).toContain(`CVM ID: ${CREATED_CVM.vm_uuid}`);
-			expect(message).toContain(`App ID: ${APP_ID}`);
-			expect(message).toContain(
-				"Check the CVM list (`phala cvms list`) and the operations of the matching CVM.",
-			);
-			expect(message).toContain("Do not resubmit this deployment.");
-			if (existing) expect(message).not.toContain(TX_HASH);
-			else
-				expect(message).toContain(`Registration transaction hash: ${TX_HASH}`);
-			expect(message).not.toContain("not submitted");
-			expect(message).not.toContain("--custom-app-id");
-			expect(message).not.toContain(LAUNCH_TOKEN);
+			expect(exitCode).toBe(0);
+			expect(failure).toBeUndefined();
+			const result = JSON.parse(stdout);
+			expect(result).toMatchObject({
+				success: true,
+				status: "starting",
+				tracking: "untracked",
+				correlation_id: null,
+				vm_uuid: CREATED_CVM.vm_uuid,
+				app_id: APP_ID,
+				launch_token: LAUNCH_TOKEN,
+			});
+			expect(result).not.toHaveProperty("status_command");
+			expect(result.message).toContain("Do not resubmit");
+			if (existing) expect(result).not.toHaveProperty("transaction_hash");
+			else expect(result.transaction_hash).toBe(TX_HASH);
 			expect(requests.filter((request) => request.body?.token)).toHaveLength(1);
 			expect(requests.some((request) => request.method === "GET")).toBe(false);
 		},
@@ -948,7 +938,7 @@ describe("phala deploy on-chain create finality", () => {
 		expect(requests.filter((request) => request.body?.token)).toHaveLength(1);
 	});
 
-	test("on a 202 wait timeout prints the exact operation without recommending a repeat", async () => {
+	test("on a 200 wait timeout prints the exact operation without recommending a repeat", async () => {
 		configureProvision();
 		accept();
 		respondGet = () => Response.json({ items: [] });

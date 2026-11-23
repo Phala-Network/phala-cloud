@@ -51,6 +51,19 @@ export function formatCvmOperationStatusCommand(
 	return `phala api '/cvms/${encodeURIComponent(cvmId).replace(/'/g, "%27")}/operations?${query}'`;
 }
 
+/** A blank response field is not an operation ID. Keep nonblank IDs unchanged. */
+export function getCvmOperationId(value: string | null | undefined) {
+	return value?.trim() ? value : undefined;
+}
+
+export function untrackedCvmOperationFields(cvmId: string) {
+	return {
+		correlation_id: null,
+		tracking: "untracked" as const,
+		message: `Phala Cloud accepted the request for CVM ${cvmId}, but did not return an operation ID. Check the CVM status. Do not resubmit the request.`,
+	};
+}
+
 type AcceptedOperation = Pick<
 	CvmFinalityWaitAccepted,
 	"correlation_id" | "finality_wait"

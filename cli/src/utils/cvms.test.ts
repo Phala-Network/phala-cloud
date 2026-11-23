@@ -149,6 +149,46 @@ describe("waitForCvmReady", () => {
 });
 
 describe("waitForCvmOperation", () => {
+	test.each(["completed", "failed", "cancelled"])(
+		"ignores an unknown status and only stops at %s",
+		async (status) => {
+			responses = [
+				{
+					body: {
+						items: [
+							{ correlation_id: "other-operation", status: "completed" },
+							{ correlation_id: "correlation-id", status: "next_stage" },
+						],
+					},
+				},
+				{
+					body: {
+						items: [
+							{
+								correlation_id: "correlation-id",
+								status,
+								error_message: "terminal operation",
+							},
+						],
+					},
+				},
+			];
+			const client = await getClient(context());
+			const result = waitForCvmOperation(
+				client,
+				CVM_ID,
+				"correlation-id",
+				5000,
+			);
+			if (status === "completed") await expect(result).resolves.toBeUndefined();
+			else
+				await expect(result).rejects.toThrow(
+					`Update ${status}: terminal operation`,
+				);
+			expect(reads).toBe(2);
+		},
+	);
+
 	test("stops an in-flight poll when the overall timeout expires", async () => {
 		responses = [
 			{
