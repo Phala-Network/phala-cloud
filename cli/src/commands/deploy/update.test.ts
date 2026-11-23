@@ -70,7 +70,7 @@ const UPDATE_FINALITY = {
 	},
 };
 const UPDATE_ACCEPTANCE = {
-	status: "awaiting_finality",
+	status: "in_progress",
 	correlation_id: UPDATE_CORRELATION_ID,
 	finality_wait: UPDATE_FINALITY,
 };
@@ -344,7 +344,7 @@ describe("phala deploy update finality", () => {
 		const result = await runCli([...args(), "--json"]);
 		expect(result.code).toBe(0);
 		expect(JSON.parse(result.stdout)).toMatchObject({
-			status: "awaiting_finality",
+			status: "in_progress",
 			eta_seconds: 93,
 			transaction_hash: UPDATE_TX,
 			correlation_id: UPDATE_CORRELATION_ID,
@@ -373,7 +373,7 @@ describe("phala deploy update finality", () => {
 		const result = await runCli([...args(), "--json"]);
 		expect(result.code).toBe(0);
 		expect(JSON.parse(result.stdout)).toMatchObject({
-			status: "awaiting_finality",
+			status: "in_progress",
 			eta_seconds: null,
 		});
 	});
@@ -623,12 +623,45 @@ describe("phala deploy update finality", () => {
 		});
 		expect(result.code).toBe(0);
 		expect(JSON.parse(result.stdout)).toMatchObject({
-			status: "awaiting_finality",
+			status: "in_progress",
 			correlation_id: UPDATE_CORRELATION_ID,
 			transaction_hash: UPDATE_TX,
 		});
 		expect(requests.map((request) => request.method)).toEqual(["POST"]);
 	});
+
+	test.each(["PATCH", "POST"])(
+		"%s --wait reports a successful update with no operation ID without polling or resubmitting",
+		async (mutation) => {
+			respond = (method) =>
+				method === mutation
+					? Response.json(
+							{ ...UPDATE_ACCEPTANCE, correlation_id: null },
+							{ status: 202 },
+						)
+					: undefined;
+			const result = await runCli([
+				...(mutation === "PATCH" ? args() : commitArgs),
+				"--wait",
+				"--json",
+			]);
+			expect(result.code).toBe(0);
+			const output = JSON.parse(result.stdout);
+			expect(output).toMatchObject({
+				success: true,
+				status: "in_progress",
+				tracking: "untracked",
+				correlation_id: null,
+			});
+			expect(output).not.toHaveProperty("status_command");
+			expect(
+				requests.filter((request) => request.method === mutation),
+			).toHaveLength(1);
+			expect(
+				requests.some((request) => request.search.includes("correlation_id")),
+			).toBe(false);
+		},
+	);
 
 	test("commit --wait verifies read access, follows the exact correlation and checks the stopped CVM", async () => {
 		respond = (method, pathname, query) => {

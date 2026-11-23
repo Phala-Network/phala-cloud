@@ -294,6 +294,25 @@ test("applies without a basis override or prepare-only header and waits for the 
 	]);
 });
 
+test("accepts a draft apply without an operation ID even with --wait and does not resend", async () => {
+	route = () =>
+		Response.json(
+			{ status: "in_progress", correlation_id: null },
+			{ status: 202 },
+		);
+	const result = await run("cvms", "draft", "apply", CVM, "--wait", "--json");
+	expect(result.code).toBe(0);
+	const output = JSON.parse(result.stdout);
+	expect(output).toMatchObject({
+		success: true,
+		status: "in_progress",
+		tracking: "untracked",
+		correlation_id: null,
+	});
+	expect(output).not.toHaveProperty("status_command");
+	expect(requests).toEqual([{ method: "POST", path: `${DRAFT_PATH}/apply` }]);
+});
+
 function appKmsInfo(chainId: number | null = base.id) {
 	return Response.json({
 		is_onchain_kms: true,

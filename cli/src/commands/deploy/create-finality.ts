@@ -237,21 +237,6 @@ function registrationProof(registration: DeployAppAuth): string[] {
 	];
 }
 
-export function untrackedCreateAcceptanceError(
-	cvmId: string,
-	appId: string | null | undefined,
-	registration: DeployAppAuth | undefined,
-): Error {
-	return new Error(
-		[
-			"Phala Cloud accepted the CVM create request but did not return a correlation ID. Check the CVM list (`phala cvms list`) and the operations of the matching CVM. Do not resubmit this deployment.",
-			`CVM ID: ${cvmId}`,
-			...(appId ? [`App ID: ${appId}`] : []),
-			...(registration ? registrationProof(registration) : []),
-		].join("\n"),
-	);
-}
-
 /** A fresh registration is the only case in which a key read waits for finality. */
 export async function getNewContractEnvPubkey(
 	client: CliApiClient,

@@ -75,8 +75,12 @@ export async function waitForCvmReady(
 					logger.success(`CVM is ready (took ${elapsed}s)`);
 					return;
 				}
-				if (failOnError && currentStatus === "error" && !inProgress) {
-					throw new CvmWaitError("CVM is in error state");
+				if (
+					failOnError &&
+					(currentStatus === "error" || currentStatus === "create_failed") &&
+					!inProgress
+				) {
+					throw new CvmWaitError(`CVM is in ${currentStatus} state`);
 				}
 			}
 		} catch (error) {
@@ -121,15 +125,24 @@ export async function waitForCvmOperation(
 		try {
 			const remainingMs = Math.max(1, deadline - Date.now());
 			const { items } = await client.get<{
-				items: Array<{ status: string; error_message?: string | null }>;
+				items: Array<{
+					correlation_id?: string;
+					status: string;
+					error_message?: string | null;
+				}>;
 			}>(`/cvms/${cvmId}/operations`, {
 				params: { correlation_id: correlationId },
 				timeout: remainingMs,
 			});
 			rateLimitAttempt = 0;
-			const operation = items[0];
+			const operation =
+				items.find((item) => item.correlation_id === correlationId) ??
+				// Older scoped responses may omit the ID on their single result.
+				(items.length === 1 && items[0]?.correlation_id === undefined
+					? items[0]
+					: undefined);
 			if (operation?.status === "completed") return;
-			if (operation && operation.status !== "in_progress") {
+			if (operation?.status === "failed" || operation?.status === "cancelled") {
 				throw new CvmWaitError(
 					`${label} ${operation.status}: ${operation.error_message ?? "no error message"}`,
 				);

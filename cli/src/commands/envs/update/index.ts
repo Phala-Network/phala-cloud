@@ -1,13 +1,20 @@
 import {
+	type UpdateCvmEnvsInProgress,
 	encryptEnvVars,
 	safeAddComposeHash,
 	safeGetCvmInfo,
 	safeUpdateCvmEnvs,
 } from "@phala/cloud";
 import { defineCommand } from "@/src/core/define-command";
+import { isInJsonMode } from "@/src/core/json-mode";
 import type { CommandContext } from "@/src/core/types";
 import { getClient } from "@/src/lib/client";
 import { logWrittenEpochRange, readEpochsWritten } from "@/src/lib/app-epoch";
+import {
+	formatAcceptedCvmOperation,
+	getCvmOperationId,
+	untrackedCvmOperationFields,
+} from "@/src/utils/finality";
 import { logger } from "@/src/utils/logger";
 import { resolveEnvInputs } from "../resolve-envs";
 import { getEncryptPubkey } from "../get-encrypt-pubkey";
@@ -16,6 +23,31 @@ import {
 	envsUpdateCommandSchema,
 	type EnvsUpdateCommandInput,
 } from "./command";
+
+function reportEnvUpdateResult(
+	context: CommandContext,
+	cvmId: string,
+	data: UpdateCvmEnvsInProgress,
+) {
+	if (data.status === "no_change") {
+		context.success(isInJsonMode() ? data : data.message);
+		return;
+	}
+
+	const id = getCvmOperationId(data.correlation_id);
+	if (!id) {
+		logger.info(untrackedCvmOperationFields(cvmId).message);
+	} else if ("finality_wait" in data && data.finality_wait) {
+		logger.info(
+			formatAcceptedCvmOperation(cvmId, {
+				correlation_id: id,
+				finality_wait: data.finality_wait,
+			}),
+		);
+	} else {
+		logger.success(`Environment update initiated (correlation_id: ${id})`);
+	}
+}
 
 async function runEnvsUpdateCommand(
 	rawInput: EnvsUpdateCommandInput,
@@ -101,14 +133,7 @@ async function runEnvsUpdateCommand(
 
 		const data = updateResult.data;
 
-		if (data.status === "in_progress") {
-			logger.success(
-				`Environment update initiated (correlation_id: ${data.correlation_id})`,
-			);
-			return 0;
-		}
-
-		if (data.status === "precondition_required") {
+		if (!("correlation_id" in data)) {
 			// Two-phase flow: on-chain compose hash registration required
 			const privateKey = input.privateKey || process.env.PRIVATE_KEY;
 			if (!privateKey) {
@@ -178,10 +203,8 @@ async function runEnvsUpdateCommand(
 				return 1;
 			}
 
-			if (retryResult.data.status === "in_progress") {
-				logger.success(
-					`Environment update initiated (correlation_id: ${retryResult.data.correlation_id})`,
-				);
+			if ("correlation_id" in retryResult.data) {
+				reportEnvUpdateResult(context, cvm.vm_uuid ?? cvm.id, retryResult.data);
 				return 0;
 			}
 
@@ -189,10 +212,8 @@ async function runEnvsUpdateCommand(
 			return 1;
 		}
 
-		context.fail(
-			`Unexpected response status: ${(data as { status: string }).status}`,
-		);
-		return 1;
+		reportEnvUpdateResult(context, cvm.vm_uuid ?? cvm.id, data);
+		return 0;
 	} catch (error) {
 		context.fail(error instanceof Error ? error.message : String(error));
 		return 1;
