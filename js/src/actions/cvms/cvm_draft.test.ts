@@ -16,6 +16,7 @@ import {
 } from "./cvm_draft";
 import { getCvmInfo } from "./get_cvm_info";
 import { patchCvm } from "./patch_cvm";
+import { updateCvmEnvs } from "./update_cvm_envs";
 import { updateDockerCompose } from "./update_docker_compose";
 import { updatePreLaunchScript } from "./update_prelaunch_script";
 import { upgradePreLaunchScript } from "./upgrade_prelaunch_script";
@@ -317,29 +318,29 @@ describe("CVM drafts", () => {
       Response.json(wire, { status: 202 }),
       Response.json(wire, { status: 202 }),
     );
-    const accepted = { correlationId: finalityWait.correlation_id, finalityWait };
+    const accepted = { correlationId: finalityWait.correlation_id, finalityWait, status: wire.status };
     const request = { id: cvmId, composeHash: previewHash, transactionHash: "already-registered" };
     await expect(confirmCvmPatch(client, request)).resolves.toEqual(accepted);
-    await expect(commitCvmUpdate(client, { ...request, token: "token" })).resolves.toEqual({
-      ...accepted,
-      status: "awaiting_finality",
-    });
+    await expect(commitCvmUpdate(client, { ...request, token: "token" })).resolves.toEqual(accepted);
   });
 });
 
-it("retains future finality stages in CVM details independently of the runtime status", async () => {
-  const { client } = setupHttp(Response.json({
-    id: cvmId,
-    name: "my-cvm",
-    status: "running",
-    resource: { memory_in_mb: 4096 },
-    gateway: {},
-    finality_wait: futureFinalityWait,
-  }));
-  const result = await getCvmInfo(client.withVersion("2026-11-11"), { id: cvmId });
-  expect(result.status).toBe("running");
-  expect(result.finality_wait).toEqual(futureFinalityWait);
-});
+it.each(["running", "awaiting_finality", "create_failed"])(
+  "preserves the read-side CVM status %s independently of finality metadata",
+  async (status) => {
+    const { client } = setupHttp(Response.json({
+      id: cvmId,
+      name: "my-cvm",
+      status,
+      resource: { memory_in_mb: 4096 },
+      gateway: {},
+      finality_wait: futureFinalityWait,
+    }));
+    const result = await getCvmInfo(client.withVersion("2026-11-11"), { id: cvmId });
+    expect(result.status).toBe(status);
+    expect(result.finality_wait).toEqual(futureFinalityWait);
+  },
+);
 
 it("keeps a patch correlation ID with future, missing, or malformed finality data", async () => {
   const wire = { status: "awaiting_finality", correlation_id: finalityWait.correlation_id };
@@ -349,10 +350,26 @@ it("keeps a patch correlation ID with future, missing, or malformed finality dat
     Response.json({ ...wire, finality_wait: { stage: 3 } }, { status: 202 }),
   );
   const request = { id: cvmId, ...patch };
-  const accepted = { requiresOnChainHash: false, correlationId: finalityWait.correlation_id };
+  const accepted = { requiresOnChainHash: false, correlationId: finalityWait.correlation_id, status: wire.status };
   expect(await patchCvm(client, request)).toEqual({ ...accepted, finalityWait: futureFinalityWait });
   expect(await patchCvm(client, request)).toEqual(accepted);
   expect(await patchCvm(client, request)).toEqual(accepted);
+});
+
+it("returns accepted updates when the response has no operation ID to track", async () => {
+  const wire = { status: "in_progress", message: "Update accepted.", finality_wait: finalityWait };
+  const { client } = setupHttp(
+    Response.json(wire, { status: 202 }),
+    Response.json({ ...wire, correlation_id: null }, { status: 202 }),
+    Response.json(wire, { status: 202 }),
+  );
+  const request = { id: cvmId, composeHash: previewHash, transactionHash: "already-registered" };
+  const accepted = { correlationId: "", finalityWait, status: wire.status };
+  await expect(confirmCvmPatch(client, request)).resolves.toEqual(accepted);
+  await expect(commitCvmUpdate(client, { ...request, token: "token" })).resolves.toEqual(accepted);
+  await expect(patchCvm(client, { id: cvmId, ...patch })).resolves.toEqual({
+    ...accepted, requiresOnChainHash: false,
+  });
 });
 
 it("keeps the default compose commit result when a 2xx response lacks a usable correlation ID", async () => {
@@ -368,26 +385,114 @@ it("keeps the default compose commit result when a 2xx response lacks a usable c
   }
 });
 
-it("preserves future finality stages and routes for existing compose and script updates", async () => {
-  const wire = {
-    status: "awaiting_finality",
+it("opts into replacement confirmation for an official script upgrade without reusing a stale ID", async () => {
+  const replacementRequired = (correlationId: string) => ({
+    error_code: "ERR-03-067",
+    message: "Confirm that you want to replace the pending CVM update.",
+    details: [
+      { field: "correlation_id", value: correlationId },
+      { field: "stage", value: "safe" },
+    ],
+  });
+  const original = replacementRequired("Pending-Operation-A");
+  const changed = replacementRequired("Pending-Operation-B");
+  const accepted = {
+    status: "in_progress",
+    message: "Update accepted.",
     correlation_id: finalityWait.correlation_id,
-    finality_wait: futureFinalityWait,
+    finality_wait: finalityWait,
   };
-  const withMessage = { ...wire, message: "Update accepted." };
   const { client, requests } = setupHttp(
-    Response.json(wire, { status: 202 }),
-    ...Array.from({ length: 3 }, () => Response.json(withMessage, { status: 202 })),
+    Response.json(original, { status: 412 }),
+    Response.json(changed, { status: 412 }),
+    Response.json(accepted, { status: 202 }),
   );
-  const request = { id: cvmId, compose_hash: previewHash, transaction_hash: "a1".repeat(32) };
-  expect(await commitCvmComposeFileUpdate(client, { ...request, encrypted_env: undefined, env_keys: undefined })).toEqual(wire);
-  expect(await updateDockerCompose(client, { ...request, docker_compose_file: "services: {}" })).toEqual(withMessage);
-  expect(await updatePreLaunchScript(client, { ...request, pre_launch_script: "true" })).toEqual(withMessage);
-  expect(await upgradePreLaunchScript(client, request)).toEqual(withMessage);
-  expect(requests).toMatchObject([
-    { url: `${endpoint}/cvms/${cvmId}/compose_file`, method: "PATCH", body: { transaction_hash: request.transaction_hash } },
-    { url: `${endpoint}/cvms/${cvmId}/docker-compose`, method: "PATCH" },
-    { url: `${endpoint}/cvms/${cvmId}/pre-launch-script`, method: "PATCH" },
-    { url: `${endpoint}/cvms/${cvmId}/pre-launch-script/upgrade-to-latest-official`, method: "POST" },
-  ]);
+  const request = { id: cvmId, compose_hash: previewHash, transaction_hash: "already-registered" };
+  await expect(client.safeUpgradePreLaunchScript({ ...request, confirmFinalityReplacement: "none" }))
+    .resolves.toMatchObject({ success: false, error: { status: 412, errorCode: "ERR-03-067", detail: original } });
+  await expect(client.upgradePreLaunchScript({ ...request, confirmFinalityReplacement: "Pending-Operation-A" }))
+    .rejects.toMatchObject({ status: 412, errorCode: "ERR-03-067", detail: changed });
+  await expect(client.upgradePreLaunchScript({ ...request, confirmFinalityReplacement: "Pending-Operation-B" }))
+    .resolves.toEqual(accepted);
+  expect(requests.map(({ headers, body }) => ({
+    confirmation: headers.get("X-Confirm-Finality-Replacement"),
+    composeHash: headers.get("X-Compose-Hash"),
+    transactionHash: headers.get("X-Transaction-Hash"),
+    body,
+  }))).toEqual(["none", "Pending-Operation-A", "Pending-Operation-B"].map((confirmation) => ({
+    confirmation,
+    composeHash: previewHash,
+    transactionHash: "already-registered",
+    body: undefined,
+  })));
 });
+
+// PATCH /envs HTTP 202 bodies captured from the integrated ASGI run.
+const capturedEnvWait = {
+  message: "CVM update accepted. It will apply after the KMS honors the on-chain change.",
+  correlation_id: "8884fa5816c2ed4c69d57b60ca964893",
+  status: "in_progress",
+  finality_wait: {
+    operation: "update",
+    correlation_id: "8884fa5816c2ed4c69d57b60ca964893",
+    phase: "awaiting_finality",
+    stage: "submitted",
+    stages: ["submitted", "finalized", "applying"],
+    transaction: {
+      hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+      block_number: 100,
+      chain_id: 1,
+    },
+    finality: {
+      block_tag: "finalized",
+      policy_block_number: 99,
+      blocks_remaining: 1,
+      eta_seconds: null,
+    },
+  },
+  allowed_envs_changed: true,
+};
+const capturedEnvNoChange = {
+  message: "Environment unchanged",
+  correlation_id: "",
+  status: "no_change",
+  allowed_envs_changed: false,
+};
+
+it.each([capturedEnvWait, capturedEnvNoChange])(
+  "preserves the captured HTTP 202 envs response with status $status",
+  async (wire) => {
+    const { client } = setupHttp(Response.json(wire, { status: 202 }));
+    await expect(updateCvmEnvs(client, { id: cvmId, encrypted_env: "abcd" })).resolves.toEqual(wire);
+  },
+);
+
+it.each(["in_progress", "future_status", "awaiting_finality"])(
+  "preserves the HTTP 202 envelope and finality metadata for update status %s",
+  async (status) => {
+    const wire = {
+      status,
+      message: "Update accepted.",
+      correlation_id: finalityWait.correlation_id,
+      finality_wait: futureFinalityWait,
+    };
+    const envResult = { ...wire, allowed_envs_changed: true };
+    const { client, requests } = setupHttp(
+      ...Array.from({ length: 4 }, () => Response.json(wire, { status: 202 })),
+      Response.json(envResult, { status: 202 }),
+    );
+    const request = { id: cvmId, compose_hash: previewHash, transaction_hash: "a1".repeat(32) };
+    expect(await commitCvmComposeFileUpdate(client, { ...request, encrypted_env: undefined, env_keys: undefined })).toEqual(wire);
+    expect(await updateDockerCompose(client, { ...request, docker_compose_file: "services: {}" })).toEqual(wire);
+    expect(await updatePreLaunchScript(client, { ...request, pre_launch_script: "true" })).toEqual(wire);
+    expect(await upgradePreLaunchScript(client, request)).toEqual(wire);
+    expect(await updateCvmEnvs(client, { ...request, encrypted_env: "abcd" })).toEqual(envResult);
+    expect(requests).toMatchObject([
+      { url: `${endpoint}/cvms/${cvmId}/compose_file`, method: "PATCH", body: { transaction_hash: request.transaction_hash } },
+      { url: `${endpoint}/cvms/${cvmId}/docker-compose`, method: "PATCH" },
+      { url: `${endpoint}/cvms/${cvmId}/pre-launch-script`, method: "PATCH" },
+      { url: `${endpoint}/cvms/${cvmId}/pre-launch-script/upgrade-to-latest-official`, method: "POST" },
+      { url: `${endpoint}/cvms/${cvmId}/envs`, method: "PATCH", body: { encrypted_env: "abcd", compose_hash: request.compose_hash, transaction_hash: request.transaction_hash } },
+    ]);
+  },
+);

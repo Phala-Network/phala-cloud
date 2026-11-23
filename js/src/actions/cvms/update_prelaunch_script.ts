@@ -36,7 +36,7 @@ import { PhalaCloudError } from "../../utils/errors";
  *   pre_launch_script: script
  * })
  *
- * if (result.status === 'precondition_required') {
+ * if ('compose_hash' in result) {
  *   // Register compose hash on-chain and get transaction hash
  *   const txHash = await registerComposeHashOnChain(
  *     result.compose_hash,
@@ -62,8 +62,7 @@ import { PhalaCloudError } from "../../utils/errors";
  * `UpdatePreLaunchScriptResult | unknown`
  *
  * Returns either:
- * - `{ status: "in_progress", ... }` - Update initiated successfully
- * - `{ status: "awaiting_finality", ... }` - Update accepted and waiting for on-chain finality
+ * - `{ status: "in_progress", ... }` - Update accepted; `finality_wait` is present while waiting for on-chain finality
  * - `{ status: "precondition_required", compose_hash: "...", ... }` - Compose hash verification required
  *
  * Return type depends on schema parameter.
@@ -108,12 +107,12 @@ import { PhalaCloudError } from "../../utils/errors";
  * })
  *
  * if (result.success) {
- *   if (result.data.status === 'precondition_required') {
+ *   if ('compose_hash' in result.data) {
  *     console.log(`Compose hash: ${result.data.compose_hash}`)
  *     console.log(`App ID: ${result.data.app_id}`)
  *     // Register on-chain and retry with transaction_hash
- *   } else {
- *     console.log(`Update started: ${result.data.correlation_id}`)
+ *   } else if ('correlation_id' in result.data) {
+ *     console.log(`Update accepted: ${result.data.correlation_id}`)
  *   }
  * } else {
  *   if ("isRequestError" in result.error) {
@@ -152,10 +151,8 @@ export const UpdatePreLaunchScriptRequestSchema = refineCvmId(
 });
 
 // Response when update is successfully initiated (202)
-const UpdatePreLaunchScriptInProgressSchema = z.object({
-  status: z.literal("in_progress"),
+const UpdatePreLaunchScriptInProgressSchema = CvmFinalityWaitAcceptedSchema.extend({
   message: z.string(),
-  correlation_id: z.string(),
 });
 
 // Response when compose hash verification is required (465)
@@ -175,10 +172,9 @@ const UpdatePreLaunchScriptNoChangeSchema = z.object({
 
 // Union type for the result
 export const UpdatePreLaunchScriptResultSchema = z.union([
-  UpdatePreLaunchScriptInProgressSchema,
   UpdatePreLaunchScriptPreconditionRequiredSchema,
   UpdatePreLaunchScriptNoChangeSchema,
-  CvmFinalityWaitAcceptedSchema.extend({ message: z.string() }),
+  UpdatePreLaunchScriptInProgressSchema,
 ]);
 
 export type UpdatePreLaunchScriptRequest = z.input<typeof UpdatePreLaunchScriptRequestSchema>;

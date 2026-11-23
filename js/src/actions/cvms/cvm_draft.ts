@@ -89,7 +89,6 @@ export type ApplyCvmDraftRequest = z.input<typeof ApplyCvmDraftRequestSchema>;
 export const ApplyCvmDraftResultSchema = z.discriminatedUnion("requiresOnChainHash", [
   CvmUpdateAcceptedFieldsSchema.extend({
     requiresOnChainHash: z.literal(false),
-    status: z.string().optional(),
   }),
   CvmUpdateHashRequiredSchema,
 ]);

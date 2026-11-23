@@ -70,8 +70,7 @@ const { action: confirmCvmPatch, safeAction: safeConfirmCvmPatch } = defineActio
       headers: cvmUpdateCommitHeaders(parsed.composeHash, parsed.transactionHash),
     },
   );
-  const { status: _status, ...accepted } = readCvmUpdateAcceptance(response);
-  return accepted;
+  return readCvmUpdateAcceptance(response);
 });
 
 export { confirmCvmPatch, safeConfirmCvmPatch };

@@ -58,6 +58,7 @@ export type WaitForCvmFinalityResult = CvmFinalityOperation & { status: "complet
 const OperationFailureReasonSchema = z.enum([
   "tx_reverted",
   "tx_dropped",
+  "registration_removed",
   "superseded",
   "outdated",
   "cancelled",

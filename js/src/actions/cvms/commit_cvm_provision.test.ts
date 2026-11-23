@@ -87,8 +87,7 @@ describe("commitCvmProvision", () => {
     } as const;
     const response = {
       ...mockCvmData,
-      status: "awaiting_finality",
-      correlation_id: finality.correlation_id,
+      status: "starting",
       finality_wait: finality,
     };
     mockPost.mockResolvedValueOnce(response);

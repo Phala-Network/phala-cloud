@@ -87,7 +87,7 @@ import type { CommitCvmProvisionResponse } from "../../types/version-mappings";
  * - **encrypted_env**: Hex-encoded encrypted environment variables
  * - **env_keys**: List of environment variable keys to allow
  * - **transaction_hash**: On-chain registration transaction hash, if available.
- *   A response with `status: "awaiting_finality"` means that the CVM has been accepted but has not started.
+ *   A response with `finality_wait` means that the CVM has been accepted but must wait before starting.
  * - **kms_id**: KMS instance identifier (if using specific KMS)
  * - **contract_address**: On-chain KMS contract address (required for ETHEREUM/BASE KMS)
  * - **deployer_address**: Deployer address for on-chain verification (required for ETHEREUM/BASE KMS)

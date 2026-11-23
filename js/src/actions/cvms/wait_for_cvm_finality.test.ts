@@ -179,6 +179,7 @@ describe("waitForCvmFinality", () => {
 
   it.each([
     ["failed", "tx_dropped", "tx_dropped"],
+    ["failed", "registration_removed", "registration_removed"],
     ["failed", "superseded", "superseded"],
     ["failed", "cancelled", "cancelled"],
     ["failed", "boot_failed", "boot_failed"],
