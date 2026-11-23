@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CvmFinalityWaitAcceptedSchema, openEnum } from "../../types/cvm_finality";
+import { CvmFinalityWaitAcceptedSchema } from "../../types/cvm_finality";
 import { type Client } from "../../client";
 import { CvmIdObjectSchema, CvmIdSchema, refineCvmId } from "../../types/cvm_id";
 import { KmsInfoSchema } from "../../types/kms_info";
@@ -154,7 +154,13 @@ export const UpdateCvmEnvsRequestSchema = refineCvmId(
 // HTTP 202 acknowledges an accepted update or confirms the environment is unchanged.
 const UpdateCvmEnvsInProgressSchema = CvmFinalityWaitAcceptedSchema.extend({
   message: z.string(),
-  status: openEnum(["in_progress", "no_change"]),
+  // Keep the approval-required branch distinguishable by status for existing SDK callers.
+  status: z
+    .string()
+    .refine((status) => status !== "precondition_required")
+    .transform((status): "in_progress" | "no_change" =>
+      status === "no_change" ? "no_change" : "in_progress",
+    ),
   allowed_envs_changed: z.boolean(),
 });
 
