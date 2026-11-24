@@ -24,8 +24,22 @@ import {
 	type CvmsInitScriptsCommandInput,
 } from "./command";
 
+function needsDataWipeConfirm(slug: InitScriptSlug): boolean {
+	return slug === "docker_cleanup" || slug === "runtime_tmpfs";
+}
+
 function selectedSlugs(scripts: CvmInitScripts): InitScriptSlug[] {
-	return scripts.items.filter((item) => item.selected).map((item) => item.slug);
+	return scripts.items
+		.filter((item) => item.selected)
+		.map((item) => item.slug)
+		.filter(isInitScriptSlug);
+}
+
+/** Selected slugs this CLI version does not know; rebuilding the set would drop them. */
+function unknownSelectedSlugs(scripts: CvmInitScripts): string[] {
+	return scripts.items
+		.filter((item) => item.selected && !isInitScriptSlug(item.slug))
+		.map((item) => item.slug);
 }
 
 function printScripts(scripts: CvmInitScripts): void {
@@ -143,6 +157,13 @@ async function runCvmsInitScriptsCommand(
 				);
 		} else if (hasSlug) {
 			const slug = input.slug as InitScriptSlug;
+			const unknown = unknownSelectedSlugs(scripts);
+			if (unknown.length > 0) {
+				context.fail(
+					`This CVM runs init scripts this CLI version does not know (${unknown.join(", ")}). Upgrade the CLI and try again.`,
+				);
+				return 1;
+			}
 			const current = selectedSlugs(scripts);
 			const enabled = current.includes(slug);
 			if (input.state === "on" && enabled) {
@@ -161,8 +182,8 @@ async function runCvmsInitScriptsCommand(
 					);
 					return 1;
 				}
-				if (slug === "docker_cleanup" && !input.confirmDataWipe) {
-					context.fail("Turning on docker_cleanup needs --confirm-data-wipe.");
+				if (needsDataWipeConfirm(slug) && !input.confirmDataWipe) {
+					context.fail(`Turning on ${slug} needs --confirm-data-wipe.`);
 					return 1;
 				}
 			}
@@ -178,7 +199,7 @@ async function runCvmsInitScriptsCommand(
 						...context.cvmId,
 						init_scripts: next,
 						confirm_data_wipe:
-							slug === "docker_cleanup" && input.state === "on"
+							needsDataWipeConfirm(slug) && input.state === "on"
 								? true
 								: undefined,
 						prepareOnly: input.prepareOnly,

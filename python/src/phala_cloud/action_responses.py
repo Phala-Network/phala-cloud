@@ -11,7 +11,6 @@ from .models.base import CloudModel
 from .models.cvms import (
     Certificate,
     CvmInfoDetailV20261111,
-    InitScriptSlug,
     PaginatedCvmInfosV20251028,
     PaginatedCvmInfosV20260121,
     PaginatedCvmInfosV20260522,
@@ -282,7 +281,8 @@ class AppLaunchTokenResponse(CloudModel):
 
 
 class CvmInitScript(CloudModel):
-    slug: InitScriptSlug
+    # Any string, so slugs added later still parse.
+    slug: str
     # The CVM's current compose runs this script.
     selected: bool
     # The caller may select this script for this CVM's compose and OS image.

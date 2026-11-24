@@ -142,6 +142,22 @@ async def test_get_cvm_init_scripts(use_async: bool) -> None:
 
 @pytest.mark.parametrize("use_async", [False, True])
 @pytest.mark.asyncio
+async def test_get_cvm_init_scripts_accepts_slugs_added_later(use_async: bool) -> None:
+    payload = {
+        "items": [
+            {"slug": "runtime_tmpfs", "selected": True, "selectable": True},
+            {"slug": "future_script", "selected": False, "selectable": False},
+        ],
+        "has_custom_scripts": False,
+    }
+    recorder = _Recorder(lambda _: httpx.Response(200, json=payload))
+    result = await _run(use_async, recorder, "get_cvm_init_scripts", {"id": "cvm-1"})
+
+    assert [item.slug for item in result.items] == ["runtime_tmpfs", "future_script"]
+
+
+@pytest.mark.parametrize("use_async", [False, True])
+@pytest.mark.asyncio
 async def test_get_cvm_user_config_returns_the_launch_token(use_async: bool) -> None:
     payload = {
         "hostname": "my-app",

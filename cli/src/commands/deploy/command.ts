@@ -18,7 +18,11 @@ import { z } from "zod";
 // always a slug, even if a file of the same name exists; pass ./docker_cleanup
 // to send a file. Other values are script file paths (create only, admin only:
 // Phala Cloud ignores raw scripts for non-admin accounts; at most 5 files).
-export const INIT_SCRIPT_SLUGS = ["docker_cleanup", "env_merge"] as const;
+export const INIT_SCRIPT_SLUGS = [
+	"docker_cleanup",
+	"runtime_tmpfs",
+	"env_merge",
+] as const;
 export type InitScriptSlug = (typeof INIT_SCRIPT_SLUGS)[number];
 
 export function isInitScriptSlug(value: string): value is InitScriptSlug {
@@ -238,7 +242,7 @@ export const deployCommandMeta: CommandMeta = {
 		{
 			name: "init-script",
 			description:
-				"Platform init script to run on every boot: docker_cleanup or env_merge (repeatable). On update, replaces the current set.",
+				"Platform init script to run on every boot: docker_cleanup, runtime_tmpfs or env_merge (repeatable). On update, replaces the current set.",
 			type: "string[]",
 			target: "initScript",
 			group: "advanced",
@@ -302,7 +306,7 @@ export const deployCommandMeta: CommandMeta = {
 		{
 			name: "confirm-data-wipe",
 			description:
-				"Confirm an update that turns on docker_cleanup or --ephemeral-data-disk, which erase data on every boot. Update only.",
+				"Confirm an update that turns on docker_cleanup, runtime_tmpfs or --ephemeral-data-disk, which erase data or leave existing container data on disk unused. Update only.",
 			type: "boolean",
 			target: "confirmDataWipe",
 			group: "advanced",

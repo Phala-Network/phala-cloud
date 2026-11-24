@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { InitScriptSlugSchema } from "../../types/app_compose";
 import { CvmIdSchema, type CvmIdInput } from "../../types/cvm_id";
 import { defineAction } from "../../utils/define-action";
 
 export const CvmInitScriptSchema = z.object({
-  slug: InitScriptSlugSchema,
+  /** Platform script slug. Any string, so slugs added later still parse. */
+  slug: z.string(),
   /** The CVM's current compose runs this script. */
   selected: z.boolean(),
   /** The caller may select this script for this CVM's compose and OS image. */

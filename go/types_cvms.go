@@ -650,13 +650,18 @@ func (g GPUConfig) MarshalJSON() ([]byte, error) {
 }
 
 // InitScriptSlug names a platform init script. Phala Cloud fixes the run
-// order: docker_cleanup, then env_merge.
+// order: docker_cleanup, runtime_tmpfs, then env_merge. docker_cleanup and
+// runtime_tmpfs cannot be selected together.
 type InitScriptSlug string
 
 const (
 	// InitScriptDockerCleanup erases all local container-runtime stores on
 	// every boot.
 	InitScriptDockerCleanup InitScriptSlug = "docker_cleanup"
+	// InitScriptRuntimeTmpfs mounts the Docker and containerd runtime
+	// directories on tmpfs, so container state lives in memory and never on
+	// the data disk. Needs dstack OS 0.6.x.
+	InitScriptRuntimeTmpfs InitScriptSlug = "runtime_tmpfs"
 	// InitScriptEnvMerge merges encrypted env on boot.
 	InitScriptEnvMerge InitScriptSlug = "env_merge"
 )
@@ -724,7 +729,7 @@ type PatchCVMRequest struct {
 	// InitScripts replaces the CVM's platform init scripts. nil leaves them
 	// unchanged; an empty non-nil slice removes them all.
 	InitScripts []InitScriptSlug `json:"init_scripts,omitzero"`
-	// ConfirmDataWipe confirms turning on docker_cleanup or
+	// ConfirmDataWipe confirms turning on docker_cleanup, runtime_tmpfs or
 	// requirements.ephemeral_data_disk, which erase data on every boot.
 	ConfirmDataWipe bool `json:"confirm_data_wipe,omitempty"`
 

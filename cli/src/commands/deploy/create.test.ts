@@ -329,7 +329,9 @@ describe("phala deploy (create)", () => {
 		expect((failure as Error).message).toContain(
 			"not a known init script slug",
 		);
-		expect((failure as Error).message).toContain("docker_cleanup, env_merge");
+		expect((failure as Error).message).toContain(
+			"docker_cleanup, runtime_tmpfs, env_merge",
+		);
 		expect((failure as Error).message).toContain("no such file");
 		expect((failure as Error).message).not.toContain("not both");
 		expect(requests).toEqual([]);

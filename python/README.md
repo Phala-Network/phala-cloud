@@ -105,7 +105,7 @@ Pass the CVM ID and the one-time token to `commit_cvm_update`. `compose_hash` an
 
 ## How do I change a CVM's app compose settings?
 
-Send `compose` to `patch_cvm` as a JSON Merge Patch: a set field sets the value, a field set to `None` removes the key, and a field you leave out is unchanged. `requirements` merges per key and cannot change `gpu_policy`. `init_scripts` replaces the CVM's platform init scripts with the given slugs (`docker_cleanup`, `env_merge`); `get_cvm_init_scripts` shows which ones the CVM runs and which it can select. Turning on `docker_cleanup` or `requirements.ephemeral_data_disk` erases data on every boot, so it also needs `confirm_data_wipe=True`.
+Send `compose` to `patch_cvm` as a JSON Merge Patch: a set field sets the value, a field set to `None` removes the key, and a field you leave out is unchanged. `requirements` merges per key and cannot change `gpu_policy`. `init_scripts` replaces the CVM's platform init scripts with the given slugs (`docker_cleanup`, `runtime_tmpfs`, `env_merge`); `get_cvm_init_scripts` shows which ones the CVM runs and which it can select. Turning on `docker_cleanup`, `runtime_tmpfs` or `requirements.ephemeral_data_disk` makes existing container data on disk unused or erases it, so it also needs `confirm_data_wipe=True`.
 
 ```python
 client.patch_cvm({
