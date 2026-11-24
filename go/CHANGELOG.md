@@ -1,3 +1,26 @@
+## [0.6.0-beta.1](https://github.com/Phala-Network/phala-cloud/compare/go/v0.5.4...go/v0.6.0-beta.1) (2026-11-24)
+
+### ⚠ BREAKING CHANGE
+
+* **go:** AppCompose is an alias of the upstream type, whose
+InitScript and SwapSize fields are now *InitScripts and *SwapSize.
+Projects whose go.mod still lists github.com/Dstack-TEE/dstack/sdk/go
+must run `go get github.com/Dstack-TEE/dstack/sdk/go@v0.6.1 && go mod tidy`
+after upgrading; otherwise the old module keeps supplying the dstack
+package and the build fails.
+
+### feat
+
+* **go:** default to the 2026-11-11 API version ([5bbe768](https://github.com/Phala-Network/phala-cloud/commit/5bbe7682d2a5d35e6ce736e8d3ca0ca75374564f))
+* **go:** move to the dstack sdk/go/dstack v0.6.1 module ([3951064](https://github.com/Phala-Network/phala-cloud/commit/3951064630fcccf940c5397b74ed2cf22f131d67))
+* **go:** support versioned CVM detail and GPU status ([2609c6a](https://github.com/Phala-Network/phala-cloud/commit/2609c6af1f98cafb51f66787a726c38e9b040672))
+
+### fix
+
+* **go:** allow creating a client without credentials for public endpoints ([b83287f](https://github.com/Phala-Network/phala-cloud/commit/b83287fe4a57071966b8824afd078acca4159c56))
+* **go:** retry rate-limited lookups for one-shot log fetches ([b272c1f](https://github.com/Phala-Network/phala-cloud/commit/b272c1fff12f14dfc54ab9011cc7edad24badb70))
+* **go:** retry rate-limited reads and bound Retry-After ([96ed09e](https://github.com/Phala-Network/phala-cloud/commit/96ed09e066d0ab337b501aa2731ae1c194e060eb))
+* **sdk:** recover log followers after idle transport disconnects ([7a098db](https://github.com/Phala-Network/phala-cloud/commit/7a098dba75c7e18cd76ae9864b970a2afe7ee198))
 ## [0.5.4](https://github.com/Phala-Network/phala-cloud/compare/go/v0.5.3...go/v0.5.4) (2026-11-11)
 
 ### fix
