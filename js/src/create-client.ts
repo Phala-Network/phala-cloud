@@ -318,6 +318,7 @@ const additionalActions = {
   safeReplicateCvm: actions.safeReplicateCvm,
   watchCvmState: actions.watchCvmState,
   waitForCvmFinality: actions.waitForCvmFinality,
+  waitForAppEnvEncryptPubKey: actions.waitForAppEnvEncryptPubKey,
   safeWaitForCvmFinality: actions.safeWaitForCvmFinality,
   listCvmDrafts: actions.listCvmDrafts,
   safeListCvmDrafts: actions.safeListCvmDrafts,
@@ -839,9 +840,9 @@ export interface Client<V extends ApiVersion = DefaultApiVersion>
   listCvmDrafts<T extends z.ZodTypeAny>(parameters: { schema: T }): Promise<z.infer<T>>;
   listCvmDrafts(parameters: { schema: false }): Promise<unknown>;
   safeListCvmDrafts(): Promise<SafeResult<actions.CvmDraftList>>;
-  safeListCvmDrafts<T extends z.ZodTypeAny>(parameters: { schema: T }): Promise<
-    SafeResult<z.infer<T>>
-  >;
+  safeListCvmDrafts<T extends z.ZodTypeAny>(parameters: {
+    schema: T;
+  }): Promise<SafeResult<z.infer<T>>>;
   safeListCvmDrafts(parameters: { schema: false }): Promise<SafeResult<unknown>>;
   getAppList(
     request?: actions.GetAppListRequest,
