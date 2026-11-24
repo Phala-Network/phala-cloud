@@ -37,8 +37,11 @@ class GetCvmListRequest(CloudModel):
         return value
 
 
-InitScriptSlug = Literal["docker_cleanup", "env_merge"]
-"""Platform init script slug. Phala Cloud fixes the run order: docker_cleanup, then env_merge."""
+InitScriptSlug = Literal["docker_cleanup", "runtime_tmpfs", "env_merge"]
+"""Platform init script slug.
+
+Phala Cloud fixes the run order: docker_cleanup, runtime_tmpfs, then env_merge.
+"""
 
 
 class ComposePortAttrs(BaseModel):

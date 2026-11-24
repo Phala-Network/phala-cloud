@@ -450,7 +450,7 @@ class PatchCvmRequest(CvmIdRequest):
     compose: ComposePatch | None = None
     # Platform init scripts this CVM runs, replacing the current set.
     init_scripts: list[InitScriptSlug] | None = None
-    # Confirms turning on docker_cleanup or requirements.ephemeral_data_disk,
+    # Confirms turning on docker_cleanup, runtime_tmpfs or requirements.ephemeral_data_disk,
     # which erase data on every boot.
     confirm_data_wipe: bool | None = None
     # Sent as the X-Prepare-Only header: on contract-owned KMS, a 465 response
