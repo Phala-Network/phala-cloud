@@ -409,6 +409,10 @@ jobs:
             -n changelog.config.js \
             --tag-prefix "${PACKAGE}-v"
 
+          # conventional-changelog writes `*` bullets; Biome formats Markdown
+          # with `-`, so the committed changelog would fail the PR format check.
+          (cd "${PACKAGE}" && bun run fmt)
+
           # Generate release notes for GitHub Release body
           conventional-changelog -p conventionalcommits \
             --commit-path "${PACKAGE}" \
