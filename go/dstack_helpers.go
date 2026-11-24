@@ -23,9 +23,11 @@ type DockerConfig = dstacksdk.DockerConfig
 type KeyProviderKind = dstacksdk.KeyProviderKind
 
 const (
-	KeyProviderNone  = dstacksdk.KeyProviderNone
-	KeyProviderKMS   = dstacksdk.KeyProviderKMS
-	KeyProviderLocal = dstacksdk.KeyProviderLocal
+	KeyProviderNone   = dstacksdk.KeyProviderNone
+	KeyProviderKMS    = dstacksdk.KeyProviderKMS
+	KeyProviderLocal  = dstacksdk.KeyProviderLocal
+	KeyProviderTPM    = dstacksdk.KeyProviderTPM
+	KeyProviderSevSnp = dstacksdk.KeyProviderSevSnp
 )
 
 // VerifyEnvEncryptPublicKeyOptions configures timestamp validation for signature verification.

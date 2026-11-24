@@ -49,10 +49,8 @@ def bump_version(version: str, release_type: str, prerelease_tag: str = "") -> s
 
 
 def check_version_exists(package_name: str, version: str) -> bool:
-    """Check if a version exists on PyPI."""
-    # Convert prerelease format: 1.0.0-beta.1 -> 1.0.0b1 (PEP 440)
-    pypi_version = to_pep440(version)
-    url = f"https://pypi.org/pypi/{package_name}/{pypi_version}/json"
+    """Check if a PEP 440 version exists on PyPI."""
+    url = f"https://pypi.org/pypi/{package_name}/{version}/json"
     try:
         req = urllib.request.Request(url, method="HEAD")
         with urllib.request.urlopen(req, timeout=30) as resp:

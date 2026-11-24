@@ -1,3 +1,13 @@
+## [0.4.5b1](https://github.com/Phala-Network/phala-cloud/compare/python-v0.4.4...python-v0.4.5b1) (2026-11-24)
+
+### feat
+
+* **python:** default to the 2026-11-11 API version ([303d8be](https://github.com/Phala-Network/phala-cloud/commit/303d8bed31968e0312028704d92f005d541f9a4c))
+* **python:** support versioned CVM detail and GPU status ([08ff934](https://github.com/Phala-Network/phala-cloud/commit/08ff934611ce8e2ed4c460a82170a6896a3d3052))
+
+### fix
+
+* **sdk:** recover log followers after idle transport disconnects ([7a098db](https://github.com/Phala-Network/phala-cloud/commit/7a098dba75c7e18cd76ae9864b970a2afe7ee198))
 ## [0.4.4](https://github.com/Phala-Network/phala-cloud/compare/python-v0.4.3...python-v0.4.4) (2026-11-11)
 
 ### fix

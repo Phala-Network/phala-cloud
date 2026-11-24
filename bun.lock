@@ -52,7 +52,7 @@
       "name": "@phala/cloud",
       "version": "0.6.5",
       "dependencies": {
-        "@phala/dstack-sdk": "0.5.8",
+        "@phala/dstack-sdk": "0.6.0",
         "debug": "^4.4.1",
         "mitt": "^3.0.1",
         "ofetch": "^1.3.3",
@@ -186,6 +186,12 @@
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.28.2", "", { "os": "win32", "cpu": "x64" }, "sha512-5ebpxr3nWMzrL/rnUI755Jkuee0bHL/Gq0WTF9lvcpv73wAp5eu8MfBUgWK9bhWvZjj7yX8etf/8tI8Ney695g=="],
 
+    "@hpke/common": ["@hpke/common@1.13.0", "", {}, "sha512-PqaJR89RWJQmt/WOGuBLrcrtXtEMbWu91XIbxDjKDTDgKvqvhlxOzQ9BAf9a0Q+yqqbTtQ0pK6KUyVi2WMehbA=="],
+
+    "@hpke/core": ["@hpke/core@1.10.1", "", { "dependencies": { "@hpke/common": "^1.13.0" } }, "sha512-VZOk0rHC4vPsbW/fIRz7Q2IviSl0+9dRhP9yi/PmkKVKjj4vZDs1ufkN47twBFLZmiw37YFtTqBrxKAI7dlOrg=="],
+
+    "@hpke/dhkem-x25519": ["@hpke/dhkem-x25519@1.8.1", "", { "dependencies": { "@hpke/common": "^1.13.0" } }, "sha512-bAshBoHmVKJY8MQdl09E8dRsfPUfWwniqCOCAOAN6IlUZzpZFI/QG6hAXqIQpu/XNDPSl0tXYBocq4423whXpg=="],
+
     "@iarna/toml": ["@iarna/toml@2.2.5", "", {}, "sha512-trnsAYxU3xnS1gPHPyU961coFyLkh4gAD/0zQ5mymY4yOZ+CYvsPqUbOFSw0aDM4y0tV7tiFxL/1XfXPNC6IPg=="],
 
     "@inquirer/ansi": ["@inquirer/ansi@2.1.1", "", {}, "sha512-WwCc5T9554vU/M3W6mztOJvZK/5RgMwQsGlSZSZpKA/H2IfsTWIPdn1WiS8+HHjhe3H0IsmQCXUlDbvGM6vvuA=="],
@@ -242,7 +248,7 @@
 
     "@phala/cloud": ["@phala/cloud@workspace:js"],
 
-    "@phala/dstack-sdk": ["@phala/dstack-sdk@0.5.8", "", { "peerDependencies": { "@noble/curves": "^1.8.1", "@noble/hashes": "^1.6.1", "@solana/web3.js": "^1.98.4", "viem": "^2.43.3" }, "optionalPeers": ["@noble/curves", "@solana/web3.js", "viem"] }, "sha512-VANlyo0Jj6pxmJl3zksHJ4/5y3VflApVmgsfcfmokk3KYKRBkW5oMkexBTR6lZaGVPOqJ48QGOLP/7CF3IEvFg=="],
+    "@phala/dstack-sdk": ["@phala/dstack-sdk@0.6.0", "", { "dependencies": { "@hpke/core": "^1.10.0", "@hpke/dhkem-x25519": "^1.8.0", "@noble/curves": "^1.8.1", "@noble/hashes": "^1.6.1" }, "peerDependencies": { "@solana/web3.js": "^1.98.4", "viem": "^2.43.3" }, "optionalPeers": ["@solana/web3.js", "viem"] }, "sha512-7MOCUpeaSewT+nKolzLydNmgE+C0mnoxXEDpeJ5wCpLpxcBWcjjxf+Bui71xsx5LKOlatPLuSKo3m8uY2LW8/A=="],
 
     "@rolldown/binding-android-arm64": ["@rolldown/binding-android-arm64@1.1.5", "", { "os": "android", "cpu": "arm64" }, "sha512-lZg8fqIv2v7FF237bwMgzGZEJvGL79/s5knJ/i6FmsGF4XXlzccZ4jb+TrFIxtSSxFtIpdsgrPZeMk1I9AFcyQ=="],
 
