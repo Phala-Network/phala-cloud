@@ -199,6 +199,9 @@ export {
 export {
   getAppEnvEncryptPubKey,
   safeGetAppEnvEncryptPubKey,
+  waitForAppEnvEncryptPubKey,
+  type AppEnvEncryptPubKeyFinality,
+  type WaitForAppEnvEncryptPubKeyOptions,
   GetAppEnvEncryptPubKeySchema,
   type GetAppEnvEncryptPubKeyRequest,
   type GetAppEnvEncryptPubKey,

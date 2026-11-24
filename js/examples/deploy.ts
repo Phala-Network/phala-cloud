@@ -1,13 +1,17 @@
-import fs from "fs";
+import type { EnvVar, KmsInfo, ProvisionCvmRequest } from "@phala/cloud";
+import {
+  addComposeHash,
+  type Client,
+  createClient,
+  deployAppAuth,
+  encryptEnvVars,
+  formatValidationErrors,
+  parseEnvVars,
+  ValidationError,
+  waitForAppEnvEncryptPubKey,
+} from "@phala/cloud";
 import arg from "arg";
-import { type Client, createClient } from "@phala/cloud";
-import { addComposeHash } from "@phala/cloud";
-import { deployAppAuth } from "@phala/cloud";
-import { encryptEnvVars } from "@phala/cloud";
-import { parseEnvVars } from "@phala/cloud";
-import { ValidationError, formatValidationErrors } from "@phala/cloud";
-import type { EnvVar, KmsInfo } from "@phala/cloud";
-import type { ProvisionCvmRequest } from "@phala/cloud";
+import fs from "fs";
 import type { Chain } from "viem";
 
 // ==================================================================
@@ -257,15 +261,16 @@ async function deploy_new_cvm(
     );
     console.log(`Contract deployed: app_id=${app_id}`);
 
-    // Get encryption public key for env vars
-    const kms_slug = assert_not_null(kms.slug, "KMS slug not found");
-    const pubkey_resp = await client.getAppEnvEncryptPubKey({
-      app_id: app_id,
-      kms: kms_slug,
-    });
-
-    const encrypted_env_vars =
-      env_vars.length > 0 ? await encryptEnvVars(env_vars, pubkey_resp.public_key) : undefined;
+    let encrypted_env_vars: string | undefined;
+    if (env_vars.length > 0) {
+      const kms_slug = assert_not_null(kms.slug, "KMS slug not found");
+      const { public_key } = await waitForAppEnvEncryptPubKey(
+        client,
+        { app_id, kms: kms_slug },
+        { retryLegacyTransientErrors: true },
+      );
+      encrypted_env_vars = await encryptEnvVars(env_vars, public_key);
+    }
 
     // Commit CVM with contract info
     result = await client.commitCvmProvision({
