@@ -18,10 +18,6 @@ This template gives AI coding tools and agents access to Figma file context thro
 - `BEARER_TOKEN`: Token required from MCP clients calling this deployment.
 - `FIGMA_API_KEY`: Figma personal access token used by the MCP server.
 
-## Mounted sockets
-
-- `/var/run/tappd.sock`: TEE attestation socket mounted into the app container.
-
 ## MCP client configuration
 
 ```json

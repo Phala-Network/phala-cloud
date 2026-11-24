@@ -6,7 +6,6 @@ services:
     ports:
       - "80:80"
     volumes:
-      - /var/run/tappd.sock:/var/run/tappd.sock
       - ./downloads:/app/downloads
     environment:
       NODE_ADDRESS: ${NODE_ADDRESS}

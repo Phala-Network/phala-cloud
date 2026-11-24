@@ -13,7 +13,6 @@ services:
       DEBUG: "${DEBUG:-true}"
       ADMIN_PASSWORD_HASH: "${ADMIN_PASSWORD_HASH}"
     volumes:
-      - /var/run/tappd.sock:/var/run/tappd.sock
       - akave_downloads:/app/downloads
     healthcheck:
       test:
