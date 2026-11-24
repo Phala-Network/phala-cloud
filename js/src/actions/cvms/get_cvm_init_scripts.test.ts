@@ -23,4 +23,18 @@ describe("getCvmInitScripts", () => {
     expect(result.items).toEqual(items);
     expect(result.has_custom_scripts).toBe(false);
   });
+
+  it("parses slugs it does not know yet", async () => {
+    const items = [
+      { slug: "runtime_tmpfs", selected: true, selectable: true, reason: null },
+      { slug: "future_script", selected: false, selectable: false, reason: null },
+    ];
+    const mockClient = {
+      get: vi.fn().mockResolvedValue({ items, has_custom_scripts: false }),
+    } as unknown as Client;
+
+    const result = await getCvmInitScripts(mockClient, { id: "my-cvm" });
+
+    expect(result.items.map((item) => item.slug)).toEqual(["runtime_tmpfs", "future_script"]);
+  });
 });

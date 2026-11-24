@@ -141,7 +141,7 @@ import { isValidHostname } from "../../utils/hostname";
  *   - Specify only if you need a different size than the default
  * - **env_keys**: List of allowed environment variable keys
  * - **listed**: Whether the CVM is publicly listed (default: false)
- * - **init_scripts**: Platform init script slugs (`docker_cleanup`, `env_merge`)
+ * - **init_scripts**: Platform init script slugs (`docker_cleanup`, `runtime_tmpfs`, `env_merge`)
  * - **launch_token**: Launch token (at least 32 bytes) the guest checks on every boot;
  *   Phala Cloud writes its hash into `compose_file.requirements.launch_token_hash`
  * - **generate_launch_token**: Let Phala Cloud generate the token for a new app; it is

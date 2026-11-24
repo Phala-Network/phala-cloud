@@ -88,7 +88,7 @@ export const ComposeRunnerSchema = z.enum(["docker-compose", "bash", "nerdctl-co
 export type ComposeRunner = z.infer<typeof ComposeRunnerSchema>;
 
 /** Platform init script slugs, in Phala Cloud's fixed run order. */
-export const InitScriptSlugSchema = z.enum(["docker_cleanup", "env_merge"]);
+export const InitScriptSlugSchema = z.enum(["docker_cleanup", "runtime_tmpfs", "env_merge"]);
 export type InitScriptSlug = z.infer<typeof InitScriptSlugSchema>;
 
 export const LooseAppComposeSchema = z
