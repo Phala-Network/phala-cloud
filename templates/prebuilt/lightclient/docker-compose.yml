@@ -35,7 +35,7 @@ services:
       - source: run.sh
         target: /root/run.sh
     volumes:
-      - /var/run/tappd.sock:/var/run/tappd.sock
+      - /var/run/dstack.sock:/var/run/dstack.sock
 
 configs:
   run.sh:
@@ -115,15 +115,16 @@ configs:
       fetch_block
 
       RESPONSE_HASH="$$(sha256sum response.txt | cut -d " " -f 1)"
-      REPORT_DATA="$$(printf "%s" "$${RESPONSE_HASH}" | od -An -v -tx1 | tr -d " \n")"
+      # report_data = sha512("app-data:" || hex sha256 of response.txt)
+      REPORT_DATA="$$(printf "app-data:%s" "$${RESPONSE_HASH}" | sha512sum | cut -d " " -f 1)"
       PAYLOAD="{\"report_data\":\"$${REPORT_DATA}\"}"
 
       echo "response.txt sha256=$${RESPONSE_HASH}"
-      echo "Requesting tappd attestation for response hash"
+      echo "Requesting dstack attestation for response hash"
       ATTEST="$$(curl -fsS \
-        --unix-socket /var/run/tappd.sock \
+        --unix-socket /var/run/dstack.sock \
         -H "Content-Type: application/json" \
         -d "$${PAYLOAD}" \
-        http://localhost/prpc/Tappd.TdxQuote?json)"
+        http://localhost/Attest)"
 
       printf "ATTEST=%s\n" "$${ATTEST}" | tee -a response.txt

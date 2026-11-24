@@ -1,6 +1,6 @@
 # TEE Coprocessors in Dstack
 
-This Phala Cloud prebuilt template runs the Helios Ethereum light client inside a Dstack CVM, queries the latest block through Helios, and requests a tappd attestation over the hash of the captured block response.
+This Phala Cloud prebuilt template runs the Helios Ethereum light client inside a Dstack CVM, queries the latest block through Helios, and requests a dstack attestation over the hash of the captured block response.
 
 It is maintained locally so Phala Cloud users are not blocked on upstream template changes.
 
@@ -12,7 +12,7 @@ It is maintained locally so Phala Cloud users are not blocked on upstream templa
 - Upstream license: Apache License 2.0
 - Base image: `ubuntu:24.04@sha256:b59d21599a2b151e23eea5f6602f4af4d7d31c4e236d22bf0b62b86d2e386b8f`
 
-This template keeps the upstream shape: inline Dockerfile, Foundry `cast`, Helios, and `/var/run/tappd.sock`. It follows the maintained upstream tutorial behavior for Helios `0.11.0` on mainnet with fallback checkpoint endpoint `https://sync-mainnet.beaconcha.in`, while keeping `ETH_RPC_URL` required for Phala Cloud deployment. The local runtime script uses `set -euo pipefail`, waits for `eth_blockNumber`, retries `cast block`, prints block data, hashes `response.txt`, then requests the tappd quote.
+This template keeps the upstream shape: inline Dockerfile, Foundry `cast`, and Helios. Unlike upstream, it requests the attestation from `/var/run/dstack.sock` (`Attest`) instead of the deprecated `tappd.sock`, so it works on Intel TDX and AMD SEV-SNP nodes alike (`GetQuote` and `Tappd.TdxQuote` are TDX only). It follows the maintained upstream tutorial behavior for Helios `0.11.0` on mainnet with fallback checkpoint endpoint `https://sync-mainnet.beaconcha.in`, while keeping `ETH_RPC_URL` required for Phala Cloud deployment. The local runtime script uses `set -euo pipefail`, waits for `eth_blockNumber`, retries `cast block`, prints block data, hashes `response.txt`, then requests the attestation.
 
 ## Runtime Dependency Note
 
@@ -35,8 +35,8 @@ At runtime it:
 3. Retries `cast block latest --rpc-url http://127.0.0.1:8545`.
 4. Writes the block output to `response.txt` and prints it to logs.
 5. Computes `sha256sum response.txt`.
-6. Sends the hash as tappd `report_data`.
-7. Appends and prints `ATTEST=<tappd response>`.
+6. Requests an attestation from `/var/run/dstack.sock` (`Attest`) with `report_data = sha512("app-data:" || <sha256 hex>)`, the same digest the earlier `Tappd.TdxQuote` call produced.
+7. Appends and prints `ATTEST=<Attest response>`; verify it with the [dstack verifier](https://github.com/Dstack-TEE/dstack/tree/next/dstack/verifier).
 
 The template intentionally does not redact output. Do not put secrets in values that are expected to be printed by the workload.
 
@@ -49,7 +49,7 @@ A successful Phala Cloud smoke run should show:
 - `Fetching latest block through Helios`.
 - `cast block` output with block fields such as `hash`, `number`, `timestamp`, `transactions`, and gas fields.
 - `response.txt sha256=<64 hex characters>`.
-- `ATTEST=...` from `/var/run/tappd.sock`.
+- `ATTEST=...` from `/var/run/dstack.sock`.
 
 If Helios cannot sync or the RPC endpoint is invalid, the container should exit non-zero after the retry window instead of producing attestation-only evidence.
 
@@ -68,7 +68,7 @@ The `docker compose config` command only validates the template shape. It does n
 ## Update Procedure
 
 1. Inspect the current upstream `Dstack-TEE/dstack-examples/tutorial/07-lightclient` files and record the source commit in this README.
-2. Compare upstream Dockerfile, Helios, Foundry, network, fallback checkpoint endpoint, and tappd request changes against this local template.
+2. Compare upstream Dockerfile, Helios, Foundry, network, fallback checkpoint endpoint, and attestation request changes against this local template.
 3. Keep the template self-contained with `dockerfile_inline` and `configs.run.sh.content`; do not depend on deploy-time files from the upstream repository.
 4. Keep the Ubuntu base image pinned by digest and verify that the digest is still available for `linux/amd64`.
 5. Re-run the local checks above.
