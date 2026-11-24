@@ -2,6 +2,7 @@ import {
 	type DeployAppAuth,
 	GetAppEnvEncryptPubKeySchema,
 	PhalaCloudError,
+	ResourceError,
 } from "@phala/cloud";
 import { globalCommandOptions } from "@/src/core/common-flags";
 import type { CommandContext } from "@/src/core/types";
@@ -117,6 +118,12 @@ function existingContractCommand(
 
 function isRetryablePubkeyError(error: unknown): error is PhalaCloudError {
 	if (!(error instanceof PhalaCloudError)) return false;
+	if (error instanceof ResourceError) {
+		// The server waits for the registration block to finalize (409), or
+		// says the app is not registered on this KMS's chain (404).
+		if (error.errorCode === "ERR-12-008") return true;
+		if (error.errorCode === "ERR-12-009") return false;
+	}
 	if ([0, 408, 429, 502, 503, 504].includes(error.status)) return true;
 	// Some API versions can distinguish a not-yet-registered app from an outage.
 	// Do not retry invalid IDs, KMS mismatches, or use-of-sealed-key errors.

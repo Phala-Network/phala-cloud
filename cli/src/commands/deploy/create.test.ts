@@ -531,9 +531,18 @@ describe("phala deploy on-chain create finality", () => {
 		).toBe(`?correlation_id=${CREATE_FINALITY.correlation_id}`);
 	});
 
-	test.each([false, true])(
-		"retries and verifies a fresh registration's key with wait=%s",
-		async (wait) => {
+	test.each([
+		[false, 502, "ERR-02-023", "KMS authorization backend unavailable"],
+		[true, 502, "ERR-02-023", "KMS authorization backend unavailable"],
+		[
+			false,
+			409,
+			"ERR-12-008",
+			"The app is registered, but its registration has not reached the KMS policy block yet",
+		],
+	])(
+		"retries and verifies a fresh registration's key with wait=%s after %i %s",
+		async (wait, firstStatus, firstCode, firstMessage) => {
 			configureProvision();
 			accept();
 			const keyResponse = await signedPubkey();
@@ -543,11 +552,8 @@ describe("phala deploy on-chain create finality", () => {
 				expect(urlPath).toBe(pubkeyPath);
 				return ++keyReads === 1
 					? Response.json(
-							{
-								error_code: "ERR-02-023",
-								message: "KMS authorization backend unavailable",
-							},
-							{ status: 502 },
+							{ error_code: firstCode, message: firstMessage },
+							{ status: firstStatus },
 						)
 					: Response.json(keyResponse);
 			};
@@ -751,32 +757,36 @@ describe("phala deploy on-chain create finality", () => {
 		}
 	});
 
-	test("does not retry an explicit KMS mismatch or sign again", async () => {
-		configureProvision();
-		respondGet = () =>
-			Response.json(
-				{
-					error_code: "ERR-12-005",
-					message: "This app is bound to a different KMS.",
-				},
-				{ status: 409 },
-			);
-		const { exitCode, failure } = await deploy({
-			...input(),
-			env: ["SETTINGS=some-value"],
-		});
-		expect(exitCode).toBe(1);
-		const message = expectRecovery(failure);
-		expect(message).toContain("This app is bound to a different KMS.");
-		expect(message).toContain("The CVM was not submitted.");
-		expect(
-			requests.filter((request) => request.path === pubkeyPath),
-		).toHaveLength(1);
-		expect(
-			rpcCalls.filter((method) => method === "eth_sendRawTransaction"),
-		).toHaveLength(1);
-		expect(commit()).toBeUndefined();
-	});
+	test.each([
+		[409, "ERR-12-005", "This app is bound to a different KMS."],
+		[
+			404,
+			"ERR-12-009",
+			"The app is not registered with KMS 'base-test' on Base",
+		],
+	])(
+		"does not retry a definitive %i %s or sign again",
+		async (status, code, apiMessage) => {
+			configureProvision();
+			respondGet = () =>
+				Response.json({ error_code: code, message: apiMessage }, { status });
+			const { exitCode, failure } = await deploy({
+				...input(),
+				env: ["SETTINGS=some-value"],
+			});
+			expect(exitCode).toBe(1);
+			const message = expectRecovery(failure);
+			expect(message).toContain(apiMessage);
+			expect(message).toContain("The CVM was not submitted.");
+			expect(
+				requests.filter((request) => request.path === pubkeyPath),
+			).toHaveLength(1);
+			expect(
+				rpcCalls.filter((method) => method === "eth_sendRawTransaction"),
+			).toHaveLength(1);
+			expect(commit()).toBeUndefined();
+		},
+	);
 
 	test.each([[undefined], [["SETTINGS=some-value"]]])(
 		"resumes a provisioned existing contract through finality with env=%j",
