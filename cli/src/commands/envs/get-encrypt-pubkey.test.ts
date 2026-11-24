@@ -1,5 +1,14 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	mock,
+	spyOn,
+	test,
+} from "bun:test";
 import { createClient } from "@phala/cloud";
+import { setJsonMode } from "@/src/core/json-mode";
 import { getEncryptPubkey } from "./get-encrypt-pubkey";
 
 const appId = `0x${"a1".repeat(20)}`;
@@ -42,6 +51,11 @@ function mockFetch() {
 	} = globalThis;
 	return spyOn(transport, "fetch");
 }
+
+// Other test files in the same process can leave JSON mode on, which mutes progress output.
+beforeEach(() => {
+	setJsonMode(false);
+});
 
 afterEach(() => mock.restore());
 
