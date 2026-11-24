@@ -1,3 +1,4 @@
+## [0.6.0](https://github.com/Phala-Network/phala-cloud/compare/go/v0.6.0-beta.1...go/v0.6.0) (2026-11-24)
 ## [0.6.0-beta.1](https://github.com/Phala-Network/phala-cloud/compare/go/v0.5.4...go/v0.6.0-beta.1) (2026-11-24)
 
 ### ⚠ BREAKING CHANGE
