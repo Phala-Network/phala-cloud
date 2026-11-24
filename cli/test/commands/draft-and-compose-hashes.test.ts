@@ -514,7 +514,7 @@ function walletRpc(
 					transactions: [],
 				});
 			case "eth_call": {
-				const { data } = rpc.params?.[0] as { data: string };
+				const { data } = (rpc.params ?? [])[0] as { data: string };
 				if (data === "0x01ffc9a78c0524c4".padEnd(74, "0"))
 					return reply(bool(true));
 				if (data.startsWith(toFunctionSelector("currentAppEpoch()"))) {
