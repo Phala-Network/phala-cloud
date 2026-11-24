@@ -2,22 +2,22 @@
 
 ### feat
 
-* **cli:** pace API request starts ([9826244](https://github.com/Phala-Network/phala-cloud/commit/98262448b0dc848fb3a271f31749b490df1263b2))
-* **js:** add custom domain actions ([f770916](https://github.com/Phala-Network/phala-cloud/commit/f770916e469a14280f41a72f1a951c1285a054fd))
-* **js:** dual-generation DstackApp contract support with app epochs ([e897a61](https://github.com/Phala-Network/phala-cloud/commit/e897a6161058b22d9896adf34dc58e289306a330))
-* **js:** expose ssh_key_ids on provision and enabled_ssh_access on CVM info ([2bbdfda](https://github.com/Phala-Network/phala-cloud/commit/2bbdfdab503a58d3595cab45eee9debe40817fa0))
+- **cli:** pace API request starts ([9826244](https://github.com/Phala-Network/phala-cloud/commit/98262448b0dc848fb3a271f31749b490df1263b2))
+- **js:** add custom domain actions ([f770916](https://github.com/Phala-Network/phala-cloud/commit/f770916e469a14280f41a72f1a951c1285a054fd))
+- **js:** dual-generation DstackApp contract support with app epochs ([e897a61](https://github.com/Phala-Network/phala-cloud/commit/e897a6161058b22d9896adf34dc58e289306a330))
+- **js:** expose ssh_key_ids on provision and enabled_ssh_access on CVM info ([2bbdfda](https://github.com/Phala-Network/phala-cloud/commit/2bbdfdab503a58d3595cab45eee9debe40817fa0))
 
 ### fix
 
-* **cli:** retry rate-limited wait polls ([4c0de69](https://github.com/Phala-Network/phala-cloud/commit/4c0de69b8067bc548b16df95418b71789ac4291b))
-* **deps:** adapt to execa 10, noble curves v2 and biome 2 markdown formatting ([c0e3f79](https://github.com/Phala-Network/phala-cloud/commit/c0e3f79e9f4b6e15d913d85d3d84ffa1eab02a52))
-* **js:** epoch review follow-ups — removal range, cache scope, epoch reads ([2bb44e7](https://github.com/Phala-Network/phala-cloud/commit/2bb44e72907a9d5d870963d31b1e129067f5b56f))
-* **js:** no shared cache bucket for chain-less clients ([e88c7e1](https://github.com/Phala-Network/phala-cloud/commit/e88c7e1d41f4f8b7c7c9e7e1d30dcd05c654036f))
-* **sdk:** recover log followers after idle transport disconnects ([7a098db](https://github.com/Phala-Network/phala-cloud/commit/7a098dba75c7e18cd76ae9864b970a2afe7ee198))
+- **cli:** retry rate-limited wait polls ([4c0de69](https://github.com/Phala-Network/phala-cloud/commit/4c0de69b8067bc548b16df95418b71789ac4291b))
+- **deps:** adapt to execa 10, noble curves v2 and biome 2 markdown formatting ([c0e3f79](https://github.com/Phala-Network/phala-cloud/commit/c0e3f79e9f4b6e15d913d85d3d84ffa1eab02a52))
+- **js:** epoch review follow-ups — removal range, cache scope, epoch reads ([2bb44e7](https://github.com/Phala-Network/phala-cloud/commit/2bb44e72907a9d5d870963d31b1e129067f5b56f))
+- **js:** no shared cache bucket for chain-less clients ([e88c7e1](https://github.com/Phala-Network/phala-cloud/commit/e88c7e1d41f4f8b7c7c9e7e1d30dcd05c654036f))
+- **sdk:** recover log followers after idle transport disconnects ([7a098db](https://github.com/Phala-Network/phala-cloud/commit/7a098dba75c7e18cd76ae9864b970a2afe7ee198))
 
 ### refactor
 
-* Revert "chore(deps): hold back @types/node, typescript and @biomejs/biome major bumps" ([0a3c6b1](https://github.com/Phala-Network/phala-cloud/commit/0a3c6b1946732590900c41ff5c4f527c77c7c6f5))
+- Revert "chore(deps): hold back @types/node, typescript and @biomejs/biome major bumps" ([0a3c6b1](https://github.com/Phala-Network/phala-cloud/commit/0a3c6b1946732590900c41ff5c4f527c77c7c6f5))
 ## [0.6.5](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.4...js-v0.6.5) (2026-11-12)
 
 ### feat
