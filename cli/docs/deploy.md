@@ -61,7 +61,7 @@ Do not run concurrent `phala deploy` commands with the same compose file in one 
 | `--rpc-url <url>`            |                         | RPC URL for blockchain interaction                                                                                                                                         |
 | `--runner <runner>`          | docker-compose          | App runner: `docker-compose`, `nerdctl-compose` or `bash`. With `bash`, `--compose` is the script to run. `nerdctl-compose` and `bash` need the `compose_advanced` feature |
 | `--app-compose <path>`       |                         | Whole app-compose JSON file, sent instead of `--compose` and the compose flags. Needs the `compose_advanced` feature                                                       |
-| `--init-script <slug>`       |                         | Platform init script to run on every boot: `docker_cleanup` or `env_merge`. Repeatable. On update, replaces the current set                                                |
+| `--init-script <slug>`       |                         | Platform init script to run on every boot: `docker_cleanup`, `runtime_tmpfs` or `env_merge`. Repeatable. On update, replaces the current set                               |
 | `--launch-token <token>`     |                         | Launch token (at least 32 bytes) the CVM must boot with                                                                                                                    |
 | `--generate-launch-token`    | false                   | Gate the CVM with a launch token Phala Cloud generates for a new app (printed once), or with the app's existing token                                                      |
 | `--clear-init-scripts`       | false                   | Update only: remove every platform init script; cannot be combined with `--init-script`                                                                                    |
@@ -69,7 +69,7 @@ Do not run concurrent `phala deploy` commands with the same compose file in one 
 | `--event-log-version <1\|2>` |                         | Event log digest format (dstack OS 0.6.0+)                                                                                                                                 |
 | `--ephemeral-data-disk`      |                         | Format the data disk on every boot (dstack OS 0.6.3+); `--no-ephemeral-data-disk` sets it to false                                                                         |
 | `--gateway` / `--no-gateway` | true                    | Route the CVM through the gateway                                                                                                                                          |
-| `--confirm-data-wipe`        | false                   | Confirm an update that turns on `docker_cleanup` or `--ephemeral-data-disk`, which erase data on every boot                                                                |
+| `--confirm-data-wipe`        | false                   | Confirm an update that turns on `docker_cleanup`, `runtime_tmpfs` or `--ephemeral-data-disk`, which erase data or leave existing container data on disk unused             |
 | `--debug`                    | false                   | Enable debug logging                                                                                                                                                       |
 
 ## Deprecated Options
@@ -96,7 +96,7 @@ With `--cvm-id` (or a CVM ID in `phala.toml`), deploy sends the compose file and
 - `--init-script` (replaces the CVM's init scripts), `--clear-init-scripts` (removes them all) and `--confirm-data-wipe`
 - `--launch-token-hash` (must be the hash of the app's launch token; `""` removes it)
 
-Turning on `docker_cleanup` or `--ephemeral-data-disk` erases data on every boot, so the update needs `--confirm-data-wipe`. Turning the gateway off removes the CVM from the gateway after the update.
+Turning on `docker_cleanup`, `runtime_tmpfs` or `--ephemeral-data-disk` erases data or leaves existing container data on disk unused, so the update needs `--confirm-data-wipe`. Turning the gateway off removes the CVM from the gateway after the update.
 
 A flag you leave out keeps the CVM's current value. In particular, an update without `--pre-launch-script` or `--no-pre-launch-script` keeps the CVM's current pre-launch script; it does not switch to the Phala Cloud default.
 

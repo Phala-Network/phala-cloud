@@ -226,6 +226,68 @@ describe("phala cvms init-scripts", () => {
 		]);
 	});
 
+	test("turns runtime_tmpfs on in run order and ignores unknown listed slugs", async () => {
+		respond = (method, path) =>
+			method === "GET" && path.endsWith("/init-scripts")
+				? Response.json({
+						items: [
+							...PLATFORM.items,
+							{
+								slug: "runtime_tmpfs",
+								selected: false,
+								selectable: true,
+								reason: null,
+							},
+							{
+								slug: "future_script",
+								selected: true,
+								selectable: true,
+								reason: null,
+							},
+						],
+						has_custom_scripts: false,
+					})
+				: undefined;
+		const { context, failure } = makeContext();
+		const exitCode = await cvmsInitScriptsCommand.run(
+			{
+				slug: "runtime_tmpfs",
+				state: "on",
+				confirmDataWipe: true,
+			} as Parameters<typeof cvmsInitScriptsCommand.run>[0],
+			context,
+		);
+
+		expect(failure()).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(requests.filter((r) => r.method === "PATCH")).toEqual([
+			{
+				method: "PATCH",
+				path: `/api/v1/cvms/${CVM_ID}`,
+				body: {
+					init_scripts: ["runtime_tmpfs", "env_merge"],
+					confirm_data_wipe: true,
+				},
+				headers: NO_ONCHAIN_HEADERS,
+			},
+		]);
+	});
+
+	test("rejects runtime_tmpfs on without --confirm-data-wipe", async () => {
+		const { context, failure } = makeContext();
+		const exitCode = await cvmsInitScriptsCommand.run(
+			{
+				slug: "runtime_tmpfs",
+				state: "on",
+			} as Parameters<typeof cvmsInitScriptsCommand.run>[0],
+			context,
+		);
+
+		expect(exitCode).toBe(1);
+		expect(String(failure())).toContain("--confirm-data-wipe");
+		expect(requests.filter((r) => r.method === "PATCH")).toEqual([]);
+	});
+
 	test("rejects docker_cleanup on without --confirm-data-wipe", async () => {
 		const { context, failure } = makeContext();
 		const exitCode = await cvmsInitScriptsCommand.run(

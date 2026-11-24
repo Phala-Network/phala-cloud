@@ -24,8 +24,15 @@ import {
 	type CvmsInitScriptsCommandInput,
 } from "./command";
 
+function needsDataWipeConfirm(slug: InitScriptSlug): boolean {
+	return slug === "docker_cleanup" || slug === "runtime_tmpfs";
+}
+
 function selectedSlugs(scripts: CvmInitScripts): InitScriptSlug[] {
-	return scripts.items.filter((item) => item.selected).map((item) => item.slug);
+	return scripts.items
+		.filter((item) => item.selected)
+		.map((item) => item.slug)
+		.filter(isInitScriptSlug);
 }
 
 function printScripts(scripts: CvmInitScripts): void {
@@ -161,8 +168,8 @@ async function runCvmsInitScriptsCommand(
 					);
 					return 1;
 				}
-				if (slug === "docker_cleanup" && !input.confirmDataWipe) {
-					context.fail("Turning on docker_cleanup needs --confirm-data-wipe.");
+				if (needsDataWipeConfirm(slug) && !input.confirmDataWipe) {
+					context.fail(`Turning on ${slug} needs --confirm-data-wipe.`);
 					return 1;
 				}
 			}
@@ -178,7 +185,7 @@ async function runCvmsInitScriptsCommand(
 						...context.cvmId,
 						init_scripts: next,
 						confirm_data_wipe:
-							slug === "docker_cleanup" && input.state === "on"
+							needsDataWipeConfirm(slug) && input.state === "on"
 								? true
 								: undefined,
 						prepareOnly: input.prepareOnly,

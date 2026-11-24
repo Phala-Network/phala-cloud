@@ -587,7 +587,9 @@ describe("phala deploy --cvm-id", () => {
 		expect((failure as Error).message).toContain(
 			"not a known init script slug",
 		);
-		expect((failure as Error).message).toContain("docker_cleanup, env_merge");
+		expect((failure as Error).message).toContain(
+			"docker_cleanup, runtime_tmpfs, env_merge",
+		);
 		expect((failure as Error).message).toContain("creating a CVM");
 		expect(requests).toEqual([]);
 	});

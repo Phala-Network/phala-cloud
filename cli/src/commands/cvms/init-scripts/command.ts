@@ -42,7 +42,7 @@ export const cvmsInitScriptsCommandMeta: CommandMeta = {
 		{
 			name: "confirm-data-wipe",
 			description:
-				"Confirm turning on docker_cleanup, which erases container stores on every boot",
+				"Confirm turning on docker_cleanup or runtime_tmpfs, which erase or stop using existing container data on disk",
 			type: "boolean",
 			target: "confirmDataWipe",
 		},
@@ -82,6 +82,11 @@ export const cvmsInitScriptsCommandMeta: CommandMeta = {
 			name: "Turn docker_cleanup on",
 			value:
 				"phala cvms init-scripts app_123 docker_cleanup on --confirm-data-wipe",
+		},
+		{
+			name: "Turn runtime_tmpfs on",
+			value:
+				"phala cvms init-scripts app_123 runtime_tmpfs on --confirm-data-wipe",
 		},
 		{
 			name: "Turn env_merge off",
