@@ -378,19 +378,21 @@ wheels = [
 
 [[package]]
 name = "dstack-sdk"
-version = "0.5.4"
+version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "asyncio" },
+    { name = "certifi" },
     { name = "cryptography" },
     { name = "eth-keys" },
     { name = "eth-utils" },
     { name = "httpx" },
     { name = "pydantic" },
+    { name = "pyhpke" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/97/6c/5c8a2ce9bbaaa8ffe4603537372deba8d07ac60b2697dc2e57d33910cae7/dstack_sdk-0.5.4.tar.gz", hash = "sha256:0a5426cf37bcd89f98db37aced09a8a95431943ceaf6ed75eb69baca32902c95", size = 33320, upload-time = "2026-06-02T13:26:02.261Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/24/cf/874033fe60492c8040232b0195b3bb066b4e99bee13caf5bb69655d5f311/dstack_sdk-0.6.0.tar.gz", hash = "sha256:8a34c1125f2106551dc050eb3f338bc1222782d614b111ccedc07e1fd2761d29", size = 59911, upload-time = "2026-11-20T15:57:42.723Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/27/98/2b62a10e0e27a87f6fd6faf26e40e6c9e4a2114632f18ad215aacbd5404e/dstack_sdk-0.5.4-py3-none-any.whl", hash = "sha256:3c64d021408cc95def04332caab4593efb9d91fe87553d1f9d31c7c6e0fee07b", size = 20013, upload-time = "2026-06-02T13:26:01.172Z" },
+    { url = "https://files.pythonhosted.org/packages/07/87/50a6163757711edcd978a18de152919681d1b86ab1dadde43004cba52431/dstack_sdk-0.6.0-py3-none-any.whl", hash = "sha256:feecb2c08b22dca735c5abf6549f4c41414d5358835760c02c6eab9ffe55a519", size = 35785, upload-time = "2026-11-20T15:57:41.663Z" },
 ]
 
 [[package]]
@@ -680,7 +682,7 @@ wheels = [
 
 [[package]]
 name = "phala-cloud"
-version = "0.2.0"
+version = "0.4.4"
 source = { editable = "." }
 dependencies = [
     { name = "certifi" },
@@ -709,7 +711,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "certifi", specifier = ">=2026.10.19" },
-    { name = "dstack-sdk", specifier = ">=0.5.4" },
+    { name = "dstack-sdk", specifier = ">=0.6.0" },
     { name = "eth-hash", extras = ["pycryptodome"], specifier = ">=0.8.0" },
     { name = "httpx", extras = ["socks"], specifier = ">=0.27.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10.0" },
@@ -929,6 +931,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/49/2e/ced460408999b33da6b31b0021b0f37d329e202d4169aeb164493778f25b/pygments-2.21.0.tar.gz", hash = "sha256:610ca751c9bc2492b38eb9a38a7fbc93edbbb2d7182edaf34e66ae493dee5c8c", size = 5005329, upload-time = "2026-08-17T08:02:48.824Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/71/46/17f022dd3e953bf20a04a028a21ec746d942f8d2af30fa0f124fa0e6a684/pygments-2.21.0-py3-none-any.whl", hash = "sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9", size = 1250147, upload-time = "2026-08-17T08:02:44.912Z" },
+]
+
+[[package]]
+name = "pyhpke"
+version = "0.6.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bd/81/692a67c409e0a81423941791f875313e7ebcf1493180363eec8051acc767/pyhpke-0.6.5.tar.gz", hash = "sha256:8dac22eb143cd83b8066213b8ad0ecc9d5326ef41f930197197f3bbb5c99cb93", size = 1639080, upload-time = "2026-07-16T04:22:59.589Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/04/31/2a0edff785b15d700199fed77186b3d070724cafd02fccfffb187e450d83/pyhpke-0.6.5-py3-none-any.whl", hash = "sha256:e8d794724e43053fe04e8971be55033225d6da904effc748b303cece763a3f3c", size = 24435, upload-time = "2026-07-16T04:22:57.832Z" },
 ]
 
 [[package]]

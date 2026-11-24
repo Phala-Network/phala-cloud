@@ -27,7 +27,7 @@ dependencies = [
   # 2026.10.19 removes emSign ECC Root CA - G3 (compromised eMudhra intermediates).
   "certifi>=2026.10.19",
   "pydantic>=2.7.0",
-  "dstack-sdk>=0.5.4",
+  "dstack-sdk>=0.6.0",
   "eth-hash[pycryptodome]>=0.8.0",
 ]
 
