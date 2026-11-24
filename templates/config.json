@@ -25,7 +25,45 @@
       {
         "key": "DISCOURSE_HOSTNAME",
         "required": false,
-        "description": "Optional public hostname without https://. The template derives the Phala app domain by default."
+        "description": "Optional public hostname without https://. Defaults to DOMAIN, then to the Phala app domain."
+      },
+      {
+        "key": "DOMAIN",
+        "required": false,
+        "description": "Optional custom hostname for dstack-ingress, for example forum.example.com. Leave empty to use only the Phala app domain."
+      },
+      {
+        "key": "GATEWAY_DOMAIN",
+        "required": false,
+        "description": "Optional dstack gateway hostname used as the custom-domain CNAME target. Defaults to gateway.${DSTACK_GATEWAY_DOMAIN}."
+      },
+      {
+        "key": "CLOUDFLARE_API_TOKEN",
+        "required": false,
+        "description": "Optional Cloudflare token with Zone:Read and DNS:Edit. Required to issue a certificate when DOMAIN is set and DNS_PROVIDER is cloudflare."
+      },
+      {
+        "key": "DNS_PROVIDER",
+        "required": false,
+        "default": "cloudflare",
+        "description": "DNS provider for custom-domain certificates: cloudflare, linode, namecheap, or route53."
+      },
+      {
+        "key": "CERTBOT_EMAIL",
+        "required": false,
+        "description": "Optional ACME contact address for dstack-ingress. Published in certificate evidence if set."
+      },
+      {
+        "key": "SET_CAA",
+        "required": false,
+        "default": "true",
+        "description": "Publish a Let's Encrypt CAA record for the custom domain."
+      },
+      {
+        "key": "CHALLENGE_TYPE",
+        "required": false,
+        "default": "dns-01",
+        "description": "ACME challenge for the custom domain: dns-01 or tls-alpn-01."
       },
       {
         "key": "DISCOURSE_NOTIFICATION_EMAIL",
