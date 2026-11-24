@@ -52,12 +52,7 @@ mock.module("@phala/cloud", () => ({
 	safeGetCvmInfo: mock(() =>
 		Promise.resolve({ success: true, data: { vm_uuid: "source-uuid" } }),
 	),
-	safeGetAppEnvEncryptPubKey: mock(() =>
-		Promise.resolve({
-			success: true,
-			data: { public_key: "aa", signature: "bb" },
-		}),
-	),
+	waitForAppEnvEncryptPubKey: realCloud.waitForAppEnvEncryptPubKey,
 	verifyEnvEncryptPublicKeyLegacy: mock(() => "0xexpected_kms_pubkey"),
 	encryptEnvVars: mock(() => "encrypted-env"),
 	formatErrorMessage: (error: Error) => error.message,

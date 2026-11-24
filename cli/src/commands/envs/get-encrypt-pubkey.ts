@@ -1,8 +1,10 @@
 import type { CliApiClient } from "@/src/lib/client";
+import { logger } from "@/src/utils/logger";
 import {
-	safeGetAppEnvEncryptPubKey,
 	verifyEnvEncryptPublicKeyLegacy,
+	waitForAppEnvEncryptPubKey,
 	type GetAppEnvEncryptPubKey,
+	type GetAppEnvEncryptPubKeyRequest,
 } from "@phala/cloud";
 
 function stripHexPrefix(value: string): string {
@@ -47,6 +49,34 @@ export function verifyAndExtractEnvEncryptPubkey(
 	return response.public_key;
 }
 
+export async function getOnchainEnvEncryptPubkey(
+	client: CliApiClient,
+	request: GetAppEnvEncryptPubKeyRequest,
+	expectedKmsPubkey?: string | null,
+	options?: { retryLegacyTransientErrors?: boolean },
+): Promise<string> {
+	const response = await waitForAppEnvEncryptPubKey(client, request, {
+		retryLegacyTransientErrors: options?.retryLegacyTransientErrors,
+		onFinalityWait(details) {
+			const chain = details ? ` on ${details.chain_name}` : "";
+			const eta = details?.eta_seconds;
+			const estimate =
+				eta == null
+					? "No finality estimate is available."
+					: `Estimated time remaining: ${eta} ${eta === 1 ? "second" : "seconds"}.`;
+			logger.info(
+				`Waiting for the KMS environment encryption public key: app registration is not yet finalized${chain}. ${estimate}`,
+			);
+		},
+	});
+
+	return verifyAndExtractEnvEncryptPubkey(
+		response,
+		request.app_id,
+		expectedKmsPubkey,
+	);
+}
+
 /**
  * Resolve the encryption public key for a CVM.
  *
@@ -86,18 +116,9 @@ export async function getEncryptPubkey(
 			throw new Error("app_id is required for decentralized KMS");
 		}
 
-		const resp = await safeGetAppEnvEncryptPubKey(client, {
-			app_id: cvm.app_id,
-			kms: kmsSlug,
-		});
-
-		if (!resp.success) {
-			throw resp.error;
-		}
-
-		return verifyAndExtractEnvEncryptPubkey(
-			resp.data,
-			cvm.app_id,
+		return getOnchainEnvEncryptPubkey(
+			client,
+			{ app_id: cvm.app_id, kms: kmsSlug },
 			cvm.kms_info?.k256_pubkey,
 		);
 	}

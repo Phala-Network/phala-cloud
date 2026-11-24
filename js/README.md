@@ -119,6 +119,25 @@ The SDK enforces `redirect: "manual"` at the fetch boundary, even if configurati
 - `client.safePatch<T>(request, body?, options?): Promise<SafeResult<T>>`
 - `client.safeDelete<T>(request, options?): Promise<SafeResult<T>>`
 
+### How do I get an encryption key after on-chain registration?
+
+Use `waitForAppEnvEncryptPubKey` to wait for the app's registration to finalize.
+Use `getAppEnvEncryptPubKey` or `safeGetAppEnvEncryptPubKey` to check without waiting.
+
+```typescript
+import { waitForAppEnvEncryptPubKey } from "@phala/cloud";
+
+const key = await waitForAppEnvEncryptPubKey(client, { kms, app_id }, { signal });
+```
+
+By default, the SDK starts waiting only after HTTP 409 (`ERR-12-008`).
+It follows the server's `Retry-After` interval and keeps waiting through
+temporary network or server failures. The SDK allows the first estimate
+plus 15 minutes. Without an estimate, it allows 45 minutes. Pass an
+`AbortSignal` to cancel sooner, or `onFinalityWait` to read the first
+response's details. HTTP 404 (`ERR-12-009`) means the app is not registered
+on the named chain and is returned immediately.
+
 ## How do I upgrade to these SDK changes?
 
 - `watchCvmState` with `maxRetries: N` now makes up to N+1 attempts, and `MaxRetriesExceededError.attempts` is N+1.
