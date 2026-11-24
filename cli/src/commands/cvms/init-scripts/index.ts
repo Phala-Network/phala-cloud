@@ -35,6 +35,13 @@ function selectedSlugs(scripts: CvmInitScripts): InitScriptSlug[] {
 		.filter(isInitScriptSlug);
 }
 
+/** Selected slugs this CLI version does not know; rebuilding the set would drop them. */
+function unknownSelectedSlugs(scripts: CvmInitScripts): string[] {
+	return scripts.items
+		.filter((item) => item.selected && !isInitScriptSlug(item.slug))
+		.map((item) => item.slug);
+}
+
 function printScripts(scripts: CvmInitScripts): void {
 	const columns = ["SLUG", "SELECTED", "SELECTABLE", "REASON"] as const;
 	const rows = scripts.items.map((item) => ({
@@ -150,6 +157,13 @@ async function runCvmsInitScriptsCommand(
 				);
 		} else if (hasSlug) {
 			const slug = input.slug as InitScriptSlug;
+			const unknown = unknownSelectedSlugs(scripts);
+			if (unknown.length > 0) {
+				context.fail(
+					`This CVM runs init scripts this CLI version does not know (${unknown.join(", ")}). Upgrade the CLI and try again.`,
+				);
+				return 1;
+			}
 			const current = selectedSlugs(scripts);
 			const enabled = current.includes(slug);
 			if (input.state === "on" && enabled) {

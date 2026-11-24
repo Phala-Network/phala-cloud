@@ -226,7 +226,7 @@ describe("phala cvms init-scripts", () => {
 		]);
 	});
 
-	test("turns runtime_tmpfs on in run order and ignores unknown listed slugs", async () => {
+	test("turns runtime_tmpfs on in run order past an unselected unknown slug", async () => {
 		respond = (method, path) =>
 			method === "GET" && path.endsWith("/init-scripts")
 				? Response.json({
@@ -240,7 +240,7 @@ describe("phala cvms init-scripts", () => {
 							},
 							{
 								slug: "future_script",
-								selected: true,
+								selected: false,
 								selectable: true,
 								reason: null,
 							},
@@ -271,6 +271,37 @@ describe("phala cvms init-scripts", () => {
 				headers: NO_ONCHAIN_HEADERS,
 			},
 		]);
+	});
+
+	test("refuses a slug change while an unknown slug is selected", async () => {
+		respond = (method, path) =>
+			method === "GET" && path.endsWith("/init-scripts")
+				? Response.json({
+						items: [
+							...PLATFORM.items,
+							{
+								slug: "future_script",
+								selected: true,
+								selectable: true,
+								reason: null,
+							},
+						],
+						has_custom_scripts: false,
+					})
+				: undefined;
+		const { context, failure } = makeContext();
+		const exitCode = await cvmsInitScriptsCommand.run(
+			{
+				slug: "runtime_tmpfs",
+				state: "on",
+				confirmDataWipe: true,
+			} as Parameters<typeof cvmsInitScriptsCommand.run>[0],
+			context,
+		);
+
+		expect(exitCode).toBe(1);
+		expect(String(failure())).toContain("future_script");
+		expect(requests.filter((r) => r.method === "PATCH")).toEqual([]);
 	});
 
 	test("rejects runtime_tmpfs on without --confirm-data-wipe", async () => {
