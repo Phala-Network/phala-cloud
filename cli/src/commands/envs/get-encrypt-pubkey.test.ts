@@ -1,14 +1,6 @@
-import {
-	afterEach,
-	beforeEach,
-	describe,
-	expect,
-	mock,
-	spyOn,
-	test,
-} from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { createClient } from "@phala/cloud";
-import { setJsonMode } from "@/src/core/json-mode";
+import { logger } from "@/src/utils/logger";
 import { getEncryptPubkey } from "./get-encrypt-pubkey";
 
 const appId = `0x${"a1".repeat(20)}`;
@@ -51,11 +43,6 @@ function mockFetch() {
 	} = globalThis;
 	return spyOn(transport, "fetch");
 }
-
-// Other test files in the same process can leave JSON mode on, which mutes progress output.
-beforeEach(() => {
-	setJsonMode(false);
-});
 
 afterEach(() => mock.restore());
 
@@ -185,14 +172,13 @@ describe("getEncryptPubkey", () => {
 		const fetch = mockFetch().mockImplementation(async () =>
 			Response.json({ error_code: "ERR-12-009", message }, { status: 404 }),
 		);
-		const stderr = spyOn(process.stderr, "write").mockImplementation(
-			() => true,
-		);
+		// Assert on the logger: other test files replace its module in the shared process.
+		const info = spyOn(logger, "info").mockImplementation(() => {});
 		await expect(getEncryptPubkey(client, cvm)).rejects.toMatchObject({
 			status: 404,
 			message,
 		});
-		expect(stderr).not.toHaveBeenCalled();
+		expect(info).not.toHaveBeenCalled();
 		expect(fetch).toHaveBeenCalledTimes(1);
 	});
 
@@ -206,14 +192,11 @@ describe("getEncryptPubkey", () => {
 				.mockImplementationOnce(async () => waiting(eta))
 				.mockImplementationOnce(async () => waiting(eta))
 				.mockImplementationOnce(async () => signedKey());
-			const stderr = spyOn(process.stderr, "write").mockImplementation(
-				() => true,
-			);
+			const info = spyOn(logger, "info").mockImplementation(() => {});
 			expect(await getEncryptPubkey(client, cvm)).toBe(publicKey);
 			expect(fetch).toHaveBeenCalledTimes(3);
-			const output = stderr.mock.calls.map(([value]) => String(value)).join("");
-			expect(output.trimEnd().split("\n")).toHaveLength(1);
-			expect(output).toContain(
+			expect(info).toHaveBeenCalledTimes(1);
+			expect(String(info.mock.calls[0]?.[0])).toContain(
 				`Waiting for the KMS environment encryption public key: app registration is not yet finalized on Base. ${suffix}`,
 			);
 		},
