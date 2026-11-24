@@ -138,7 +138,7 @@ For shallow deployment smoke tests, generated dummy values for `NEAR_SEED_PHRASE
 │  └─────────┬───────┘ └────────┬────────┘ │
 │            │                  │          │
 │  ┌─────────┴──────────────────┴────────┐ │
-│  │       TEE Socket (/var/run/tappd)   │ │
+│  │   TEE Socket (/var/run/dstack.sock) │ │
 │  └─────────────────────────────────────────┘ │
 └─────────────────────────────────────────┘
               │
@@ -226,12 +226,12 @@ docker-compose logs shade-agent-api
 ```
 
 **Issue**: TEE Socket Connection Failures  
-**Symptoms**: "Cannot connect to tappd socket" errors
+**Symptoms**: "Cannot connect to dstack socket" errors
 **Solution**:
 1. Verify TEE daemon status (Phala Cloud specific)
 2. Check socket file permissions:
 ```bash
-ls -la /var/run/tappd.sock
+ls -la /var/run/dstack.sock
 ```
 
 **Issue**: Contract ID Format Errors

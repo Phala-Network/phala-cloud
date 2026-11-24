@@ -29,7 +29,6 @@ services:
     image: postgres:16-alpine
     platform: linux/amd64
     volumes:
-      - /var/run/tappd.sock:/var/run/tappd.sock
       - postgres-data:/var/lib/postgresql/data
     restart: unless-stopped
     environment:
@@ -46,7 +45,6 @@ services:
     image: redis:7-alpine
     platform: linux/amd64
     volumes:
-      - /var/run/tappd.sock:/var/run/tappd.sock
       - redis-data:/data
     restart: unless-stopped
     healthcheck:
@@ -61,7 +59,6 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - /var/run/tappd.sock:/var/run/tappd.sock
       - app-storage:/rails/storage
     restart: unless-stopped
     environment:
@@ -95,7 +92,6 @@ services:
     image: ghcr.io/maybe-finance/maybe:latest
     platform: linux/amd64
     volumes:
-      - /var/run/tappd.sock:/var/run/tappd.sock
       - app-storage:/rails/storage
     restart: unless-stopped
     environment:

@@ -7,8 +7,6 @@ services:
       - NODE_ENV=production
       # You'll need to provide your Figma API key through environment variables
       - FIGMA_API_KEY=${FIGMA_API_KEY}
-    volumes:
-      - /var/run/tappd.sock:/var/run/tappd.sock
     restart: unless-stopped
     networks:
       - internal

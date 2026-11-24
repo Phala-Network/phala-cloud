@@ -6,7 +6,6 @@ services:
     ports:
       - "8888:8888"
     volumes:
-      - /var/run/tappd.sock:/var/run/tappd.sock
       - jupyter_data:/home/jovyan
       - /tmp:/tmp
     environment:
@@ -33,7 +32,6 @@ services:
         python -m jupyter_mcp_server.server
       "
     volumes:
-      - /var/run/tappd.sock:/var/run/tappd.sock
       - /tmp:/tmp
     environment:
       - SERVER_URL=http://jupyter-notebook:8888

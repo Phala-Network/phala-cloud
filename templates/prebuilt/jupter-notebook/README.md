@@ -29,9 +29,8 @@ Update the tokens before sharing the deployment URL.
 
 - `jupyter_data`: Mounted at `/home/jovyan` for notebooks and workspace files.
 
-## Mounted sockets
+## Mounted paths
 
-- `/var/run/tappd.sock`: TEE attestation socket.
 - `/tmp`: Shared temporary directory used by both services.
 
 ## Deploy
