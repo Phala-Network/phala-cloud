@@ -7,7 +7,7 @@ An HTTP Client provides a clean interface to make HTTP requests with built-in er
 ## Import
 
 ```typescript
-import { createClient } from '@phala/cloud-sdk'
+import { createClient } from "@phala/cloud-sdk";
 ```
 
 ## Usage
@@ -15,25 +15,25 @@ import { createClient } from '@phala/cloud-sdk'
 Initialize a Client with your API key and desired configuration:
 
 ```typescript
-import { createClient } from '@phala/cloud-sdk'
+import { createClient } from "@phala/cloud-sdk";
 
 const client = createClient({
-  apiKey: 'your-api-key',
-  baseURL: 'https://cloud-api.phala.network/v1' // optional
-})
+  apiKey: "your-api-key",
+  baseURL: "https://cloud-api.phala.network/v1", // optional
+});
 ```
 
 Then you can consume HTTP actions:
 
 ```typescript
 // Simple GET request
-const user = await client.get<User>('/users/1')
+const user = await client.get<User>("/users/1");
 
 // POST with body
-const newUser = await client.post<User>('/users', {
-  name: 'Alice',
-  email: 'alice@example.com'
-})
+const newUser = await client.post<User>("/users", {
+  name: "Alice",
+  email: "alice@example.com",
+});
 ```
 
 ## Error Handling Patterns
@@ -46,13 +46,13 @@ Use the standard HTTP methods when you prefer traditional try/catch error handli
 
 ```typescript
 try {
-  const user = await client.get<User>('/users/1')
-  console.log(`User: ${user.name}`)
+  const user = await client.get<User>("/users/1");
+  console.log(`User: ${user.name}`);
 } catch (error) {
   if (error instanceof RequestError) {
-    console.error(`API Error: ${error.message}`)
-    console.error(`Status: ${error.status}`)
-    console.error(`Detail: ${error.detail}`)
+    console.error(`API Error: ${error.message}`);
+    console.error(`Status: ${error.status}`);
+    console.error(`Detail: ${error.detail}`);
   }
 }
 ```
@@ -62,15 +62,15 @@ try {
 Inspired by [Zod's `safeParse` pattern](https://zod.dev/basics#handling-errors), use the safe methods to avoid try/catch blocks:
 
 ```typescript
-const result = await client.safeGet<User>('/users/1')
+const result = await client.safeGet<User>("/users/1");
 
 if (!result.success) {
   // Handle error case
-  console.error(`API Error: ${result.error.message}`)
-  console.error(`Status: ${result.error.status}`)
+  console.error(`API Error: ${result.error.message}`);
+  console.error(`Status: ${result.error.status}`);
 } else {
   // Handle success case
-  console.log(`User: ${result.data.name}`)
+  console.log(`User: ${result.data.name}`);
 }
 ```
 
@@ -124,10 +124,10 @@ await client.safeDelete<T>(request, options?)
 
 ```typescript
 const client = createClient({
-  apiKey: 'your-api-key',           // Required: Your API key
-  baseURL: 'https://api.custom.com', // Optional: Custom base URL
-  timeout: 10000,                   // Optional: Request timeout in ms
-})
+  apiKey: "your-api-key", // Required: Your API key
+  baseURL: "https://api.custom.com", // Optional: Custom base URL
+  timeout: 10000, // Optional: Request timeout in ms
+});
 ```
 
 ### Advanced Configuration
@@ -136,32 +136,32 @@ The client extends [ofetch](https://github.com/unjs/ofetch) configuration, so yo
 
 ```typescript
 const client = createClient({
-  apiKey: 'your-api-key',
-  baseURL: 'https://api.custom.com',
+  apiKey: "your-api-key",
+  baseURL: "https://api.custom.com",
   timeout: 10000,
-  
+
   // Custom headers. The SDK sets User-Agent to
   // `phala-cloud-sdk-js/<version> <runtime>/<runtime version>` on Node,
   // Bun, Deno, and Cloudflare Workers (`workerd`). It does not set
   // User-Agent in browsers. A caller-supplied User-Agent replaces the default.
   headers: {
-    'User-Agent': 'MyApp/1.0',
-    'Accept-Language': 'en-US'
+    "User-Agent": "MyApp/1.0",
+    "Accept-Language": "en-US",
   },
-  
-  // Retry configuration  
+
+  // Retry configuration
   retry: 3,
   retryDelay: 1000,
-  
+
   // Response interceptors
   onResponse({ response }) {
-    console.log('Response received:', response.status)
+    console.log("Response received:", response.status);
   },
-  
+
   onResponseError({ response, error }) {
-    console.error('Request failed:', response.status)
-  }
-})
+    console.error("Request failed:", response.status);
+  },
+});
 ```
 
 ## TypeScript Support
@@ -172,39 +172,39 @@ The client provides full TypeScript support with automatic type inference:
 
 ```typescript
 interface User {
-  id: string
-  name: string
-  email: string
+  id: string;
+  name: string;
+  email: string;
 }
 
 // TypeScript automatically infers the return type as User
-const user = await client.get<User>('/users/1')
+const user = await client.get<User>("/users/1");
 
 // Safe methods return SafeResult<User, RequestError>
-const result = await client.safeGet<User>('/users/1')
+const result = await client.safeGet<User>("/users/1");
 ```
 
 ### Error Types
 
 ```typescript
-import { RequestError, type SafeResult } from '@phala/cloud-sdk'
+import { RequestError, type SafeResult } from "@phala/cloud-sdk";
 
 // RequestError provides detailed error information
 interface RequestError {
-  name: 'RequestError'
-  message: string
-  status?: number
-  statusText?: string
-  data?: unknown
-  detail: string | object | Array<{msg: string}>
-  code?: string
-  type?: string
+  name: "RequestError";
+  message: string;
+  status?: number;
+  statusText?: string;
+  data?: unknown;
+  detail: string | object | Array<{ msg: string }>;
+  code?: string;
+  type?: string;
 }
 
 // SafeResult is a discriminated union
 type SafeResult<T, E = RequestError> =
   | { success: true; data: T; error?: never }
-  | { success: false; data?: never; error: E }
+  | { success: false; data?: never; error: E };
 ```
 
 ## Advanced Usage
@@ -214,13 +214,13 @@ type SafeResult<T, E = RequestError> =
 For advanced use cases, you can access the underlying ofetch instance:
 
 ```typescript
-const client = createClient({ apiKey: 'your-key' })
+const client = createClient({ apiKey: "your-key" });
 
 // Access raw ofetch instance
-const response = await client.raw('/custom-endpoint', {
-  method: 'PATCH',
-  body: customData
-})
+const response = await client.raw("/custom-endpoint", {
+  method: "PATCH",
+  body: customData,
+});
 ```
 
 ### Request/Response Interception
@@ -229,23 +229,23 @@ Leverage ofetch's powerful interceptor system:
 
 ```typescript
 const client = createClient({
-  apiKey: 'your-key',
-  
+  apiKey: "your-key",
+
   // Log all requests
   onRequest({ request, options }) {
-    console.log('[Request]', request, options)
+    console.log("[Request]", request, options);
   },
-  
+
   // Transform responses
   onResponse({ response }) {
-    console.log('[Response]', response.status)
+    console.log("[Response]", response.status);
   },
-  
+
   // Handle errors globally
   onResponseError({ request, response, error }) {
-    console.error('[Error]', response.status, request)
-  }
-})
+    console.error("[Error]", response.status, request);
+  },
+});
 ```
 
 ## Error Handling Best Practices
@@ -256,15 +256,15 @@ Use safe methods when building reusable libraries:
 
 ```typescript
 async function fetchUserProfile(userId: string) {
-  const result = await client.safeGet<User>(`/users/${userId}`)
-  
+  const result = await client.safeGet<User>(`/users/${userId}`);
+
   if (!result.success) {
     // Log error and return fallback
-    console.warn('Failed to fetch user:', result.error.message)
-    return null
+    console.warn("Failed to fetch user:", result.error.message);
+    return null;
   }
-  
-  return result.data
+
+  return result.data;
 }
 ```
 
@@ -275,17 +275,16 @@ Use traditional methods with proper error boundaries:
 ```typescript
 async function updateUserProfile(userId: string, updates: Partial<User>) {
   try {
-    const user = await client.put<User>(`/users/${userId}`, updates)
-    showSuccessMessage('Profile updated!')
-    return user
+    const user = await client.put<User>(`/users/${userId}`, updates);
+    showSuccessMessage("Profile updated!");
+    return user;
   } catch (error) {
     if (error instanceof RequestError) {
-      showErrorMessage(`Update failed: ${error.message}`)
+      showErrorMessage(`Update failed: ${error.message}`);
     }
-    throw error
+    throw error;
   }
 }
 ```
 
-
-This design philosophy, inspired by [viem's client patterns](https://viem.sh/docs/clients/public) and [Zod's safe parsing approach](https://zod.dev/basics), provides both simplicity for basic use cases and power for complex error handling scenarios. 
+This design philosophy, inspired by [viem's client patterns](https://viem.sh/docs/clients/public) and [Zod's safe parsing approach](https://zod.dev/basics), provides both simplicity for basic use cases and power for complex error handling scenarios.

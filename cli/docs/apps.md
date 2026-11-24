@@ -10,20 +10,20 @@ phala apps [options]
 
 ## Options
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--page <number>` | 1 | Page number for pagination |
-| `--page-size <number>` | 50 | Number of items per page (max: 100) |
-| `--search <query>` | | Search by name, app_id, vm_uuid, or instance_id |
-| `--status <status>` | | Filter by CVM status (repeatable) |
-| `--listed` | | Filter to only listed CVMs |
-| `--no-listed` | | Filter to only unlisted CVMs |
-| `--base-image <name>` | | Filter by base OS image name |
-| `--instance-type <type>` | | Filter by instance type |
-| `--kms-type <type>` | | Filter by KMS type (phala, ethereum, base) |
-| `--node <name>` | | Filter by node name |
-| `--region <region>` | | Filter by region |
-| `-j, --json` | false | Output in JSON format |
+| Flag                     | Default | Description                                     |
+| ------------------------ | ------- | ----------------------------------------------- |
+| `--page <number>`        | 1       | Page number for pagination                      |
+| `--page-size <number>`   | 50      | Number of items per page (max: 100)             |
+| `--search <query>`       |         | Search by name, app_id, vm_uuid, or instance_id |
+| `--status <status>`      |         | Filter by CVM status (repeatable)               |
+| `--listed`               |         | Filter to only listed CVMs                      |
+| `--no-listed`            |         | Filter to only unlisted CVMs                    |
+| `--base-image <name>`    |         | Filter by base OS image name                    |
+| `--instance-type <type>` |         | Filter by instance type                         |
+| `--kms-type <type>`      |         | Filter by KMS type (phala, ethereum, base)      |
+| `--node <name>`          |         | Filter by node name                             |
+| `--region <region>`      |         | Filter by region                                |
+| `-j, --json`             | false   | Output in JSON format                           |
 
 ## CVM Status Values
 

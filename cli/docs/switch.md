@@ -10,9 +10,9 @@ phala switch [profile-name]
 
 ## Arguments
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `profile-name` | No | Name of the profile to switch to. If omitted, shows interactive picker |
+| Name           | Required | Description                                                            |
+| -------------- | -------- | ---------------------------------------------------------------------- |
+| `profile-name` | No       | Name of the profile to switch to. If omitted, shows interactive picker |
 
 If no profile name is provided, shows an interactive picker.
 
@@ -58,6 +58,3 @@ phala deploy -n work-app
 phala switch personal
 phala deploy -n personal-app
 ```
-
-
-

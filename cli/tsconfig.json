@@ -2,15 +2,17 @@
 	"$schema": "https://json.schemastore.org/tsconfig",
 	"compilerOptions": {
 		"isolatedModules": false,
-		"baseUrl": ".",
+		"strict": false,
+		"strictPropertyInitialization": false,
+		"target": "ES2022",
+		"lib": ["ES2022"],
 		"paths": {
 			"@/*": ["./*"]
 		},
 		"rootDir": "src",
 		"moduleResolution": "bundler",
 		"module": "ESNext",
-		"target": "ES2020",
-		"lib": ["ES2020", "ES2020.BigInt"],
+		"types": ["node", "bun"],
 		"outDir": "./dist",
 		"esModuleInterop": true,
 		"resolveJsonModule": true,

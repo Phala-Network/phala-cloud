@@ -3,7 +3,7 @@
  * Provides both real execution and mocked execution modes
  */
 
-import { execaCommand, type Options as ExecaOptions } from "execa";
+import { execa, parseCommandString, type Options as ExecaOptions } from "execa";
 import path from "node:path";
 
 const CLI_PATH = path.join(__dirname, "../../../dist/index.js");
@@ -47,7 +47,8 @@ export async function runCommand(
 	const fullCommand = `${CLI_CMD} ${command}`;
 
 	try {
-		const result = await execaCommand(fullCommand, execOptions);
+		const [file, ...args] = parseCommandString(fullCommand);
+		const result = await execa(file, args, execOptions);
 
 		return {
 			stdout: result.stdout,

@@ -9,8 +9,11 @@ const TX_HASH = `0x${"ab".repeat(32)}`;
 // Toggle whether the mocked chain reports the queried devices as allowed.
 let mockDevicesAllowed = true;
 // The backend allowlist view, replaceable per test.
-let mockAllowlistDevices: { device_id: string; status: string; node_name?: string }[] =
-	[];
+let mockAllowlistDevices: {
+	device_id: string;
+	status: string;
+	node_name?: string;
+}[] = [];
 
 // Capture the interactive prompt's choices; auto-select everything offered.
 const promptMock = mock((questions: { choices?: { value: string }[] }[]) =>

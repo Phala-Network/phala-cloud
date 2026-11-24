@@ -582,10 +582,7 @@ export function getSimulatorLogPath(customPath?: string): string {
  * @returns Recent log content or null if log file doesn't exist
  */
 export function getSimulatorLogs(
-	options: {
-		logFilePath?: string;
-		maxLines?: number;
-	} = {},
+	options: { logFilePath?: string; maxLines?: number } = {},
 ): string | null {
 	const logFilePath = options.logFilePath ?? SIMULATOR_CONFIG.defaultLogPath;
 	const maxLines = options.maxLines ?? 100;

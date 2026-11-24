@@ -5,16 +5,19 @@
 ## Core Architecture
 
 ### Action Types
+
 - **HTTP Actions**: API calls via HTTP client
 - **Blockchain Actions**: Direct blockchain operations via viem
 - **Hybrid Actions**: Combined HTTP + blockchain operations
 
 ### Required Patterns
+
 1. **Dual API**: Standard (throws) + Safe (returns `SafeResult<T>`)
 2. **Type-Safe Schemas**: Zod validation with TypeScript inference
 3. **Conditional Types**: Smart return type inference based on parameters
 
 ## File Structure
+
 ```
 src/actions/
 ├── {action_name}.ts           # Implementation
@@ -26,49 +29,58 @@ src/actions/
 
 ### HTTP Action Template
 
-```typescript
+````typescript
 import { z } from "zod";
 import { type Client, type SafeResult } from "../client";
 
 /**
  * Brief action description
- * 
+ *
  * @example
  * ```typescript
  * import { createClient, myAction } from '@phala/cloud'
- * 
+ *
  * const client = createClient({ apiKey: 'your-key' })
  * const result = await myAction(client, { param: 'value' })
  * ```
  */
 
 // Schema: align with backend, use .optional()/.nullable(), add .passthrough()
-export const MyActionSchema = z.object({
-  id: z.string(),
-  name: z.string().optional(),
-}).passthrough();
+export const MyActionSchema = z
+  .object({
+    id: z.string(),
+    name: z.string().optional(),
+  })
+  .passthrough();
 
 export type MyAction = z.infer<typeof MyActionSchema>;
 
 // Conditional types for type inference
 export type MyActionParameters<T = undefined> = {
   param: string;
-} & (T extends z.ZodSchema ? { schema: T } : T extends false ? { schema: false } : { schema?: z.ZodSchema | false });
+} & (T extends z.ZodSchema
+  ? { schema: T }
+  : T extends false
+    ? { schema: false }
+    : { schema?: z.ZodSchema | false });
 
 export type MyActionReturnType<T = undefined> = T extends z.ZodSchema
-  ? z.infer<T> : T extends false ? unknown : MyAction;
+  ? z.infer<T>
+  : T extends false
+    ? unknown
+    : MyAction;
 
 // Standard version (throws)
 export async function myAction<T extends z.ZodSchema | false | undefined = undefined>(
   client: Client,
-  params: MyActionParameters<T>
+  params: MyActionParameters<T>,
 ): Promise<MyActionReturnType<T>> {
   const response = await client.post("/api/endpoint", params);
-  
+
   if (params.schema === false) {
     return response as MyActionReturnType<T>;
   }
-  
+
   const schema = (params.schema || MyActionSchema) as z.ZodSchema;
   return schema.parse(response) as MyActionReturnType<T>;
 }
@@ -76,22 +88,22 @@ export async function myAction<T extends z.ZodSchema | false | undefined = undef
 // Safe version (returns SafeResult)
 export async function safeMyAction<T extends z.ZodSchema | false | undefined = undefined>(
   client: Client,
-  params: MyActionParameters<T>
+  params: MyActionParameters<T>,
 ): Promise<SafeResult<MyActionReturnType<T>>> {
   const httpResult = await client.safePost("/api/endpoint", params);
-  
+
   if (!httpResult.success) {
     return httpResult as SafeResult<MyActionReturnType<T>>;
   }
-  
+
   if (params.schema === false) {
     return { success: true, data: httpResult.data } as SafeResult<MyActionReturnType<T>>;
   }
-  
+
   const schema = (params.schema || MyActionSchema) as z.ZodSchema;
   return schema.safeParse(httpResult.data) as SafeResult<MyActionReturnType<T>>;
 }
-```
+````
 
 ### Blockchain Action Template
 
@@ -100,28 +112,40 @@ import { z } from "zod";
 import { type Chain, type Address, type Hex, createPublicClient, createWalletClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { type SafeResult } from "../client";
-import { 
-  type NetworkClients, validateNetworkPrerequisites, createTransactionTracker,
-  executeTransactionWithRetry, type RetryOptions, type TransactionOptions 
+import {
+  type NetworkClients,
+  validateNetworkPrerequisites,
+  createTransactionTracker,
+  executeTransactionWithRetry,
+  type RetryOptions,
+  type TransactionOptions,
 } from "../utils";
 
 // Schema with conditional validation
-const BlockchainActionSchema = z.object({
-  chain: z.unknown().optional(),
-  contractAddress: z.string(),
-  privateKey: z.string().optional(),
-  walletClient: z.unknown().optional(),
-  publicClient: z.unknown().optional(),
-  timeout: z.number().optional().default(120000),
-  retryOptions: z.unknown().optional(),
-}).refine((data) => {
-  // XOR: privateKey OR walletClient, not both
-  return !!data.privateKey !== !!data.walletClient;
-}, { message: "Provide either 'privateKey' or 'walletClient', not both" })
-.refine((data) => {
-  // Chain required when clients not provided
-  return !!(data.publicClient && data.walletClient) || !!data.chain;
-}, { message: "Chain required when publicClient or walletClient missing" });
+const BlockchainActionSchema = z
+  .object({
+    chain: z.unknown().optional(),
+    contractAddress: z.string(),
+    privateKey: z.string().optional(),
+    walletClient: z.unknown().optional(),
+    publicClient: z.unknown().optional(),
+    timeout: z.number().optional().default(120000),
+    retryOptions: z.unknown().optional(),
+  })
+  .refine(
+    (data) => {
+      // XOR: privateKey OR walletClient, not both
+      return !!data.privateKey !== !!data.walletClient;
+    },
+    { message: "Provide either 'privateKey' or 'walletClient', not both" },
+  )
+  .refine(
+    (data) => {
+      // Chain required when clients not provided
+      return !!(data.publicClient && data.walletClient) || !!data.chain;
+    },
+    { message: "Chain required when publicClient or walletClient missing" },
+  );
 
 export type BlockchainActionRequest = {
   chain?: Chain;
@@ -137,33 +161,42 @@ export type BlockchainActionRequest = {
 
 export async function blockchainAction(request: BlockchainActionRequest) {
   const validated = BlockchainActionSchema.parse(request);
-  
+
   // Create clients
   let publicClient: PublicClient, walletClient: WalletClient, address: Address;
-  
+
   if (validated.privateKey) {
     const account = privateKeyToAccount(validated.privateKey as Hex);
-    publicClient = validated.publicClient as PublicClient || 
+    publicClient =
+      (validated.publicClient as PublicClient) ||
       createPublicClient({ chain: validated.chain as Chain, transport: http() });
     walletClient = createWalletClient({
-      account, chain: validated.chain as Chain, transport: http()
+      account,
+      chain: validated.chain as Chain,
+      transport: http(),
     });
     address = account.address;
   } else {
     walletClient = validated.walletClient as WalletClient;
-    publicClient = validated.publicClient as PublicClient ||
+    publicClient =
+      (validated.publicClient as PublicClient) ||
       createPublicClient({ chain: validated.chain as Chain, transport: http() });
     address = walletClient.account!.address;
   }
-  
-  const networkClients: NetworkClients = { publicClient, walletClient, address, chainId: (validated.chain as Chain).id };
-  
+
+  const networkClients: NetworkClients = {
+    publicClient,
+    walletClient,
+    address,
+    chainId: (validated.chain as Chain).id,
+  };
+
   // Validate prerequisites
   await validateNetworkPrerequisites(networkClients, {
     targetChainId: networkClients.chainId,
-    minBalance: parseEther("0.001")
+    minBalance: parseEther("0.001"),
   });
-  
+
   // Execute transaction
   const operation = async (clients: NetworkClients) => {
     return await clients.walletClient.writeContract({
@@ -173,20 +206,28 @@ export async function blockchainAction(request: BlockchainActionRequest) {
       args: [],
     });
   };
-  
+
   const tracker = createTransactionTracker();
-  const result = validated.retryOptions 
-    ? await executeTransactionWithRetry(operation, networkClients, [], {
-        timeout: validated.timeout!, confirmations: 1,
-        onSubmitted: validated.onTransactionSubmitted,
-        onConfirmed: validated.onTransactionConfirmed,
-      }, validated.retryOptions)
+  const result = validated.retryOptions
+    ? await executeTransactionWithRetry(
+        operation,
+        networkClients,
+        [],
+        {
+          timeout: validated.timeout!,
+          confirmations: 1,
+          onSubmitted: validated.onTransactionSubmitted,
+          onConfirmed: validated.onTransactionConfirmed,
+        },
+        validated.retryOptions,
+      )
     : await tracker.execute(operation, networkClients, [], {
-        timeout: validated.timeout!, confirmations: 1,
+        timeout: validated.timeout!,
+        confirmations: 1,
         onSubmitted: validated.onTransactionSubmitted,
         onConfirmed: validated.onTransactionConfirmed,
       });
-  
+
   return parseBlockchainResult(result.receipt);
 }
 ```
@@ -194,7 +235,9 @@ export async function blockchainAction(request: BlockchainActionRequest) {
 ## Testing Requirements
 
 ### Unit Tests (`{action}.test.ts`)
+
 **Required Coverage:**
+
 - Standard & safe versions (success/error paths)
 - Schema validation (default/custom/false)
 - Parameter handling (empty/missing)
@@ -212,7 +255,9 @@ if ("isRequestError" in result.error && result.error.isRequestError) {
 ```
 
 ### E2E Tests (`{action}.e2e.test.ts`)
+
 **Required Coverage:**
+
 - Real API calls with dynamic parameters (fetch via other actions)
 - All HTTP error codes 400-500 with intentionally invalid data
 - Skip when env vars missing
@@ -234,23 +279,30 @@ describe("E2E Error Scenarios", () => {
 ### Renaming Parameters: Mandatory Checklist
 
 **Files to Update:**
+
 - [ ] `{action}.ts`: Types, JSDoc, examples, error messages
 - [ ] `{action}.test.ts`: All parameter usage, error expectations
 - [ ] `{action}.e2e.test.ts`: All test scenarios, variable names
 
 **Example Rename Process:**
+
 ```typescript
 // Before
-{ identifier: "cvm-123" }
+{
+  identifier: "cvm-123";
+}
 
-// After  
-{ cvm_id: "cvm-123" }
+// After
+{
+  cvm_id: "cvm-123";
+}
 
 // Internal transformation for API compatibility
 const apiParams = { identifier: params.cvm_id };
 ```
 
 **Systematic Updates:**
+
 ```bash
 # Find affected files
 find . -name "*{action}*.test.ts"
@@ -265,48 +317,56 @@ npm test -- --grep "{action}"
 ## Schema Design Rules
 
 ### API Contract Verification
+
 **CRITICAL**: Test real API before implementing schemas
 
 ```typescript
 // ❌ Wrong: Assuming structure
-encrypted_env: z.array(z.object({ key: z.string(), value: z.string() }))
+encrypted_env: z.array(z.object({ key: z.string(), value: z.string() }));
 
 // ✅ Correct: Verify API returns string
-encrypted_env: z.string() // Backend expects hex string
+encrypted_env: z.string(); // Backend expects hex string
 ```
 
 ### Schema Patterns
+
 ```typescript
 // Required patterns
-export const MySchema = z.object({
-  required_field: z.string(),
-  optional_field: z.string().optional(),
-  nullable_field: z.string().nullable().optional(),
-}).passthrough(); // Forward compatibility
+export const MySchema = z
+  .object({
+    required_field: z.string(),
+    optional_field: z.string().optional(),
+    nullable_field: z.string().nullable().optional(),
+  })
+  .passthrough(); // Forward compatibility
 ```
 
 ## Common Patterns
 
 ### Path Parameters
+
 ```typescript
 export async function getUser(client: Client, userId: string, params?: GetUserParams) {
   return client.get(`/users/${userId}`);
 }
 ```
 
-### Query Parameters  
+### Query Parameters
+
 ```typescript
-export type ListParams = { page?: number; limit?: number; };
+export type ListParams = { page?: number; limit?: number };
 ```
 
 ### Body Parameters
+
 ```typescript
-export type CreateParams = { body: { name: string; email: string; }; };
+export type CreateParams = { body: { name: string; email: string } };
 ```
 
 ## Error Handling Best Practices
 
 ### Use safePost/safeGet for Consistent Types
+
 ```typescript
 // ✅ Correct: Guaranteed RequestError type
 const httpResult = await client.safePost("/endpoint", data);
@@ -314,11 +374,12 @@ if (!httpResult.success) {
   throw httpResult.error; // RequestError with isRequestError: true
 }
 
-// ❌ Wrong: Throws FetchError, not RequestError  
+// ❌ Wrong: Throws FetchError, not RequestError
 const response = await client.post("/endpoint", data);
 ```
 
 ### Debugging E2E Failures
+
 ```typescript
 try {
   const result = await myAction(client, payload);
@@ -331,6 +392,7 @@ try {
 ## Pre-Implementation Checklist
 
 **Prevent Rework:**
+
 - [ ] Parameter names user-friendly? (`cvm_id` not `identifier`)
 - [ ] SafeError type guards planned?
 - [ ] Test update scope identified?
@@ -338,7 +400,8 @@ try {
 - [ ] Error messages actionable?
 
 **Red Flags:**
+
 - Copying API parameter names directly
 - Skipping real API testing
 - Assuming data structures
-- Missing SafeError type guards 
+- Missing SafeError type guards

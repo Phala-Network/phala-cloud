@@ -30,4 +30,3 @@ $ phala logout
 $ phala status
 ✗ Not authenticated. Run 'phala login' to authenticate.
 ```
-

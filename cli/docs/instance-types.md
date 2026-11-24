@@ -10,15 +10,15 @@ phala instance-types [family] [options]
 
 ## Arguments
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `family` | No | Instance type family to filter by (cpu, gpu) |
+| Name     | Required | Description                                  |
+| -------- | -------- | -------------------------------------------- |
+| `family` | No       | Instance type family to filter by (cpu, gpu) |
 
 ## Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--json` | `-j` | false | Output in JSON format |
+| Flag     | Short | Default | Description           |
+| -------- | ----- | ------- | --------------------- |
+| `--json` | `-j`  | false   | Output in JSON format |
 
 ## Examples
 
@@ -107,4 +107,3 @@ Instance types follow the pattern: `tdx.<family>.<size>`
 - `tdx` - TEE technology (Intel TDX)
 - `family` - Instance family (cpu, gpu)
 - `size` - Size tier (small, medium, large, xlarge, etc.)
-

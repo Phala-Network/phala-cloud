@@ -26,25 +26,29 @@ npm run test
 When writing tests, use the test helper to set up the test environment:
 
 ```typescript
-import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
-import { createTestEnvironment } from '../utils/test-helper';
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { createTestEnvironment } from "../utils/test-helper";
 
-describe('My Test Suite', () => {
-  const { runCommand, setup, teardown } = createTestEnvironment('my-test');
+describe("My Test Suite", () => {
+	const { runCommand, setup, teardown } = createTestEnvironment("my-test");
 
-  beforeAll(() => {
-    setup();
-  });
+	beforeAll(() => {
+		setup();
+	});
 
-  afterAll(() => {
-    teardown();
-  });
+	afterAll(() => {
+		teardown();
+	});
 
-  test('My test', async () => {
-    const { stdout, exitCode } = await runCommand(['command', 'subcommand', '--option']);
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain('Expected output');
-  });
+	test("My test", async () => {
+		const { stdout, exitCode } = await runCommand([
+			"command",
+			"subcommand",
+			"--option",
+		]);
+		expect(exitCode).toBe(0);
+		expect(stdout).toContain("Expected output");
+	});
 });
 ```
 
@@ -59,8 +63,8 @@ Each test suite gets its own temporary directory, which is cleaned up after the 
 The `mock.ts` utility provides functions for creating mock files and directories. Use these to set up the test environment with the necessary files.
 
 ```typescript
-import { createMockFile } from '../utils/mock';
+import { createMockFile } from "../utils/mock";
 
 // Create a mock file
-createMockFile('/path/to/file.json', JSON.stringify({ key: 'value' }));
+createMockFile("/path/to/file.json", JSON.stringify({ key: "value" }));
 ```

@@ -109,7 +109,7 @@ https://cloud.phala.network/device?user_code=XXXX-XXXX
 Profiles are stored in `~/.phala-cloud/credentials.json`
 
 Each profile contains:
+
 - API key
 - Workspace information
 - User metadata
-

@@ -10,10 +10,10 @@ phala whoami [options]
 
 ## Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--json` | `-j` | false | Output in JSON format |
-| `--api-token <token>` | | | Override API token for this command |
+| Flag                  | Short | Default | Description                         |
+| --------------------- | ----- | ------- | ----------------------------------- |
+| `--json`              | `-j`  | false   | Output in JSON format               |
+| `--api-token <token>` |       |         | Override API token for this command |
 
 ## Examples
 
@@ -53,4 +53,3 @@ other@example.com
 
 - `0` - Successfully retrieved user information
 - `1` - Not authenticated or error occurred
-

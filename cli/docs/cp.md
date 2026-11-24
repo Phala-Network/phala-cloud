@@ -12,21 +12,21 @@ SCP needs the CVM to serve SSH: a dev OS image (dstack 0.5 and older) or a
 
 ## Arguments
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `source` | Yes | Source path (local or `cvm-name:path`, use `:path` for linked CVM) |
-| `destination` | Yes | Destination path (same format as source) |
+| Name          | Required | Description                                                        |
+| ------------- | -------- | ------------------------------------------------------------------ |
+| `source`      | Yes      | Source path (local or `cvm-name:path`, use `:path` for linked CVM) |
+| `destination` | Yes      | Destination path (same format as source)                           |
 
 ## Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--identity <file>` | `-i` | | SSH identity file |
-| `--port <port>` | `-p` | 443 | SSH port (priority: CLI > phala.toml > 443) |
-| `--gateway <domain>` | `-g` | | Gateway domain (priority: CLI > phala.toml > API) |
-| `--recursive` | `-r` | false | Copy directories recursively |
-| `--verbose` | `-v` | false | Verbose SCP details |
-| `--dry-run` | | false | Print SCP command without executing |
+| Flag                 | Short | Default | Description                                       |
+| -------------------- | ----- | ------- | ------------------------------------------------- |
+| `--identity <file>`  | `-i`  |         | SSH identity file                                 |
+| `--port <port>`      | `-p`  | 443     | SSH port (priority: CLI > phala.toml > 443)       |
+| `--gateway <domain>` | `-g`  |         | Gateway domain (priority: CLI > phala.toml > API) |
+| `--recursive`        | `-r`  | false   | Copy directories recursively                      |
+| `--verbose`          | `-v`  | false   | Verbose SCP details                               |
+| `--dry-run`          |       | false   | Print SCP command without executing               |
 
 ## Path Format
 

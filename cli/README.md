@@ -42,47 +42,47 @@ By default, `phala deploy` uses the Phala Cloud pre-launch script. Use `--no-pre
 
 ### Deploy
 
-| Command | Description |
-|---------|-------------|
-| [`deploy`](docs/deploy.md) | Deploy new CVM or update existing one |
-| [`instance-types`](docs/instance-types.md) | List available instance types |
-| [`nodes`](docs/nodes.md) | List TEE worker nodes |
+| Command                                    | Description                           |
+| ------------------------------------------ | ------------------------------------- |
+| [`deploy`](docs/deploy.md)                 | Deploy new CVM or update existing one |
+| [`instance-types`](docs/instance-types.md) | List available instance types         |
+| [`nodes`](docs/nodes.md)                   | List TEE worker nodes                 |
 
 ### Manage
 
-| Command | Description |
-|---------|-------------|
-| [`apps`](docs/apps.md) | List deployed CVMs |
-| [`cvms`](docs/cvms.md) | Manage CVMs (start, stop, restart, delete, resize, ...) |
-| [`link`](docs/link.md) | Link a local directory to a CVM |
-| [`simulator`](docs/simulator.md) | Local TEE simulator for development |
+| Command                          | Description                                             |
+| -------------------------------- | ------------------------------------------------------- |
+| [`apps`](docs/apps.md)           | List deployed CVMs                                      |
+| [`cvms`](docs/cvms.md)           | Manage CVMs (start, stop, restart, delete, resize, ...) |
+| [`link`](docs/link.md)           | Link a local directory to a CVM                         |
+| [`simulator`](docs/simulator.md) | Local TEE simulator for development                     |
 
 ### CVM Operations
 
-| Command | Description |
-|---------|-------------|
+| Command                | Description                                              |
+| ---------------------- | -------------------------------------------------------- |
 | [`logs`](docs/logs.md) | Fetch logs from a CVM (container, serial, stdout/stderr) |
-| [`ps`](docs/ps.md) | List containers of a CVM |
-| [`ssh`](docs/ssh.md) | Connect to a CVM via SSH |
-| [`cp`](docs/cp.md) | Copy files to/from a CVM via SCP |
+| [`ps`](docs/ps.md)     | List containers of a CVM                                 |
+| [`ssh`](docs/ssh.md)   | Connect to a CVM via SSH                                 |
+| [`cp`](docs/cp.md)     | Copy files to/from a CVM via SCP                         |
 
 ### Profile / Auth
 
-| Command | Description |
-|---------|-------------|
-| [`login`](docs/login.md) | Authenticate with Phala Cloud |
-| [`logout`](docs/logout.md) | Remove stored API key |
-| [`status`](docs/status.md) | Check authentication status |
-| [`whoami`](docs/whoami.md) | Print the current user |
-| [`profiles`](docs/profiles.md) | List auth profiles |
-| [`switch`](docs/switch.md) | Switch auth profiles |
+| Command                        | Description                   |
+| ------------------------------ | ----------------------------- |
+| [`login`](docs/login.md)       | Authenticate with Phala Cloud |
+| [`logout`](docs/logout.md)     | Remove stored API key         |
+| [`status`](docs/status.md)     | Check authentication status   |
+| [`whoami`](docs/whoami.md)     | Print the current user        |
+| [`profiles`](docs/profiles.md) | List auth profiles            |
+| [`switch`](docs/switch.md)     | Switch auth profiles          |
 
 ### Advanced
 
-| Command | Description |
-|---------|-------------|
-| [`api`](docs/api.md) | Make authenticated API requests |
-| [`self`](docs/self.md) | CLI self-management (update) |
+| Command                            | Description                       |
+| ---------------------------------- | --------------------------------- |
+| [`api`](docs/api.md)               | Make authenticated API requests   |
+| [`self`](docs/self.md)             | CLI self-management (update)      |
 | [`completion`](docs/completion.md) | Generate shell completion scripts |
 
 ## Configuration
@@ -103,14 +103,14 @@ When `phala.toml` exists, commands like `deploy`, `logs`, `ssh`, and `cp` automa
 
 ### Environment variables
 
-| Variable | Description |
-|----------|-------------|
-| `PHALA_CLOUD_API_KEY` | Override the stored API key |
-| `PHALA_CLOUD_API_PREFIX` | Override the API base URL |
+| Variable                          | Description                                                                     |
+| --------------------------------- | ------------------------------------------------------------------------------- |
+| `PHALA_CLOUD_API_KEY`             | Override the stored API key                                                     |
+| `PHALA_CLOUD_API_PREFIX`          | Override the API base URL                                                       |
 | `PHALA_CLOUD_REQUESTS_PER_MINUTE` | Pace request starts per credential (default: `180`; must be a positive integer) |
-| `PHALA_CLOUD_PROFILE` | Use this auth profile instead of the current one (same as `--profile`) |
-| `PHALA_CLOUD_DIR` | Override the credentials directory (default: `~/.phala-cloud`) |
-| `PHALA_UPDATE_CHANNEL` | Release channel for `self update` (e.g., `latest`, `beta`) |
+| `PHALA_CLOUD_PROFILE`             | Use this auth profile instead of the current one (same as `--profile`)          |
+| `PHALA_CLOUD_DIR`                 | Override the credentials directory (default: `~/.phala-cloud`)                  |
+| `PHALA_UPDATE_CHANNEL`            | Release channel for `self update` (e.g., `latest`, `beta`)                      |
 
 ### Profiles
 

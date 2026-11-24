@@ -16,9 +16,9 @@ Get a configuration value
 
 #### Arguments
 
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `key` | Yes | Configuration key to retrieve |
+| Argument | Required | Description                   |
+| -------- | -------- | ----------------------------- |
+| `key`    | Yes      | Configuration key to retrieve |
 
 #### Examples
 
@@ -33,10 +33,10 @@ Set a configuration value
 
 #### Arguments
 
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `key` | Yes | Configuration key to set |
-| `value` | Yes | Value to assign to the key |
+| Argument | Required | Description                |
+| -------- | -------- | -------------------------- |
+| `key`    | Yes      | Configuration key to set   |
+| `value`  | Yes      | Value to assign to the key |
 
 #### Examples
 
@@ -53,9 +53,9 @@ Aliases: `config ls`
 
 #### Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--json` | `-j` | false | Output in JSON format |
+| Flag     | Short | Default | Description           |
+| -------- | ----- | ------- | --------------------- |
+| `--json` | `-j`  | false   | Output in JSON format |
 
 #### Examples
 

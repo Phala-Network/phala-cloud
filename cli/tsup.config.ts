@@ -37,6 +37,12 @@ export default defineConfig({
 	bundle: true,
 	splitting: false,
 	noExternal: ["@phala/cloud"],
+	// @phala/dstack-sdk is bundled via @phala/cloud and imports
+	// @noble/curves subpaths without the .js suffix required by v2's export
+	// map. Keep the noble packages external so the bundler leaves those
+	// imports as-is and the runtime resolves @noble/curves@1, whose nested
+	// copy is installed for @phala/dstack-sdk.
+	external: ["@noble/curves", "@noble/hashes"],
 	esbuildOptions(options) {
 		options.banner = {
 			js: "import { createRequire } from 'module';const require = createRequire(import.meta.url);",

@@ -16,25 +16,26 @@ connection usually fails.
 
 ## Arguments
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `cvm-id` | No | CVM ID, UUID, or name (uses linked CVM if omitted) |
+| Name     | Required | Description                                        |
+| -------- | -------- | -------------------------------------------------- |
+| `cvm-id` | No       | CVM ID, UUID, or name (uses linked CVM if omitted) |
 
 ## Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--port <port>` | `-p` | 443 | Gateway port (priority: CLI > phala.toml > 443) |
-| `--gateway <domain>` | `-g` | | Gateway domain (priority: CLI > phala.toml > API) |
-| `--timeout <seconds>` | `-t` | 30 | Connection timeout |
-| `--verbose` | `-v` | false | Show verbose connection details |
-| `--dry-run` | | false | Print SSH command without executing |
+| Flag                  | Short | Default | Description                                       |
+| --------------------- | ----- | ------- | ------------------------------------------------- |
+| `--port <port>`       | `-p`  | 443     | Gateway port (priority: CLI > phala.toml > 443)   |
+| `--gateway <domain>`  | `-g`  |         | Gateway domain (priority: CLI > phala.toml > API) |
+| `--timeout <seconds>` | `-t`  | 30      | Connection timeout                                |
+| `--verbose`           | `-v`  | false   | Show verbose connection details                   |
+| `--dry-run`           |       | false   | Print SSH command without executing               |
 
 ## Pass-through Options
 
 All arguments after `--` are passed directly to ssh. Trailing arguments are executed as remote commands.
 
 Common pass-through options:
+
 - `-i` — SSH identity file
 - `-L` — Local port forwarding
 - `-R` — Remote port forwarding

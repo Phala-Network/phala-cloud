@@ -24,13 +24,13 @@ List the custom domains of the workspace. Values are never truncated.
 
 #### Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--app-id <id>` | | | Only list domains bound to this app |
-| `--cvm-id <cvm>` | | | CVM whose app to use instead of `--app-id` |
-| `--page <n>` | | 1 | Page number |
-| `--page-size <n>` | | server default | Items per page (1-100) |
-| `--json` | `-j` | false | Output in JSON format |
+| Flag              | Short | Default        | Description                                |
+| ----------------- | ----- | -------------- | ------------------------------------------ |
+| `--app-id <id>`   |       |                | Only list domains bound to this app        |
+| `--cvm-id <cvm>`  |       |                | CVM whose app to use instead of `--app-id` |
+| `--page <n>`      |       | 1              | Page number                                |
+| `--page-size <n>` |       | server default | Items per page (1-100)                     |
+| `--json`          | `-j`  | false          | Output in JSON format                      |
 
 #### Examples
 
@@ -55,11 +55,11 @@ Show the DNS records to publish, the DNS error, the routing status and the app's
 
 #### Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--app-id <id>` | | | Only show the binding to this app |
-| `--cvm-id <cvm>` | | | CVM whose app to use instead of `--app-id` |
-| `--json` | `-j` | false | Output in JSON format |
+| Flag             | Short | Default | Description                                |
+| ---------------- | ----- | ------- | ------------------------------------------ |
+| `--app-id <id>`  |       |         | Only show the binding to this app          |
+| `--cvm-id <cvm>` |       |         | CVM whose app to use instead of `--app-id` |
+| `--json`         | `-j`  | false   | Output in JSON format                      |
 
 ---
 
@@ -73,12 +73,12 @@ Check a domain's DNS against what the app expects, without adding it. Prints eac
 
 #### Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--app-id <id>` | | `phala.toml` | App to check the domain for |
-| `--cvm-id <cvm>` | | | CVM whose app to use instead of `--app-id` |
-| `--port <n>` | | 443 | External HTTPS port the domain is served on |
-| `--json` | `-j` | false | Output in JSON format |
+| Flag             | Short | Default      | Description                                 |
+| ---------------- | ----- | ------------ | ------------------------------------------- |
+| `--app-id <id>`  |       | `phala.toml` | App to check the domain for                 |
+| `--cvm-id <cvm>` |       |              | CVM whose app to use instead of `--app-id`  |
+| `--port <n>`     |       | 443          | External HTTPS port the domain is served on |
+| `--json`         | `-j`  | false        | Output in JSON format                       |
 
 The command exits 0 whether or not the DNS is ready. Read `is_valid` in the JSON output to gate a script.
 
@@ -94,12 +94,12 @@ Add a custom domain to an app and print the DNS records you still have to publis
 
 #### Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--app-id <id>` | | `phala.toml` | App to add the domain to |
-| `--cvm-id <cvm>` | | | CVM whose app to use instead of `--app-id` |
-| `--port <n>` | | 443 | External HTTPS port the domain is served on |
-| `--json` | `-j` | false | Output in JSON format |
+| Flag             | Short | Default      | Description                                 |
+| ---------------- | ----- | ------------ | ------------------------------------------- |
+| `--app-id <id>`  |       | `phala.toml` | App to add the domain to                    |
+| `--cvm-id <cvm>` |       |              | CVM whose app to use instead of `--app-id`  |
+| `--port <n>`     |       | 443          | External HTTPS port the domain is served on |
+| `--json`         | `-j`  | false        | Output in JSON format                       |
 
 A domain registered by another workspace is refused with the server's message.
 
@@ -115,11 +115,11 @@ Re-check the DNS records of a domain you added. The app is found from the domain
 
 #### Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--app-id <id>` | | | Required when the domain is bound to more than one app |
-| `--cvm-id <cvm>` | | | CVM whose app to use instead of `--app-id` |
-| `--json` | `-j` | false | Output in JSON format |
+| Flag             | Short | Default | Description                                            |
+| ---------------- | ----- | ------- | ------------------------------------------------------ |
+| `--app-id <id>`  |       |         | Required when the domain is bound to more than one app |
+| `--cvm-id <cvm>` |       |         | CVM whose app to use instead of `--app-id`             |
+| `--json`         | `-j`  | false   | Output in JSON format                                  |
 
 ---
 
@@ -133,12 +133,12 @@ Remove a custom domain from an app.
 
 #### Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--app-id <id>` | | | Required when the domain is bound to more than one app |
-| `--cvm-id <cvm>` | | | CVM whose app to use instead of `--app-id` |
-| `--yes` | `-y` | false | Skip the confirmation prompt |
-| `--json` | `-j` | false | Output in JSON format |
+| Flag             | Short | Default | Description                                            |
+| ---------------- | ----- | ------- | ------------------------------------------------------ |
+| `--app-id <id>`  |       |         | Required when the domain is bound to more than one app |
+| `--cvm-id <cvm>` |       |         | CVM whose app to use instead of `--app-id`             |
+| `--yes`          | `-y`  | false   | Skip the confirmation prompt                           |
+| `--json`         | `-j`  | false   | Output in JSON format                                  |
 
 The command asks for confirmation in a terminal. Without a terminal (CI, pipes, `--json`) it refuses unless you pass `--yes`.
 
@@ -154,15 +154,15 @@ Add the dstack-ingress sidecar for a domain to your local compose file. The serv
 
 #### Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--app-id <id>` | | `phala.toml` | App the domain belongs to |
-| `--cvm-id <cvm>` | | | CVM whose app to use instead of `--app-id` |
-| `--port <n>` | | 443 | External HTTPS port the domain is served on |
-| `--dns-provider <name>` | | cloudflare | DNS provider the ingress uses for certificates |
-| `--compose <file>` | `-c` | `compose_file` in `phala.toml`, then `docker-compose.yml` | Compose file to edit |
-| `--yes` | `-y` | false | Write without asking |
-| `--json` | `-j` | false | Output in JSON format |
+| Flag                    | Short | Default                                                   | Description                                    |
+| ----------------------- | ----- | --------------------------------------------------------- | ---------------------------------------------- |
+| `--app-id <id>`         |       | `phala.toml`                                              | App the domain belongs to                      |
+| `--cvm-id <cvm>`        |       |                                                           | CVM whose app to use instead of `--app-id`     |
+| `--port <n>`            |       | 443                                                       | External HTTPS port the domain is served on    |
+| `--dns-provider <name>` |       | cloudflare                                                | DNS provider the ingress uses for certificates |
+| `--compose <file>`      | `-c`  | `compose_file` in `phala.toml`, then `docker-compose.yml` | Compose file to edit                           |
+| `--yes`                 | `-y`  | false                                                     | Write without asking                           |
+| `--json`                | `-j`  | false                                                     | Output in JSON format                          |
 
 If the compose already has the ingress for this domain, nothing changes. Without a terminal and without `--yes`, the command prints the diff, leaves the file alone and exits non-zero.
 
@@ -200,11 +200,11 @@ After the file is written, set the environment variables (in your `.env` file or
 
 ## Errors
 
-| Situation | Message |
-|-----------|---------|
-| Unknown app or domain (404) | `App or domain not found` |
-| Domain registered elsewhere (409, `add`) | The server's message |
+| Situation                                   | Message                                                                               |
+| ------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Unknown app or domain (404)                 | `App or domain not found`                                                             |
+| Domain registered elsewhere (409, `add`)    | The server's message                                                                  |
 | Lookup limit with a browser challenge (429) | The account hit the domain lookup limit; wait the stated seconds or use the dashboard |
-| Lookup limit without a challenge (429) | Wait the stated seconds and try again |
+| Lookup limit without a challenge (429)      | Wait the stated seconds and try again                                                 |
 
 `check`, `add` and `verify` share one rate limit.

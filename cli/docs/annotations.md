@@ -10,21 +10,21 @@ Annotations are not passed to the guest, not measured, and not part of the compo
 
 ## Arguments
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `cvm-id` | No | CVM identifier (UUID, app_id, instance_id, or name). Uses the CVM in `phala.toml` if omitted. An argument containing `=` is a pair, not a CVM id. |
-| `KEY=VALUE` | No | Annotation to set. The value is everything after the first `=`. |
+| Name        | Required | Description                                                                                                                                       |
+| ----------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cvm-id`    | No       | CVM identifier (UUID, app_id, instance_id, or name). Uses the CVM in `phala.toml` if omitted. An argument containing `=` is a pair, not a CVM id. |
+| `KEY=VALUE` | No       | Annotation to set. The value is everything after the first `=`.                                                                                   |
 
 Without pairs or flags, the command shows the current annotations. With pairs, it reads the current annotations, sets the given keys, and writes the full set back.
 
 ## Options
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--unset <key>` | | Remove a key (repeatable) |
-| `--clear` | false | Remove every annotation; cannot be combined with pairs or `--unset` |
-| `--replace` | false | Make the given pairs the whole set instead of merging them |
-| `--json` | false | JSON output |
+| Flag            | Default | Description                                                         |
+| --------------- | ------- | ------------------------------------------------------------------- |
+| `--unset <key>` |         | Remove a key (repeatable)                                           |
+| `--clear`       | false   | Remove every annotation; cannot be combined with pairs or `--unset` |
+| `--replace`     | false   | Make the given pairs the whole set instead of merging them          |
+| `--json`        | false   | JSON output                                                         |
 
 The change applies at once, without a restart. Host tools that read annotations only when QEMU launches see the new values after the CVM restarts (`phala cvms restart`).
 

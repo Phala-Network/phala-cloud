@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { execaCommand } from "execa";
+import { execa, parseCommandString } from "execa";
 import path from "node:path";
 import { config } from "dotenv";
 
@@ -26,7 +26,8 @@ describe.skipIf(skipTests)("Phala Cloud CLI - Nodes List E2E Test", () => {
 	test("nodes list --json returns valid JSON with at least one node", async () => {
 		const fullCommand = `${CLI_CMD} nodes list --json`;
 
-		const result = await execaCommand(fullCommand, {
+		const [file, ...args] = parseCommandString(fullCommand);
+		const result = await execa(file, args, {
 			env: {
 				...process.env,
 				PHALA_CLOUD_API_KEY: TEST_API_KEY,

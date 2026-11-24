@@ -23,25 +23,25 @@ bun add @phala/cloud
 ### Basic Usage
 
 ```typescript
-import { createClient } from '@phala/cloud';
+import { createClient } from "@phala/cloud";
 
 // Create client with API key
 const client = createClient({
-  apiKey: 'your-api-key',
+  apiKey: "your-api-key",
   // Optional: override base URL
   // baseURL: 'https://custom-api.example.com'
 });
 
 // Make API requests
-const result = await client.get('/kms');
+const result = await client.get("/kms");
 console.log(result);
 
 // Using safe methods that return a SafeResult
-const safeResult = await client.safeGet('/kms');
+const safeResult = await client.safeGet("/kms");
 if (safeResult.success) {
-  console.log('Success:', safeResult.data);
+  console.log("Success:", safeResult.data);
 } else {
-  console.error('Error:', safeResult.error);
+  console.error("Error:", safeResult.error);
 }
 ```
 

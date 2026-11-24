@@ -19,11 +19,11 @@ List all TEE worker nodes available in your workspace.
 
 #### Options
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--page` | 1 | Page number for pagination |
-| `--page-size` | 30 | Number of items per page (max: 100) |
-| `--json` / `-j` | false | JSON output |
+| Flag            | Default | Description                         |
+| --------------- | ------- | ----------------------------------- |
+| `--page`        | 1       | Page number for pagination          |
+| `--page-size`   | 30      | Number of items per page (max: 100) |
+| `--json` / `-j` | false   | JSON output                         |
 
 #### Examples
 

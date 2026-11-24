@@ -28,49 +28,49 @@ Do not run concurrent `phala deploy` commands with the same compose file in one 
 
 ## Basic Options
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-n, --name <name>` | directory name | CVM name |
-| `-c, --compose <path>` | docker-compose.yml | Docker Compose file path |
-| `-t, --instance-type <type>` | auto-selected | Instance type (e.g., tdx.small, tdx.medium) |
-| `-r, --region <region>` | auto-selected | Preferred region (e.g., us-west, eu-central) |
-| `-e, --env <value>` | | Environment variable (KEY=VALUE) or path to .env file. Repeatable |
-| `--kms <type>` | phala | KMS type: phala, ethereum/eth, or base |
-| `--wait` | false | Wait for the deployment to finish and fail if it failed. New CVM: wait until it is running. Update (`--cvm-id`): wait until the CVM is running again, or stays stopped if it was not running before the update |
-| `--dev` (alias `--dev-os`) | false | Enable SSH access. Without `--image` it picks the newest dstack release; on dstack 0.6+ it adds a `dev-box` service and saves it to your local compose file, below 0.6 (with `--image`) it deploys the dev variant of that release. An update re-adds the dev box |
-| `--public-logs` | true | Make CVM logs publicly accessible |
-| `--no-public-logs` | | Disable public log access |
-| `--public-sysinfo` | true | Make CVM system info publicly accessible |
-| `--no-public-sysinfo` | | Disable public system info access |
-| `--listed` | false | List CVM on Phala Trust Center |
-| `--no-listed` | | Don't list CVM on Trust Center |
+| Flag                         | Default            | Description                                                                                                                                                                                                                                                       |
+| ---------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-n, --name <name>`          | directory name     | CVM name                                                                                                                                                                                                                                                          |
+| `-c, --compose <path>`       | docker-compose.yml | Docker Compose file path                                                                                                                                                                                                                                          |
+| `-t, --instance-type <type>` | auto-selected      | Instance type (e.g., tdx.small, tdx.medium)                                                                                                                                                                                                                       |
+| `-r, --region <region>`      | auto-selected      | Preferred region (e.g., us-west, eu-central)                                                                                                                                                                                                                      |
+| `-e, --env <value>`          |                    | Environment variable (KEY=VALUE) or path to .env file. Repeatable                                                                                                                                                                                                 |
+| `--kms <type>`               | phala              | KMS type: phala, ethereum/eth, or base                                                                                                                                                                                                                            |
+| `--wait`                     | false              | Wait for the deployment to finish and fail if it failed. New CVM: wait until it is running. Update (`--cvm-id`): wait until the CVM is running again, or stays stopped if it was not running before the update                                                    |
+| `--dev` (alias `--dev-os`)   | false              | Enable SSH access. Without `--image` it picks the newest dstack release; on dstack 0.6+ it adds a `dev-box` service and saves it to your local compose file, below 0.6 (with `--image`) it deploys the dev variant of that release. An update re-adds the dev box |
+| `--public-logs`              | true               | Make CVM logs publicly accessible                                                                                                                                                                                                                                 |
+| `--no-public-logs`           |                    | Disable public log access                                                                                                                                                                                                                                         |
+| `--public-sysinfo`           | true               | Make CVM system info publicly accessible                                                                                                                                                                                                                          |
+| `--no-public-sysinfo`        |                    | Disable public system info access                                                                                                                                                                                                                                 |
+| `--listed`                   | false              | List CVM on Phala Trust Center                                                                                                                                                                                                                                    |
+| `--no-listed`                |                    | Don't list CVM on Trust Center                                                                                                                                                                                                                                    |
 
 ## Advanced Options
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--cvm-id <id>` | | CVM ID for updating existing deployment |
-| `--disk-size <size>` | 20G | Disk size with unit (e.g., 50G, 100G) |
-| `--image <image>` | newest production image | OS image name. Without it, the CLI asks for a production image, as the web console does; to use a development image, name it (run `phala os-images`) |
-| `--node <name>` | | Deploy to specific physical node name |
-| `--custom-app-id <id>` | | Use custom App ID (requires --nonce for PHALA KMS) |
-| `--nonce <nonce>` | | Nonce for deterministic app_id generation |
-| `--pre-launch-script <path>` | | Path to pre-launch script. An empty file is treated as unspecified and keeps the Phala Cloud default |
-| `--no-pre-launch-script` | false | Deploy without any pre-launch script (do not use the Phala Cloud default); cannot be combined with `--pre-launch-script` |
-| `--private-key <key>` | | Private key for on-chain KMS (ethereum/base) |
-| `--rpc-url <url>` | | RPC URL for blockchain interaction |
-| `--runner <runner>` | docker-compose | App runner: `docker-compose`, `nerdctl-compose` or `bash`. With `bash`, `--compose` is the script to run. `nerdctl-compose` and `bash` need the `compose_advanced` feature |
-| `--app-compose <path>` | | Whole app-compose JSON file, sent instead of `--compose` and the compose flags. Needs the `compose_advanced` feature |
-| `--init-script <slug>` | | Platform init script to run on every boot: `docker_cleanup` or `env_merge`. Repeatable. On update, replaces the current set |
-| `--launch-token <token>` | | Launch token (at least 32 bytes) the CVM must boot with |
-| `--generate-launch-token` | false | Gate the CVM with a launch token Phala Cloud generates for a new app (printed once), or with the app's existing token |
-| `--clear-init-scripts` | false | Update only: remove every platform init script; cannot be combined with `--init-script` |
-| `--launch-token-hash <hash>` | | Update only: set `requirements.launch_token_hash` to the hash printed by `phala apps launch-token set`; `""` removes it |
-| `--event-log-version <1\|2>` | | Event log digest format (dstack OS 0.6.0+) |
-| `--ephemeral-data-disk` | | Format the data disk on every boot (dstack OS 0.6.3+); `--no-ephemeral-data-disk` sets it to false |
-| `--gateway` / `--no-gateway` | true | Route the CVM through the gateway |
-| `--confirm-data-wipe` | false | Confirm an update that turns on `docker_cleanup` or `--ephemeral-data-disk`, which erase data on every boot |
-| `--debug` | false | Enable debug logging |
+| Flag                         | Default                 | Description                                                                                                                                                                |
+| ---------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--cvm-id <id>`              |                         | CVM ID for updating existing deployment                                                                                                                                    |
+| `--disk-size <size>`         | 20G                     | Disk size with unit (e.g., 50G, 100G)                                                                                                                                      |
+| `--image <image>`            | newest production image | OS image name. Without it, the CLI asks for a production image, as the web console does; to use a development image, name it (run `phala os-images`)                       |
+| `--node <name>`              |                         | Deploy to specific physical node name                                                                                                                                      |
+| `--custom-app-id <id>`       |                         | Use custom App ID (requires --nonce for PHALA KMS)                                                                                                                         |
+| `--nonce <nonce>`            |                         | Nonce for deterministic app_id generation                                                                                                                                  |
+| `--pre-launch-script <path>` |                         | Path to pre-launch script. An empty file is treated as unspecified and keeps the Phala Cloud default                                                                       |
+| `--no-pre-launch-script`     | false                   | Deploy without any pre-launch script (do not use the Phala Cloud default); cannot be combined with `--pre-launch-script`                                                   |
+| `--private-key <key>`        |                         | Private key for on-chain KMS (ethereum/base)                                                                                                                               |
+| `--rpc-url <url>`            |                         | RPC URL for blockchain interaction                                                                                                                                         |
+| `--runner <runner>`          | docker-compose          | App runner: `docker-compose`, `nerdctl-compose` or `bash`. With `bash`, `--compose` is the script to run. `nerdctl-compose` and `bash` need the `compose_advanced` feature |
+| `--app-compose <path>`       |                         | Whole app-compose JSON file, sent instead of `--compose` and the compose flags. Needs the `compose_advanced` feature                                                       |
+| `--init-script <slug>`       |                         | Platform init script to run on every boot: `docker_cleanup` or `env_merge`. Repeatable. On update, replaces the current set                                                |
+| `--launch-token <token>`     |                         | Launch token (at least 32 bytes) the CVM must boot with                                                                                                                    |
+| `--generate-launch-token`    | false                   | Gate the CVM with a launch token Phala Cloud generates for a new app (printed once), or with the app's existing token                                                      |
+| `--clear-init-scripts`       | false                   | Update only: remove every platform init script; cannot be combined with `--init-script`                                                                                    |
+| `--launch-token-hash <hash>` |                         | Update only: set `requirements.launch_token_hash` to the hash printed by `phala apps launch-token set`; `""` removes it                                                    |
+| `--event-log-version <1\|2>` |                         | Event log digest format (dstack OS 0.6.0+)                                                                                                                                 |
+| `--ephemeral-data-disk`      |                         | Format the data disk on every boot (dstack OS 0.6.3+); `--no-ephemeral-data-disk` sets it to false                                                                         |
+| `--gateway` / `--no-gateway` | true                    | Route the CVM through the gateway                                                                                                                                          |
+| `--confirm-data-wipe`        | false                   | Confirm an update that turns on `docker_cleanup` or `--ephemeral-data-disk`, which erase data on every boot                                                                |
+| `--debug`                    | false                   | Enable debug logging                                                                                                                                                       |
 
 ## Deprecated Options
 
@@ -330,14 +330,14 @@ $ phala deploy --no-listed --no-public-logs --no-public-sysinfo
 
 Common deployment errors:
 
-| Code | Description | Solution |
-|------|-------------|----------|
-| ERR-1001 | Instance type not found | Check available types with `phala instance-types` |
-| ERR-1002 | No available resources match requirements | Try different instance type or region |
-| ERR-1003 | Insufficient CPU capacity | Reduce CPU requirements or try different region |
-| ERR-1004 | Insufficient memory | Reduce memory requirements or try different region |
-| ERR-2003 | OS image not available | Use `--image` to specify valid image version |
-| ERR-2005 | Node not accessible | Node may be offline, try different node or omit `--node` |
+| Code     | Description                               | Solution                                                 |
+| -------- | ----------------------------------------- | -------------------------------------------------------- |
+| ERR-1001 | Instance type not found                   | Check available types with `phala instance-types`        |
+| ERR-1002 | No available resources match requirements | Try different instance type or region                    |
+| ERR-1003 | Insufficient CPU capacity                 | Reduce CPU requirements or try different region          |
+| ERR-1004 | Insufficient memory                       | Reduce memory requirements or try different region       |
+| ERR-2003 | OS image not available                    | Use `--image` to specify valid image version             |
+| ERR-2005 | Node not accessible                       | Node may be offline, try different node or omit `--node` |
 
 ## Instance Types
 
@@ -388,4 +388,3 @@ $ phala deploy --kms base \
   --private-key 0x... \
   --rpc-url https://base-mainnet.g.alchemy.com/v2/...
 ```
-

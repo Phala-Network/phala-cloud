@@ -39,10 +39,10 @@ If no `--key-file` is specified, the command looks for a default key in `~/.ssh/
 
 #### Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--name <name>` | | `<hostname>-<keyfile>` | Name for the SSH key |
-| `--key-file <path>` | | Auto-detected | Path to SSH public key file |
+| Flag                | Short | Default                | Description                 |
+| ------------------- | ----- | ---------------------- | --------------------------- |
+| `--name <name>`     |       | `<hostname>-<keyfile>` | Name for the SSH key        |
+| `--key-file <path>` |       | Auto-detected          | Path to SSH public key file |
 
 #### Examples
 
@@ -62,15 +62,15 @@ Remove an SSH key from your account.
 
 #### Arguments
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `key_id` | No | SSH key ID to remove (from `phala ssh-keys list`) |
+| Name     | Required | Description                                       |
+| -------- | -------- | ------------------------------------------------- |
+| `key_id` | No       | SSH key ID to remove (from `phala ssh-keys list`) |
 
 #### Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--interactive` | `-i` | false | Select key from list |
+| Flag            | Short | Default | Description          |
+| --------------- | ----- | ------- | -------------------- |
+| `--interactive` | `-i`  | false   | Select key from list |
 
 #### Examples
 
@@ -89,9 +89,9 @@ Import SSH keys from a GitHub user's public profile. Keys that already exist are
 
 #### Arguments
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `github_username` | Yes | GitHub username to import SSH keys from |
+| Name              | Required | Description                             |
+| ----------------- | -------- | --------------------------------------- |
+| `github_username` | Yes      | GitHub username to import SSH keys from |
 
 #### Examples
 
@@ -125,10 +125,10 @@ Authorize a workspace member's keys on a CVM. The nickname is resolved server-si
 
 #### Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--id <sshkey_id>` | | | SSH key hashid to grant |
-| `--apply-now` | | false | Restart the CVM so the change takes effect immediately |
+| Flag               | Short | Default | Description                                            |
+| ------------------ | ----- | ------- | ------------------------------------------------------ |
+| `--id <sshkey_id>` |       |         | SSH key hashid to grant                                |
+| `--apply-now`      |       | false   | Restart the CVM so the change takes effect immediately |
 
 #### Examples
 
@@ -148,10 +148,10 @@ Withdraw SSH keys from a CVM. The account key is left intact and can be re-grant
 
 #### Options
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--id <sshkey_id>` | | | SSH key hashid to withdraw |
-| `--apply-now` | | false | Restart the CVM so the change takes effect immediately |
+| Flag               | Short | Default | Description                                            |
+| ------------------ | ----- | ------- | ------------------------------------------------------ |
+| `--id <sshkey_id>` |       |         | SSH key hashid to withdraw                             |
+| `--apply-now`      |       | false   | Restart the CVM so the change takes effect immediately |
 
 #### Examples
 
