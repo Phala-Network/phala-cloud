@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { type Client, type SafeResult } from "../../client";
 import type { ApiVersion } from "../../types/client";
+import { OptionalCvmFinalityWaitSchema } from "../../types/cvm_finality";
 import type { CommitCvmProvisionResponse } from "../../types/version-mappings";
 
 /**
@@ -85,6 +86,8 @@ import type { CommitCvmProvisionResponse } from "../../types/version-mappings";
  *
  * - **encrypted_env**: Hex-encoded encrypted environment variables
  * - **env_keys**: List of environment variable keys to allow
+ * - **transaction_hash**: On-chain registration transaction hash, if available.
+ *   A response with `finality_wait` means that the CVM has been accepted but must wait before starting.
  * - **kms_id**: KMS instance identifier (if using specific KMS)
  * - **contract_address**: On-chain KMS contract address (required for ETHEREUM/BASE KMS)
  * - **deployer_address**: Deployer address for on-chain verification (required for ETHEREUM/BASE KMS)
@@ -152,6 +155,8 @@ const CommitCvmProvisionBaseSchema = z
   .object({
     name: z.string(),
     status: z.string(),
+    correlation_id: z.string().nullish(),
+    finality_wait: OptionalCvmFinalityWaitSchema,
     teepod_id: z.number(),
     teepod: z
       .object({
@@ -213,6 +218,7 @@ export const CommitCvmProvisionRequestSchema = z
     token: z.string().optional(),
     app_id: z.string().optional(),
     compose_hash: z.string().optional(),
+    transaction_hash: z.string().optional(),
     /** @deprecated Identifies a KMS node, not the on-chain KMS contract. Use kms_contract_id. */
     kms_id: z.string().optional(),
     kms_contract_id: z.union([z.string(), z.number()]).optional(),

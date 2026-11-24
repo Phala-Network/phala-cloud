@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { type Client } from "../../client";
+import { CvmFinalityWaitAcceptedSchema } from "../../types/cvm_finality";
 import { defineAction } from "../../utils/define-action";
 
 /**
@@ -24,16 +25,17 @@ import { defineAction } from "../../utils/define-action";
  *
  * ## Returns
  *
- * `void | unknown`
- *
- * No response body (HTTP 202 Accepted). The update is processed asynchronously. Return type depends on schema parameter.
+ * The update is processed asynchronously. If the response includes a correlation ID,
+ * the SDK returns the acknowledgment, including any usable `finality_wait` data.
+ * Older servers may return no body; the default return value in that case is `undefined`.
  *
  * ## Parameters
  *
  * ### request (required)
- * - **Type:** `CommitCvmComposeFileUpdateRequestData`
+ * - **Type:** `CommitCvmComposeFileUpdateRequest`
  *
- * Request parameters containing the CVM ID and commit request data.
+ * Provide the CVM ID, the provisioned compose hash, and the registration transaction
+ * hash if the update requires an on-chain registration.
  *
  * ### parameters (optional)
  * - **Type:** `CommitCvmComposeFileUpdateParameters`
@@ -41,7 +43,7 @@ import { defineAction } from "../../utils/define-action";
  * Optional behavior parameters for schema validation.
  *
  * ```typescript
- * // Use default schema (void response)
+ * // Use the default response schema
  * await commitCvmComposeFileUpdate(client, { cvmId: 'cvm-123', request: commitRequest })
  *
  * // Return raw data without validation
@@ -96,6 +98,7 @@ export const CommitCvmComposeFileUpdateRequestSchema = z
       .transform((val) => (val.startsWith("instance_") ? val : `instance_${val}`))
       .optional(),
     compose_hash: z.string().min(1, "Compose hash is required"),
+    transaction_hash: z.string().optional(),
     encrypted_env: z.string().optional(),
     env_keys: z.array(z.string()).optional(),
     update_env_vars: z.boolean().optional().nullable(),
@@ -107,25 +110,30 @@ export const CommitCvmComposeFileUpdateRequestSchema = z
   .transform((data) => ({
     cvmId: data.id || data.uuid || data.app_id || data.instance_id,
     compose_hash: data.compose_hash,
+    transaction_hash: data.transaction_hash,
     encrypted_env: data.encrypted_env,
     env_keys: data.env_keys,
     update_env_vars: data.update_env_vars ?? undefined,
     _raw: data,
   }));
 
-export const CommitCvmComposeFileUpdateSchema = z.any().transform(() => undefined);
+export const CommitCvmComposeFileUpdateSchema = z.unknown().transform((value) => {
+  const accepted = CvmFinalityWaitAcceptedSchema.safeParse(value);
+  return accepted.success && accepted.data.correlation_id.trim() ? accepted.data : undefined;
+});
 
 export type CommitCvmComposeFileUpdateRequest = Omit<
   z.infer<typeof CommitCvmComposeFileUpdateRequestSchema>,
-  "cvmId" | "_raw" | "update_env_vars"
+  "cvmId" | "_raw" | "update_env_vars" | "transaction_hash"
 > & {
+  transaction_hash?: string;
   id?: string;
   uuid?: string;
   app_id?: string;
   instance_id?: string;
   update_env_vars?: boolean | null;
 };
-export type CommitCvmComposeFileUpdate = undefined;
+export type CommitCvmComposeFileUpdate = z.infer<typeof CommitCvmComposeFileUpdateSchema>;
 
 const { action: commitCvmComposeFileUpdate, safeAction: safeCommitCvmComposeFileUpdate } =
   defineAction<CommitCvmComposeFileUpdateRequest, typeof CommitCvmComposeFileUpdateSchema>(
@@ -135,6 +143,9 @@ const { action: commitCvmComposeFileUpdate, safeAction: safeCommitCvmComposeFile
 
       return await client.patch(`/cvms/${validatedRequest.cvmId}/compose_file`, {
         compose_hash: validatedRequest.compose_hash,
+        ...(validatedRequest.transaction_hash === undefined
+          ? {}
+          : { transaction_hash: validatedRequest.transaction_hash }),
         encrypted_env: validatedRequest.encrypted_env,
         env_keys: validatedRequest.env_keys,
         update_env_vars: validatedRequest.update_env_vars,

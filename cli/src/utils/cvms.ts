@@ -16,6 +16,7 @@ class CvmWaitError extends Error {}
  * @param cvmId CVM identifier (UUID, app_id, name, or any format accepted by CvmIdSchema)
  * @param timeoutMs Maximum time to wait in milliseconds
  * @param expectedStatus Status that counts as ready (default: running)
+ * @param existingClient Reuse the caller's client when it already has credentials.
  * @returns Promise that resolves when CVM is in expectedStatus and not in_progress, or rejects on timeout.
  * With failOnError, a CVM that settles in error rejects at once; only use it
  * when the CVM cannot start from error (a restart of an error CVM would fail
@@ -27,8 +28,9 @@ export async function waitForCvmReady(
 	context: Pick<CommandContext, "env" | "projectConfig" | "globalOptions">,
 	expectedStatus = "running",
 	failOnError = false,
+	existingClient?: CliApiClient,
 ): Promise<void> {
-	const client = await getClient(context);
+	const client = existingClient ?? (await getClient(context));
 	const startTime = Date.now();
 	const deadline = startTime + Math.max(0, timeoutMs);
 	let rateLimitAttempt = 0;
@@ -73,8 +75,12 @@ export async function waitForCvmReady(
 					logger.success(`CVM is ready (took ${elapsed}s)`);
 					return;
 				}
-				if (failOnError && currentStatus === "error" && !inProgress) {
-					throw new CvmWaitError("CVM is in error state");
+				if (
+					failOnError &&
+					(currentStatus === "error" || currentStatus === "create_failed") &&
+					!inProgress
+				) {
+					throw new CvmWaitError(`CVM is in ${currentStatus} state`);
 				}
 			}
 		} catch (error) {
@@ -119,15 +125,24 @@ export async function waitForCvmOperation(
 		try {
 			const remainingMs = Math.max(1, deadline - Date.now());
 			const { items } = await client.get<{
-				items: Array<{ status: string; error_message?: string | null }>;
+				items: Array<{
+					correlation_id?: string;
+					status: string;
+					error_message?: string | null;
+				}>;
 			}>(`/cvms/${cvmId}/operations`, {
 				params: { correlation_id: correlationId },
 				timeout: remainingMs,
 			});
 			rateLimitAttempt = 0;
-			const operation = items[0];
+			const operation =
+				items.find((item) => item.correlation_id === correlationId) ??
+				// Older scoped responses may omit the ID on their single result.
+				(items.length === 1 && items[0]?.correlation_id === undefined
+					? items[0]
+					: undefined);
 			if (operation?.status === "completed") return;
-			if (operation && operation.status !== "in_progress") {
+			if (operation?.status === "failed" || operation?.status === "cancelled") {
 				throw new CvmWaitError(
 					`${label} ${operation.status}: ${operation.error_message ?? "no error message"}`,
 				);
@@ -198,5 +213,12 @@ export async function waitForCvmCreated(
 			"Create",
 		);
 	}
-	await waitForCvmReady(cvmId, deadline - Date.now(), context, "running", true);
+	await waitForCvmReady(
+		cvmId,
+		deadline - Date.now(),
+		context,
+		"running",
+		true,
+		client,
+	);
 }

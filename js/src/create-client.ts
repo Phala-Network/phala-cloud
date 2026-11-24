@@ -317,6 +317,23 @@ const additionalActions = {
   replicateCvm: actions.replicateCvm,
   safeReplicateCvm: actions.safeReplicateCvm,
   watchCvmState: actions.watchCvmState,
+  waitForCvmFinality: actions.waitForCvmFinality,
+  waitForAppEnvEncryptPubKey: actions.waitForAppEnvEncryptPubKey,
+  safeWaitForCvmFinality: actions.safeWaitForCvmFinality,
+  listCvmDrafts: actions.listCvmDrafts,
+  safeListCvmDrafts: actions.safeListCvmDrafts,
+  getCvmDraft: actions.getCvmDraft,
+  safeGetCvmDraft: actions.safeGetCvmDraft,
+  stageCvmDraft: actions.stageCvmDraft,
+  safeStageCvmDraft: actions.safeStageCvmDraft,
+  undoCvmDraftEntry: actions.undoCvmDraftEntry,
+  safeUndoCvmDraftEntry: actions.safeUndoCvmDraftEntry,
+  discardCvmDraft: actions.discardCvmDraft,
+  safeDiscardCvmDraft: actions.safeDiscardCvmDraft,
+  applyCvmDraft: actions.applyCvmDraft,
+  safeApplyCvmDraft: actions.safeApplyCvmDraft,
+  getAppPendingUpdates: actions.getAppPendingUpdates,
+  safeGetAppPendingUpdates: actions.safeGetAppPendingUpdates,
   patchCvm: actions.patchCvm,
   safePatchCvm: actions.safePatchCvm,
   confirmCvmPatch: actions.confirmCvmPatch,
@@ -379,6 +396,8 @@ const additionalActions = {
 const onChainActions = {
   addComposeHash: actions.addComposeHash,
   safeAddComposeHash: actions.safeAddComposeHash,
+  removeComposeHash: actions.removeComposeHash,
+  safeRemoveComposeHash: actions.safeRemoveComposeHash,
   deployAppAuth: actions.deployAppAuth,
   safeDeployAppAuth: actions.safeDeployAppAuth,
   addDevice: actions.addDevice,
@@ -412,8 +431,24 @@ type VersionedAppAction =
   | "safeGetAppCvms"
   | "replicateCvm"
   | "safeReplicateCvm";
-type SimpleAdditionalAction = "revokeCurrentApiToken" | "safeRevokeCurrentApiToken";
+type SimpleAdditionalAction =
+  | "revokeCurrentApiToken"
+  | "safeRevokeCurrentApiToken"
+  | "listCvmDrafts"
+  | "safeListCvmDrafts";
 type SchemaAction =
+  | "getCvmDraft"
+  | "safeGetCvmDraft"
+  | "stageCvmDraft"
+  | "safeStageCvmDraft"
+  | "undoCvmDraftEntry"
+  | "safeUndoCvmDraftEntry"
+  | "discardCvmDraft"
+  | "safeDiscardCvmDraft"
+  | "applyCvmDraft"
+  | "safeApplyCvmDraft"
+  | "getAppPendingUpdates"
+  | "safeGetAppPendingUpdates"
   | "getWorkspaceNodes"
   | "safeGetWorkspaceNodes"
   | "getWorkspaceQuotas"
@@ -801,6 +836,14 @@ export interface Client<V extends ApiVersion = DefaultApiVersion>
     schema: T;
   }): Promise<SafeResult<z.infer<T>>>;
   safeRevokeCurrentApiToken(parameters: { schema: false }): Promise<SafeResult<unknown>>;
+  listCvmDrafts(): Promise<actions.CvmDraftList>;
+  listCvmDrafts<T extends z.ZodTypeAny>(parameters: { schema: T }): Promise<z.infer<T>>;
+  listCvmDrafts(parameters: { schema: false }): Promise<unknown>;
+  safeListCvmDrafts(): Promise<SafeResult<actions.CvmDraftList>>;
+  safeListCvmDrafts<T extends z.ZodTypeAny>(parameters: {
+    schema: T;
+  }): Promise<SafeResult<z.infer<T>>>;
+  safeListCvmDrafts(parameters: { schema: false }): Promise<SafeResult<unknown>>;
   getAppList(
     request?: actions.GetAppListRequest,
   ): Promise<import("./types/version-mappings").GetAppListResponse<V>>;

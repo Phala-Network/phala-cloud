@@ -1,13 +1,15 @@
 import { z } from "zod";
 import { CvmIdObjectSchema, CvmIdSchema, refineCvmId } from "../../types/cvm_id";
 import { defineAction } from "../../utils/define-action";
+import { CvmUpdateAcceptedFieldsSchema, readCvmUpdateAcceptance } from "./cvm_update_response";
 
 /**
  * Commit CVM update (token-based, no auth required)
  *
- * Completes a two-phase CVM update using a one-time commit token generated
- * during a prepare-only PATCH request. This enables multisig workflows where
- * the on-chain signer is different from the original API caller.
+ * Submits a two-phase CVM update using a one-time commit token generated
+ * during a prepare-only request. The update may still be awaiting finality.
+ * The token enables multisig workflows where the signer is different from
+ * the original API caller.
  *
  * @example
  * ```typescript
@@ -47,8 +49,7 @@ export const CommitCvmUpdateRequestSchema = refineCvmId(
 
 export type CommitCvmUpdateRequest = z.input<typeof CommitCvmUpdateRequestSchema>;
 
-const CommitCvmUpdateResultSchema = z.object({
-  correlationId: z.string(),
+const CommitCvmUpdateResultSchema = CvmUpdateAcceptedFieldsSchema.extend({
   status: z.string(),
 });
 
@@ -61,19 +62,12 @@ const { action: commitCvmUpdate, safeAction: safeCommitCvmUpdate } = defineActio
   const parsed = CommitCvmUpdateRequestSchema.parse(request);
   const { cvmId } = CvmIdSchema.parse(parsed);
 
-  const response = await client.post<{
-    correlation_id: string;
-    status: string;
-  }>(`/cvms/${cvmId}/commit-update`, {
+  const response = await client.post(`/cvms/${cvmId}/commit-update`, {
     token: parsed.token,
     compose_hash: parsed.composeHash,
     transaction_hash: parsed.transactionHash,
   });
-
-  return {
-    correlationId: response.correlation_id,
-    status: response.status,
-  };
+  return readCvmUpdateAcceptance(response);
 });
 
 export { commitCvmUpdate, safeCommitCvmUpdate };

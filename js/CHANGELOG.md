@@ -1,3 +1,9 @@
+## Unreleased
+
+### ⚠ BREAKING CHANGE
+
+- **js:** `commitCvmComposeFileUpdate` and its safe variant can now return an acceptance object when an update is waiting for on-chain finality. The default return type is `CvmFinalityWaitAccepted | undefined`. Widen explicit `undefined` return annotations and check for a result before reading its fields.
+
 ## [0.6.6](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.6-beta.1...js-v0.6.6) (2026-11-24)
 
 ## [0.6.6-beta.1](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.5...js-v0.6.6-beta.1) (2026-11-24)
@@ -20,6 +26,7 @@
 ### refactor
 
 - Revert "chore(deps): hold back @types/node, typescript and @biomejs/biome major bumps" ([0a3c6b1](https://github.com/Phala-Network/phala-cloud/commit/0a3c6b1946732590900c41ff5c4f527c77c7c6f5))
+
 ## [0.6.5](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.4...js-v0.6.5) (2026-11-12)
 
 ### feat

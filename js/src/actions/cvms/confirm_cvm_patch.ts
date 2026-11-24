@@ -1,13 +1,19 @@
 import { z } from "zod";
 import { CvmIdObjectSchema, CvmIdSchema, refineCvmId } from "../../types/cvm_id";
 import { defineAction } from "../../utils/define-action";
+import {
+  CvmUpdateAcceptedFieldsSchema,
+  cvmUpdateCommitHeaders,
+  readCvmUpdateAcceptance,
+} from "./cvm_update_response";
 
 /**
  * Confirm CVM patch (Phase 2 of on-chain KMS update)
  *
- * Completes a two-phase CVM update by providing the compose hash and transaction
- * hash proving on-chain registration. Call this after `patchCvm` returns
- * `{ requiresOnChainHash: true }` and you have registered the compose hash on-chain.
+ * Submits a two-phase CVM update by providing the compose hash and transaction
+ * hash proving on-chain registration. The update may still be awaiting finality.
+ * Call this after `patchCvm` returns `{ requiresOnChainHash: true }` and you
+ * have registered the compose hash on-chain.
  *
  * @example
  * ```typescript
@@ -46,9 +52,7 @@ export const ConfirmCvmPatchRequestSchema = refineCvmId(
 
 export type ConfirmCvmPatchRequest = z.input<typeof ConfirmCvmPatchRequestSchema>;
 
-const ConfirmCvmPatchResultSchema = z.object({
-  correlationId: z.string(),
-});
+const ConfirmCvmPatchResultSchema = CvmUpdateAcceptedFieldsSchema;
 
 export type ConfirmCvmPatchResult = z.infer<typeof ConfirmCvmPatchResultSchema>;
 
@@ -59,20 +63,14 @@ const { action: confirmCvmPatch, safeAction: safeConfirmCvmPatch } = defineActio
   const parsed = ConfirmCvmPatchRequestSchema.parse(request);
   const { cvmId } = CvmIdSchema.parse(parsed);
 
-  const response = await client.patch<{ correlation_id: string }>(
+  const response = await client.patch(
     `/cvms/${cvmId}`,
     {},
     {
-      headers: {
-        "X-Compose-Hash": parsed.composeHash,
-        "X-Transaction-Hash": parsed.transactionHash,
-      },
+      headers: cvmUpdateCommitHeaders(parsed.composeHash, parsed.transactionHash),
     },
   );
-
-  return {
-    correlationId: response.correlation_id,
-  };
+  return readCvmUpdateAcceptance(response);
 });
 
 export { confirmCvmPatch, safeConfirmCvmPatch };

@@ -1,5 +1,6 @@
 import type { Chain } from "viem";
 import { z } from "zod";
+import { OptionalCvmFinalityWaitSchema } from "./cvm_finality";
 import { CvmNetworkUrlsV20251028Schema } from "./cvm_info_v20251028";
 import { SUPPORTED_CHAINS } from "./supported_chains";
 
@@ -219,6 +220,7 @@ export const CvmInfoV20260522Schema = CvmInfoV20260121Schema.extend({
 export type CvmInfoV20260522 = z.infer<typeof CvmInfoV20260522Schema>;
 
 export const CvmInfoDetailV20260121Schema = CvmInfoV20260121Schema.extend({
+  finality_wait: OptionalCvmFinalityWaitSchema,
   compose_file: z
     .union([z.record(z.string(), z.any()), z.string()])
     .nullable()
@@ -227,6 +229,7 @@ export const CvmInfoDetailV20260121Schema = CvmInfoV20260121Schema.extend({
 export type CvmInfoDetailV20260121 = z.infer<typeof CvmInfoDetailV20260121Schema>;
 
 export const CvmInfoDetailV20260522Schema = CvmInfoV20260522Schema.extend({
+  finality_wait: OptionalCvmFinalityWaitSchema,
   compose_file: z
     .union([z.record(z.string(), z.any()), z.string()])
     .nullable()

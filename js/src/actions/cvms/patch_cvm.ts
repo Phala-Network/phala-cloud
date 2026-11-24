@@ -5,9 +5,12 @@ import {
   VerityVolumeSchema,
 } from "../../types/app_compose";
 import { CvmIdObjectSchema, CvmIdSchema, refineCvmId } from "../../types/cvm_id";
-import { KmsInfoSchema } from "../../types/kms_info";
 import { defineAction } from "../../utils/define-action";
-import { PhalaCloudError } from "../../utils/errors";
+import {
+  CvmUpdateAcceptedFieldsSchema,
+  CvmUpdateHashRequiredSchema,
+  submitCvmUpdate,
+} from "./cvm_update_response";
 
 /**
  * Patch CVM (unified update)
@@ -146,46 +149,49 @@ export const ComposePatchSchema = z
 
 export type ComposePatch = z.input<typeof ComposePatchSchema>;
 
+export const CvmPatchBodySchema = z.object({
+  // Compose-hash-affecting fields
+  docker_compose_file: z.string().optional(),
+  pre_launch_script: z.string().optional(),
+  allowed_envs: z.array(z.string()).optional(),
+
+  // Visibility
+  public_logs: z.boolean().optional(),
+  public_sysinfo: z.boolean().optional(),
+  public_tcbinfo: z.boolean().optional(),
+
+  // JSON Merge Patch of the app compose (see ComposePatchSchema)
+  compose: ComposePatchSchema.optional(),
+  // Platform init scripts this CVM runs, replacing the current set
+  init_scripts: z.array(InitScriptSlugSchema).optional(),
+  // Raw guest init scripts, replacing the current set. System admins only.
+  init_script: z.array(z.string()).optional(),
+  // Confirms turning on docker_cleanup, runtime_tmpfs or requirements.ephemeral_data_disk,
+  // which erase data on every boot
+  confirm_data_wipe: z.boolean().optional(),
+
+  // Non-compose-hash config
+  encrypted_env: z.string().optional(),
+  user_config: z.string().optional(),
+  gpus: PatchCvmGpuConfigSchema.optional(),
+
+  // Resources
+  vcpu: z.number().optional(),
+  memory: z.number().optional(),
+  disk_size: z.number().optional(),
+  instance_type: z.string().optional(),
+
+  // OS image
+  image: z.string().optional(),
+
+  // Shutdown behavior
+  shutdown_timeout: z.number().optional(),
+  allow_force_stop: z.boolean().optional(),
+});
+
 export const PatchCvmRequestSchema = refineCvmId(
   CvmIdObjectSchema.extend({
-    // Compose-hash-affecting fields
-    docker_compose_file: z.string().optional(),
-    pre_launch_script: z.string().optional(),
-    allowed_envs: z.array(z.string()).optional(),
-
-    // Visibility
-    public_logs: z.boolean().optional(),
-    public_sysinfo: z.boolean().optional(),
-    public_tcbinfo: z.boolean().optional(),
-
-    // JSON Merge Patch of the app compose (see ComposePatchSchema)
-    compose: ComposePatchSchema.optional(),
-    // Platform init scripts this CVM runs, replacing the current set
-    init_scripts: z.array(InitScriptSlugSchema).optional(),
-    // Raw guest init scripts, replacing the current set. System admins only.
-    init_script: z.array(z.string()).optional(),
-    // Confirms turning on docker_cleanup, runtime_tmpfs or requirements.ephemeral_data_disk,
-    // which erase data on every boot
-    confirm_data_wipe: z.boolean().optional(),
-
-    // Non-compose-hash config
-    encrypted_env: z.string().optional(),
-    user_config: z.string().optional(),
-    gpus: PatchCvmGpuConfigSchema.optional(),
-
-    // Resources
-    vcpu: z.number().optional(),
-    memory: z.number().optional(),
-    disk_size: z.number().optional(),
-    instance_type: z.string().optional(),
-
-    // OS image
-    image: z.string().optional(),
-
-    // Shutdown behavior
-    shutdown_timeout: z.number().optional(),
-    allow_force_stop: z.boolean().optional(),
-
+    ...CvmPatchBodySchema.shape,
     // Prepare-only mode (for multisig workflows)
     prepareOnly: z.boolean().optional(),
   }),
@@ -193,58 +199,18 @@ export const PatchCvmRequestSchema = refineCvmId(
 
 export type PatchCvmRequest = z.input<typeof PatchCvmRequestSchema>;
 
-// Response when update is accepted (202)
-const PatchCvmAcceptedSchema = z.object({
+const PatchCvmAcceptedSchema = CvmUpdateAcceptedFieldsSchema.extend({
   requiresOnChainHash: z.literal(false),
-  correlationId: z.string(),
-});
-
-// Response when compose hash registration is required (465)
-const PatchCvmHashRequiredSchema = z.object({
-  requiresOnChainHash: z.literal(true),
-  composeHash: z.string(),
-  appId: z.string(),
-  deviceId: z.string(),
-  kmsInfo: KmsInfoSchema,
-  commitToken: z.string().optional(),
-  commitUrl: z.string().optional(),
-  apiCommitUrl: z.string().optional(),
-  onchainStatus: z
-    .object({
-      compose_hash_allowed: z.boolean(),
-      device_id_allowed: z.boolean(),
-      is_allowed: z.boolean(),
-    })
-    .optional(),
 });
 
 export const PatchCvmResultSchema = z.discriminatedUnion("requiresOnChainHash", [
   PatchCvmAcceptedSchema,
-  PatchCvmHashRequiredSchema,
+  CvmUpdateHashRequiredSchema,
 ]);
 
 export type PatchCvmResult = z.infer<typeof PatchCvmResultSchema>;
 export type PatchCvmAccepted = z.infer<typeof PatchCvmAcceptedSchema>;
-export type PatchCvmHashRequired = z.infer<typeof PatchCvmHashRequiredSchema>;
-
-/**
- * Extract structured error details into a key-value map
- */
-function extractDetailsMap(detail: unknown): Record<string, unknown> {
-  const map: Record<string, unknown> = {};
-  if (!detail || typeof detail !== "object") return map;
-
-  const obj = detail as Record<string, unknown>;
-  const details = obj.details;
-  if (!Array.isArray(details)) return map;
-
-  for (const item of details) {
-    if (item && typeof item === "object" && "field" in item && "value" in item) {
-      map[item.field as string] = item.value;
-    }
-  }
-  return map;
-}
+export type PatchCvmHashRequired = z.infer<typeof CvmUpdateHashRequiredSchema>;
 
 const { action: patchCvm, safeAction: safePatchCvm } = defineAction<
   PatchCvmRequest,
@@ -256,36 +222,11 @@ const { action: patchCvm, safeAction: safePatchCvm } = defineAction<
   // Build request body excluding CVM identifier and meta fields
   const { id, uuid, app_id, instance_id, name, prepareOnly, ...body } = parsed;
 
-  try {
-    const response = prepareOnly
-      ? await client.patch<{ correlation_id?: string; status?: string }>(`/cvms/${cvmId}`, body, {
-          headers: { "X-Prepare-Only": "true" },
-        })
-      : await client.patch<{ correlation_id?: string; status?: string }>(`/cvms/${cvmId}`, body);
-    return {
-      requiresOnChainHash: false as const,
-      // no_change (unchanged compose) has no correlation_id; CLI still requires a string.
-      correlationId: response.correlation_id ?? "",
-    };
-  } catch (error) {
-    if (error instanceof PhalaCloudError && error.status === 465) {
-      const details = extractDetailsMap(error.detail);
-      return {
-        requiresOnChainHash: true as const,
-        composeHash: details.compose_hash as string,
-        appId: String(details.app_id),
-        deviceId: details.device_id as string,
-        kmsInfo: details.kms_info,
-        commitToken: details.commit_token as string | undefined,
-        commitUrl: details.commit_url as string | undefined,
-        apiCommitUrl: details.api_commit_url as string | undefined,
-        onchainStatus: details.onchain_status as
-          | { compose_hash_allowed: boolean; device_id_allowed: boolean; is_allowed: boolean }
-          | undefined,
-      };
-    }
-    throw error;
-  }
+  return submitCvmUpdate(() =>
+    prepareOnly
+      ? client.patch(`/cvms/${cvmId}`, body, { headers: { "X-Prepare-Only": "true" } })
+      : client.patch(`/cvms/${cvmId}`, body),
+  );
 });
 
 export { patchCvm, safePatchCvm };
