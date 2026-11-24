@@ -1,3 +1,5 @@
+## [0.6.6](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.6-beta.1...js-v0.6.6) (2026-11-24)
+
 ## [0.6.6-beta.1](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.5...js-v0.6.6-beta.1) (2026-11-24)
 
 ### feat
