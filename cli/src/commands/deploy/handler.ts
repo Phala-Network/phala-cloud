@@ -22,7 +22,7 @@ import { logger } from "@/src/utils/logger";
 
 import {
 	getEncryptPubkey,
-	verifyAndExtractEnvEncryptPubkey,
+	getOnchainEnvEncryptPubkey,
 } from "@/src/commands/envs/get-encrypt-pubkey";
 import { dedupeEnvVars, parseEnvInputs } from "@/src/utils/env-parsing";
 import type { RuntimeProjectConfig } from "@/src/utils/project-config";
@@ -49,7 +49,6 @@ import {
 	safeCommitCvmUpdate,
 	safeConfirmCvmPatch,
 	safeDeployAppAuth,
-	safeGetAppEnvEncryptPubKey,
 	safeGetAvailableNodes,
 	safeGetCurrentUser,
 	safeGetCvmInfo,
@@ -1519,19 +1518,11 @@ const deployNewCvm = async (
 				"KMS reference (slug or id) is missing from provision response",
 			);
 		}
-		const resp = await safeGetAppEnvEncryptPubKey(client, {
-			app_id: deployed_contract.appId,
-			kms: kmsRef,
-		});
-
-		if (!resp.success) {
-			throw resp.error;
-		}
-
-		const pubkey = verifyAndExtractEnvEncryptPubkey(
-			resp.data,
-			deployed_contract.appId,
+		const pubkey = await getOnchainEnvEncryptPubkey(
+			client,
+			{ app_id: deployed_contract.appId, kms: kmsRef },
 			provisionKmsInfo.k256_pubkey,
+			{ retryLegacyTransientErrors: true },
 		);
 		const encrypted_env_vars = await encryptEnvVars(envsWithSshKey, pubkey);
 
