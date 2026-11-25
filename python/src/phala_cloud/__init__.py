@@ -6,6 +6,8 @@ from .action_responses import (
     CvmInitScript,
     CvmInitScriptsResponse,
     CvmUserConfigResponse,
+    ManagedInitScript,
+    ManagedInitScriptsResponse,
 )
 from .actions import *  # noqa: F403
 from .actions import (
@@ -127,6 +129,8 @@ __all__ = [
     "CvmAnnotationsResponse",
     "CvmInitScript",
     "CvmInitScriptsResponse",
+    "ManagedInitScript",
+    "ManagedInitScriptsResponse",
     "CvmUserConfigResponse",
     "SetAppLaunchTokenRequest",
     "UpdateCvmAnnotationsRequest",

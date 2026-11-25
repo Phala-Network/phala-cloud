@@ -143,6 +143,8 @@ __all__ = [
     "safe_update_cvm_annotations",
     "get_cvm_init_scripts",
     "safe_get_cvm_init_scripts",
+    "get_managed_init_scripts",
+    "safe_get_managed_init_scripts",
     "set_app_launch_token",
     "safe_set_app_launch_token",
     "clear_app_launch_token",
@@ -826,6 +828,14 @@ def get_cvm_init_scripts(client: Any, *args: Any, **kwargs: Any) -> Any:
 
 def safe_get_cvm_init_scripts(client: Any, *args: Any, **kwargs: Any) -> Any:
     return client.safe_get_cvm_init_scripts(*args, **kwargs)
+
+
+def get_managed_init_scripts(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.get_managed_init_scripts(*args, **kwargs)
+
+
+def safe_get_managed_init_scripts(client: Any, *args: Any, **kwargs: Any) -> Any:
+    return client.safe_get_managed_init_scripts(*args, **kwargs)
 
 
 def set_app_launch_token(client: Any, *args: Any, **kwargs: Any) -> Any:

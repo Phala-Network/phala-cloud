@@ -40,6 +40,7 @@ from .action_responses import (
     InstanceTypesAllResponse,
     InstanceTypesFamilyResponse,
     ListWorkspacesResponse,
+    ManagedInitScriptsResponse,
     NextAppIdsResponse,
     PreLaunchScriptUpgradeStatus,
     ProvisionCvmComposeFileUpdateResult,
@@ -645,6 +646,8 @@ class _ExtMixin:
             return CvmAnnotationsResponse
         if m == "GET" and re.fullmatch(r"/cvms/[^/]+/init-scripts", path):
             return CvmInitScriptsResponse
+        if m == "GET" and path == "/managed-init-scripts":
+            return ManagedInitScriptsResponse
         if m == "POST" and re.fullmatch(r"/apps/[^/]+/launch-token", path):
             return AppLaunchTokenResponse
         if m == "GET" and re.fullmatch(r"/cvms/[^/]+/gpu-status", path):
@@ -936,6 +939,10 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         body = dict(req.get("app_compose") or {})
         if "update_env_vars" in req:
             body["update_env_vars"] = req["update_env_vars"]
+        # confirm_data_wipe confirms turning on docker_cleanup, runtime_tmpfs or
+        # requirements.ephemeral_data_disk, which erase data on every boot.
+        if "confirm_data_wipe" in req:
+            body["confirm_data_wipe"] = req["confirm_data_wipe"]
         return self._validate(
             ProvisionCvmComposeFileUpdateResult,
             self.post(f"/cvms/{cvm_id}/compose_file/provision", json=body),
@@ -1545,6 +1552,12 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     ) -> SafeResult[CvmInitScriptsResponse]:
         return self.safe(self.get_cvm_init_scripts, request)
 
+    def get_managed_init_scripts(self) -> ManagedInitScriptsResponse:
+        return cast(ManagedInitScriptsResponse, self.get("/managed-init-scripts"))
+
+    def safe_get_managed_init_scripts(self) -> SafeResult[ManagedInitScriptsResponse]:
+        return self.safe(self.get_managed_init_scripts)
+
     def set_app_launch_token(
         self, request: SetAppLaunchTokenRequest | Mapping[str, Any]
     ) -> AppLaunchTokenResponse:
@@ -2000,6 +2013,10 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         body = dict(req.get("app_compose") or {})
         if "update_env_vars" in req:
             body["update_env_vars"] = req["update_env_vars"]
+        # confirm_data_wipe confirms turning on docker_cleanup, runtime_tmpfs or
+        # requirements.ephemeral_data_disk, which erase data on every boot.
+        if "confirm_data_wipe" in req:
+            body["confirm_data_wipe"] = req["confirm_data_wipe"]
         return self._validate(
             ProvisionCvmComposeFileUpdateResult,
             await self.post(f"/cvms/{cvm_id}/compose_file/provision", json=body),
@@ -2639,6 +2656,12 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         self, request: CvmIdRequest | Mapping[str, Any]
     ) -> SafeResult[CvmInitScriptsResponse]:
         return await self.safe(self.get_cvm_init_scripts, request)
+
+    async def get_managed_init_scripts(self) -> ManagedInitScriptsResponse:
+        return cast(ManagedInitScriptsResponse, await self.get("/managed-init-scripts"))
+
+    async def safe_get_managed_init_scripts(self) -> SafeResult[ManagedInitScriptsResponse]:
+        return await self.safe(self.get_managed_init_scripts)
 
     async def set_app_launch_token(
         self, request: SetAppLaunchTokenRequest | Mapping[str, Any]
