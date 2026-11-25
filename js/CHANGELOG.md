@@ -1,3 +1,21 @@
+## [0.6.7-beta.1](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.6...js-v0.6.7-beta.1) (2026-11-25)
+
+### feat
+
+- **js:** add CVM drafts and finality tracking ([d788ed9](https://github.com/Phala-Network/phala-cloud/commit/d788ed943574584ba1cd644c8cb1712c8b756138))
+- **js:** add runtime_tmpfs init script slug ([3c68dfa](https://github.com/Phala-Network/phala-cloud/commit/3c68dfacd497513265715f24c057486c33981c05))
+- **js:** let the server own init script names ([35e572c](https://github.com/Phala-Network/phala-cloud/commit/35e572cbf30f6bcf5d1d99274bf1e57b35a3de2b))
+- **sdk:** guard draft mutations with reviewed entry IDs ([442524c](https://github.com/Phala-Network/phala-cloud/commit/442524c54d2b4b5785182e20b0ed5afc939c492f))
+- **sdk:** wait for KMS encryption key finality ([19424b1](https://github.com/Phala-Network/phala-cloud/commit/19424b1c7a7cf99c37e23fd97aa91e7b4e1b0583))
+
+### fix
+
+- **js:** expose the KMS public key wait on the client ([fbd475c](https://github.com/Phala-Network/phala-cloud/commit/fbd475cf8322fdee70507dd8d20c41bc4b742a2a))
+- **sdk:** keep compose registration receipts off stdout ([5bd7c09](https://github.com/Phala-Network/phala-cloud/commit/5bd7c09210d19e119fbe08bc7c61229c5eb8596a))
+- **sdk:** keep environment approval responses distinguishable ([e9fd45f](https://github.com/Phala-Network/phala-cloud/commit/e9fd45f2b23f0789e84cdd383fbb760a87d5fbde))
+- **sdk:** preserve finality polling through transient responses ([5925edb](https://github.com/Phala-Network/phala-cloud/commit/5925edb1ab010556a67e8614af0e1421e12447b5))
+- **sdk:** preserve legacy finality submission responses ([df8567e](https://github.com/Phala-Network/phala-cloud/commit/df8567ee8403023a047f0553961319d75ef836d8))
+- **sdk:** tolerate finality response and polling changes ([3c50201](https://github.com/Phala-Network/phala-cloud/commit/3c50201153087a0c58e646032dde9dfd58cd0697))
 ## Unreleased
 
 ### ⚠ BREAKING CHANGE
