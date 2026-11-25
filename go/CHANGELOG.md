@@ -1,3 +1,8 @@
+## [0.6.1-beta.2](https://github.com/Phala-Network/phala-cloud/compare/go/v0.6.1-beta.1...go/v0.6.1-beta.2) (2026-11-25)
+
+### feat
+
+* **go:** fill init-script catalog, custom-script flag and compose wipe confirm ([dd3b148](https://github.com/Phala-Network/phala-cloud/commit/dd3b148e3eef7b4cdf8db128f78433a06c9ff61d))
 ## [0.6.1-beta.1](https://github.com/Phala-Network/phala-cloud/compare/go/v0.6.0...go/v0.6.1-beta.1) (2026-11-25)
 
 ### feat
