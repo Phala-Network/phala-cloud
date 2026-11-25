@@ -820,6 +820,8 @@ type PatchCVMRequest struct {
 	// that the CVM runs. The server validates the names and fixes the order. nil leaves them
 	// unchanged; an empty non-nil slice removes them all.
 	InitScripts []InitScriptSlug `json:"init_scripts,omitzero"`
+	// InitScript replaces the raw guest init scripts. Phala Cloud admins only.
+	InitScript []string `json:"init_script,omitzero"`
 	// ConfirmDataWipe confirms turning on docker_cleanup, runtime_tmpfs or
 	// requirements.ephemeral_data_disk, which erase data on every boot.
 	ConfirmDataWipe bool `json:"confirm_data_wipe,omitempty"`

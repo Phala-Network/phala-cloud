@@ -295,6 +295,16 @@ func TestPatchCVM465FormatsAppID(t *testing.T) {
 	}
 }
 
+func TestPatchCVMSendsAdminInitScript(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusAccepted, acceptedUpdate)
+	if _, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{
+		InitScript: []string{"echo hi"},
+	}); err != nil {
+		t.Fatalf("PatchCVM: %v", err)
+	}
+	assertBody(t, (*seen)[0].body, `{"init_script": ["echo hi"]}`)
+}
+
 func TestPatchCVMSendsGuestAgentGatewayAccess(t *testing.T) {
 	client, seen := recordingServer(t, http.StatusAccepted, acceptedUpdate)
 	closed := "closed"
