@@ -282,6 +282,13 @@ type GetCVMListOptions struct {
 	PageSize      *int     `json:"page_size,omitempty"`
 	Family        *string  `json:"family,omitempty"`
 	InstanceTypes []string `json:"instance_types,omitempty"`
+	Search        *string  `json:"search,omitempty"`
+	Status        []string `json:"status,omitzero"`
+	BaseImage     *string  `json:"base_image,omitempty"`
+	KMSSlug       *string  `json:"kms_slug,omitempty"`
+	KMSType       *string  `json:"kms_type,omitempty"`
+	Node          *string  `json:"node,omitempty"`
+	Region        *string  `json:"region,omitempty"`
 }
 
 // ProvisionCVMRequest is the request body for provisioning a CVM.
@@ -323,6 +330,9 @@ type ProvisionCVMRequest struct {
 	// Deprecated: use InitScripts with InitScriptDockerCleanup.
 	EnabledInitScriptsDockerCleanup *bool `json:"enabled_init_scripts_docker_cleanup,omitempty"`
 	EnabledGuestAgentAccess         *bool `json:"enabled_guest_agent_access,omitempty"`
+	// GuestAgentGatewayAccess confirms blocking gateway access to port 8090.
+	// Send "closed".
+	GuestAgentGatewayAccess *string `json:"guest_agent_gateway_access,omitempty"`
 
 	// ComposeFileRaw is a whole app-compose JSON file, sent instead of
 	// ComposeFile. Needs the compose_advanced feature flag.
@@ -554,6 +564,9 @@ type CommitCVMProvisionRequest struct {
 	TransactionHash *string  `json:"transaction_hash,omitempty"`
 	EncryptedEnv    *string  `json:"encrypted_env,omitempty"`
 	EnvKeys         []string `json:"env_keys,omitzero"`
+	KMSID           *string  `json:"kms_id,omitempty"`
+	ContractAddress *string  `json:"contract_address,omitempty"`
+	DeployerAddress *string  `json:"deployer_address,omitempty"`
 }
 
 // CommitCVMProvisionResponseFields contains shared commit response fields.
@@ -675,6 +688,13 @@ type ReplicateCVMOptions struct {
 	// OSImage pins the replica to a specific OS image slug. Empty means the
 	// replica inherits the source CVM's image.
 	OSImage string `json:"os_image,omitempty"`
+	// EncryptedEnv is required when the source CVM has managed env enabled.
+	EncryptedEnv *string `json:"encrypted_env,omitempty"`
+	// ComposeHash selects which compose to replicate when the source app has
+	// more than one live instance.
+	ComposeHash *string  `json:"compose_hash,omitempty"`
+	KMSURLs     []string `json:"kms_urls,omitzero"`
+	GatewayURLs []string `json:"gateway_urls,omitzero"`
 }
 
 // CommitCVMUpdateRequest identifies a prepared update and its on-chain transaction.
@@ -793,6 +813,9 @@ type PatchCVMRequest struct {
 
 	// Compose is a JSON Merge Patch of the app compose.
 	Compose *ComposePatch `json:"compose,omitempty"`
+	// GuestAgentGatewayAccess confirms blocking gateway access to port 8090.
+	// Send "closed".
+	GuestAgentGatewayAccess *string `json:"guest_agent_gateway_access,omitempty"`
 	// InitScripts replaces, by name, the init scripts provided by Phala Cloud
 	// that the CVM runs. The server validates the names and fixes the order. nil leaves them
 	// unchanged; an empty non-nil slice removes them all.
@@ -814,8 +837,9 @@ type PatchCVMRequest struct {
 	Image *string `json:"image,omitempty"`
 
 	// ShutdownTimeout is the graceful shutdown timeout in seconds (10-1200).
-	ShutdownTimeout *int  `json:"shutdown_timeout,omitempty"`
-	AllowForceStop  *bool `json:"allow_force_stop,omitempty"`
+	// PatchNull uses the platform default.
+	ShutdownTimeout Patch[int] `json:"shutdown_timeout,omitzero"`
+	AllowForceStop  *bool      `json:"allow_force_stop,omitempty"`
 
 	// Deprecated: use Image. PatchCVM sends OSImageName as image.
 	OSImageName *string `json:"-"`

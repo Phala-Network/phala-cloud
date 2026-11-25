@@ -71,7 +71,7 @@ func TestPatchCVMSendsOnlyFieldsTheAPIAccepts(t *testing.T) {
 		},
 		InstanceType:    String("h200.small"),
 		Image:           &image,
-		ShutdownTimeout: Int(60),
+		ShutdownTimeout: PatchValue(60),
 		AllowForceStop:  Bool(true),
 	})
 	if err != nil {
@@ -293,6 +293,27 @@ func TestPatchCVM465FormatsAppID(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPatchCVMSendsGuestAgentGatewayAccess(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusAccepted, acceptedUpdate)
+	closed := "closed"
+	if _, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{
+		GuestAgentGatewayAccess: &closed,
+	}); err != nil {
+		t.Fatalf("PatchCVM: %v", err)
+	}
+	assertBody(t, (*seen)[0].body, `{"guest_agent_gateway_access": "closed"}`)
+}
+
+func TestPatchCVMSendsNullShutdownTimeout(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusAccepted, acceptedUpdate)
+	if _, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{
+		ShutdownTimeout: PatchNull[int](),
+	}); err != nil {
+		t.Fatalf("PatchCVM: %v", err)
+	}
+	assertBody(t, (*seen)[0].body, `{"shutdown_timeout": null}`)
 }
 
 func TestPatchCVMSendsTheComposeMergePatch(t *testing.T) {

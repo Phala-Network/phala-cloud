@@ -60,6 +60,46 @@ func TestProvisionCVMSendsACallerLaunchTokenAndRunner(t *testing.T) {
 	}`)
 }
 
+func TestProvisionCVMSendsGuestAgentGatewayAccess(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusOK, `{"app_id":"app-1","compose_hash":"abc"}`)
+	closed := "closed"
+	_, err := client.ProvisionCVM(context.Background(), &ProvisionCVMRequest{
+		Name:                    "my-app",
+		GuestAgentGatewayAccess: &closed,
+	})
+	if err != nil {
+		t.Fatalf("ProvisionCVM: %v", err)
+	}
+	assertBody(t, (*seen)[0].body, `{"name": "my-app", "guest_agent_gateway_access": "closed"}`)
+}
+
+func TestCommitCVMProvisionSendsContractFields(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusOK, `{"id":"cvm_1","name":"my-app","status":"starting"}`)
+	kmsID := "kms_1"
+	contract := "0xabc"
+	deployer := "0xdef"
+	_, err := client.CommitCVMProvision(context.Background(), &CommitCVMProvisionRequest{
+		AppID:           "app-1",
+		ComposeHash:     "abc",
+		KMSID:           &kmsID,
+		ContractAddress: &contract,
+		DeployerAddress: &deployer,
+	})
+	if err != nil {
+		t.Fatalf("CommitCVMProvision: %v", err)
+	}
+	if r := (*seen)[0]; r.method != "POST" || r.path != "/cvms" {
+		t.Fatalf("request = %s %s", r.method, r.path)
+	}
+	assertBody(t, (*seen)[0].body, `{
+		"app_id": "app-1",
+		"compose_hash": "abc",
+		"kms_id": "kms_1",
+		"contract_address": "0xabc",
+		"deployer_address": "0xdef"
+	}`)
+}
+
 func TestProvisionCVMRequestOmitsFieldsTheCreateAPIDoesNotRead(t *testing.T) {
 	typ := reflect.TypeOf(ProvisionCVMRequest{})
 	for _, name := range []string{"KMSType", "Encrypted", "SecureTime", "SSHAuthorizedKeys", "CustomAppID", "StorageFS"} {
