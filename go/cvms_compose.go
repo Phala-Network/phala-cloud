@@ -3,6 +3,7 @@ package phala
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 )
 
 // GetCVMComposeFile returns the compose file for a CVM.
@@ -100,12 +101,22 @@ type CommitComposeUpdateRequest struct {
 	EncryptedEnv  *string  `json:"encrypted_env,omitempty"`
 	EnvKeys       []string `json:"env_keys,omitzero"`
 	UpdateEnvVars *bool    `json:"update_env_vars,omitempty"`
+
+	// ConfirmFinalityReplacement sets X-Confirm-Finality-Replacement. Empty sends
+	// no header: a new update silently replaces a waiting one. Use
+	// ConfirmFinalityReplacementNone to get a 412 (see
+	// APIError.FinalityReplacementRequired) instead of replacing it, or the
+	// waiting update's correlation ID to confirm the replacement.
+	ConfirmFinalityReplacement string `json:"-"`
 }
 
 // CommitCVMComposeFileUpdate commits a compose file update.
 func (c *Client) CommitCVMComposeFileUpdate(ctx context.Context, cvmID string, req *CommitComposeUpdateRequest) error {
+	if req == nil {
+		return fmt.Errorf("phala: commit compose update request is required")
+	}
 	return c.doWithRetry(ctx, func() error {
-		return c.doJSON(ctx, "PATCH", cvmPath(cvmID, "compose_file"), req, nil)
+		return c.doJSONWithHeaders(ctx, "PATCH", cvmPath(cvmID, "compose_file"), withConfirmFinalityReplacement(nil, req.ConfirmFinalityReplacement), req, nil)
 	})
 }
 
@@ -113,19 +124,33 @@ func (c *Client) CommitCVMComposeFileUpdate(ctx context.Context, cvmID string, r
 type ComposeUpdateOptions struct {
 	ComposeHash     string
 	TransactionHash string
+
+	// ConfirmFinalityReplacement sets X-Confirm-Finality-Replacement. Empty sends
+	// no header: a new update silently replaces a waiting one. Use
+	// ConfirmFinalityReplacementNone to get a 412 (see
+	// APIError.FinalityReplacementRequired) instead of replacing it, or the
+	// waiting update's correlation ID to confirm the replacement.
+	ConfirmFinalityReplacement string `json:"-"`
+}
+
+// headers returns the request headers for opts. A nil opts sends none.
+func (opts *ComposeUpdateOptions) headers() map[string]string {
+	headers := map[string]string{}
+	if opts == nil {
+		return headers
+	}
+	if opts.ComposeHash != "" {
+		headers["X-Compose-Hash"] = opts.ComposeHash
+	}
+	if opts.TransactionHash != "" {
+		headers["X-Transaction-Hash"] = opts.TransactionHash
+	}
+	return withConfirmFinalityReplacement(headers, opts.ConfirmFinalityReplacement)
 }
 
 // UpdateDockerCompose updates the docker-compose YAML for a CVM.
 func (c *Client) UpdateDockerCompose(ctx context.Context, cvmID, compose string, opts *ComposeUpdateOptions) (*UpdateResult, error) {
-	headers := map[string]string{}
-	if opts != nil {
-		if opts.ComposeHash != "" {
-			headers["X-Compose-Hash"] = opts.ComposeHash
-		}
-		if opts.TransactionHash != "" {
-			headers["X-Transaction-Hash"] = opts.TransactionHash
-		}
-	}
+	headers := opts.headers()
 
 	var result UpdateResult
 	err := c.doWithRetry(ctx, func() error {
@@ -139,15 +164,7 @@ func (c *Client) UpdateDockerCompose(ctx context.Context, cvmID, compose string,
 
 // UpdatePreLaunchScript updates the pre-launch script for a CVM.
 func (c *Client) UpdatePreLaunchScript(ctx context.Context, cvmID, script string, opts *ComposeUpdateOptions) (*UpdateResult, error) {
-	headers := map[string]string{}
-	if opts != nil {
-		if opts.ComposeHash != "" {
-			headers["X-Compose-Hash"] = opts.ComposeHash
-		}
-		if opts.TransactionHash != "" {
-			headers["X-Transaction-Hash"] = opts.TransactionHash
-		}
-	}
+	headers := opts.headers()
 
 	var result UpdateResult
 	err := c.doWithRetry(ctx, func() error {
@@ -192,15 +209,7 @@ func (c *Client) GetPreLaunchScriptUpgradeStatus(ctx context.Context, cvmID stri
 // IsComposePrecondition and ComposePrecondition to read it, then retry with
 // opts carrying the compose hash and the registering transaction hash.
 func (c *Client) UpgradePreLaunchScript(ctx context.Context, cvmID string, opts *ComposeUpdateOptions) (*UpdateResult, error) {
-	headers := map[string]string{}
-	if opts != nil {
-		if opts.ComposeHash != "" {
-			headers["X-Compose-Hash"] = opts.ComposeHash
-		}
-		if opts.TransactionHash != "" {
-			headers["X-Transaction-Hash"] = opts.TransactionHash
-		}
-	}
+	headers := opts.headers()
 
 	var result UpdateResult
 	err := c.doWithRetry(ctx, func() error {

@@ -1,6 +1,9 @@
 package phala
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // CVMSSHKeyEntry describes an SSH key authorized on a CVM.
 type CVMSSHKeyEntry struct {
@@ -273,13 +276,23 @@ type UpdateEnvsRequest struct {
 	EnvKeys         []string `json:"env_keys,omitzero"`
 	ComposeHash     *string  `json:"compose_hash,omitempty"`
 	TransactionHash *string  `json:"transaction_hash,omitempty"`
+
+	// ConfirmFinalityReplacement sets X-Confirm-Finality-Replacement. Empty sends
+	// no header: a new update silently replaces a waiting one. Use
+	// ConfirmFinalityReplacementNone to get a 412 (see
+	// APIError.FinalityReplacementRequired) instead of replacing it, or the
+	// waiting update's correlation ID to confirm the replacement.
+	ConfirmFinalityReplacement string `json:"-"`
 }
 
 // UpdateCVMEnvs updates the encrypted environment variables for a CVM.
 func (c *Client) UpdateCVMEnvs(ctx context.Context, cvmID string, req *UpdateEnvsRequest) (*UpdateResult, error) {
+	if req == nil {
+		return nil, fmt.Errorf("phala: update envs request is required")
+	}
 	var result UpdateResult
 	err := c.doWithRetry(ctx, func() error {
-		return c.doJSON(ctx, "PATCH", cvmPath(cvmID, "envs"), req, &result)
+		return c.doJSONWithHeaders(ctx, "PATCH", cvmPath(cvmID, "envs"), withConfirmFinalityReplacement(nil, req.ConfirmFinalityReplacement), req, &result)
 	})
 	if err != nil {
 		return nil, err

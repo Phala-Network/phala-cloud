@@ -348,6 +348,28 @@ if id := resp.FinalityCorrelationID(); id != "" {
 
 It polls every 15 seconds and stops after 30 minutes. Set `Timeout` and `PollInterval` in `WaitForCVMFinalityOptions` to change this. A timeout or a cancelled `ctx` stops only the local wait. It does not cancel the operation.
 
+A new update replaces one that is still waiting. By default this happens without a warning. To be told first, set `ConfirmFinalityReplacement` to `phala.ConfirmFinalityReplacementNone`. If an update is waiting, the call fails with a 412 error that names it. Then either wait for that update, or repeat the call with its correlation ID to replace it. The field exists on every request that starts an update, such as `PatchCVMRequest` and `ComposeUpdateOptions`.
+
+```go
+req := &phala.PatchCVMRequest{
+	PublicLogs:                 phala.Bool(true),
+	ConfirmFinalityReplacement: phala.ConfirmFinalityReplacementNone,
+}
+resp, err := client.PatchCVM(ctx, "cvm-id", req)
+
+var apiErr *phala.APIError
+if errors.As(err, &apiErr) {
+	if waiting, ok := apiErr.FinalityReplacementRequired(); ok {
+		// waiting.CorrelationID and waiting.Stage describe the waiting update.
+		// Option 1: wait for it, then send the update again.
+		_, err = client.WaitForCVMFinality(ctx, "cvm-id", waiting.CorrelationID, nil)
+		// Option 2: replace it.
+		req.ConfirmFinalityReplacement = waiting.CorrelationID
+		resp, err = client.PatchCVM(ctx, "cvm-id", req)
+	}
+}
+```
+
 ## Error Handling
 
 All API errors are returned as `*phala.APIError`:

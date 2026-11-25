@@ -166,6 +166,14 @@ type RedeployAppRevisionRequest struct {
 	// only to deliberately keep the current environment despite the
 	// mismatch; otherwise pass a re-encrypted EncryptedEnv.
 	AllowEnvMismatch bool `json:"allow_env_mismatch,omitempty"`
+
+	// ConfirmFinalityReplacement sets X-Confirm-Finality-Replacement. Empty sends
+	// no header: a new update silently replaces a waiting one. Use
+	// ConfirmFinalityReplacementNone to get a 412 (see
+	// APIError.FinalityReplacementRequired) instead of replacing it, or the
+	// waiting update's correlation ID to confirm the replacement. The header
+	// applies to every CVM in VMUUIDs.
+	ConfirmFinalityReplacement string `json:"-"`
 }
 
 // RedeployAppRevision schedules an async redeploy of the named revision
@@ -185,7 +193,11 @@ type RedeployAppRevisionRequest struct {
 // to present it.
 func (c *Client) RedeployAppRevision(ctx context.Context, appID, revisionID string, req *RedeployAppRevisionRequest) error {
 	path := fmt.Sprintf("/apps/%s/revisions/%s/redeploy", appID, url.PathEscape(revisionID))
-	return c.doJSON(ctx, "POST", path, req, nil)
+	var headers map[string]string
+	if req != nil {
+		headers = withConfirmFinalityReplacement(nil, req.ConfirmFinalityReplacement)
+	}
+	return c.doJSONWithHeaders(ctx, "POST", path, headers, req, nil)
 }
 
 // GetAppAttestation returns attestation data for an application.

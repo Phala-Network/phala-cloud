@@ -272,6 +272,13 @@ type RedeployCVMRevisionRequest struct {
 	// only to deliberately keep the current environment despite the
 	// mismatch; otherwise pass a re-encrypted EncryptedEnv.
 	AllowEnvMismatch bool `json:"allow_env_mismatch,omitempty"`
+
+	// ConfirmFinalityReplacement sets X-Confirm-Finality-Replacement. Empty sends
+	// no header: a new update silently replaces a waiting one. Use
+	// ConfirmFinalityReplacementNone to get a 412 (see
+	// APIError.FinalityReplacementRequired) instead of replacing it, or the
+	// waiting update's correlation ID to confirm the replacement.
+	ConfirmFinalityReplacement string `json:"-"`
 }
 
 // RedeployCVMRevisionResponse is returned when a CVM redeploy is accepted.
@@ -296,10 +303,12 @@ func (c *Client) RedeployCVMRevision(ctx context.Context, cvmID, revisionID stri
 	path := cvmPath(cvmID, "revisions", url.PathEscape(revisionID), "redeploy")
 	// A typed nil pointer would marshal as JSON null; send no body instead.
 	var body any
+	var headers map[string]string
 	if req != nil {
 		body = req
+		headers = withConfirmFinalityReplacement(nil, req.ConfirmFinalityReplacement)
 	}
-	if err := c.doJSON(ctx, "POST", path, body, &result); err != nil {
+	if err := c.doJSONWithHeaders(ctx, "POST", path, headers, body, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -421,8 +430,12 @@ func (c *Client) ReplicateCVMV20260121(ctx context.Context, cvmID string, opts *
 
 // CommitCVMUpdate completes a prepared CVM update with its one-time token.
 func (c *Client) CommitCVMUpdate(ctx context.Context, cvmID string, req *CommitCVMUpdateRequest) (*CommitCVMUpdateResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("phala: commit update request is required")
+	}
 	var result CommitCVMUpdateResponse
-	if err := c.doJSON(ctx, "POST", cvmPath(cvmID, "commit-update"), req, &result); err != nil {
+	headers := withConfirmFinalityReplacement(nil, req.ConfirmFinalityReplacement)
+	if err := c.doJSONWithHeaders(ctx, "POST", cvmPath(cvmID, "commit-update"), headers, req, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -458,6 +471,7 @@ func (c *Client) sendCVMPatch(ctx context.Context, cvmID string, body PatchCVMRe
 	if body.PrepareOnly {
 		headers = map[string]string{"X-Prepare-Only": "true"}
 	}
+	headers = withConfirmFinalityReplacement(headers, body.ConfirmFinalityReplacement)
 
 	var result PatchCVMResponse
 	err = c.doWithRetry(ctx, func() error {
@@ -523,7 +537,7 @@ func (c *Client) ConfirmCVMPatch(ctx context.Context, cvmID string, req *Confirm
 	if req == nil {
 		return nil, fmt.Errorf("phala: confirm patch request is required")
 	}
-	headers := map[string]string{"X-Compose-Hash": req.ComposeHash, "X-Transaction-Hash": req.TransactionHash}
+	headers := withConfirmFinalityReplacement(map[string]string{"X-Compose-Hash": req.ComposeHash, "X-Transaction-Hash": req.TransactionHash}, req.ConfirmFinalityReplacement)
 	if err := c.doText(ctx, "PATCH", cvmPath(cvmID), "application/json", "{}", headers, &result); err != nil {
 		return nil, err
 	}
@@ -536,7 +550,7 @@ func (c *Client) ConfirmCVMPatchV20260121(ctx context.Context, cvmID string, req
 	if req == nil {
 		return nil, fmt.Errorf("phala: confirm patch request is required")
 	}
-	headers := map[string]string{"X-Compose-Hash": req.ComposeHash, "X-Transaction-Hash": req.TransactionHash, "X-Phala-Version": "2026-01-21"}
+	headers := withConfirmFinalityReplacement(map[string]string{"X-Compose-Hash": req.ComposeHash, "X-Transaction-Hash": req.TransactionHash, "X-Phala-Version": "2026-01-21"}, req.ConfirmFinalityReplacement)
 	if err := c.doText(ctx, "PATCH", cvmPath(cvmID), "application/json", "{}", headers, &result); err != nil {
 		return nil, err
 	}

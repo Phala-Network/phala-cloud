@@ -31,6 +31,43 @@ const (
 	CVMFailureBootFailed          = "boot_failed"
 )
 
+// ConfirmFinalityReplacementNone is the value for a ConfirmFinalityReplacement
+// field that asks the server to refuse, instead of silently replacing, an
+// update that is still waiting for finality.
+const ConfirmFinalityReplacementNone = "none"
+
+// confirmFinalityReplacementHeader is the request header behind every
+// ConfirmFinalityReplacement field.
+const confirmFinalityReplacementHeader = "X-Confirm-Finality-Replacement"
+
+// FinalityReplacementRequired describes the update that a rejected request
+// would have replaced. It comes from APIError.FinalityReplacementRequired.
+//
+// Pass CorrelationID to WaitForCVMFinality to let that update finish. To
+// replace it, repeat the request with ConfirmFinalityReplacement set to
+// CorrelationID.
+type FinalityReplacementRequired struct {
+	// CorrelationID identifies the waiting update.
+	CorrelationID string
+	// Stage is the waiting update's current stage, for example "submitted",
+	// "safe" or "finalized".
+	Stage string
+}
+
+// withConfirmFinalityReplacement returns headers plus the confirmation header.
+// An empty value sends no header. It never modifies headers.
+func withConfirmFinalityReplacement(headers map[string]string, value string) map[string]string {
+	if value == "" {
+		return headers
+	}
+	out := make(map[string]string, len(headers)+1)
+	for k, v := range headers {
+		out[k] = v
+	}
+	out[confirmFinalityReplacementHeader] = value
+	return out
+}
+
 const (
 	defaultFinalityTimeout      = 30 * time.Minute
 	defaultFinalityPollInterval = 15 * time.Second
