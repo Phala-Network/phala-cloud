@@ -1,3 +1,16 @@
+## [0.6.7-beta.2](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.7-beta.1...js-v0.6.7-beta.2) (2026-11-25)
+
+### docs
+
+- **js:** explain choosing init scripts and checking their bytes ([0c6716a](https://github.com/Phala-Network/phala-cloud/commit/0c6716a42a701134c8f0124ffcbf8401212956ed))
+
+### feat
+
+- **js:** fill init-script catalog and compose wipe confirm ([9b0744a](https://github.com/Phala-Network/phala-cloud/commit/9b0744a6ea83f058fea65bfd59d704109fc4a2c2))
+
+### fix
+
+- **js:** default has_custom_scripts to false like the Python and Go SDKs ([8399ed4](https://github.com/Phala-Network/phala-cloud/commit/8399ed46b90ab14d3ca0e7bfcda5b7c52cf4dd03))
 ## [0.6.7-beta.1](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.6...js-v0.6.7-beta.1) (2026-11-25)
 
 ### feat
