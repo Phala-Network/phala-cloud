@@ -3,6 +3,8 @@ package phala
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"strings"
 )
 
 // CVMHourlyRate contains split hourly pricing for a CVM.
@@ -289,38 +291,32 @@ type ProvisionCVMRequest struct {
 	ComposeFile  *ComposeFile `json:"compose_file,omitempty"`
 
 	// Optional fields.
-	VCPU              *int                `json:"vcpu,omitempty"`
-	Memory            *int                `json:"memory,omitempty"`
-	DiskSize          *int                `json:"disk_size,omitempty"`
-	Node              *string             `json:"node,omitempty"`
-	Image             *string             `json:"image,omitempty"`
-	Region            *string             `json:"region,omitempty"`
-	KMSID             *string             `json:"kms_id,omitempty"`
-	KMS               *string             `json:"kms,omitempty"`
-	KMSType           *string             `json:"kms_type,omitempty"`
-	KMSContract       *string             `json:"kms_contract,omitempty"`
-	KMSContractID     *string             `json:"kms_contract_id,omitempty"`
-	KeyProviderMode   *string             `json:"key_provider_mode,omitempty"`
-	SkipGateway       *bool               `json:"skip_gateway,omitempty"`
-	Listed            *bool               `json:"listed,omitempty"`
-	Encrypted         *bool               `json:"encrypted,omitempty"`
-	SecureTime        *bool               `json:"secure_time,omitempty"`
-	SSHAuthorizedKeys []string            `json:"ssh_authorized_keys,omitzero"`
-	CustomAppID       *string             `json:"custom_app_id,omitempty"`
-	Nonce             *int64              `json:"nonce,omitempty"`
-	StorageFS         *string             `json:"storage_fs,omitempty"`
-	AppID             *string             `json:"app_id,omitempty"`
-	PreferDev         *bool               `json:"prefer_dev,omitempty"`
-	EnvKeys           []string            `json:"env_keys,omitzero"`
-	SSHKeyIDs         []string            `json:"ssh_key_ids,omitzero"`
-	Ports             []ProvisionPort     `json:"ports,omitzero"`
-	EncryptedEnv      *string             `json:"encrypted_env,omitempty"`
-	UserConfig        *string             `json:"user_config,omitempty"`
-	Hugepages         *bool               `json:"hugepages,omitempty"`
-	PinNUMA           *bool               `json:"pin_numa,omitempty"`
-	GPUs              *ProvisionGPUConfig `json:"gpus,omitempty"`
-	KMSURLs           []string            `json:"kms_urls,omitzero"`
-	GatewayURLs       []string            `json:"gateway_urls,omitzero"`
+	VCPU            *int                `json:"vcpu,omitempty"`
+	Memory          *int                `json:"memory,omitempty"`
+	DiskSize        *int                `json:"disk_size,omitempty"`
+	Node            *string             `json:"node,omitempty"`
+	Image           *string             `json:"image,omitempty"`
+	Region          *string             `json:"region,omitempty"`
+	KMSID           *string             `json:"kms_id,omitempty"`
+	KMS             *string             `json:"kms,omitempty"`
+	KMSContract     *string             `json:"kms_contract,omitempty"`
+	KMSContractID   *string             `json:"kms_contract_id,omitempty"`
+	KeyProviderMode *string             `json:"key_provider_mode,omitempty"`
+	SkipGateway     *bool               `json:"skip_gateway,omitempty"`
+	Listed          *bool               `json:"listed,omitempty"`
+	Nonce           *int64              `json:"nonce,omitempty"`
+	AppID           *string             `json:"app_id,omitempty"`
+	PreferDev       *bool               `json:"prefer_dev,omitempty"`
+	EnvKeys         []string            `json:"env_keys,omitzero"`
+	SSHKeyIDs       []string            `json:"ssh_key_ids,omitzero"`
+	Ports           []ProvisionPort     `json:"ports,omitzero"`
+	EncryptedEnv    *string             `json:"encrypted_env,omitempty"`
+	UserConfig      *string             `json:"user_config,omitempty"`
+	Hugepages       *bool               `json:"hugepages,omitempty"`
+	PinNUMA         *bool               `json:"pin_numa,omitempty"`
+	GPUs            *ProvisionGPUConfig `json:"gpus,omitempty"`
+	KMSURLs         []string            `json:"kms_urls,omitzero"`
+	GatewayURLs     []string            `json:"gateway_urls,omitzero"`
 	// InitScripts selects, by name, the init scripts provided by Phala Cloud to
 	// run on every boot. The server validates the names and fixes the order.
 	InitScripts []InitScriptSlug `json:"init_scripts,omitzero"`
@@ -388,7 +384,8 @@ const (
 	ComposeRunnerBash           = "bash"
 )
 
-// ComposeFile represents a compose file configuration.
+// ComposeFile is an app compose, as returned by GetCVMComposeFile and sent
+// (flat) by ProvisionCVMComposeFileUpdate.
 type ComposeFile struct {
 	Name                    string               `json:"name"`
 	DockerComposeFile       string               `json:"docker_compose_file,omitempty"`
@@ -420,6 +417,73 @@ type ComposeFile struct {
 	Salt                    *string              `json:"salt,omitempty"`
 	SwapSize                *string              `json:"swap_size,omitempty"`
 	TproxyEnabled           *bool                `json:"tproxy_enabled,omitempty"`
+	// Extra holds app-compose keys the SDK does not model, so a
+	// GetCVMComposeFile → ProvisionCVMComposeFileUpdate round trip keeps them.
+	Extra map[string]json.RawMessage `json:"-"`
+}
+
+func (c *ComposeFile) UnmarshalJSON(data []byte) error {
+	type plain ComposeFile
+	var value plain
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	extra, err := extraJSONFields(data, value)
+	if err != nil {
+		return err
+	}
+	*c = ComposeFile(value)
+	c.Extra = extra
+	return nil
+}
+
+func (c ComposeFile) MarshalJSON() ([]byte, error) {
+	type plain ComposeFile
+	base, err := json.Marshal(plain(c))
+	if err != nil {
+		return nil, err
+	}
+	return mergeJSONObject(base, c.Extra)
+}
+
+func extraJSONFields(data []byte, known any) (map[string]json.RawMessage, error) {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+	t := reflect.TypeOf(known)
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
+		if name == "" || name == "-" {
+			continue
+		}
+		delete(raw, name)
+	}
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	return raw, nil
+}
+
+func mergeJSONObject(base []byte, extra map[string]json.RawMessage) ([]byte, error) {
+	if len(extra) == 0 {
+		return base, nil
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(base, &obj); err != nil {
+		return nil, err
+	}
+	if obj == nil {
+		obj = map[string]json.RawMessage{}
+	}
+	for key, value := range extra {
+		obj[key] = value
+	}
+	return json.Marshal(obj)
 }
 
 type ComposePortAttr struct {

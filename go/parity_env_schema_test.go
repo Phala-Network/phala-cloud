@@ -50,7 +50,7 @@ func TestProvisionEncryptedEnvironmentSchema(t *testing.T) {
 	if _, err := c.ProvisionCVM(context.Background(), &ProvisionCVMRequest{Name: "hello", ComposeFile: &ComposeFile{Name: "hello"}, EncryptedEnv: &encrypted}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.ProvisionCVMComposeFileUpdate(context.Background(), "id", &ProvisionComposeUpdateRequest{Name: "hello", DockerComposeFile: "services: {}"}); err != nil {
+	if _, err := c.ProvisionCVMComposeFileUpdate(context.Background(), "id", &ProvisionComposeUpdateRequest{ComposeFile: ComposeFile{Name: "hello", DockerComposeFile: "services: {}"}}); err != nil {
 		t.Fatal(err)
 	}
 }

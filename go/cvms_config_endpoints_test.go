@@ -2,6 +2,7 @@ package phala
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"reflect"
 	"strings"
@@ -147,9 +148,11 @@ func TestGetManagedInitScripts(t *testing.T) {
 func TestProvisionCVMComposeFileUpdateSendsConfirmDataWipe(t *testing.T) {
 	client, seen := recordingServer(t, http.StatusOK, `{"app_id":"app-1","compose_hash":"abc"}`)
 	_, err := client.ProvisionCVMComposeFileUpdate(context.Background(), "cvm-1", &ProvisionComposeUpdateRequest{
-		Name:              "my-app",
-		DockerComposeFile: "services: {}",
-		ConfirmDataWipe:   true,
+		ComposeFile: ComposeFile{
+			Name:              "my-app",
+			DockerComposeFile: "services: {}",
+		},
+		ConfirmDataWipe: true,
 	})
 	if err != nil {
 		t.Fatalf("ProvisionCVMComposeFileUpdate: %v", err)
@@ -161,5 +164,52 @@ func TestProvisionCVMComposeFileUpdateSendsConfirmDataWipe(t *testing.T) {
 		"name": "my-app",
 		"docker_compose_file": "services: {}",
 		"confirm_data_wipe": true
+	}`)
+}
+
+func TestProvisionCVMComposeFileUpdateSendsRequirements(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusOK, `{"app_id":"app-1","compose_hash":"abc"}`)
+	_, err := client.ProvisionCVMComposeFileUpdate(context.Background(), "cvm-1", &ProvisionComposeUpdateRequest{
+		ComposeFile: ComposeFile{
+			Name:              "my-app",
+			DockerComposeFile: "services: {}",
+			Requirements:      &ComposeRequirements{EphemeralDataDisk: Bool(true)},
+		},
+		ConfirmDataWipe: true,
+	})
+	if err != nil {
+		t.Fatalf("ProvisionCVMComposeFileUpdate: %v", err)
+	}
+	if r := (*seen)[0]; r.method != "POST" || r.path != "/cvms/cvm-1/compose_file/provision" {
+		t.Fatalf("request = %s %s", r.method, r.path)
+	}
+	assertBody(t, (*seen)[0].body, `{
+		"name": "my-app",
+		"docker_compose_file": "services: {}",
+		"requirements": {"ephemeral_data_disk": true},
+		"confirm_data_wipe": true
+	}`)
+}
+
+func TestProvisionCVMComposeFileUpdateKeepsUnknownComposeFields(t *testing.T) {
+	var compose ComposeFile
+	if err := json.Unmarshal([]byte(`{
+		"name":"my-app",
+		"docker_compose_file":"services: {}",
+		"future_compose_key":"keep-me"
+	}`), &compose); err != nil {
+		t.Fatalf("unmarshal compose: %v", err)
+	}
+	client, seen := recordingServer(t, http.StatusOK, `{"app_id":"app-1","compose_hash":"abc"}`)
+	_, err := client.ProvisionCVMComposeFileUpdate(context.Background(), "cvm-1", &ProvisionComposeUpdateRequest{
+		ComposeFile: compose,
+	})
+	if err != nil {
+		t.Fatalf("ProvisionCVMComposeFileUpdate: %v", err)
+	}
+	assertBody(t, (*seen)[0].body, `{
+		"name": "my-app",
+		"docker_compose_file": "services: {}",
+		"future_compose_key": "keep-me"
 	}`)
 }
