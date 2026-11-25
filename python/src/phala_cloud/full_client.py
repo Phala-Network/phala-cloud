@@ -14,9 +14,7 @@ from .action_responses import (
     AppAttestationResponse,
     AppEnvPubkeyResponse,
     AppFilterOptionsResponse,
-    AppInfoResponse,
     AppLaunchTokenResponse,
-    AppListResponse,
     AppRevisionDetailResponse,
     AppRevisionsResponse,
     CommitCvmProvisionResponseV20260121,
@@ -69,7 +67,14 @@ from .logs import afetch_cvm_logs as _afetch_cvm_logs
 from .logs import afollow_cvm_logs as _afollow_cvm_logs
 from .logs import fetch_cvm_logs as _fetch_cvm_logs
 from .logs import follow_cvm_logs as _follow_cvm_logs
-from .models.apps import DeviceAllowlistResponseV20260121, DeviceAllowlistResponseV20260522
+from .models.apps import (
+    DeviceAllowlistResponseV20260121,
+    DeviceAllowlistResponseV20260522,
+    DstackAppFullResponseV20260121,
+    DstackAppFullResponseV20260522,
+    DstackAppListResponseV20260121,
+    DstackAppListResponseV20260522,
+)
 from .models.auth import CurrentUserV20251028, CurrentUserV20260121
 from .models.base import CloudModel, NodeSelectionRequest
 from .models.cvms import (
@@ -91,6 +96,7 @@ from .models.cvms import (
     PaginatedCvmInfosV20251028,
     PaginatedCvmInfosV20260121,
     PaginatedCvmInfosV20260522,
+    ReplicaVM,
 )
 from .models.kms import (
     GetKmsListResponse,
@@ -202,10 +208,29 @@ class CvmCreationRequest(NodeSelectionRequest):
     # Host-side key/value metadata stored by the VMM. Needs the cvm_annotations
     # feature flag.
     annotations: dict[str, str] | None = None
+    guest_agent_gateway_access: Literal["closed"] | None = None
+    kms_id: str | None = None
+    contract_address: str | None = None
+    deployer_address: str | None = None
 
 
 def _cvm_creation_body(request: CvmCreationRequest | Mapping[str, Any]) -> dict[str, Any]:
     return CvmCreationRequest.model_validate(request).model_dump(exclude_unset=True)
+
+
+def _replica_body(req: ReplicateCvmRequest) -> dict[str, Any]:
+    body: dict[str, Any] = {"os_image": req.os_image}
+    if req.node is not None:
+        body["node"] = req.node
+    if req.encrypted_env is not None:
+        body["encrypted_env"] = req.encrypted_env
+    if req.compose_hash is not None:
+        body["compose_hash"] = req.compose_hash
+    if req.kms_urls is not None:
+        body["kms_urls"] = req.kms_urls
+    if req.gateway_urls is not None:
+        body["gateway_urls"] = req.gateway_urls
+    return body
 
 
 class FamilyRequest(BaseModel):
@@ -247,6 +272,9 @@ class CreateAppInstanceRequest(NodeSelectionRequest, _AliasModel):
     compose_hash: str | None = None
     token: str | None = None
     transaction_hash: str | None = None
+    os_image: str | None = None
+    kms_urls: list[str] | None = None
+    gateway_urls: list[str] | None = None
 
 
 class AppRevisionDetailRequest(_AliasModel):
@@ -319,6 +347,10 @@ def _upgrade_pre_launch_script_headers(req: UpgradePreLaunchScriptRequest) -> di
 
 class ReplicateCvmRequest(NodeSelectionRequest, CvmIdRequest):
     os_image: str | None = Field(default=None, min_length=1)
+    encrypted_env: str | None = None
+    compose_hash: str | None = None
+    kms_urls: list[str] | None = None
+    gateway_urls: list[str] | None = None
 
 
 class UpdateResourcesRequest(CvmIdRequest):
@@ -448,6 +480,7 @@ class PatchCvmRequest(CvmIdRequest):
     image: str | None = None
     shutdown_timeout: int | None = None
     allow_force_stop: bool | None = None
+    guest_agent_gateway_access: Literal["closed"] | None = None
     # JSON Merge Patch of the app compose; only the fields set on it are sent.
     compose: ComposePatch | None = None
     # Init scripts provided by Phala Cloud that this CVM runs, by name, replacing
@@ -463,7 +496,7 @@ class PatchCvmRequest(CvmIdRequest):
     def body(self) -> dict[str, Any]:
         body = self.model_dump(
             exclude={"id", "uuid", "app_id", "instance_id", "cvm_id", "cvmId", "compose"},
-            exclude_none=True,
+            exclude_unset=True,
         )
         if self.compose is not None:
             # A None the caller set is a merge-patch removal and must be sent.
@@ -553,6 +586,22 @@ class _ExtMixin:
             return None
         return {"requires_on_chain_hash": True, **fields}
 
+    @staticmethod
+    def _accepted_cvm_update(data: Any) -> dict[str, Any]:
+        correlation_id = ""
+        payload: dict[str, Any] = {}
+        if isinstance(data, dict):
+            payload = data
+            correlation_id = str(data.get("correlation_id") or "")
+        elif data is not None:
+            correlation_id = str(getattr(data, "correlation_id", "") or "")
+            payload = getattr(data, "model_dump", lambda: {})()
+        result = {"requires_on_chain_hash": False, "correlation_id": correlation_id}
+        for key in ("status", "finality_wait", "message"):
+            if key in payload:
+                result[key] = payload[key]
+        return result
+
     def _model_for_response(self, method: str, path: str, version: str | None = None) -> Any | None:
         m = method.upper()
         if version is None:
@@ -603,7 +652,7 @@ class _ExtMixin:
         if m == "POST" and re.fullmatch(r"/cvms/[^/]+/compose_file/provision", path):
             return ProvisionCvmComposeFileUpdateResult
         if m == "POST" and re.fullmatch(r"/apps/[^/]+/instances", path):
-            return CvmInfoV20260121 if self.config.version == "2026-01-21" else CvmInfoV20260522
+            return ReplicaVM
 
         if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/envs", path):
             return InProgressResponse | ComposeHashPreconditionResponse
@@ -694,7 +743,9 @@ class _ExtMixin:
             return self._v20260121_model(IsAllowedResultV20260121, IsAllowedResultV20260522)
 
         if m == "GET" and path == "/apps":
-            return AppListResponse
+            return self._v20260121_model(
+                DstackAppListResponseV20260121, DstackAppListResponseV20260522
+            )
         if m == "GET" and path == "/apps/filter-options":
             return AppFilterOptionsResponse
         if m == "GET" and re.fullmatch(r"/apps/[^/]+/device-allowlist", path):
@@ -718,7 +769,9 @@ class _ExtMixin:
         if m == "GET" and re.fullmatch(r"/apps/[^/]+/attestations", path):
             return AppAttestationResponse
         if m == "GET" and re.fullmatch(r"/apps/[^/]+", path):
-            return AppInfoResponse
+            return self._v20260121_model(
+                DstackAppFullResponseV20260121, DstackAppFullResponseV20260522
+            )
 
         if m == "GET" and path == "/os-images":
             return GetOsImagesResponse
@@ -1224,12 +1277,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
             data = self._loose_validate(
                 self.request("PATCH", f"/cvms/{cvm_id}", json=req.body(), headers=req.headers())
             )
-            correlation_id = ""
-            if isinstance(data, dict):
-                correlation_id = data.get("correlation_id", "")
-            elif data is not None:
-                correlation_id = str(getattr(data, "correlation_id", ""))
-            return {"requires_on_chain_hash": False, "correlation_id": correlation_id}
+            return self._accepted_cvm_update(data)
         except ApiError as exc:
             hash_required = self._patch_cvm_hash_required(exc)
             if hash_required is not None:
@@ -1611,13 +1659,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     def replicate_cvm(self, request: ReplicateCvmRequest | Mapping[str, Any]) -> Any:
         req = ReplicateCvmRequest.model_validate(request)
         return self._loose_validate(
-            self.post(
-                f"/cvms/{req.resolved}/replicas",
-                json={
-                    "os_image": req.os_image,
-                    **({"node": req.node} if req.node is not None else {}),
-                },
-            )
+            self.post(f"/cvms/{req.resolved}/replicas", json=_replica_body(req))
         )
 
     def safe_replicate_cvm(
@@ -1656,9 +1698,11 @@ class PhalaCloud(_SyncBase, _ExtMixin):
             "compose_hash": req.compose_hash,
             "token": req.token,
             "transaction_hash": req.transaction_hash,
+            "os_image": req.os_image,
+            "kms_urls": req.kms_urls,
+            "gateway_urls": req.gateway_urls,
         }
-        model = CvmInfoV20260121 if self.config.version == "2026-01-21" else CvmInfoV20260522
-        return self._validate(model, self.post(f"/apps/{req.app_id}/instances", json=body))
+        return self._validate(ReplicaVM, self.post(f"/apps/{req.app_id}/instances", json=body))
 
     def safe_create_app_instance(
         self, request: CreateAppInstanceRequest | Mapping[str, Any]
@@ -2312,12 +2356,7 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
                     "PATCH", f"/cvms/{cvm_id}", json=req.body(), headers=req.headers()
                 )
             )
-            correlation_id = ""
-            if isinstance(data, dict):
-                correlation_id = data.get("correlation_id", "")
-            elif data is not None:
-                correlation_id = str(getattr(data, "correlation_id", ""))
-            return {"requires_on_chain_hash": False, "correlation_id": correlation_id}
+            return self._accepted_cvm_update(data)
         except ApiError as exc:
             hash_required = self._patch_cvm_hash_required(exc)
             if hash_required is not None:
@@ -2718,13 +2757,7 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
     async def replicate_cvm(self, request: ReplicateCvmRequest | Mapping[str, Any]) -> Any:
         req = ReplicateCvmRequest.model_validate(request)
         return self._loose_validate(
-            await self.post(
-                f"/cvms/{req.resolved}/replicas",
-                json={
-                    "os_image": req.os_image,
-                    **({"node": req.node} if req.node is not None else {}),
-                },
-            )
+            await self.post(f"/cvms/{req.resolved}/replicas", json=_replica_body(req))
         )
 
     async def safe_replicate_cvm(
@@ -2765,9 +2798,13 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
             "compose_hash": req.compose_hash,
             "token": req.token,
             "transaction_hash": req.transaction_hash,
+            "os_image": req.os_image,
+            "kms_urls": req.kms_urls,
+            "gateway_urls": req.gateway_urls,
         }
-        model = CvmInfoV20260121 if self.config.version == "2026-01-21" else CvmInfoV20260522
-        return self._validate(model, await self.post(f"/apps/{req.app_id}/instances", json=body))
+        return self._validate(
+            ReplicaVM, await self.post(f"/apps/{req.app_id}/instances", json=body)
+        )
 
     async def safe_create_app_instance(
         self, request: CreateAppInstanceRequest | Mapping[str, Any]

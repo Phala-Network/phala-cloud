@@ -37,6 +37,7 @@ class WorkspaceResponse(CloudModel):
     billing_status: str = "active"
     # When the workspace was suspended. None unless billing_status is suspended.
     suspended_at: str | None = None
+    viewer: GenericObject | None = None
 
 
 class ListWorkspacesResponse(CloudModel):
@@ -104,6 +105,7 @@ class CommitCvmProvisionResponseBase(CloudModel):
     # Launch token this create stored on a new app (launch_token or
     # generate_launch_token). Returned only here, once.
     launch_token: str | None = None
+    finality_wait: GenericObject | None = None
 
 
 class CommitCvmProvisionResponseV20260121(CommitCvmProvisionResponseBase):
@@ -352,19 +354,6 @@ class RefreshInstanceIdsResponseV20260522(RefreshInstanceIdsResponseBase):
 
 
 RefreshInstanceIdsResponse = RefreshInstanceIdsResponseV20260522
-
-
-class AppListResponse(CloudModel):
-    items: list[GenericObject] = Field(default_factory=list)
-    total: int | None = None
-    page: int | None = None
-    page_size: int | None = None
-    pages: int | None = None
-
-
-class AppInfoResponse(CloudModel):
-    id: str | None = None
-    name: str | None = None
 
 
 # AppRevisionsResponse and AppRevisionDetailResponse are imported from models.apps

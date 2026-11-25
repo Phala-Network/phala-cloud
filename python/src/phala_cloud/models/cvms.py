@@ -24,6 +24,13 @@ class GetCvmListRequest(CloudModel):
     page_size: int | None = Field(default=None, ge=1)
     family: Literal["all", "cpu", "gpu"] | None = None
     instance_types: list[str] | None = None
+    search: str | None = None
+    status: list[str] | None = None
+    base_image: str | None = None
+    kms_slug: str | None = None
+    kms_type: str | None = None
+    node: str | None = None
+    region: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -74,7 +81,7 @@ class ComposeRequirementsPatch(BaseModel):
     ``gpu_policy`` is not patchable: the stored value is kept.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
     # Formats the data disk on every boot (OS 0.6.3+). Turning it on needs confirm_data_wipe.
     ephemeral_data_disk: bool | None = None
@@ -84,6 +91,13 @@ class ComposeRequirementsPatch(BaseModel):
     launch_token_hash: str | None = None
     platforms: list[str] | None = None
     tdx_measure_acpi_tables: bool | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_gpu_policy(cls, value: Any) -> Any:
+        if isinstance(value, Mapping) and "gpu_policy" in value:
+            raise ValueError("gpu_policy is not patchable")
+        return value
 
 
 class ComposePatch(BaseModel):
@@ -95,7 +109,7 @@ class ComposePatch(BaseModel):
     differently).
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
     # Replaces the script of a bash-runner app. None is rejected for a bash app.
     bash_script: str | None = None
@@ -218,6 +232,8 @@ class CvmKmsInfoV20260121(CloudModel):
     rpc_endpoint: str | None = None
     encrypted_env_pubkey: str | None = None
     k256_pubkey: str | None = None
+    block_tag: str | None = None
+    finality_eta_seconds: int | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -276,6 +292,7 @@ class CvmLogUrlsV20260121(CloudModel):
 class NodeRef(CloudModel):
     object_type: Literal["node"] = "node"
     id: int | None = None
+    node_id: int | None = None
     name: str | None = None
     region: str | None = None
     device_id: str | None = None
@@ -414,12 +431,69 @@ class CvmInfoDetailV20260522(CvmInfoV20260522):
     compose_file: str | dict | None = None
 
 
+class CvmFinalityWaitTransaction(CloudModel):
+    hash: str
+    block_number: int
+    chain_id: int
+
+
+class CvmFinalityWaitProgress(CloudModel):
+    block_tag: str | None = None
+    policy_block_number: int | None = None
+    blocks_remaining: int | None = None
+    eta_seconds: int | None = None
+
+
+class CvmFinalityWaitStatus(CloudModel):
+    operation: str
+    correlation_id: str
+    phase: str
+    stage: str
+    stages: list[str] | None = None
+    transaction: CvmFinalityWaitTransaction | None = None
+    finality: CvmFinalityWaitProgress
+
+
+class CvmFinalityFailure(CloudModel):
+    operation: str
+    correlation_id: str
+    failure_reason: str
+    failed_at: str
+
+
+class ReplicaVM(CloudModel):
+    """POST /apps/{id}/instances response: a VM plus optional finality_wait."""
+
+    id: str | int
+    name: str
+    status: str
+    teepod_id: int
+    app_id: str
+    vm_uuid: str | None = None
+    instance_id: str | None = None
+    app_url: str | None = None
+    base_image: str | None = None
+    vcpu: int
+    memory: int
+    disk_size: int
+    manifest_version: int | None = None
+    version: str | None = None
+    runner: str | None = None
+    docker_compose_file: str | None = None
+    features: list[str] | None = None
+    created_at: str
+    encrypted_env_pubkey: str | None = None
+    finality_wait: CvmFinalityWaitStatus | None = None
+
+
 class CvmInfoDetailV20261111(CvmInfoDetailV20260522):
     enabled_ssh_access: bool = False
     resource: CvmResourceV20261111
     gpu: CvmGpuInfo | None = None
     dapp_dashboard_url: str | None = None
     syslog_endpoint: str | None = None
+    finality_wait: CvmFinalityWaitStatus | None = None
+    finality_failure: CvmFinalityFailure | None = None
 
 
 class PaginatedCvmInfosV20260522(CloudModel):

@@ -46,6 +46,18 @@ def response(path: str) -> dict:
             "allow_any_device": True,
             "is_allowed": True,
         }
+    if path.endswith("instances") or path.endswith("replicas"):
+        return {
+            "id": "cvm-1",
+            "name": "test",
+            "status": "running",
+            "teepod_id": 1,
+            "app_id": "app-1",
+            "vcpu": 1,
+            "memory": 1,
+            "disk_size": 1,
+            "created_at": "2026-01-01T00:00:00Z",
+        }
     return {"id": "cvm-1", "name": "test", "status": "running", "resource": {}}
 
 

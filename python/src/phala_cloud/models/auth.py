@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from .base import CloudModel
 
 
 class UserInfo(CloudModel):
+    id: str | None = None
     username: str
     email: str
     role: Literal["admin", "user"]
@@ -14,6 +15,16 @@ class UserInfo(CloudModel):
     totp_enabled: bool
     has_backup_codes: bool
     flag_has_password: bool
+
+
+class FeatureFlag(CloudModel):
+    name: str
+    enabled: bool = True
+    options: list[str] | None = None
+    reason: str | None = None
+    action_text: str | None = None
+    action_url: str | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class WorkspaceInfo(CloudModel):
@@ -46,6 +57,7 @@ class CurrentUserV20260121(CloudModel):
     user: UserInfo
     workspace: WorkspaceInfo
     credits: CreditsInfo
+    features: list[FeatureFlag] | None = None
 
 
 class CurrentUserV20251028(CloudModel):

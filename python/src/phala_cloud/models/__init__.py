@@ -13,8 +13,9 @@ from .apps import (
     DstackAppFullResponseV20260522,
     DstackAppListResponseV20260121,
     DstackAppListResponseV20260522,
+    OidcProvenance,
 )
-from .auth import CurrentUser, CurrentUserV20251028, CurrentUserV20260121
+from .auth import CurrentUser, CurrentUserV20251028, CurrentUserV20260121, FeatureFlag
 from .cvms import (
     AppCvmsBatchIsAllowedResponse,
     AppCvmsBatchIsAllowedResponseV20260121,
@@ -69,6 +70,7 @@ from .cvms import (
     PaginatedCvmInfosV20251028,
     PaginatedCvmInfosV20260121,
     PaginatedCvmInfosV20260522,
+    ReplicaVM,
     TcbInfo,
     UserRef,
     VmInfoV20251028,
@@ -183,6 +185,7 @@ __all__ = [
     "DstackAppListResponseV20260121",
     "DstackAppListResponseV20260522",
     "EventLog",
+    "FeatureFlag",
     "GetCvmListRequest",
     "GuestEvent",
     "InitScriptSlug",
@@ -203,6 +206,7 @@ __all__ = [
     "ListKmsContractNodesResponse",
     "ListKmsContractsResponse",
     "NodeRef",
+    "OidcProvenance",
     "OnChainDevice",
     "OnChainKmsContract",
     "OnChainOsImage",
@@ -212,6 +216,7 @@ __all__ = [
     "PaginatedCvmInfosV20251028",
     "PaginatedCvmInfosV20260121",
     "PaginatedCvmInfosV20260522",
+    "ReplicaVM",
     "TcbInfo",
     "UserRef",
     "VmInfoV20251028",
