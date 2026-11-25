@@ -26,6 +26,15 @@ class _Recorder:
         return httpx.Response(200, json=self.payload)
 
 
+def test_provision_cvm_sends_an_init_script_name_it_does_not_know() -> None:
+    recorder = _Recorder(_PROVISIONED)
+    request = {"name": "my-app", "init_scripts": ["future_script"]}
+    with httpx.Client(transport=httpx.MockTransport(recorder), base_url=_BASE_URL) as raw:
+        PhalaCloud(http_client=raw).provision_cvm(request)
+
+    assert recorder.bodies == [request]
+
+
 @pytest.mark.parametrize("use_async", [False, True])
 @pytest.mark.asyncio
 async def test_provision_cvm_sends_the_new_create_fields(use_async: bool) -> None:
@@ -64,7 +73,6 @@ def test_provision_cvm_sends_a_caller_launch_token() -> None:
 @pytest.mark.parametrize(
     "field",
     [
-        {"init_scripts": ["unknown_script"]},
         {"annotations": {"memory_tier": 1}},
         {"generate_launch_token": "yes please"},
     ],
