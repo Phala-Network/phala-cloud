@@ -43,7 +43,7 @@ func main() {
 
 ### Public endpoints without an API key
 
-An API key is required only for authenticated endpoints. Public lookups work on a client created without credentials, for example fetching an app's environment encryption public key:
+An API key is required only for authenticated endpoints. Public lookups work on a client created without credentials, for example fetching an app's environment encryption public key or listing the init scripts Phala Cloud provides (`GetManagedInitScripts`):
 
 ```go
 client, err := phala.NewClient() // no API key
