@@ -707,6 +707,15 @@ export {
 } from "./cvms/get_cvm_init_scripts";
 
 export {
+  getManagedInitScripts,
+  safeGetManagedInitScripts,
+  ManagedInitScriptSchema,
+  ManagedInitScriptsSchema,
+  type ManagedInitScript,
+  type ManagedInitScripts,
+} from "./cvms/get_managed_init_scripts";
+
+export {
   putCvmInitScripts,
   safePutCvmInitScripts,
   PutCvmInitScriptsRequestSchema,

@@ -64,6 +64,9 @@ import { defineAction } from "../../utils/define-action";
  * ```
  */
 
+/** Known values are editor hints; the server may send others. */
+export type WorkspaceBillingStatus = "active" | "suspended" | "abandoned" | (string & {});
+
 export const WorkspaceResponseSchema = z
   .object({
     id: z.string(),
@@ -81,7 +84,7 @@ export const WorkspaceResponseSchema = z
      * it pays what it owes or is topped up. An abandoned one is closed and
      * read-only until what it owes is paid.
      */
-    billing_status: z.enum(["active", "suspended", "abandoned"]).default("active"),
+    billing_status: z.string().default("active") as z.ZodType<WorkspaceBillingStatus>,
     /** When the workspace was suspended. Null unless billing_status is suspended. */
     suspended_at: z.string().nullable().optional(),
   })

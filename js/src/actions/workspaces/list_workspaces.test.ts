@@ -40,7 +40,8 @@ describe("WorkspaceResponseSchema", () => {
     expect(parsed.suspended_at).toBe("2026-06-15T00:00:00Z");
   });
 
-  it("rejects a lifecycle state the API cannot produce", () => {
-    expect(() => WorkspaceResponseSchema.parse({ ...base, billing_status: "deleted" })).toThrow();
+  it("reads an unknown billing_status", () => {
+    const parsed = WorkspaceResponseSchema.parse({ ...base, billing_status: "restricted" });
+    expect(parsed.billing_status).toBe("restricted");
   });
 });
