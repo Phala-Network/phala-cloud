@@ -1,3 +1,14 @@
+## [0.4.6b2](https://github.com/Phala-Network/phala-cloud/compare/python-v0.4.5...python-v0.4.6b2) (2026-11-25)
+
+### docs
+
+* **python:** explain choosing init scripts and checking their bytes ([79f0703](https://github.com/Phala-Network/phala-cloud/commit/79f07035e11ec13731259b1f7471295c7ce8d219))
+
+### feat
+
+* **python:** add runtime_tmpfs init script slug ([7cdd337](https://github.com/Phala-Network/phala-cloud/commit/7cdd337262e0a0fa9f27aae12273e24f0d63e2df))
+* **python:** fill init-script catalog, custom-script flag and compose wipe confirm ([1e0c85f](https://github.com/Phala-Network/phala-cloud/commit/1e0c85f63049fdcd7ee80e7f9646501252417f12))
+* **python:** let the server own init script names ([30e4d11](https://github.com/Phala-Network/phala-cloud/commit/30e4d11dc5b8f9bb70512e2a57ca09961f758262))
 ## [0.4.6b1](https://github.com/Phala-Network/phala-cloud/compare/python-v0.4.5...python-v0.4.6b1) (2026-11-25)
 
 ### feat
