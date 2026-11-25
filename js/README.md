@@ -138,6 +138,39 @@ plus 15 minutes. Without an estimate, it allows 45 minutes. Pass an
 response's details. HTTP 404 (`ERR-12-009`) means the app is not registered
 on the named chain and is returned immediately.
 
+### How do I avoid replacing a pending on-chain update?
+
+A new update replaces an update that is still waiting for finality.
+To stop that, pass `confirmFinalityReplacement: "none"`.
+If another update is waiting, the API fails with HTTP 412 (`ERR-03-067`).
+Read the waiting update's correlation ID from the error with `readFinalityReplacementRequired`.
+Then either wait for that update with `waitForCvmFinality`, or retry with the ID to confirm the replacement.
+
+```typescript
+import { patchCvm, readFinalityReplacementRequired, waitForCvmFinality } from "@phala/cloud";
+
+const update = { id: "cvm-123", public_logs: true };
+const result = await client.safePatchCvm({ ...update, confirmFinalityReplacement: "none" });
+
+if (!result.success) {
+  const waiting = readFinalityReplacementRequired(result.error);
+  if (!waiting) throw result.error;
+
+  // Wait for the pending update first...
+  await waitForCvmFinality(client, { id: "cvm-123", correlationId: waiting.correlationId });
+  // ...or replace it on purpose by sending its ID.
+  await patchCvm(client, { ...update, confirmFinalityReplacement: waiting.correlationId });
+}
+```
+
+If the waiting update changes before you retry, the API returns 412 again with the new ID.
+Check the new update before you confirm it.
+Leave the option out to keep the default: the new update replaces the waiting one without a check.
+
+These actions accept `confirmFinalityReplacement`: `patchCvm`, `updateCvmEnvs`,
+`updateDockerCompose`, `updatePreLaunchScript`, `upgradePreLaunchScript`,
+`commitCvmComposeFileUpdate`, `applyCvmDraft` and `commitCvmUpdate`.
+
 ### How do I choose init scripts for a CVM?
 
 Init scripts run on every boot, before your containers start. Phala Cloud provides them. You can turn each one on or off, but you cannot change a script or add your own. Phala Cloud also decides the order they run in.

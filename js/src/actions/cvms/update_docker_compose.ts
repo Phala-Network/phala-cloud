@@ -1,7 +1,11 @@
 import { z } from "zod";
 import { type Client } from "../../client";
 import { CvmIdObjectSchema, CvmIdSchema, refineCvmId } from "../../types/cvm_id";
-import { CvmFinalityWaitAcceptedSchema } from "../../types/cvm_finality";
+import {
+  ConfirmFinalityReplacementSchema,
+  CvmFinalityWaitAcceptedSchema,
+  finalityReplacementHeaders,
+} from "../../types/cvm_finality";
 import { KmsInfoSchema } from "../../types/kms_info";
 import { defineAction } from "../../utils/define-action";
 import { PhalaCloudError } from "../../utils/errors";
@@ -138,6 +142,7 @@ export const UpdateDockerComposeRequestSchema = refineCvmId(
       .string()
       .optional()
       .describe("On-chain transaction hash for verification (Phase 2, contract-owned KMS only)"),
+    confirmFinalityReplacement: ConfirmFinalityReplacementSchema,
   }),
 ).transform((data) => {
   // Use CvmIdSchema to normalize the CVM ID
@@ -149,6 +154,7 @@ export const UpdateDockerComposeRequestSchema = refineCvmId(
       compose_hash: data.compose_hash,
       transaction_hash: data.transaction_hash,
     },
+    confirmFinalityReplacement: data.confirmFinalityReplacement,
     _raw: data,
   };
 });
@@ -204,6 +210,7 @@ const { action: updateDockerCompose, safeAction: safeUpdateDockerCompose } = def
   // Prepare headers for compose_hash and transaction_hash
   const headers: Record<string, string> = {
     "Content-Type": "text/yaml",
+    ...finalityReplacementHeaders(validatedRequest.confirmFinalityReplacement),
   };
 
   if (validatedRequest.request.compose_hash) {

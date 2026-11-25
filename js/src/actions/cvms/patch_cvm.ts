@@ -4,6 +4,10 @@ import {
   PortPolicySchema,
   VerityVolumeSchema,
 } from "../../types/app_compose";
+import {
+  ConfirmFinalityReplacementSchema,
+  finalityReplacementHeaders,
+} from "../../types/cvm_finality";
 import { CvmIdObjectSchema, CvmIdSchema, refineCvmId } from "../../types/cvm_id";
 import { defineAction } from "../../utils/define-action";
 import {
@@ -196,6 +200,8 @@ export const PatchCvmRequestSchema = refineCvmId(
     ...CvmPatchBodySchema.shape,
     // Prepare-only mode (for multisig workflows)
     prepareOnly: z.boolean().optional(),
+    // Set to "none", or to the waiting update's correlation ID, to guard against replacing it
+    confirmFinalityReplacement: ConfirmFinalityReplacementSchema,
   }),
 );
 
@@ -222,13 +228,14 @@ const { action: patchCvm, safeAction: safePatchCvm } = defineAction<
   const { cvmId } = CvmIdSchema.parse(parsed);
 
   // Build request body excluding CVM identifier and meta fields
-  const { id, uuid, app_id, instance_id, name, prepareOnly, ...body } = parsed;
+  const { id, uuid, app_id, instance_id, name, prepareOnly, confirmFinalityReplacement, ...body } =
+    parsed;
 
-  return submitCvmUpdate(() =>
-    prepareOnly
-      ? client.patch(`/cvms/${cvmId}`, body, { headers: { "X-Prepare-Only": "true" } })
-      : client.patch(`/cvms/${cvmId}`, body),
-  );
+  const headers = {
+    ...(prepareOnly ? { "X-Prepare-Only": "true" } : {}),
+    ...finalityReplacementHeaders(confirmFinalityReplacement),
+  };
+  return submitCvmUpdate(() => client.patch(`/cvms/${cvmId}`, body, { headers }));
 });
 
 export { patchCvm, safePatchCvm };

@@ -1,7 +1,9 @@
 import { z } from "zod";
 import {
+  ConfirmFinalityReplacementSchema,
   CvmFinalityWaitPhaseSchema,
   OptionalCvmFinalityWaitSchema,
+  finalityReplacementHeaders,
 } from "../../types/cvm_finality";
 import { CvmIdObjectSchema, CvmIdSchema, type CvmIdInput, refineCvmId } from "../../types/cvm_id";
 import { defineAction, defineSimpleAction } from "../../utils/define-action";
@@ -70,6 +72,7 @@ const ApplyCvmDraftBaseRequestSchema = CvmIdObjectSchema.extend({
   baseComposeHash: z.string().optional(),
   expectedEntryIds: z.array(z.string()).optional(),
   prepareOnly: z.boolean().optional(),
+  confirmFinalityReplacement: ConfirmFinalityReplacementSchema,
 });
 
 export const ApplyCvmDraftRequestSchema = refineCvmId(
@@ -162,12 +165,14 @@ const { action: applyCvmDraft, safeAction: safeApplyCvmDraft } = defineAction<
     baseComposeHash,
     expectedEntryIds,
     prepareOnly,
+    confirmFinalityReplacement,
     composeHash,
     transactionHash,
     ...identifier
   } = ApplyCvmDraftRequestSchema.parse(request);
   const headers = {
     ...(prepareOnly ? { "X-Prepare-Only": "true" } : {}),
+    ...finalityReplacementHeaders(confirmFinalityReplacement),
     ...(composeHash && transactionHash ? cvmUpdateCommitHeaders(composeHash, transactionHash) : {}),
   };
   const body =

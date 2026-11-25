@@ -65,3 +65,61 @@ export const CvmFinalityFailureSchema = z.object({
 });
 export type CvmFinalityFailure = z.infer<typeof CvmFinalityFailureSchema>;
 export const OptionalCvmFinalityFailureSchema = CvmFinalityFailureSchema.nullish().catch(undefined);
+
+/**
+ * Optional `confirmFinalityReplacement` request field shared by every update action.
+ *
+ * - Omitted: no header is sent and a new update silently replaces a waiting one.
+ * - `"none"`: fail with HTTP 412 (`ERR-03-067`) if another update is still waiting.
+ * - The waiting update's correlation ID: confirm that it may be replaced.
+ */
+export const ConfirmFinalityReplacementSchema = z.string().optional();
+
+/** Build the request headers for `confirmFinalityReplacement`. Empty when omitted. */
+export function finalityReplacementHeaders(
+  confirmFinalityReplacement: string | undefined,
+): Record<string, string> {
+  return confirmFinalityReplacement === undefined
+    ? {}
+    : { "X-Confirm-Finality-Replacement": confirmFinalityReplacement };
+}
+
+export const FINALITY_REPLACEMENT_REQUIRED_ERROR_CODE = "ERR-03-067";
+
+export interface FinalityReplacementRequired {
+  /** Correlation ID of the update that is still waiting. Pass it to confirm the replacement. */
+  correlationId: string;
+  stage: CvmFinalityStage;
+}
+
+/**
+ * Read the waiting update from an `ERR-03-067` (HTTP 412) error.
+ * Returns `undefined` for any other error. Works with the error thrown by an action and
+ * with `error` from a `safe*` action result.
+ */
+export function readFinalityReplacementRequired(
+  error: unknown,
+): FinalityReplacementRequired | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const { status, errorCode, detail } = error as {
+    status?: unknown;
+    errorCode?: unknown;
+    detail?: unknown;
+  };
+  if (status !== 412 || errorCode !== FINALITY_REPLACEMENT_REQUIRED_ERROR_CODE) return undefined;
+  if (typeof detail !== "object" || detail === null) return undefined;
+  const items: unknown = (detail as { details?: unknown }).details;
+  if (!Array.isArray(items)) return undefined;
+
+  const fields = new Map<string, unknown>();
+  for (const item of items) {
+    if (typeof item === "object" && item !== null && "field" in item && "value" in item) {
+      fields.set(String(item.field), item.value);
+    }
+  }
+  const correlationId = fields.get("correlation_id");
+  const stage = fields.get("stage");
+  if (typeof correlationId !== "string" || !correlationId) return undefined;
+  if (typeof stage !== "string") return undefined;
+  return { correlationId, stage };
+}

@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { CvmFinalityWaitAcceptedSchema } from "../../types/cvm_finality";
+import {
+  ConfirmFinalityReplacementSchema,
+  CvmFinalityWaitAcceptedSchema,
+  finalityReplacementHeaders,
+} from "../../types/cvm_finality";
 import { type Client } from "../../client";
 import { CvmIdObjectSchema, CvmIdSchema, refineCvmId } from "../../types/cvm_id";
 import { KmsInfoSchema } from "../../types/kms_info";
@@ -135,6 +139,7 @@ export const UpdateCvmEnvsRequestSchema = refineCvmId(
       .describe(
         "On-chain transaction hash for verification (Phase 2, required when env_keys changes)",
       ),
+    confirmFinalityReplacement: ConfirmFinalityReplacementSchema,
   }),
 ).transform((data) => {
   // Use CvmIdSchema to normalize the CVM ID
@@ -147,6 +152,7 @@ export const UpdateCvmEnvsRequestSchema = refineCvmId(
       compose_hash: data.compose_hash,
       transaction_hash: data.transaction_hash,
     },
+    confirmFinalityReplacement: data.confirmFinalityReplacement,
     _raw: data,
   };
 });
@@ -206,6 +212,7 @@ const { action: updateCvmEnvs, safeAction: safeUpdateCvmEnvs } = defineAction<
     const response = await client.patch<UpdateCvmEnvsInProgress>(
       `/cvms/${validatedRequest.cvmId}/envs`,
       validatedRequest.request,
+      { headers: finalityReplacementHeaders(validatedRequest.confirmFinalityReplacement) },
     );
 
     // Success case (200) - return as-is
