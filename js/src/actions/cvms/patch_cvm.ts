@@ -162,9 +162,10 @@ export const CvmPatchBodySchema = z.object({
 
   // JSON Merge Patch of the app compose (see ComposePatchSchema)
   compose: ComposePatchSchema.optional(),
-  // Platform init scripts this CVM runs, replacing the current set
+  // Init scripts provided by Phala Cloud that this CVM runs, by name, replacing the
+  // current set. The server validates the names and fixes the order.
   init_scripts: z.array(InitScriptSlugSchema).optional(),
-  // Raw guest init scripts, replacing the current set. System admins only.
+  // Phala Cloud admins only.
   init_script: z.array(z.string()).optional(),
   // Confirms turning on docker_cleanup, runtime_tmpfs or requirements.ephemeral_data_disk,
   // which erase data on every boot

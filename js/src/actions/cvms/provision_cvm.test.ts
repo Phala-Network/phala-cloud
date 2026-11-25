@@ -399,6 +399,17 @@ describe("provisionCvm (wire-level)", () => {
     expect(body.annotations).toEqual({ memory_tier: "fast" });
   });
 
+  it("sends an init script name it does not know without rejecting it", async () => {
+    await provisionCvm(mockClient, {
+      name: "test-app",
+      instance_type: "tdx.small",
+      compose_file: { docker_compose_file: "services: {}" },
+      init_scripts: ["future_script"],
+    });
+
+    expect(getRequestBody().init_scripts).toEqual(["future_script"]);
+  });
+
   it("sends the nullable compose fields as null", async () => {
     const nulls = {
       bash_script: null,

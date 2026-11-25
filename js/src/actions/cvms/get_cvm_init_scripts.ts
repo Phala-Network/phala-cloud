@@ -3,7 +3,7 @@ import { CvmIdSchema, type CvmIdInput } from "../../types/cvm_id";
 import { defineAction } from "../../utils/define-action";
 
 export const CvmInitScriptSchema = z.object({
-  /** Platform script slug. Any string, so slugs added later still parse. */
+  /** Name of an init script provided by Phala Cloud. Any string, so new names still parse. */
   slug: z.string(),
   /** The CVM's current compose runs this script. */
   selected: z.boolean(),
@@ -26,13 +26,13 @@ export const GetCvmInitScriptsRequestSchema = CvmIdSchema;
 export type GetCvmInitScriptsRequest = CvmIdInput;
 
 /**
- * List the platform init scripts of a CVM
+ * List the init scripts Phala Cloud provides for a CVM
  *
- * Returns every platform init script in its fixed run order: whether the CVM's
- * current compose runs it, and whether the caller could select it (with the
- * reason when not). has_custom_scripts is true when the compose also runs a
- * script that is not a platform script. Change the selection with
- * `patchCvm({ init_scripts })` or replace raw scripts with `putCvmInitScripts`.
+ * Returns every provided init script in the order Phala Cloud runs them: whether
+ * the CVM's current compose runs it, and whether the caller can select it (with
+ * the reason when not). has_custom_scripts is true when the compose also runs
+ * scripts set by Phala Cloud support. Change the selection with
+ * `patchCvm({ init_scripts })`.
  *
  * @example
  * ```typescript

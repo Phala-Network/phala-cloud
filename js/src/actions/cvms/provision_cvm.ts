@@ -141,7 +141,8 @@ import { isValidHostname } from "../../utils/hostname";
  *   - Specify only if you need a different size than the default
  * - **env_keys**: List of allowed environment variable keys
  * - **listed**: Whether the CVM is publicly listed (default: false)
- * - **init_scripts**: Platform init script slugs (`docker_cleanup`, `runtime_tmpfs`, `env_merge`)
+ * - **init_scripts**: Names of init scripts provided by Phala Cloud, such as `docker_cleanup`.
+ *   Phala Cloud owns the list and the run order; see `getCvmInitScripts`
  * - **launch_token**: Launch token (at least 32 bytes) the guest checks on every boot;
  *   Phala Cloud writes its hash into `compose_file.requirements.launch_token_hash`
  * - **generate_launch_token**: Let Phala Cloud generate the token for a new app; it is
@@ -248,7 +249,7 @@ export const ProvisionCvmRequestSchema = z
           .optional(),
         snapshotter: z.enum(["overlayfs", "stargz"]).nullable().optional(),
         verity_volumes: z.array(VerityVolumeSchema).nullable().optional(),
-        // Raw guest init scripts. Platform slugs use init_scripts instead.
+        // Phala Cloud admins only. Everyone else selects init scripts with init_scripts.
         init_script: z.union([z.string(), z.array(z.string())]).optional(),
       })
       // Keep compose_file open to newer backend fields. Without passthrough,
@@ -262,7 +263,8 @@ export const ProvisionCvmRequestSchema = z
     // A whole app-compose JSON file, sent instead of compose_file (not both).
     // Needs the compose_advanced feature flag.
     compose_file_raw: z.string().optional(),
-    // Platform init scripts to run on every boot; Phala Cloud fixes the order.
+    // Init scripts provided by Phala Cloud to run on every boot, by name. The server
+    // validates the names and fixes the order.
     init_scripts: z.array(InitScriptSlugSchema).optional(),
     // Launch token (at least 32 bytes) the guest requires on every boot.
     launch_token: z.string().optional(),
