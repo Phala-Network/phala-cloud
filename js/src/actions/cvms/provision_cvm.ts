@@ -273,6 +273,7 @@ export const ProvisionCvmRequestSchema = z
     generate_launch_token: z.boolean().optional(),
     // Host-side key/value metadata stored by the VMM; needs the cvm_annotations flag.
     annotations: z.record(z.string(), z.string()).optional(),
+    guest_agent_gateway_access: z.literal("closed").optional(),
     listed: z.boolean().optional(),
     kms_id: z.string().optional(),
     kms: z.enum(["PHALA", "ETHEREUM", "BASE"]).optional(), // KMS type selection (defaults to PHALA)

@@ -185,9 +185,10 @@ export const CvmPatchBodySchema = z.object({
   // OS image
   image: z.string().optional(),
 
-  // Shutdown behavior
-  shutdown_timeout: z.number().optional(),
+  // Shutdown behavior. Null restores the platform default.
+  shutdown_timeout: z.number().nullable().optional(),
   allow_force_stop: z.boolean().optional(),
+  guest_agent_gateway_access: z.literal("closed").optional(),
 });
 
 export const PatchCvmRequestSchema = refineCvmId(

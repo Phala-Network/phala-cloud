@@ -1,6 +1,6 @@
 import type { Chain } from "viem";
 import { z } from "zod";
-import { OptionalCvmFinalityWaitSchema } from "./cvm_finality";
+import { OptionalCvmFinalityFailureSchema, OptionalCvmFinalityWaitSchema } from "./cvm_finality";
 import { CvmNetworkUrlsV20251028Schema } from "./cvm_info_v20251028";
 import { SUPPORTED_CHAINS } from "./supported_chains";
 
@@ -81,6 +81,8 @@ const CvmKmsInfoV20260121BaseSchema = z.object({
   rpc_endpoint: z.string().nullable().optional(),
   encrypted_env_pubkey: z.string().nullable().optional(),
   k256_pubkey: z.string().nullable().optional(),
+  block_tag: z.string().nullable().optional(),
+  finality_eta_seconds: z.number().int().nullable().optional(),
 });
 
 export const CvmKmsInfoV20260121Schema = CvmKmsInfoV20260121BaseSchema.transform((data) => {
@@ -153,6 +155,7 @@ export type DeviceIdEntry = z.infer<typeof DeviceIdEntrySchema>;
 export const NodeRefSchema = z.object({
   object_type: z.literal("node"),
   id: z.number().int().nullable().optional(),
+  node_id: z.number().int().nullable().optional(),
   name: z.string().nullable().optional(),
   region: z.string().nullable().optional(),
   // Deprecated: resolved single device_id. Use device_ids for the full matrix.
@@ -238,6 +241,7 @@ export const CvmInfoDetailV20260522Schema = CvmInfoV20260522Schema.extend({
 export type CvmInfoDetailV20260522 = z.infer<typeof CvmInfoDetailV20260522Schema>;
 
 export const CvmInfoDetailV20261111Schema = CvmInfoDetailV20260522Schema.extend({
+  finality_failure: OptionalCvmFinalityFailureSchema,
   resource: CvmResourceInfoV20260121Schema.extend({
     memory_in_mb: z.number().int(),
   }),

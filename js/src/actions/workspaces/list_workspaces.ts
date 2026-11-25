@@ -87,6 +87,7 @@ export const WorkspaceResponseSchema = z
     billing_status: z.string().default("active") as z.ZodType<WorkspaceBillingStatus>,
     /** When the workspace was suspended. Null unless billing_status is suspended. */
     suspended_at: z.string().nullable().optional(),
+    viewer: z.unknown().nullable().optional(),
   })
   .passthrough();
 

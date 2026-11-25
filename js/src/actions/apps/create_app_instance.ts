@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { VMSchema } from "../../types/cvm_info";
-import { defineAction } from "../../utils/define-action";
+import type { Client, SafeResult } from "../../client";
+import type { ApiVersion } from "../../types/client";
+import { type VMForVersion, getVMSchemaForVersion } from "../../types/cvm_info";
 import { placementRequest } from "../../utils/placement-request";
 
 /**
@@ -58,19 +59,50 @@ export const CreateAppInstanceRequestSchema = placementRequest(
       compose_hash: z.string().optional(),
       token: z.string().optional(),
       transaction_hash: z.string().optional(),
+      os_image: z.string().optional(),
+      kms_urls: z.array(z.string()).optional(),
+      gateway_urls: z.array(z.string()).optional(),
     })
     .strict(),
 );
 
 export type CreateAppInstanceRequest = z.infer<typeof CreateAppInstanceRequestSchema>;
 
-const { action: createAppInstance, safeAction: safeCreateAppInstance } = defineAction<
-  CreateAppInstanceRequest,
-  typeof VMSchema
->(VMSchema, async (client, request) => {
+export function createAppInstance<V extends ApiVersion>(
+  client: Client<V>,
+  request: CreateAppInstanceRequest,
+): Promise<VMForVersion<V>>;
+export async function createAppInstance<V extends ApiVersion>(
+  client: Client<V>,
+  request: CreateAppInstanceRequest,
+): Promise<VMForVersion<V>> {
   const parsed = CreateAppInstanceRequestSchema.parse(request);
   const { appId, ...body } = parsed;
-  return await client.post(`/apps/${appId}/instances`, body);
-});
+  const response = await client.post(`/apps/${appId}/instances`, body);
+  return getVMSchemaForVersion(client.config.version).parse(response) as VMForVersion<V>;
+}
 
-export { createAppInstance, safeCreateAppInstance };
+export function safeCreateAppInstance<V extends ApiVersion>(
+  client: Client<V>,
+  request: CreateAppInstanceRequest,
+): Promise<SafeResult<VMForVersion<V>>>;
+export async function safeCreateAppInstance<V extends ApiVersion>(
+  client: Client<V>,
+  request: CreateAppInstanceRequest,
+): Promise<SafeResult<VMForVersion<V>>> {
+  try {
+    const data = await createAppInstance(client, request);
+    return { success: true, data };
+  } catch (error) {
+    if (error && typeof error === "object" && ("status" in error || "issues" in error)) {
+      return { success: false, error } as SafeResult<VMForVersion<V>>;
+    }
+    return {
+      success: false,
+      error: {
+        name: "Error",
+        message: error instanceof Error ? error.message : String(error),
+      },
+    } as SafeResult<VMForVersion<V>>;
+  }
+}
