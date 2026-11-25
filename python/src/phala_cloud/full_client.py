@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import re
 import ssl
 import time
 from collections.abc import AsyncGenerator, AsyncIterator, Iterator, Mapping
 from contextlib import asynccontextmanager, contextmanager
 from typing import Any, Literal, TypedDict, cast
+from urllib.parse import quote
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
@@ -56,6 +58,17 @@ from .action_responses import (
 from .client import AsyncPhalaCloud as _AsyncBase
 from .client import PhalaCloud as _SyncBase
 from .errors import ApiError, RequestError
+from .finality_wait import (
+    DEFAULT_FINALITY_POLL_INTERVAL,
+    DEFAULT_FINALITY_TIMEOUT,
+    check_wait_arguments,
+    find_operation,
+    is_transient,
+    plain,
+    retry_after_seconds,
+    terminal_error,
+    timeout_error,
+)
 from .logs import (
     CVM_LOGS_INFO_API_VERSION,
     CvmLogEntry,
@@ -89,6 +102,8 @@ from .models.cvms import (
     CvmInfoDetailV20261111,
     CvmInfoV20260121,
     CvmInfoV20260522,
+    CvmOperation,
+    CvmOperationsPage,
     CvmStatus,
     InitScriptSlug,
     IsAllowedResultV20260121,
@@ -120,6 +135,10 @@ def _logs_api_headers(path: str) -> dict[str, str] | None:
     if path.rstrip("/").endswith("/composition"):
         return None
     return {"X-Phala-Version": CVM_LOGS_INFO_API_VERSION}
+
+
+def _cvm_operations_path(cvm_id: str) -> str:
+    return f"/cvms/{quote(cvm_id, safe='')}/operations"
 
 
 class _WatchTransportError(RequestError):
@@ -422,6 +441,28 @@ class CvmSshKey(BaseModel):
 class CvmSshKeysResponse(BaseModel):
     keys: list[CvmSshKey]
     restart_required: bool
+
+
+class GetCvmOperationsRequest(CvmIdRequest):
+    cursor: str | None = None
+    limit: int | None = Field(default=None, ge=1, le=500)
+    start_time: str | None = None
+    end_time: str | None = None
+    operation_types: list[str] | None = None
+    correlation_id: str | None = None
+
+    def query(self) -> dict[str, Any]:
+        return self.model_dump(
+            include={
+                "cursor",
+                "limit",
+                "start_time",
+                "end_time",
+                "operation_types",
+                "correlation_id",
+            },
+            exclude_none=True,
+        )
 
 
 class CommitCvmUpdateRequest(CvmIdRequest):
@@ -1477,6 +1518,69 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     ) -> SafeResult[CvmSshKeysResponse]:
         return self.safe(self.get_cvm_ssh_keys, request)
 
+    def get_cvm_operations(
+        self, request: GetCvmOperationsRequest | Mapping[str, Any]
+    ) -> CvmOperationsPage:
+        req = GetCvmOperationsRequest.model_validate(request)
+        data = self.get(_cvm_operations_path(req.resolved), params=req.query())
+        return self._validate(CvmOperationsPage, plain(data))
+
+    def safe_get_cvm_operations(
+        self, request: GetCvmOperationsRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmOperationsPage]:
+        return self.safe(self.get_cvm_operations, request)
+
+    def wait_for_cvm_finality(
+        self,
+        cvm_id: str,
+        correlation_id: str,
+        *,
+        timeout: float = DEFAULT_FINALITY_TIMEOUT,
+        poll_interval: float = DEFAULT_FINALITY_POLL_INTERVAL,
+    ) -> CvmOperation:
+        """Wait until the operation completes; see the README for the errors it raises."""
+        check_wait_arguments(correlation_id, timeout, poll_interval)
+        deadline = time.monotonic() + timeout
+        path = _cvm_operations_path(cvm_id)
+        last_transient: Exception | None = None
+        while True:
+            if time.monotonic() >= deadline:
+                raise timeout_error(correlation_id, timeout, last_transient)
+            retry_after = 0.0
+            operation: CvmOperation | None = None
+            try:
+                data = self.get(path, params={"correlation_id": correlation_id})
+                operation = find_operation(data, correlation_id)
+            except (ApiError, RequestError) as exc:
+                if not is_transient(exc):
+                    raise
+                last_transient = exc
+                retry_after = retry_after_seconds(exc)
+            if operation is not None:
+                error = terminal_error(operation)
+                if error is not None:
+                    raise error
+                if operation.status == "completed":
+                    return operation
+            delay = max(poll_interval, retry_after)
+            self._sleep(max(0.0, min(delay, deadline - time.monotonic())))
+
+    def safe_wait_for_cvm_finality(
+        self,
+        cvm_id: str,
+        correlation_id: str,
+        *,
+        timeout: float = DEFAULT_FINALITY_TIMEOUT,
+        poll_interval: float = DEFAULT_FINALITY_POLL_INTERVAL,
+    ) -> SafeResult[CvmOperation]:
+        return self.safe(
+            self.wait_for_cvm_finality,
+            cvm_id,
+            correlation_id,
+            timeout=timeout,
+            poll_interval=poll_interval,
+        )
+
     def update_cvm_ssh_keys(
         self, request: UpdateCvmSshKeysRequest | Mapping[str, Any]
     ) -> CvmSshKeysResponse:
@@ -2488,8 +2592,6 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         raise RequestError(f"{message}: {details}" if details else message) from last_transport
 
     async def _sleep(self, seconds: float) -> None:
-        import asyncio
-
         await asyncio.sleep(seconds)
 
     async def get_kms_info(self, request: KmsInfoRequest | Mapping[str, Any]) -> Any:
@@ -2568,6 +2670,75 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         self, request: CvmIdRequest | Mapping[str, Any]
     ) -> SafeResult[CvmSshKeysResponse]:
         return await self.safe(self.get_cvm_ssh_keys, request)
+
+    async def get_cvm_operations(
+        self, request: GetCvmOperationsRequest | Mapping[str, Any]
+    ) -> CvmOperationsPage:
+        req = GetCvmOperationsRequest.model_validate(request)
+        data = await self.get(_cvm_operations_path(req.resolved), params=req.query())
+        return self._validate(CvmOperationsPage, plain(data))
+
+    async def safe_get_cvm_operations(
+        self, request: GetCvmOperationsRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmOperationsPage]:
+        return await self.safe(self.get_cvm_operations, request)
+
+    async def wait_for_cvm_finality(
+        self,
+        cvm_id: str,
+        correlation_id: str,
+        *,
+        timeout: float = DEFAULT_FINALITY_TIMEOUT,
+        poll_interval: float = DEFAULT_FINALITY_POLL_INTERVAL,
+    ) -> CvmOperation:
+        """Wait until the operation completes; see the README for the errors it raises."""
+        check_wait_arguments(correlation_id, timeout, poll_interval)
+        deadline = time.monotonic() + timeout
+        path = _cvm_operations_path(cvm_id)
+        last_transient: Exception | None = None
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise timeout_error(correlation_id, timeout, last_transient)
+            retry_after = 0.0
+            operation: CvmOperation | None = None
+            try:
+                # The deadline also bounds a request that is still in flight.
+                data = await asyncio.wait_for(
+                    self.get(path, params={"correlation_id": correlation_id}), remaining
+                )
+                operation = find_operation(data, correlation_id)
+            except asyncio.TimeoutError:
+                raise timeout_error(correlation_id, timeout, last_transient) from None
+            except (ApiError, RequestError) as exc:
+                if not is_transient(exc):
+                    raise
+                last_transient = exc
+                retry_after = retry_after_seconds(exc)
+            if operation is not None:
+                error = terminal_error(operation)
+                if error is not None:
+                    raise error
+                if operation.status == "completed":
+                    return operation
+            delay = max(poll_interval, retry_after)
+            await self._sleep(max(0.0, min(delay, deadline - time.monotonic())))
+
+    async def safe_wait_for_cvm_finality(
+        self,
+        cvm_id: str,
+        correlation_id: str,
+        *,
+        timeout: float = DEFAULT_FINALITY_TIMEOUT,
+        poll_interval: float = DEFAULT_FINALITY_POLL_INTERVAL,
+    ) -> SafeResult[CvmOperation]:
+        return await self.safe(
+            self.wait_for_cvm_finality,
+            cvm_id,
+            correlation_id,
+            timeout=timeout,
+            poll_interval=poll_interval,
+        )
 
     async def update_cvm_ssh_keys(
         self, request: UpdateCvmSshKeysRequest | Mapping[str, Any]

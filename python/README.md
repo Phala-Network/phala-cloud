@@ -103,6 +103,16 @@ else:
 
 Pass the CVM ID and the one-time token to `commit_cvm_update`. `compose_hash` and `transaction_hash` are optional. If you omit the compose hash, the server reads it from the token. If you omit the transaction hash, the server checks whether the compose hash is already allowed on-chain. The server still validates the token and the update.
 
+## How do I wait for an on-chain update to take effect?
+
+On an Ethereum or Base KMS, Phala Cloud accepts an update or a create, waits for chain finality, and only then applies it. The response carries `correlation_id` (and `finality_wait` with progress). Pass the CVM ID and that `correlation_id` to `wait_for_cvm_finality`. It polls until the operation completes and returns it.
+
+```python
+operation = client.wait_for_cvm_finality("my-cvm", correlation_id, timeout=1800, poll_interval=15)
+```
+
+`timeout` and `poll_interval` are in seconds; the defaults are 1800 and 15. A failed or cancelled operation raises `CvmFinalityOperationError` with `status`, `failure_reason` and `error_message`. A timeout raises `CvmFinalityTimeoutError`. The operation keeps running after a timeout. Both inherit from `CvmFinalityWaitError`. Network errors, 408, 425, 429 and 5xx responses are retried until the timeout. Other HTTP errors are raised at once. The async client has the same method; use `await`. To list operations yourself, call `get_cvm_operations`.
+
 ## How do I change a CVM's app compose settings?
 
 Send `compose` to `patch_cvm` as a JSON Merge Patch: a set field sets the value, a field set to `None` removes the key, and a field you leave out is unchanged. `requirements` merges per key and cannot change `gpu_policy`. Turning on `requirements.ephemeral_data_disk` erases data on every boot, so it also needs `confirm_data_wipe=True`. To turn init scripts on or off, see [How do I choose init scripts for a CVM?](#how-do-i-choose-init-scripts-for-a-cvm).

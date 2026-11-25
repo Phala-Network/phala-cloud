@@ -62,6 +62,13 @@ _KMS_CONTRACT_API_VERSION = "2026-06-23"
 T = TypeVar("T", bound=BaseModel)
 
 
+def _parse_retry_after(value: str | None) -> float | None:
+    """Read a Retry-After header as seconds. HTTP dates are not supported."""
+    if value is None or not value.strip().isdigit():
+        return None
+    return float(value.strip())
+
+
 class _BaseConfig:
     def __init__(
         self,
@@ -366,6 +373,7 @@ class AsyncPhalaCloud:
             "code": code,
             "detail": payload,
             "request_id": request_id,
+            "retry_after": _parse_retry_after(response.headers.get("Retry-After")),
         }
 
         # Structured error (has error_code field)
@@ -662,6 +670,7 @@ class PhalaCloud:
             "code": code,
             "detail": payload,
             "request_id": request_id,
+            "retry_after": _parse_retry_after(response.headers.get("Retry-After")),
         }
 
         # Structured error (has error_code field)

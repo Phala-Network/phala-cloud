@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .models.cvms import CvmOperation
 
 
 class PhalaCloudError(Exception):
@@ -22,11 +25,14 @@ class ApiError(PhalaCloudError):
         code: str | None = None,
         detail: Any | None = None,
         request_id: str | None = None,
+        retry_after: float | None = None,
     ) -> None:
         self.status_code = status_code
         self.code = code
         self.detail = detail
         self.request_id = request_id
+        # Seconds from the Retry-After response header, when the server sent one.
+        self.retry_after = retry_after
         super().__init__(message)
 
 
@@ -62,6 +68,7 @@ class ResourceError(BusinessError):
         code: str | None = None,
         detail: Any | None = None,
         request_id: str | None = None,
+        retry_after: float | None = None,
         error_code: str | None = None,
         structured_details: list[dict[str, Any]] | None = None,
         suggestions: list[str] | None = None,
@@ -77,8 +84,40 @@ class ResourceError(BusinessError):
             code=code,
             detail=detail,
             request_id=request_id,
+            retry_after=retry_after,
         )
 
 
 class ValidationError(PhalaCloudError):
     """Response validation failed (Pydantic)."""
+
+
+class CvmFinalityWaitError(PhalaCloudError):
+    """Waiting for an on-chain CVM operation ended without it completing.
+
+    The operation itself is not cancelled by this error.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        operation: CvmOperation | None = None,
+    ) -> None:
+        self.operation = operation
+        super().__init__(message)
+
+
+class CvmFinalityOperationError(CvmFinalityWaitError):
+    """The operation ended as failed or cancelled."""
+
+    def __init__(self, message: str, *, operation: CvmOperation) -> None:
+        super().__init__(message, operation=operation)
+        # "failed" or "cancelled".
+        self.status = operation.status
+        self.failure_reason = operation.failure_reason
+        self.error_message = operation.error_message
+
+
+class CvmFinalityTimeoutError(CvmFinalityWaitError):
+    """The local wait timed out. The operation may still be in progress."""
