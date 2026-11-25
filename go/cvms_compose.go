@@ -37,6 +37,9 @@ type ProvisionComposeUpdateRequest struct {
 	PublicTcbinfo     *bool    `json:"public_tcbinfo,omitempty"`
 	SecureTime        *bool    `json:"secure_time,omitempty"`
 	UpdateEnvVars     *bool    `json:"update_env_vars,omitempty"`
+	// ConfirmDataWipe confirms turning on docker_cleanup, runtime_tmpfs or
+	// requirements.ephemeral_data_disk, which erase data on every boot.
+	ConfirmDataWipe bool `json:"confirm_data_wipe,omitempty"`
 }
 
 // ProvisionCVMComposeFileUpdate provisions a compose file update.

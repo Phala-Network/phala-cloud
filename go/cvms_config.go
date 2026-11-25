@@ -337,6 +337,9 @@ type CVMInitScript struct {
 // order it runs them.
 type CVMInitScriptsResponse struct {
 	Items []CVMInitScript `json:"items"`
+	// HasCustomScripts is true when the CVM also runs init scripts set by
+	// Phala Cloud support, and changing the selection replaces them.
+	HasCustomScripts bool `json:"has_custom_scripts"`
 }
 
 // GetCVMInitScripts returns which provided init scripts the CVM runs and which
@@ -344,6 +347,35 @@ type CVMInitScriptsResponse struct {
 func (c *Client) GetCVMInitScripts(ctx context.Context, cvmID string) (*CVMInitScriptsResponse, error) {
 	var result CVMInitScriptsResponse
 	if err := c.getJSON(ctx, cvmPath(cvmID, "init-scripts"), &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// ManagedInitScript is one init script provided by Phala Cloud, with the
+// script text and hash that provisioning injects.
+type ManagedInitScript struct {
+	// Name identifies the script. Phala Cloud owns the names; the SDK does
+	// not validate them.
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Script  string `json:"script"`
+	// Hash is the sha256 hex of Script.
+	Hash         string `json:"hash"`
+	RequestField string `json:"request_field"`
+	MinOSVersion string `json:"min_os_version"`
+}
+
+// ManagedInitScriptsResponse lists every init script Phala Cloud provides.
+type ManagedInitScriptsResponse struct {
+	Items []ManagedInitScript `json:"items"`
+}
+
+// GetManagedInitScripts returns every init script Phala Cloud provides, with
+// the script text and hash. The endpoint is public and needs no auth.
+func (c *Client) GetManagedInitScripts(ctx context.Context) (*ManagedInitScriptsResponse, error) {
+	var result ManagedInitScriptsResponse
+	if err := c.getJSON(ctx, "/managed-init-scripts", &result); err != nil {
 		return nil, err
 	}
 	return &result, nil

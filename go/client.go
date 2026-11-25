@@ -39,7 +39,8 @@ func (c *Client) withVersion(version string) *Client {
 // API key is resolved from options or the PHALA_CLOUD_API_KEY environment variable.
 // Credentials are optional: a client without an API key or bearer token sends no
 // authentication header, which is enough for public endpoints such as
-// GetAppEnvEncryptPubKey. Authenticated endpoints then fail with a 401 *APIError.
+// GetAppEnvEncryptPubKey and GetManagedInitScripts. Authenticated endpoints
+// then fail with a 401 *APIError.
 // Base URL is resolved from options or the PHALA_CLOUD_API_PREFIX environment variable.
 func NewClient(opts ...Option) (*Client, error) {
 	c := &Client{
