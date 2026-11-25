@@ -1,0 +1,158 @@
+services:
+  dstack-ingress:
+    image: ghcr.io/dstack-tee/dstack-ingress:2.8@sha256:60e682449534715a2f2e5b72326ca4229209c8e26c931c6f34d27e02200ac086
+    restart: unless-stopped
+    ports:
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-}
+      GATEWAY_DOMAIN: ${GATEWAY_DOMAIN:-gateway.${DSTACK_GATEWAY_DOMAIN}}
+      TARGET_ENDPOINT: proxy:80
+      DNS_PROVIDER: ${DNS_PROVIDER:-cloudflare}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+      LINODE_API_TOKEN: ${LINODE_API_TOKEN:-}
+      NAMECHEAP_USERNAME: ${NAMECHEAP_USERNAME:-}
+      NAMECHEAP_API_KEY: ${NAMECHEAP_API_KEY:-}
+      NAMECHEAP_CLIENT_IP: ${NAMECHEAP_CLIENT_IP:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
+      ACME_EMAIL: ${ACME_EMAIL:-${CERTBOT_EMAIL:-}}
+      CERTBOT_EMAIL: ${CERTBOT_EMAIL:-}
+      SET_CAA: ${SET_CAA:-true}
+      CHALLENGE_TYPE: ${CHALLENGE_TYPE:-dns-01}
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
+      - /var/run/tappd.sock:/var/run/tappd.sock
+      - cert-data:/etc/letsencrypt
+      - evidences:/evidences
+    depends_on:
+      - proxy
+    entrypoint:
+      - /bin/bash
+      - -ceu
+    command:
+      - |
+        if [ -z "$${DOMAIN:-}" ]; then
+          echo "dstack-ingress idle: set DOMAIN to enable a custom hostname"
+          exec sleep infinity
+        fi
+        exec /scripts/entrypoint.sh haproxy -W -f /etc/haproxy/haproxy.cfg
+
+  proxy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    depends_on:
+      discourse:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+
+  discourse:
+    image: discourse/discourse:2026.11.0-latest.2
+    restart: unless-stopped
+    init: true
+    shm_size: 512m
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      LANG: en_US.UTF-8
+      LANGUAGE: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      CREATE_DB_ON_BOOT: "0"
+      MIGRATE_ON_BOOT: "1"
+      PRECOMPILE_ON_BOOT: "1"
+      DISCOURSE_FORCE_HTTPS: "true"
+      DISCOURSE_HOSTNAME: ${DISCOURSE_HOSTNAME:-${DOMAIN:-${DSTACK_APP_DOMAIN:-localhost}}}
+      DISCOURSE_DEVELOPER_EMAILS: ${DISCOURSE_DEVELOPER_EMAILS}
+      DISCOURSE_DB_SOCKET: ""
+      DISCOURSE_DB_HOST: postgres
+      DISCOURSE_DB_PORT: "5432"
+      DISCOURSE_DB_NAME: discourse
+      DISCOURSE_DB_USERNAME: discourse
+      DISCOURSE_DB_PASSWORD: ${DISCOURSE_DB_PASSWORD}
+      DISCOURSE_REDIS_HOST: redis
+      DISCOURSE_REDIS_PORT: "6379"
+      DISCOURSE_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      DISCOURSE_NOTIFICATION_EMAIL: ${DISCOURSE_NOTIFICATION_EMAIL:-noreply@example.com}
+      DISCOURSE_SMTP_ADDRESS: ${DISCOURSE_SMTP_ADDRESS:-}
+      DISCOURSE_SMTP_PORT: ${DISCOURSE_SMTP_PORT:-587}
+      DISCOURSE_SMTP_USER_NAME: ${DISCOURSE_SMTP_USER_NAME:-}
+      DISCOURSE_SMTP_PASSWORD: ${DISCOURSE_SMTP_PASSWORD:-}
+      DISCOURSE_SMTP_ENABLE_START_TLS: ${DISCOURSE_SMTP_ENABLE_START_TLS:-true}
+    volumes:
+      - discourse_shared:/shared
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://127.0.0.1/srv/status | grep -qi ok
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 420s
+
+  postgres:
+    image: discourse/postgres:pg18
+    restart: unless-stopped
+    shm_size: 512m
+    environment:
+      POSTGRES_DB: discourse
+      DB_USER: discourse
+      DB_PASSWORD: ${DISCOURSE_DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U postgres
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  redis:
+    image: redis:7.4.12-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - ${REDIS_PASSWORD}
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - redis-cli -a "$$REDIS_PASSWORD" ping | grep PONG
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  discourse_shared:
+  postgres_data:
+  redis_data:
+  cert-data:
+  evidences:
+
+configs:
+  caddy_config:
+    content: |
+      :80 {
+        reverse_proxy discourse:80 {
+          header_up X-Forwarded-Proto https
+          header_up X-Forwarded-Port 443
+          header_up X-Forwarded-For {remote_host}
+        }
+        encode gzip zstd
+      }

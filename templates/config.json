@@ -1,5 +1,106 @@
 [
   {
+    "id": "discourse",
+    "name": "discourse/discourse",
+    "description": "Open-source discussion platform for communities. This template deploys the official Discourse web image with Discourse PostgreSQL 18 and Redis, behind Caddy on Phala Cloud.",
+    "repo": "https://github.com/Phala-Network/phala-cloud/tree/main/templates/prebuilt/discourse",
+    "author": "discourse",
+    "icon": "discourse.png",
+    "envs": [
+      {
+        "key": "DISCOURSE_DB_PASSWORD",
+        "required": true,
+        "description": "Stable PostgreSQL password for the Discourse database user. Generate with openssl rand -hex 32."
+      },
+      {
+        "key": "REDIS_PASSWORD",
+        "required": true,
+        "description": "Stable Redis password used by Discourse and Sidekiq. Generate with openssl rand -hex 32."
+      },
+      {
+        "key": "DISCOURSE_DEVELOPER_EMAILS",
+        "required": true,
+        "description": "Comma-separated emails that become admin and developer on first signup."
+      },
+      {
+        "key": "DISCOURSE_HOSTNAME",
+        "required": false,
+        "description": "Optional public hostname without https://. Defaults to DOMAIN, then to the Phala app domain."
+      },
+      {
+        "key": "DOMAIN",
+        "required": false,
+        "description": "Optional custom hostname for dstack-ingress, for example forum.example.com. Leave empty to use only the Phala app domain."
+      },
+      {
+        "key": "GATEWAY_DOMAIN",
+        "required": false,
+        "description": "Optional dstack gateway hostname used as the custom-domain CNAME target. Defaults to gateway.${DSTACK_GATEWAY_DOMAIN}."
+      },
+      {
+        "key": "CLOUDFLARE_API_TOKEN",
+        "required": false,
+        "description": "Optional Cloudflare token with Zone:Read and DNS:Edit. Required to issue a certificate when DOMAIN is set and DNS_PROVIDER is cloudflare."
+      },
+      {
+        "key": "DNS_PROVIDER",
+        "required": false,
+        "default": "cloudflare",
+        "description": "DNS provider for custom-domain certificates: cloudflare, linode, namecheap, or route53."
+      },
+      {
+        "key": "CERTBOT_EMAIL",
+        "required": false,
+        "description": "Optional ACME contact address for dstack-ingress. Published in certificate evidence if set."
+      },
+      {
+        "key": "SET_CAA",
+        "required": false,
+        "default": "true",
+        "description": "Publish a Let's Encrypt CAA record for the custom domain."
+      },
+      {
+        "key": "CHALLENGE_TYPE",
+        "required": false,
+        "default": "dns-01",
+        "description": "ACME challenge for the custom domain: dns-01 or tls-alpn-01."
+      },
+      {
+        "key": "DISCOURSE_NOTIFICATION_EMAIL",
+        "required": false,
+        "default": "noreply@example.com",
+        "description": "Sender address used for forum notification email."
+      },
+      {
+        "key": "DISCOURSE_SMTP_ADDRESS",
+        "required": false,
+        "description": "Optional SMTP server hostname for outbound email."
+      },
+      {
+        "key": "DISCOURSE_SMTP_PORT",
+        "required": false,
+        "default": "587",
+        "description": "SMTP server port."
+      },
+      {
+        "key": "DISCOURSE_SMTP_USER_NAME",
+        "required": false,
+        "description": "Optional SMTP username."
+      },
+      {
+        "key": "DISCOURSE_SMTP_PASSWORD",
+        "required": false,
+        "description": "Optional SMTP password."
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 4,
+      "memory": 8192,
+      "diskSize": 40
+    },
+    "tags": ["Web Apps", "Business Apps", "Data & Storage"]
+  },
+  {
     "id": "ralph-miner",
     "name": "RalphLabsAI/ralph miner",
     "description": "Ralph Bittensor H100-style miner workspace for Phala Cloud H200 TEE. It prepares Ralph, recipe, dependencies, data, the TDX/NVIDIA CC attestation path, and a token-protected JupyterLab environment for miners to continue manually.",
