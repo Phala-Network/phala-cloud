@@ -154,6 +154,110 @@ async def test_get_cvm_init_scripts_accepts_slugs_added_later(use_async: bool) -
     result = await _run(use_async, recorder, "get_cvm_init_scripts", {"id": "cvm-1"})
 
     assert [item.slug for item in result.items] == ["runtime_tmpfs", "future_script"]
+    assert result.has_custom_scripts is False
+
+
+@pytest.mark.parametrize("use_async", [False, True])
+@pytest.mark.asyncio
+async def test_get_cvm_init_scripts_has_custom_scripts(use_async: bool) -> None:
+    payload = {
+        "items": [{"slug": "docker_cleanup", "selected": True, "selectable": True}],
+        "has_custom_scripts": True,
+    }
+    recorder = _Recorder(lambda _: httpx.Response(200, json=payload))
+    result = await _run(use_async, recorder, "get_cvm_init_scripts", {"id": "cvm-1"})
+
+    assert result.has_custom_scripts is True
+    assert "has_custom_scripts" in phala_cloud.CvmInitScriptsResponse.model_fields
+
+
+_MANAGED_INIT_SCRIPTS = {
+    "items": [
+        {
+            "name": "future_script",
+            "version": "0.0.3",
+            "script": "echo hi",
+            "hash": "aaa",
+            "request_field": "init_scripts",
+            "min_os_version": "0.6.0",
+        }
+    ]
+}
+
+
+async def _run_no_args(use_async: bool, recorder: _Recorder, action: str) -> Any:
+    transport = httpx.MockTransport(recorder)
+    fn = getattr(phala_cloud, action)
+    safe_fn = getattr(phala_cloud, f"safe_{action}")
+    if use_async:
+        async with httpx.AsyncClient(transport=transport, base_url=_BASE_URL) as raw:
+            client = phala_cloud.AsyncPhalaCloud(http_client=raw)
+            results = [
+                await getattr(client, action)(),
+                await fn(client),
+                (await safe_fn(client)).unwrap(),
+            ]
+    else:
+        with httpx.Client(transport=transport, base_url=_BASE_URL) as raw:
+            client = phala_cloud.PhalaCloud(http_client=raw)
+            results = [
+                getattr(client, action)(),
+                fn(client),
+                safe_fn(client).unwrap(),
+            ]
+    assert all(result == results[0] for result in results)
+    return results[0]
+
+
+@pytest.mark.parametrize("use_async", [False, True])
+@pytest.mark.asyncio
+async def test_get_managed_init_scripts(use_async: bool) -> None:
+    recorder = _Recorder(lambda _: httpx.Response(200, json=_MANAGED_INIT_SCRIPTS))
+    result = await _run_no_args(use_async, recorder, "get_managed_init_scripts")
+
+    assert recorder.calls[0] == ("GET", "/api/v1/managed-init-scripts", None)
+    assert isinstance(result, phala_cloud.ManagedInitScriptsResponse)
+    item = result.items[0]
+    assert (
+        item.name,
+        item.version,
+        item.script,
+        item.hash,
+        item.request_field,
+        item.min_os_version,
+    ) == (
+        "future_script",
+        "0.0.3",
+        "echo hi",
+        "aaa",
+        "init_scripts",
+        "0.6.0",
+    )
+
+
+@pytest.mark.parametrize("use_async", [False, True])
+@pytest.mark.asyncio
+async def test_get_managed_init_scripts_needs_no_auth(
+    monkeypatch: pytest.MonkeyPatch, use_async: bool
+) -> None:
+    monkeypatch.delenv("PHALA_CLOUD_API_KEY", raising=False)
+    monkeypatch.delenv("PHALA_OIDC_TOKEN", raising=False)
+    seen: list[httpx.Headers] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers)
+        return httpx.Response(200, json=_MANAGED_INIT_SCRIPTS)
+
+    transport = httpx.MockTransport(handler)
+    if use_async:
+        async with httpx.AsyncClient(transport=transport, base_url=_BASE_URL) as raw:
+            await phala_cloud.AsyncPhalaCloud(http_client=raw).get_managed_init_scripts()
+    else:
+        with httpx.Client(transport=transport, base_url=_BASE_URL) as raw:
+            phala_cloud.PhalaCloud(http_client=raw).get_managed_init_scripts()
+
+    assert "x-api-key" not in seen[0]
+    assert "authorization" not in seen[0]
 
 
 @pytest.mark.parametrize("use_async", [False, True])

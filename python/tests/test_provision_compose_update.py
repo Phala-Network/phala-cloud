@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -56,6 +58,36 @@ def test_provision_cvm_compose_file_update_sync() -> None:
         assert isinstance(result, ProvisionCvmComposeFileUpdateResult)
         assert result.compose_hash_registered is True
         assert result.app_id == "app-123"
+
+
+def test_provision_cvm_compose_file_update_sends_confirm_data_wipe() -> None:
+    seen: list[object] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/v1/cvms/cvm-123/compose_file/provision"
+        seen.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={"app_id": "app-123", "device_id": None, "compose_hash": "abc123"},
+        )
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport, base_url="https://cloud-api.phala.com/api/v1") as raw:
+        PhalaCloud(http_client=raw).provision_cvm_compose_file_update(
+            {
+                "cvm_id": "cvm-123",
+                "app_compose": {"name": "test", "docker_compose_file": "services: {}"},
+                "confirm_data_wipe": True,
+            }
+        )
+
+    assert seen == [
+        {
+            "name": "test",
+            "docker_compose_file": "services: {}",
+            "confirm_data_wipe": True,
+        }
+    ]
 
 
 @pytest.mark.anyio

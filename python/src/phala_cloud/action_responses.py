@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import Field
 
 from .models.apps import AppRevisionDetailResponse as AppRevisionDetailResponse
@@ -36,7 +34,7 @@ class WorkspaceResponse(CloudModel):
     # Billing lifecycle state. A suspended workspace has its CVMs stopped until
     # it pays what it owes or is topped up. An abandoned one is closed and
     # read-only until what it owes is paid.
-    billing_status: Literal["active", "suspended", "abandoned"] = "active"
+    billing_status: str = "active"
     # When the workspace was suspended. None unless billing_status is suspended.
     suspended_at: str | None = None
 
@@ -294,6 +292,24 @@ class CvmInitScript(CloudModel):
 class CvmInitScriptsResponse(CloudModel):
     # Every init script Phala Cloud provides, in the order it runs them.
     items: list[CvmInitScript]
+    # True when the CVM also runs init scripts set by Phala Cloud support;
+    # changing the selection replaces them.
+    has_custom_scripts: bool = False
+
+
+class ManagedInitScript(CloudModel):
+    # Name of an init script provided by Phala Cloud. Any string, so new names still parse.
+    name: str
+    version: str
+    script: str
+    # sha256 hex of script.
+    hash: str
+    request_field: str
+    min_os_version: str
+
+
+class ManagedInitScriptsResponse(CloudModel):
+    items: list[ManagedInitScript]
 
 
 class RefreshInstanceIdResponseBase(CloudModel):

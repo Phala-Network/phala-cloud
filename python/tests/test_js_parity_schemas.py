@@ -148,6 +148,12 @@ class TestWorkspaceResponse:
         assert workspace.suspended_at == "2026-08-01T00:00:00Z"
         assert workspace.avatar_url == "https://example.test/a.png"
 
+    def test_reads_an_unknown_billing_status(self) -> None:
+        workspace = WorkspaceResponse.model_validate(
+            {"id": "wks_1", "name": "acme", "billing_status": "restricted"}
+        )
+        assert workspace.billing_status == "restricted"
+
 
 class TestDeviceIdEntry:
     def test_no_longer_declares_os_image_ids(self) -> None:

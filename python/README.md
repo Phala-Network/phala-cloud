@@ -105,7 +105,7 @@ Pass the CVM ID and the one-time token to `commit_cvm_update`. `compose_hash` an
 
 ## How do I change a CVM's app compose settings?
 
-Send `compose` to `patch_cvm` as a JSON Merge Patch: a set field sets the value, a field set to `None` removes the key, and a field you leave out is unchanged. `requirements` merges per key and cannot change `gpu_policy`. `init_scripts` replaces the init scripts the CVM runs with the given names, such as `docker_cleanup`. Phala Cloud owns the list of init scripts and their run order, and the server rejects a name it does not provide; `get_cvm_init_scripts` shows which ones the CVM runs and which it can select. Turning on `docker_cleanup`, `runtime_tmpfs` or `requirements.ephemeral_data_disk` makes existing container data on disk unused or erases it, so it also needs `confirm_data_wipe=True`.
+Send `compose` to `patch_cvm` as a JSON Merge Patch: a set field sets the value, a field set to `None` removes the key, and a field you leave out is unchanged. `requirements` merges per key and cannot change `gpu_policy`. Turning on `requirements.ephemeral_data_disk` erases data on every boot, so it also needs `confirm_data_wipe=True`. To turn init scripts on or off, see [How do I choose init scripts for a CVM?](#how-do-i-choose-init-scripts-for-a-cvm).
 
 ```python
 client.patch_cvm({
@@ -113,6 +113,22 @@ client.patch_cvm({
     "compose": {"secure_time": True, "swap_size": None, "requirements": {"health_check": True}},
 })
 ```
+
+## How do I choose init scripts for a CVM?
+
+Init scripts run on every boot, before your containers start. Phala Cloud provides them. You can turn each one on or off, but you cannot change a script or add your own. Phala Cloud also decides the order they run in.
+
+To see the scripts for one CVM, call `get_cvm_init_scripts`. For each script it tells you whether the CVM runs it, whether you can turn it on, and if not, why. `has_custom_scripts` is true when Phala Cloud support has also set scripts on this CVM. Changing the selection removes those scripts, so check it first.
+
+To turn scripts on or off, send the full list of names as `init_scripts` to `patch_cvm`. When you create a CVM, send `init_scripts` to `provision_cvm`. Some settings stop using or erase data on disk: `docker_cleanup`, `runtime_tmpfs` and `requirements.ephemeral_data_disk`. Turning one of them on needs `confirm_data_wipe=True`, also when you turn it on with `provision_cvm_compose_file_update`.
+
+```python
+client.patch_cvm({"id": "my-cvm", "init_scripts": ["runtime_tmpfs"], "confirm_data_wipe": True})
+```
+
+## How do I check the exact script that runs?
+
+Call `get_managed_init_scripts`. It needs no API key. It returns each script's full text and its SHA-256 hash. The scripts a CVM runs are part of its app compose, so the compose hash covers their exact bytes.
 
 ## How do I gate a CVM with a launch token?
 
