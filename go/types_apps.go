@@ -4,13 +4,16 @@ package phala
 type CreateAppInstanceRequest struct {
 	Name *string `json:"name,omitempty"`
 	// Node is the physical node name. Omit it to inherit the template instance's placement.
-	Node              *string `json:"node,omitempty"`
-	DockerComposeFile *string `json:"docker_compose_file,omitempty"`
-	PreLaunchScript   *string `json:"pre_launch_script,omitempty"`
-	EncryptedEnv      *string `json:"encrypted_env,omitempty"`
-	ComposeHash       *string `json:"compose_hash,omitempty"`
-	Token             *string `json:"token,omitempty"`
-	TransactionHash   *string `json:"transaction_hash,omitempty"`
+	Node              *string  `json:"node,omitempty"`
+	DockerComposeFile *string  `json:"docker_compose_file,omitempty"`
+	PreLaunchScript   *string  `json:"pre_launch_script,omitempty"`
+	EncryptedEnv      *string  `json:"encrypted_env,omitempty"`
+	ComposeHash       *string  `json:"compose_hash,omitempty"`
+	Token             *string  `json:"token,omitempty"`
+	TransactionHash   *string  `json:"transaction_hash,omitempty"`
+	OSImage           *string  `json:"os_image,omitempty"`
+	KMSURLs           []string `json:"kms_urls,omitzero"`
+	GatewayURLs       []string `json:"gateway_urls,omitzero"`
 }
 
 // AppInfoFields contains fields shared by versioned app response schemas.

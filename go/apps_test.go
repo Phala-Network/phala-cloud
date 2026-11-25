@@ -133,6 +133,24 @@ func TestCreateAppInstance(t *testing.T) {
 	}
 }
 
+func TestCreateAppInstanceSendsOSImageAndURLs(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusOK, `{"id":"cvm-456","name":"instance-1","resource":{"instance_type":"cpu-2"},"status":"running"}`)
+	osImage := "dstack-0.5.5"
+	_, err := client.CreateAppInstance(context.Background(), "app-123", &CreateAppInstanceRequest{
+		OSImage:     &osImage,
+		KMSURLs:     []string{"https://kms.example"},
+		GatewayURLs: []string{"https://gw.example"},
+	})
+	if err != nil {
+		t.Fatalf("CreateAppInstance: %v", err)
+	}
+	assertBody(t, (*seen)[0].body, `{
+		"os_image": "dstack-0.5.5",
+		"kms_urls": ["https://kms.example"],
+		"gateway_urls": ["https://gw.example"]
+	}`)
+}
+
 // TestRedeployAppRevision covers the SDK method used by the Terraform
 // provider's members-mode update path: redeploy a revision across a set
 // of vm_uuids by POSTing /apps/{id}/revisions/{rev}/redeploy.
