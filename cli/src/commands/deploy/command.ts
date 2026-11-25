@@ -14,21 +14,6 @@ import {
 } from "@/src/utils/constants";
 import { z } from "zod";
 
-// Platform slugs accepted by --init-script. A value equal to one of these is
-// always a slug, even if a file of the same name exists; pass ./docker_cleanup
-// to send a file. Other values are script file paths (create only, admin only:
-// Phala Cloud ignores raw scripts for non-admin accounts; at most 5 files).
-export const INIT_SCRIPT_SLUGS = [
-	"docker_cleanup",
-	"runtime_tmpfs",
-	"env_merge",
-] as const;
-export type InitScriptSlug = (typeof INIT_SCRIPT_SLUGS)[number];
-
-export function isInitScriptSlug(value: string): value is InitScriptSlug {
-	return (INIT_SCRIPT_SLUGS as readonly string[]).includes(value);
-}
-
 export const deployCommandMeta: CommandMeta = {
 	name: "deploy",
 	category: "deploy",
@@ -243,7 +228,7 @@ export const deployCommandMeta: CommandMeta = {
 		{
 			name: "init-script",
 			description:
-				"Platform init script to run on every boot: docker_cleanup, runtime_tmpfs or env_merge (repeatable). On update, replaces the current set.",
+				"Init script provided by Phala Cloud to run on every boot (repeatable), e.g. docker_cleanup. Run `phala cvms init-scripts <cvm>` to see what is available. On update, replaces the current set.",
 			type: "string[]",
 			target: "initScript",
 			group: "advanced",
@@ -251,7 +236,7 @@ export const deployCommandMeta: CommandMeta = {
 		{
 			name: "clear-init-scripts",
 			description:
-				"Remove every platform init script from an existing CVM. Cannot be combined with --init-script. Update only.",
+				"Remove every init script from an existing CVM. Cannot be combined with --init-script. Update only.",
 			type: "boolean",
 			target: "clearInitScripts",
 			group: "advanced",
@@ -307,7 +292,7 @@ export const deployCommandMeta: CommandMeta = {
 		{
 			name: "confirm-data-wipe",
 			description:
-				"Confirm an update that turns on docker_cleanup, runtime_tmpfs or --ephemeral-data-disk, which erase data or leave existing container data on disk unused. Update only.",
+				"Confirm an update that turns on an init script or --ephemeral-data-disk that erases data or leaves existing container data on disk unused. Update only.",
 			type: "boolean",
 			target: "confirmDataWipe",
 			group: "advanced",

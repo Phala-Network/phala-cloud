@@ -8,19 +8,20 @@ import {
 	rpcUrlOption,
 	transactionHashOption,
 } from "@/src/core/common-flags";
-import { INIT_SCRIPT_SLUGS } from "@/src/commands/deploy/command";
 
 export const cvmsInitScriptsCommandMeta: CommandMeta = {
 	name: "init-scripts",
-	description: "Show or change the platform init scripts a CVM runs",
+	description:
+		"Show or change the init scripts provided by Phala Cloud that a CVM runs",
 	stability: "unstable",
 	arguments: [
 		cvmIdArgument,
 		{
-			name: "slug",
-			description: `Platform init script (${INIT_SCRIPT_SLUGS.join(", ")})`,
+			name: "name",
+			description:
+				"Init script provided by Phala Cloud. Leave out to list what is available.",
 			required: false,
-			target: "slug",
+			target: "name",
 		},
 		{
 			name: "state",
@@ -35,24 +36,17 @@ export const cvmsInitScriptsCommandMeta: CommandMeta = {
 		{
 			name: "yes",
 			shorthand: "y",
-			description: "Replace custom init scripts without asking",
+			description:
+				"Continue when the CVM also runs init scripts set by Phala Cloud support",
 			type: "boolean",
 			target: "yes",
 		},
 		{
 			name: "confirm-data-wipe",
 			description:
-				"Confirm turning on docker_cleanup or runtime_tmpfs, which erase or stop using existing container data on disk",
+				"Confirm turning on an init script that erases or stops using existing data on disk",
 			type: "boolean",
 			target: "confirmDataWipe",
-		},
-		{
-			name: "file",
-			description:
-				"Raw init script file to send (repeatable, max 5). Admins only.",
-			type: "string[]",
-			target: "file",
-			hidden: true,
 		},
 		{
 			name: "prepare-only",
@@ -97,9 +91,8 @@ export const cvmsInitScriptsCommandMeta: CommandMeta = {
 
 export const cvmsInitScriptsCommandSchema = z.object({
 	cvmId: z.string().optional(),
-	slug: z.string().optional(),
+	name: z.string().optional(),
 	state: z.string().optional(),
-	file: z.array(z.string()).optional(),
 	yes: z.boolean().default(false),
 	confirmDataWipe: z.boolean().default(false),
 	prepareOnly: z.boolean().default(false),

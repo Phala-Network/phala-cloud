@@ -2,19 +2,16 @@ import {
 	safeConfirmCvmPatch,
 	safeGetCvmInitScripts,
 	safePatchCvm,
-	safePutCvmInitScripts,
 	type CvmInitScripts,
 	type PatchCvmResult,
 } from "@phala/cloud";
 import { defineCommand } from "@/src/core/define-command";
 import type { CommandContext } from "@/src/core/types";
-import {
-	INIT_SCRIPT_SLUGS,
-	isInitScriptSlug,
-	type InitScriptSlug,
-} from "@/src/commands/deploy/command";
 import { getClient } from "@/src/lib/client";
-import { readInitScriptFiles } from "@/src/lib/init-script-files";
+import {
+	DATA_WIPE_CONFIRM_GUIDANCE,
+	isDataWipeConfirmError,
+} from "@/src/lib/init-scripts";
 import { runTwoPhaseComposeUpdate } from "@/src/lib/on-chain-update";
 import { printTable } from "@/src/lib/table";
 import { logger } from "@/src/utils/logger";
@@ -24,45 +21,30 @@ import {
 	type CvmsInitScriptsCommandInput,
 } from "./command";
 
-function needsDataWipeConfirm(slug: InitScriptSlug): boolean {
-	return slug === "docker_cleanup" || slug === "runtime_tmpfs";
+function selectedNames(scripts: CvmInitScripts): string[] {
+	return scripts.items.filter((item) => item.selected).map((item) => item.slug);
 }
 
-function selectedSlugs(scripts: CvmInitScripts): InitScriptSlug[] {
-	return scripts.items
-		.filter((item) => item.selected)
-		.map((item) => item.slug)
-		.filter(isInitScriptSlug);
-}
-
-/** Selected slugs this CLI version does not know; rebuilding the set would drop them. */
-function unknownSelectedSlugs(scripts: CvmInitScripts): string[] {
-	return scripts.items
-		.filter((item) => item.selected && !isInitScriptSlug(item.slug))
-		.map((item) => item.slug);
-}
+const CUSTOM_SCRIPTS_NOTICE =
+	"This CVM also runs init scripts set by Phala Cloud support; changing the selection replaces them.";
 
 function printScripts(scripts: CvmInitScripts): void {
-	const columns = ["SLUG", "SELECTED", "SELECTABLE", "REASON"] as const;
+	const columns = ["NAME", "SELECTED", "SELECTABLE", "REASON"] as const;
 	const rows = scripts.items.map((item) => ({
-		SLUG: item.slug,
+		NAME: item.slug,
 		SELECTED: item.selected ? "yes" : "no",
 		SELECTABLE: item.selectable ? "yes" : "no",
 		REASON: item.reason ?? "",
 	}));
 	printTable(columns, rows);
-	logger.info(
-		scripts.has_custom_scripts
-			? "This CVM also runs custom init scripts."
-			: "This CVM does not run custom init scripts.",
-	);
+	if (scripts.has_custom_scripts) {
+		logger.info(CUSTOM_SCRIPTS_NOTICE);
+	}
 }
 
 function requireReplaceCustom(scripts: CvmInitScripts, yes: boolean): void {
 	if (scripts.has_custom_scripts && !yes) {
-		throw new Error(
-			"This CVM has custom init scripts. Pass --yes to replace them.",
-		);
+		throw new Error(`${CUSTOM_SCRIPTS_NOTICE} Pass --yes to continue.`);
 	}
 }
 
@@ -88,16 +70,10 @@ async function runCvmsInitScriptsCommand(
 		return 1;
 	}
 
-	const files = input.file ?? [];
-	const hasFiles = files.length > 0;
-	const hasSlug = input.slug !== undefined || input.state !== undefined;
+	const hasChange = input.name !== undefined || input.state !== undefined;
 	const hasHashes = Boolean(input.composeHash && input.transactionHash);
-	if (hasFiles && hasSlug) {
-		context.fail("--file cannot be combined with a slug on/off change.");
-		return 1;
-	}
-	if ((input.slug === undefined) !== (input.state === undefined)) {
-		context.fail("Pass both a slug and on|off, or neither to list scripts.");
+	if ((input.name === undefined) !== (input.state === undefined)) {
+		context.fail("Pass both a name and on|off, or neither to list scripts.");
 		return 1;
 	}
 	if (
@@ -106,12 +82,6 @@ async function runCvmsInitScriptsCommand(
 		input.state !== "off"
 	) {
 		context.fail("State must be on or off.");
-		return 1;
-	}
-	if (input.slug !== undefined && !isInitScriptSlug(input.slug)) {
-		context.fail(
-			`${input.slug} is not a known init script slug (${INIT_SCRIPT_SLUGS.join(", ")}).`,
-		);
 		return 1;
 	}
 
@@ -126,7 +96,7 @@ async function runCvmsInitScriptsCommand(
 		}
 		const scripts = listed.data;
 
-		if (!hasFiles && input.slug === undefined && !hasHashes) {
+		if (!hasChange && !hasHashes) {
 			if (input.json) {
 				context.success(scripts);
 				return 0;
@@ -135,7 +105,7 @@ async function runCvmsInitScriptsCommand(
 			return 0;
 		}
 
-		if (hasSlug) {
+		if (hasChange) {
 			requireReplaceCustom(scripts, input.yes);
 		}
 
@@ -145,63 +115,42 @@ async function runCvmsInitScriptsCommand(
 			);
 		};
 
-		if (hasFiles) {
-			const contents = readInitScriptFiles(files);
-			phase1 = async () =>
-				unwrapPhase(
-					await safePutCvmInitScripts(client, {
-						...context.cvmId,
-						scripts: contents,
-						prepareOnly: input.prepareOnly,
-					}),
-				);
-		} else if (hasSlug) {
-			const slug = input.slug as InitScriptSlug;
-			const unknown = unknownSelectedSlugs(scripts);
-			if (unknown.length > 0) {
+		if (input.name !== undefined) {
+			const name = input.name;
+			const option = scripts.items.find((item) => item.slug === name);
+			if (!option) {
 				context.fail(
-					`This CVM runs init scripts this CLI version does not know (${unknown.join(", ")}). Upgrade the CLI and try again.`,
+					`${name} is not an init script provided for this CVM. Available: ${scripts.items.map((item) => item.slug).join(", ")}.`,
 				);
 				return 1;
 			}
-			const current = selectedSlugs(scripts);
-			const enabled = current.includes(slug);
+			const current = selectedNames(scripts);
+			const enabled = current.includes(name);
 			if (input.state === "on" && enabled) {
-				logger.info(`${slug} is already on.`);
+				logger.info(`${name} is already on.`);
 				return 0;
 			}
 			if (input.state === "off" && !enabled) {
-				logger.info(`${slug} is already off.`);
+				logger.info(`${name} is already off.`);
 				return 0;
 			}
-			if (input.state === "on") {
-				const option = scripts.items.find((item) => item.slug === slug);
-				if (option && !option.selectable) {
-					context.fail(
-						option.reason ?? `${slug} cannot be selected for this CVM.`,
-					);
-					return 1;
-				}
-				if (needsDataWipeConfirm(slug) && !input.confirmDataWipe) {
-					context.fail(`Turning on ${slug} needs --confirm-data-wipe.`);
-					return 1;
-				}
+			if (input.state === "on" && !option.selectable) {
+				context.fail(
+					option.reason ?? `${name} cannot be selected for this CVM.`,
+				);
+				return 1;
 			}
+			// The server validates the set and runs it in its own order.
 			const next =
 				input.state === "on"
-					? INIT_SCRIPT_SLUGS.filter(
-							(name) => current.includes(name) || name === slug,
-						)
-					: current.filter((name) => name !== slug);
+					? [...current, name]
+					: current.filter((selected) => selected !== name);
 			phase1 = async () =>
 				unwrapPhase(
 					await safePatchCvm(client, {
 						...context.cvmId,
 						init_scripts: next,
-						confirm_data_wipe:
-							needsDataWipeConfirm(slug) && input.state === "on"
-								? true
-								: undefined,
+						confirm_data_wipe: input.confirmDataWipe ? true : undefined,
 						prepareOnly: input.prepareOnly,
 					}),
 				);
@@ -262,6 +211,9 @@ async function runCvmsInitScriptsCommand(
 	} catch (error) {
 		context.failWithError(error, {
 			operation: "Manage CVM init scripts",
+			...(isDataWipeConfirmError(error)
+				? { guidance: DATA_WIPE_CONFIRM_GUIDANCE }
+				: {}),
 		});
 		return 1;
 	}

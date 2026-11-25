@@ -111,6 +111,20 @@ Get observed GPU confidential-computing modes from the CVM node. CPU-only CVMs r
 
 ---
 
+### cvms init-scripts
+
+Show the init scripts Phala Cloud provides for a CVM, or turn one on or off. Phala Cloud owns the list of scripts, their run order and the rules for combining them, so the CLI sends the names you give it and the server accepts or rejects them. Without a name, the command lists what the CVM runs and what it can select.
+
+    phala cvms init-scripts [cvm-id] [name on|off] [--confirm-data-wipe] [--yes] [--json]
+
+If the CVM also runs init scripts set by Phala Cloud support, changing the selection replaces them and needs `--yes`. When a script erases or stops using existing data on disk, the server asks for confirmation; rerun with `--confirm-data-wipe`.
+
+    $ phala cvms init-scripts my-app
+    $ phala cvms init-scripts my-app docker_cleanup on --confirm-data-wipe
+    $ phala cvms init-scripts my-app env_merge off
+
+---
+
 ### cvms start
 
 Start a stopped CVM.
