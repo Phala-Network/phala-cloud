@@ -8,11 +8,13 @@ import httpx
 from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
 
+from .error_codes import CVM_FINALITY_REPLACEMENT_REQUIRED
 from .errors import (
     ApiError,
     AuthError,
     BusinessError,
     ConflictError,
+    CvmFinalityReplacementRequiredError,
     PhalaCloudError,
     RequestError,
     ResourceError,
@@ -378,7 +380,12 @@ class AsyncPhalaCloud:
 
         # Structured error (has error_code field)
         if isinstance(payload, dict) and "error_code" in payload:
-            return ResourceError(
+            error_class = (
+                CvmFinalityReplacementRequiredError
+                if payload.get("error_code") == CVM_FINALITY_REPLACEMENT_REQUIRED
+                else ResourceError
+            )
+            return error_class(
                 **base_kwargs,
                 error_code=payload.get("error_code"),
                 structured_details=payload.get("details"),
@@ -675,7 +682,12 @@ class PhalaCloud:
 
         # Structured error (has error_code field)
         if isinstance(payload, dict) and "error_code" in payload:
-            return ResourceError(
+            error_class = (
+                CvmFinalityReplacementRequiredError
+                if payload.get("error_code") == CVM_FINALITY_REPLACEMENT_REQUIRED
+                else ResourceError
+            )
+            return error_class(
                 **base_kwargs,
                 error_code=payload.get("error_code"),
                 structured_details=payload.get("details"),

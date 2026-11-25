@@ -88,6 +88,26 @@ class ResourceError(BusinessError):
         )
 
 
+class CvmFinalityReplacementRequiredError(ResourceError):
+    """412 ERR-03-067: this update would replace one that is still waiting for finality.
+
+    ``correlation_id`` names the waiting update and ``stage`` is where it stands
+    (for example "submitted", "safe" or "finalized"). Wait for it with
+    ``wait_for_cvm_finality``, or send ``correlation_id`` as
+    ``confirm_finality_replacement`` to replace it.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        fields = {
+            item["field"]: item.get("value")
+            for item in self.structured_details or []
+            if isinstance(item, dict) and "field" in item
+        }
+        self.correlation_id = str(fields.get("correlation_id") or "")
+        self.stage = str(fields.get("stage") or "")
+
+
 class ValidationError(PhalaCloudError):
     """Response validation failed (Pydantic)."""
 
