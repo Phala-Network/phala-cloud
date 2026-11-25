@@ -1,3 +1,9 @@
+## [0.4.6b1](https://github.com/Phala-Network/phala-cloud/compare/python-v0.4.5...python-v0.4.6b1) (2026-11-25)
+
+### feat
+
+* **python:** add runtime_tmpfs init script slug ([7cdd337](https://github.com/Phala-Network/phala-cloud/commit/7cdd337262e0a0fa9f27aae12273e24f0d63e2df))
+* **python:** let the server own init script names ([30e4d11](https://github.com/Phala-Network/phala-cloud/commit/30e4d11dc5b8f9bb70512e2a57ca09961f758262))
 ## [0.4.5](https://github.com/Phala-Network/phala-cloud/compare/python-v0.4.4...python-v0.4.5) (2026-11-24)
 
 ### feat
