@@ -321,7 +321,8 @@ type ProvisionCVMRequest struct {
 	GPUs              *ProvisionGPUConfig `json:"gpus,omitempty"`
 	KMSURLs           []string            `json:"kms_urls,omitzero"`
 	GatewayURLs       []string            `json:"gateway_urls,omitzero"`
-	// InitScripts selects the platform init scripts to run on every boot.
+	// InitScripts selects, by name, the init scripts provided by Phala Cloud to
+	// run on every boot. The server validates the names and fixes the order.
 	InitScripts []InitScriptSlug `json:"init_scripts,omitzero"`
 	// Deprecated: use InitScripts with InitScriptDockerCleanup.
 	EnabledInitScriptsDockerCleanup *bool `json:"enabled_init_scripts_docker_cleanup,omitempty"`
@@ -357,8 +358,8 @@ type ProvisionGPUConfig struct {
 }
 
 // ComposeInitScripts decodes both historical single-string and current array forms.
-// It is encoded as an array. Provisioning ignores submitted compose init scripts;
-// use ProvisionCVMRequest.InitScripts to select platform-owned scripts.
+// It is encoded as an array. The field is read-only here: provisioning ignores
+// it. Select init scripts by name with ProvisionCVMRequest.InitScripts.
 type ComposeInitScripts []string
 
 func (scripts *ComposeInitScripts) UnmarshalJSON(data []byte) error {
@@ -649,9 +650,11 @@ func (g GPUConfig) MarshalJSON() ([]byte, error) {
 	return json.Marshal(plain(g))
 }
 
-// InitScriptSlug names a platform init script. Phala Cloud fixes the run
-// order: docker_cleanup, runtime_tmpfs, then env_merge. docker_cleanup and
-// runtime_tmpfs cannot be selected together.
+// InitScriptSlug names an init script provided by Phala Cloud. Phala Cloud
+// owns the list of scripts, their run order and the selection rules, and the
+// server rejects names it does not know. The SDK sends any name as is and does
+// not validate it. The constants below are the names known today, not a closed
+// set; GetCVMInitScripts returns what a CVM can select.
 type InitScriptSlug string
 
 const (
@@ -726,7 +729,8 @@ type PatchCVMRequest struct {
 
 	// Compose is a JSON Merge Patch of the app compose.
 	Compose *ComposePatch `json:"compose,omitempty"`
-	// InitScripts replaces the CVM's platform init scripts. nil leaves them
+	// InitScripts replaces, by name, the init scripts provided by Phala Cloud
+	// that the CVM runs. The server validates the names and fixes the order. nil leaves them
 	// unchanged; an empty non-nil slice removes them all.
 	InitScripts []InitScriptSlug `json:"init_scripts,omitzero"`
 	// ConfirmDataWipe confirms turning on docker_cleanup, runtime_tmpfs or

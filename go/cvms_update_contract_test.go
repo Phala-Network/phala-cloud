@@ -344,6 +344,16 @@ func TestPatchCVMSendsTheBashScript(t *testing.T) {
 	assertBody(t, (*seen)[0].body, `{"compose": {"bash_script": "echo hi"}}`)
 }
 
+func TestPatchCVMSendsAnInitScriptNameItDoesNotKnow(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusAccepted, acceptedUpdate)
+	if _, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{
+		InitScripts: []InitScriptSlug{"future_script"},
+	}); err != nil {
+		t.Fatalf("PatchCVM: %v", err)
+	}
+	assertBody(t, (*seen)[0].body, `{"init_scripts": ["future_script"]}`)
+}
+
 func TestPatchCVMSendsAnEmptyInitScriptSet(t *testing.T) {
 	client, seen := recordingServer(t, http.StatusAccepted, acceptedUpdate)
 	if _, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{
