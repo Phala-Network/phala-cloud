@@ -1,3 +1,5 @@
+## [1.2.9-beta.2](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.9-beta.1...cli-v1.2.9-beta.2) (2026-11-25)
+
 ## [1.2.9-beta.1](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.8...cli-v1.2.9-beta.1) (2026-11-25)
 
 ### ⚠ BREAKING CHANGE
