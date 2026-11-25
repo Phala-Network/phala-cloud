@@ -354,6 +354,8 @@ const additionalActions = {
   safeUpdateCvmAnnotations: actions.safeUpdateCvmAnnotations,
   getCvmInitScripts: actions.getCvmInitScripts,
   safeGetCvmInitScripts: actions.safeGetCvmInitScripts,
+  getManagedInitScripts: actions.getManagedInitScripts,
+  safeGetManagedInitScripts: actions.safeGetManagedInitScripts,
   putCvmInitScripts: actions.putCvmInitScripts,
   safePutCvmInitScripts: actions.safePutCvmInitScripts,
   setAppLaunchToken: actions.setAppLaunchToken,
@@ -435,7 +437,9 @@ type SimpleAdditionalAction =
   | "revokeCurrentApiToken"
   | "safeRevokeCurrentApiToken"
   | "listCvmDrafts"
-  | "safeListCvmDrafts";
+  | "safeListCvmDrafts"
+  | "getManagedInitScripts"
+  | "safeGetManagedInitScripts";
 type SchemaAction =
   | "getCvmDraft"
   | "safeGetCvmDraft"
@@ -844,6 +848,14 @@ export interface Client<V extends ApiVersion = DefaultApiVersion>
     schema: T;
   }): Promise<SafeResult<z.infer<T>>>;
   safeListCvmDrafts(parameters: { schema: false }): Promise<SafeResult<unknown>>;
+  getManagedInitScripts(): Promise<actions.ManagedInitScripts>;
+  getManagedInitScripts<T extends z.ZodTypeAny>(parameters: { schema: T }): Promise<z.infer<T>>;
+  getManagedInitScripts(parameters: { schema: false }): Promise<unknown>;
+  safeGetManagedInitScripts(): Promise<SafeResult<actions.ManagedInitScripts>>;
+  safeGetManagedInitScripts<T extends z.ZodTypeAny>(parameters: {
+    schema: T;
+  }): Promise<SafeResult<z.infer<T>>>;
+  safeGetManagedInitScripts(parameters: { schema: false }): Promise<SafeResult<unknown>>;
   getAppList(
     request?: actions.GetAppListRequest,
   ): Promise<import("./types/version-mappings").GetAppListResponse<V>>;

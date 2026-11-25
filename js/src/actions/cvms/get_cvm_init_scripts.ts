@@ -15,7 +15,8 @@ export const CvmInitScriptSchema = z.object({
 
 export const CvmInitScriptsSchema = z.object({
   items: z.array(CvmInitScriptSchema),
-  has_custom_scripts: z.boolean(),
+  /** True when the CVM also runs init scripts set by Phala Cloud support; changing the selection replaces them. */
+  has_custom_scripts: z.boolean().default(false),
 });
 
 export type CvmInitScript = z.infer<typeof CvmInitScriptSchema>;

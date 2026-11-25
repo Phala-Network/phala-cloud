@@ -109,6 +109,21 @@ describe("provisionCvmComposeFileUpdate", () => {
         update_env_vars: null
       });
     });
+
+    it("sends confirm_data_wipe as a top-level body field", async () => {
+      (mockClient.post as any).mockResolvedValue(mockProvisionResponse);
+
+      await provisionCvmComposeFileUpdate(mockClient, {
+        ...mockProvisionRequest,
+        confirm_data_wipe: true,
+      });
+
+      expect(mockClient.post).toHaveBeenCalledWith("/cvms/cvm-123/compose_file/provision", {
+        ...mockAppCompose,
+        update_env_vars: undefined,
+        confirm_data_wipe: true,
+      });
+    });
   });
 
   describe("request validation", () => {

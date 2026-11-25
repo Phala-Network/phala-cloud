@@ -107,6 +107,8 @@ export const ProvisionCvmComposeFileUpdateRequestSchema = z
       .optional(),
     app_compose: LooseAppComposeSchema,
     update_env_vars: z.boolean().optional().nullable(),
+    /** Confirms turning on docker_cleanup, runtime_tmpfs or requirements.ephemeral_data_disk, which erase data on every boot. */
+    confirm_data_wipe: z.boolean().optional(),
   })
   .refine(
     (data) => !!(data.id || data.uuid || data.app_id || data.instance_id),
@@ -115,7 +117,11 @@ export const ProvisionCvmComposeFileUpdateRequestSchema = z
   .transform((data) => {
     return {
       cvmId: data.id || data.uuid || data.app_id || data.instance_id,
-      request: { ...data.app_compose, update_env_vars: data.update_env_vars },
+      request: {
+        ...data.app_compose,
+        update_env_vars: data.update_env_vars,
+        confirm_data_wipe: data.confirm_data_wipe,
+      },
       _raw: data,
     };
   });
