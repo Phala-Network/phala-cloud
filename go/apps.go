@@ -64,8 +64,10 @@ func (c *Client) GetAppCVMsV20260121(ctx context.Context, appID string) ([]CVMIn
 }
 
 // CreateAppInstance creates a new CVM instance under an existing app.
-func (c *Client) CreateAppInstance(ctx context.Context, appID string, req *CreateAppInstanceRequest) (*CVMInfo, error) {
-	var result CVMInfo
+// The response is a replica VM (top-level vcpu/memory/disk_size and teepod_id),
+// not CVMInfo.
+func (c *Client) CreateAppInstance(ctx context.Context, appID string, req *CreateAppInstanceRequest) (*ReplicaVM, error) {
+	var result ReplicaVM
 	if err := c.doJSON(ctx, "POST", "/apps/"+appID+"/instances", req, &result); err != nil {
 		return nil, err
 	}
@@ -73,9 +75,9 @@ func (c *Client) CreateAppInstance(ctx context.Context, appID string, req *Creat
 }
 
 // CreateAppInstanceV20260121 creates an app instance using the v20260121 response schema.
-func (c *Client) CreateAppInstanceV20260121(ctx context.Context, appID string, req *CreateAppInstanceRequest) (*CVMInfoV20260121, error) {
+func (c *Client) CreateAppInstanceV20260121(ctx context.Context, appID string, req *CreateAppInstanceRequest) (*ReplicaVMV20260121, error) {
 	c = c.withVersion("2026-01-21")
-	var result CVMInfoV20260121
+	var result ReplicaVMV20260121
 	if err := c.doJSON(ctx, "POST", "/apps/"+appID+"/instances", req, &result); err != nil {
 		return nil, err
 	}

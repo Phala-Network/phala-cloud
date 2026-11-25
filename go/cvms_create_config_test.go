@@ -109,6 +109,18 @@ func TestProvisionCVMRequestOmitsFieldsTheCreateAPIDoesNotRead(t *testing.T) {
 	}
 }
 
+func TestCommitCVMProvisionDecodesFinalityWait(t *testing.T) {
+	client, _ := recordingServer(t, http.StatusOK, `{"id":"cvm_1","name":"my-app","status":"starting","finality_wait":{"operation":"create","correlation_id":"corr-4","phase":"awaiting_finality","stage":"submitted","transaction":null,"finality":{"block_tag":null,"policy_block_number":null,"blocks_remaining":null,"eta_seconds":null}}}`)
+	token := "tok-1"
+	got, err := client.CommitCVMProvision(context.Background(), &CommitCVMProvisionRequest{Token: &token})
+	if err != nil {
+		t.Fatalf("CommitCVMProvision: %v", err)
+	}
+	if got.FinalityWait == nil || got.FinalityWait.CorrelationID != "corr-4" {
+		t.Fatalf("finality_wait = %+v", got.FinalityWait)
+	}
+}
+
 func TestCommitCVMProvisionReturnsTheIssuedLaunchToken(t *testing.T) {
 	client, _ := recordingServer(t, http.StatusOK, `{"id":"cvm_1","name":"my-app","status":"starting","launch_token":"lt"}`)
 	token := "tok-1"

@@ -295,6 +295,17 @@ func TestPatchCVM465FormatsAppID(t *testing.T) {
 	}
 }
 
+func TestPatchCVMResponseDecodesFinalityWait(t *testing.T) {
+	client, _ := recordingServer(t, http.StatusAccepted, `{"status":"in_progress","message":"accepted","correlation_id":"corr-3","finality_wait":{"operation":"update","correlation_id":"corr-3","phase":"awaiting_finality","stage":"submitted","transaction":null,"finality":{"block_tag":"latest","policy_block_number":9,"blocks_remaining":1,"eta_seconds":5}}}`)
+	got, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{PublicLogs: Bool(true)})
+	if err != nil {
+		t.Fatalf("PatchCVM: %v", err)
+	}
+	if got.FinalityWait == nil || got.FinalityWait.CorrelationID != "corr-3" {
+		t.Fatalf("finality_wait = %+v", got.FinalityWait)
+	}
+}
+
 func TestPatchCVMSendsGuestAgentGatewayAccess(t *testing.T) {
 	client, seen := recordingServer(t, http.StatusAccepted, acceptedUpdate)
 	closed := "closed"

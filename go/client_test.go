@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -64,6 +65,27 @@ func TestClientWithAPIKeySendsKeyHeader(t *testing.T) {
 	}
 	if _, err := c.GetAppEnvEncryptPubKey(context.Background(), "kms", "app"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestNewClientRejectsMalformedAPIVersion(t *testing.T) {
+	_, err := NewClient(WithAPIKey("k"), WithAPIVersion("latest"))
+	if err == nil || !strings.Contains(err.Error(), "YYYY-MM-DD") {
+		t.Fatalf("err = %v, want YYYY-MM-DD", err)
+	}
+}
+
+func TestGetCurrentUserDecodesIDAndFeatures(t *testing.T) {
+	client, _ := recordingServer(t, http.StatusOK, `{"user":{"id":"usr_1","username":"ada","email":"a@b.c","role":"user"},"workspace":{"id":"wks_1","name":"acme","tier":"level_1","role":"owner"},"credits":{},"features":[{"name":"can_create_cvm","enabled":true}]}`)
+	got, err := client.GetCurrentUser(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentUser: %v", err)
+	}
+	if got.User.ID != "usr_1" {
+		t.Fatalf("user.id = %q", got.User.ID)
+	}
+	if len(got.Features) != 1 || got.Features[0].Name != "can_create_cvm" || !got.Features[0].Enabled {
+		t.Fatalf("features = %+v", got.Features)
 	}
 }
 

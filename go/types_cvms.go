@@ -80,6 +80,10 @@ type CVMInfoFields struct {
 	GPU                 *CVMGPUInfo            `json:"gpu,omitempty"`
 	DappDashboardURL    *string                `json:"dapp_dashboard_url,omitempty"`
 	SyslogEndpoint      *string                `json:"syslog_endpoint,omitempty"`
+	// EnabledSSHAccess is true when this CVM runs a dev OS image or a dev-box service.
+	EnabledSSHAccess bool                   `json:"enabled_ssh_access"`
+	FinalityWait     *CVMFinalityWaitStatus `json:"finality_wait,omitempty"`
+	FinalityFailure  *CVMFinalityFailure    `json:"finality_failure,omitempty"`
 
 	// Additional fields used by the Terraform provider.
 	InProgress         bool          `json:"in_progress,omitempty"`
@@ -196,6 +200,8 @@ type CvmKmsInfo struct {
 	RPCEndpoint        *string `json:"rpc_endpoint,omitempty"`
 	EncryptedEnvPubkey *string `json:"encrypted_env_pubkey,omitempty"`
 	K256Pubkey         *string `json:"k256_pubkey,omitempty"`
+	BlockTag           *string `json:"block_tag,omitempty"`
+	FinalityETASeconds *int    `json:"finality_eta_seconds,omitempty"`
 }
 
 // ChainName returns a human-readable chain name based on ChainID.
@@ -232,6 +238,7 @@ type CvmGatewayInfo struct {
 type NodeRef struct {
 	ObjectType string          `json:"object_type"`
 	ID         *int            `json:"id,omitempty"`
+	NodeID     *int            `json:"node_id,omitempty"`
 	Name       *string         `json:"name,omitempty"`
 	Region     *string         `json:"region,omitempty"`
 	DeviceID   *string         `json:"device_id,omitempty"`
@@ -575,7 +582,8 @@ type CommitCVMProvisionResponseFields struct {
 	Status string `json:"status"`
 	// LaunchToken is the launch token this create stored on a new app
 	// (LaunchToken or GenerateLaunchToken). Returned only here, once.
-	LaunchToken string `json:"launch_token,omitempty"`
+	LaunchToken  string                 `json:"launch_token,omitempty"`
+	FinalityWait *CVMFinalityWaitStatus `json:"finality_wait,omitempty"`
 }
 
 // CommitCVMProvisionResponseV20260121 is the commit response before hashed CVM IDs.
@@ -863,17 +871,51 @@ type OnchainStatus struct {
 // on-chain, then call ConfirmCVMPatch, or CommitCVMUpdate with CommitToken
 // for a prepare-only request.
 type PatchCVMResponse struct {
-	RequiresOnChainHash bool           `json:"requires_on_chain_hash"`
-	CorrelationID       string         `json:"correlation_id,omitempty"`
-	Status              string         `json:"status,omitempty"`
-	ComposeHash         string         `json:"compose_hash,omitempty"`
-	AppID               string         `json:"app_id,omitempty"`
-	DeviceID            string         `json:"device_id,omitempty"`
-	KMSInfo             *KMSInfo       `json:"kms_info,omitempty"`
-	CommitToken         string         `json:"commit_token,omitempty"`
-	CommitURL           string         `json:"commit_url,omitempty"`
-	APICommitURL        string         `json:"api_commit_url,omitempty"`
-	OnchainStatus       *OnchainStatus `json:"onchain_status,omitempty"`
+	RequiresOnChainHash bool                   `json:"requires_on_chain_hash"`
+	CorrelationID       string                 `json:"correlation_id,omitempty"`
+	Status              string                 `json:"status,omitempty"`
+	ComposeHash         string                 `json:"compose_hash,omitempty"`
+	AppID               string                 `json:"app_id,omitempty"`
+	DeviceID            string                 `json:"device_id,omitempty"`
+	KMSInfo             *KMSInfo               `json:"kms_info,omitempty"`
+	CommitToken         string                 `json:"commit_token,omitempty"`
+	CommitURL           string                 `json:"commit_url,omitempty"`
+	APICommitURL        string                 `json:"api_commit_url,omitempty"`
+	OnchainStatus       *OnchainStatus         `json:"onchain_status,omitempty"`
+	FinalityWait        *CVMFinalityWaitStatus `json:"finality_wait,omitempty"`
+}
+
+// CVMFinalityWaitStatus is Phala Cloud's view of an accepted on-chain operation.
+// Strings are open; the server may add values.
+type CVMFinalityWaitStatus struct {
+	Operation     string                      `json:"operation"`
+	CorrelationID string                      `json:"correlation_id"`
+	Phase         string                      `json:"phase"`
+	Stage         string                      `json:"stage"`
+	Stages        []string                    `json:"stages,omitempty"`
+	Transaction   *CVMFinalityWaitTransaction `json:"transaction"`
+	Finality      CVMFinalityWaitProgress     `json:"finality"`
+}
+
+type CVMFinalityWaitTransaction struct {
+	Hash        string `json:"hash"`
+	BlockNumber int    `json:"block_number"`
+	ChainID     int    `json:"chain_id"`
+}
+
+type CVMFinalityWaitProgress struct {
+	BlockTag          *string `json:"block_tag"`
+	PolicyBlockNumber *int    `json:"policy_block_number"`
+	BlocksRemaining   *int    `json:"blocks_remaining"`
+	ETASeconds        *int    `json:"eta_seconds"`
+}
+
+// CVMFinalityFailure is a terminal on-chain failure for a CVM.
+type CVMFinalityFailure struct {
+	Operation     string `json:"operation"`
+	CorrelationID string `json:"correlation_id"`
+	FailureReason string `json:"failure_reason"`
+	FailedAt      string `json:"failed_at"`
 }
 
 // ConfirmCVMPatchRequest is the request for confirming a CVM patch with on-chain hash.
