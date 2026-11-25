@@ -322,6 +322,32 @@ wsNodes, err := client.GetWorkspaceNodes(ctx, "team-slug", nil)
 quotas, err := client.GetWorkspaceQuotas(ctx, "team-slug")
 ```
 
+## How do I wait for an on-chain update to take effect?
+
+On a CVM that uses an on-chain KMS, Phala Cloud accepts an update, then waits for chain finality before it applies the change. The response carries `finality_wait`. Pass its correlation ID to `WaitForCVMFinality`.
+
+```go
+resp, err := client.PatchCVM(ctx, "cvm-id", &phala.PatchCVMRequest{ /* ... */ })
+if err != nil {
+	return err
+}
+if id := resp.FinalityCorrelationID(); id != "" {
+	_, err = client.WaitForCVMFinality(ctx, "cvm-id", id, nil)
+	var failed *phala.CVMOperationFailedError
+	var timedOut *phala.CVMFinalityTimeoutError
+	switch {
+	case errors.As(err, &failed):
+		// failed.Operation.FailureReason and .ErrorMessage say why.
+	case errors.As(err, &timedOut):
+		// The operation may still be in progress.
+	case err != nil:
+		return err
+	}
+}
+```
+
+It polls every 15 seconds and stops after 30 minutes. Set `Timeout` and `PollInterval` in `WaitForCVMFinalityOptions` to change this. A timeout or a cancelled `ctx` stops only the local wait. It does not cancel the operation.
+
 ## Error Handling
 
 All API errors are returned as `*phala.APIError`:
