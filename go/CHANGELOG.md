@@ -1,3 +1,9 @@
+## [0.6.1-beta.1](https://github.com/Phala-Network/phala-cloud/compare/go/v0.6.0...go/v0.6.1-beta.1) (2026-11-25)
+
+### feat
+
+* **go:** add InitScriptRuntimeTmpfs init script slug ([972015a](https://github.com/Phala-Network/phala-cloud/commit/972015ab24828584d43c4fad927496aeeccf6e5c))
+* **go:** document that the server owns init script names ([0104ced](https://github.com/Phala-Network/phala-cloud/commit/0104ced0c91c28a2e3034b54b8c677ce83784cf6))
 ## [0.6.0](https://github.com/Phala-Network/phala-cloud/compare/go/v0.6.0-beta.1...go/v0.6.0) (2026-11-24)
 ## [0.6.0-beta.1](https://github.com/Phala-Network/phala-cloud/compare/go/v0.5.4...go/v0.6.0-beta.1) (2026-11-24)
 
