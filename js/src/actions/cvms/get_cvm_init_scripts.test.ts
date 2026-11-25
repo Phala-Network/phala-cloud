@@ -37,4 +37,14 @@ describe("getCvmInitScripts", () => {
 
     expect(result.items.map((item) => item.slug)).toEqual(["runtime_tmpfs", "future_script"]);
   });
+
+  it("reads has_custom_scripts as false when the server leaves it out", async () => {
+    const mockClient = {
+      get: vi.fn().mockResolvedValue({ items: [] }),
+    } as unknown as Client;
+
+    const result = await getCvmInitScripts(mockClient, { id: "my-cvm" });
+
+    expect(result.has_custom_scripts).toBe(false);
+  });
 });
