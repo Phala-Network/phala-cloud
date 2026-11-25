@@ -188,8 +188,9 @@ class CvmCreationRequest(NodeSelectionRequest):
     # A whole app-compose JSON file, sent instead of compose_file. Needs the
     # compose_advanced feature flag.
     compose_file_raw: str | None = None
-    # Platform init scripts to run on every boot. The {"env_merge": bool}
-    # object form is deprecated; send slugs.
+    # Init scripts provided by Phala Cloud to run on every boot, by name. The
+    # server validates the names and fixes the order. The {"env_merge": bool}
+    # object form is deprecated; send names.
     init_scripts: list[InitScriptSlug] | dict[Literal["env_merge"], bool] | None = None
     # Deprecated: send init_scripts=["docker_cleanup"].
     enabled_init_scripts_docker_cleanup: bool | None = None
@@ -448,7 +449,8 @@ class PatchCvmRequest(CvmIdRequest):
     allow_force_stop: bool | None = None
     # JSON Merge Patch of the app compose; only the fields set on it are sent.
     compose: ComposePatch | None = None
-    # Platform init scripts this CVM runs, replacing the current set.
+    # Init scripts provided by Phala Cloud that this CVM runs, by name, replacing
+    # the current set. The server validates the names and fixes the order.
     init_scripts: list[InitScriptSlug] | None = None
     # Confirms turning on docker_cleanup, runtime_tmpfs or requirements.ephemeral_data_disk,
     # which erase data on every boot.

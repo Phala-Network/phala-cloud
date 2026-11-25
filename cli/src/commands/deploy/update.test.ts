@@ -236,8 +236,10 @@ function makeContext(
 ): {
 	context: CommandContext;
 	failure: () => unknown;
+	guidance: () => string | undefined;
 } {
 	let failure: unknown;
+	let guidance: string | undefined;
 	const context = {
 		env: {
 			...auth,
@@ -249,11 +251,12 @@ function makeContext(
 		cvmId,
 		stdout: { write: () => true },
 		stderr: { write: () => true },
-		failWithError: (error: unknown) => {
+		failWithError: (error: unknown, options?: { guidance?: string }) => {
 			failure = error;
+			guidance = options?.guidance;
 		},
 	} as unknown as CommandContext;
-	return { context, failure: () => failure };
+	return { context, failure: () => failure, guidance: () => guidance };
 }
 
 async function deploy(
@@ -261,14 +264,14 @@ async function deploy(
 	auth: Record<string, string> = { PHALA_CLOUD_API_KEY: "test-key" },
 	cvmId: { id: string } = { id: CVM_ID },
 ) {
-	const { context, failure } = makeContext(auth, cvmId);
+	const { context, failure, guidance } = makeContext(auth, cvmId);
 	const exitCode = await runDeploy(
 		{ compose: composePath, json: true, ...input } as Parameters<
 			typeof runDeploy
 		>[0],
 		context,
 	);
-	return { exitCode, failure: failure() };
+	return { exitCode, failure: failure(), guidance: guidance() };
 }
 
 function updateRequest(): Recorded {
@@ -718,7 +721,7 @@ describe("phala deploy --help", () => {
 		);
 	});
 
-	test("describes --init-script as slugs only", async () => {
+	test("describes --init-script as a Phala Cloud provided script by name", async () => {
 		const { code, stdout } = await runCli(["deploy", "--help"]);
 
 		expect(code).toBe(0);
@@ -726,7 +729,7 @@ describe("phala deploy --help", () => {
 			.split("\n")
 			.find(
 				(line) =>
-					line.includes("--init-script") && line.includes("docker_cleanup"),
+					line.includes("--init-script") && line.includes("provided by Phala"),
 			);
 		expect(option).toBeDefined();
 		expect(option).not.toMatch(/file/i);
@@ -976,30 +979,33 @@ describe("phala deploy --cvm-id", () => {
 		expect(recallDevOsMode(VM_UUID)).toBe("dev-box");
 	});
 
-	test("rejects --init-script file paths on update before any request", async () => {
+	test("sends an init script name it does not know without rejecting it", async () => {
 		const { exitCode, failure } = await deploy({
-			initScript: [path.join(tmpDir, "init.sh")],
+			initScript: ["future_script"],
 		});
 
-		expect(exitCode).toBe(1);
-		expect((failure as Error).message).toContain("creating a CVM");
-		expect(requests).toEqual([]);
+		expect(failure).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(updateRequest().body?.init_scripts).toEqual(["future_script"]);
 	});
 
-	test("rejects a mistyped init script slug on update as unknown slug, not only as a file", async () => {
-		const { exitCode, failure } = await deploy({
-			initScript: ["docker_clenaup"],
+	test("points to --confirm-data-wipe when the server asks for it", async () => {
+		respond = (method, path) =>
+			method === "PATCH" && /^\/api\/v1\/cvms\/[^/]+$/.test(path)
+				? Response.json(
+						{
+							error_code: "ERR-03-048",
+							message: "Turning this on erases data on every boot",
+						},
+						{ status: 400 },
+					)
+				: undefined;
+		const { exitCode, guidance } = await deploy({
+			initScript: ["docker_cleanup"],
 		});
 
 		expect(exitCode).toBe(1);
-		expect((failure as Error).message).toContain(
-			"not a known init script slug",
-		);
-		expect((failure as Error).message).toContain(
-			"docker_cleanup, runtime_tmpfs, env_merge",
-		);
-		expect((failure as Error).message).toContain("creating a CVM");
-		expect(requests).toEqual([]);
+		expect(guidance).toContain("--confirm-data-wipe");
 	});
 
 	test("sends compose flags as a merge patch, with init scripts and the data-wipe confirmation", async () => {

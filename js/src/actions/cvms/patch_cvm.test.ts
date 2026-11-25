@@ -154,6 +154,21 @@ describe("patchCvm", () => {
       });
     });
 
+    it("sends an init script name it does not know without rejecting it", async () => {
+      (mockClient.patch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        correlation_id: "corr-123",
+      });
+
+      await patchCvm(mockClient, {
+        id: "test-cvm-id",
+        init_scripts: ["future_script", "docker_cleanup"],
+      });
+
+      expect(mockClient.patch).toHaveBeenCalledWith("/cvms/test-cvm-id", {
+        init_scripts: ["future_script", "docker_cleanup"],
+      });
+    });
+
     it.each([{ restrict_mode: true }, { ports: [{ port: 443 }] }])(
       "sends compose.port_policy %j without the defaulted fields",
       async (port_policy) => {

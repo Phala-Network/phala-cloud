@@ -236,6 +236,14 @@ async def test_patch_cvm_sends_compose_merge_patch_with_nulls(use_async: bool) -
     }
 
 
+def test_patch_cvm_sends_an_init_script_name_it_does_not_know() -> None:
+    recorder = _Recorder()
+    _sync_client(recorder).patch_cvm({"id": "cvm-1", "init_scripts": ["future_script"]})
+
+    _, _, body, _ = recorder.last
+    assert body == {"init_scripts": ["future_script"]}
+
+
 def test_patch_cvm_sends_an_empty_init_script_set() -> None:
     recorder = _Recorder()
     _sync_client(recorder).patch_cvm({"id": "cvm-1", "init_scripts": []})

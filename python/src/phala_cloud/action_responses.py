@@ -281,7 +281,7 @@ class AppLaunchTokenResponse(CloudModel):
 
 
 class CvmInitScript(CloudModel):
-    # Any string, so slugs added later still parse.
+    # Name of an init script provided by Phala Cloud. Any string, so new names still parse.
     slug: str
     # The CVM's current compose runs this script.
     selected: bool
@@ -292,7 +292,7 @@ class CvmInitScript(CloudModel):
 
 
 class CvmInitScriptsResponse(CloudModel):
-    # Every platform init script, in run order.
+    # Every init script Phala Cloud provides, in the order it runs them.
     items: list[CvmInitScript]
 
 

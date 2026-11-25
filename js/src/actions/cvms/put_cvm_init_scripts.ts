@@ -30,10 +30,11 @@ function extractDetailsMap(detail: unknown): Record<string, unknown> {
 }
 
 /**
- * Replace a CVM's raw init scripts
+ * Replace the raw init scripts of a CVM
  *
- * System admins only. An empty list clears them. Same on-chain two-phase
- * result as `patchCvm`.
+ * Phala Cloud admins only. Other callers select init scripts by name with
+ * `patchCvm({ init_scripts })`. An empty list clears them. Same on-chain
+ * two-phase result as `patchCvm`.
  *
  * @example
  * ```typescript
@@ -42,7 +43,7 @@ function extractDetailsMap(detail: unknown): Record<string, unknown> {
  * const client = createClient()
  * await putCvmInitScripts(client, {
  *   id: 'my-cvm',
- *   scripts: ['echo custom\\n'],
+ *   scripts: ['echo admin-script\\n'],
  * })
  * ```
  */

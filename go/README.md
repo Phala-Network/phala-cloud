@@ -206,7 +206,7 @@ if resp.RequiresOnChainHash {
 }
 ```
 
-`Compose` is a JSON Merge Patch of the app compose. Each key is a `phala.Patch[T]`: leave it zero to keep the value, `phala.PatchValue(v)` to set it, `phala.PatchNull[T]()` to remove the key. `Requirements` merges per key and cannot change `gpu_policy`. `InitScripts` replaces the CVM's platform init scripts (`GetCVMInitScripts` shows which it runs and can select). Turning on `docker_cleanup`, `runtime_tmpfs` or `ephemeral_data_disk` makes existing container data on disk unused or erases it, and needs `ConfirmDataWipe: true`.
+`Compose` is a JSON Merge Patch of the app compose. Each key is a `phala.Patch[T]`: leave it zero to keep the value, `phala.PatchValue(v)` to set it, `phala.PatchNull[T]()` to remove the key. `Requirements` merges per key and cannot change `gpu_policy`. `InitScripts` replaces the init scripts the CVM runs with the given names. Phala Cloud owns the list of init scripts and their run order, and the server rejects a name it does not provide (`GetCVMInitScripts` shows which the CVM runs and can select). Turning on `docker_cleanup`, `runtime_tmpfs` or `ephemeral_data_disk` makes existing container data on disk unused or erases it, and needs `ConfirmDataWipe: true`.
 
 ```go
 resp, err := client.PatchCVM(ctx, "cvm-id", &phala.PatchCVMRequest{

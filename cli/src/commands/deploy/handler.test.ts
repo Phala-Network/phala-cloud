@@ -526,7 +526,6 @@ describe("buildProvisionPayload", () => {
 				defaultPrivacySettings,
 				undefined,
 				undefined,
-				undefined,
 				"dev-image",
 			);
 
@@ -545,7 +544,6 @@ describe("buildProvisionPayload", () => {
 				defaultDockerCompose,
 				defaultEnvs,
 				defaultPrivacySettings,
-				undefined,
 				undefined,
 				undefined,
 				"dev-box",
@@ -640,7 +638,6 @@ describe("buildProvisionPayload", () => {
 				defaultDockerCompose,
 				defaultEnvs,
 				defaultPrivacySettings,
-				undefined,
 				undefined,
 				undefined,
 				"dev-image",
@@ -844,7 +841,6 @@ describe("buildProvisionPayload", () => {
 				defaultDockerCompose,
 				defaultEnvs,
 				defaultPrivacySettings,
-				undefined,
 				undefined,
 				undefined,
 				"dev-image",

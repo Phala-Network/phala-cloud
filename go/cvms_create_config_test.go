@@ -28,6 +28,18 @@ func TestProvisionCVMSendsTheNewCreateFields(t *testing.T) {
 	}`)
 }
 
+func TestProvisionCVMSendsAnInitScriptNameItDoesNotKnow(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusOK, `{"app_id":"app-1","compose_hash":"abc"}`)
+	_, err := client.ProvisionCVM(context.Background(), &ProvisionCVMRequest{
+		Name:        "my-app",
+		InitScripts: []InitScriptSlug{"future_script"},
+	})
+	if err != nil {
+		t.Fatalf("ProvisionCVM: %v", err)
+	}
+	assertBody(t, (*seen)[0].body, `{"name": "my-app", "init_scripts": ["future_script"]}`)
+}
+
 func TestProvisionCVMSendsACallerLaunchTokenAndRunner(t *testing.T) {
 	client, seen := recordingServer(t, http.StatusOK, `{"app_id":"app-1","compose_hash":"abc"}`)
 	token := "0123456789abcdef0123456789abcdef"

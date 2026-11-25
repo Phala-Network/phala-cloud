@@ -74,11 +74,9 @@ import dedent from "dedent";
 import fs from "fs-extra";
 import inquirer from "inquirer";
 import {
-	assertInitScriptFilesExist,
-	partitionInitScriptValues,
-	readInitScriptFiles,
-	unknownInitScriptSlugMessage,
-} from "@/src/lib/init-script-files";
+	DATA_WIPE_CONFIRM_GUIDANCE,
+	isDataWipeConfirmError,
+} from "@/src/lib/init-scripts";
 import {
 	resolveWritableComposeFile,
 	unifiedDiff,
@@ -238,14 +236,6 @@ export function assertUpdatableOptions(options: Options): void {
 			"--clear-init-scripts cannot be combined with --init-script.",
 		);
 	}
-	const unknownInitScripts = partitionInitScriptValues(
-		options.initScript,
-	).files;
-	if (unknownInitScripts.length > 0) {
-		throw new Error(
-			`${unknownInitScriptSlugMessage(unknownInitScripts[0] as string)}. File paths with --init-script can only be used when creating a CVM, not with --cvm-id.`,
-		);
-	}
 }
 
 /**
@@ -279,21 +269,6 @@ export function assertCreateOptions(options: Options): void {
 				`${flag} only applies to an update of an existing CVM (--cvm-id).`,
 			);
 		}
-	}
-	const initScripts = partitionInitScriptValues(options.initScript);
-	assertInitScriptFilesExist(initScripts.files);
-	if (initScripts.slugs.length > 0 && initScripts.files.length > 0) {
-		throw new Error(
-			"Send either init script slugs or init script files with --init-script, not both.",
-		);
-	}
-	if (initScripts.files.length > 5) {
-		throw new Error("--init-script accepts at most 5 script files.");
-	}
-	if (options.appCompose !== undefined && initScripts.files.length > 0) {
-		throw new Error(
-			"--init-script file paths cannot be used with --app-compose. Set them in the app-compose file.",
-		);
 	}
 	if (options.appCompose === undefined) return;
 	const flags = COMPOSE_SHAPING_FLAGS.filter(
@@ -1165,7 +1140,6 @@ function buildComposeFile(
 	envs: EnvVar[],
 	privacySettings: PrivacySettings,
 	preLaunchScriptContent?: string,
-	initScriptContents?: string[],
 ): Record<string, unknown> {
 	const composeFile: Record<string, unknown> = {
 		name: "", // Required by backend schema, defaults to empty string
@@ -1199,9 +1173,6 @@ function buildComposeFile(
 	if (options.experimentalKeyProviderType) {
 		composeFile.key_provider = options.experimentalKeyProviderType;
 	}
-	if (initScriptContents && initScriptContents.length > 0) {
-		composeFile.init_script = initScriptContents;
-	}
 	return composeFile;
 }
 
@@ -1221,7 +1192,6 @@ export const buildProvisionPayload = (
 	privacySettings: PrivacySettings,
 	preResolvedKmsSelection?: ReturnType<typeof resolveKmsSelection>,
 	preLaunchScriptContent?: string,
-	initScriptContents?: string[],
 	devOsMode?: DevOsMode,
 ) => {
 	const payload: ProvisionCvmRequest = options.appCompose
@@ -1239,14 +1209,12 @@ export const buildProvisionPayload = (
 					envs,
 					privacySettings,
 					preLaunchScriptContent,
-					initScriptContents,
 				),
 				listed: privacySettings.listed,
 			};
 
-	const initScripts = partitionInitScriptValues(options.initScript);
-	if (initScripts.slugs.length > 0 && initScripts.files.length === 0) {
-		payload.init_scripts = initScripts.slugs;
+	if (options.initScript !== undefined && options.initScript.length > 0) {
+		payload.init_scripts = options.initScript;
 	}
 	if (options.launchToken !== undefined) {
 		payload.launch_token = options.launchToken;
@@ -1438,7 +1406,6 @@ const deployNewCvm = async (
 	composeFilePath: string | undefined,
 	projectConfig: PrivacyConfig | undefined,
 	preLaunchScriptContent: string | undefined,
-	initScriptContents: string[],
 	devOsMode: DevOsMode | undefined,
 	sshKeyChannel: SshKeyChannel,
 	context: CommandContext,
@@ -1484,7 +1451,6 @@ const deployNewCvm = async (
 		privacySettings,
 		kmsSelection,
 		preLaunchScriptContent,
-		initScriptContents,
 		devOsMode,
 	);
 
@@ -2491,9 +2457,6 @@ export async function runDeploy(
 				`Pre-launch script file not found: ${input.preLaunchScript}`,
 			);
 		}
-		const initScriptContents = readInitScriptFiles(
-			partitionInitScriptValues(input.initScript).files,
-		);
 
 		// Early size check for compose payload (the SDK schema validates the
 		// combined size too, but checking here gives users a faster, friendlier
@@ -2583,7 +2546,6 @@ export async function runDeploy(
 				composeFilePath,
 				context.projectConfig,
 				preLaunchScriptContent,
-				initScriptContents,
 				devOsMode,
 				sshKeyChannel,
 				context,
@@ -2597,7 +2559,9 @@ export async function runDeploy(
 			operation: isUpdate ? "CVM update" : "CVM deployment",
 			debug: input.debug,
 			guidance: isUpdate
-				? "Check the CVM status before retrying. Include the Request ID when contacting support."
+				? isDataWipeConfirmError(error)
+					? DATA_WIPE_CONFIRM_GUIDANCE
+					: "Check the CVM status before retrying. Include the Request ID when contacting support."
 				: "Include the Request ID when contacting support.",
 		});
 		return 1;

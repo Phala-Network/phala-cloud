@@ -37,10 +37,12 @@ class GetCvmListRequest(CloudModel):
         return value
 
 
-InitScriptSlug = Literal["docker_cleanup", "runtime_tmpfs", "env_merge"]
-"""Platform init script slug.
+InitScriptSlug = str
+"""Name of an init script provided by Phala Cloud, such as ``docker_cleanup``.
 
-Phala Cloud fixes the run order: docker_cleanup, runtime_tmpfs, then env_merge.
+Phala Cloud owns the list of names, the run order and the selection rules. The
+SDK sends any name as is and the server rejects names it does not know; call
+``get_cvm_init_scripts`` to see what a CVM can select.
 """
 
 

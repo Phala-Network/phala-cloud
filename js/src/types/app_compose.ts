@@ -87,9 +87,14 @@ export const VerityVolumeSchema = z.object({
 export const ComposeRunnerSchema = z.enum(["docker-compose", "bash", "nerdctl-compose"]);
 export type ComposeRunner = z.infer<typeof ComposeRunnerSchema>;
 
-/** Platform init script slugs, in Phala Cloud's fixed run order. */
-export const InitScriptSlugSchema = z.enum(["docker_cleanup", "runtime_tmpfs", "env_merge"]);
-export type InitScriptSlug = z.infer<typeof InitScriptSlugSchema>;
+/**
+ * Name of an init script provided by Phala Cloud. Phala Cloud owns the list, the
+ * run order and the selection rules, so any non-empty string is sent as is and the
+ * server rejects names it does not know. The known names only feed editor
+ * autocomplete; use `getCvmInitScripts` to see what a CVM can select.
+ */
+export type InitScriptSlug = "docker_cleanup" | "runtime_tmpfs" | "env_merge" | (string & {});
+export const InitScriptSlugSchema: z.ZodType<InitScriptSlug> = z.string().min(1);
 
 export const LooseAppComposeSchema = z
   .object({
@@ -131,8 +136,9 @@ export const LooseAppComposeSchema = z
     snapshotter: z.enum(["overlayfs", "stargz"]).nullable().optional(),
     verity_volumes: z.array(VerityVolumeSchema).nullable().optional(),
     /**
-     * Platform init scripts, managed by Phala Cloud (read-only; select them with
-     * `init_scripts` slugs). A string or absent below dstack OS 0.6.0, a list from 0.6.0.
+     * Init scripts the CVM runs, managed by Phala Cloud (read-only; select the ones
+     * Phala Cloud provides with `init_scripts` names). A string or absent below
+     * dstack OS 0.6.0, a list from 0.6.0.
      */
     init_script: z.union([z.string(), z.array(z.string())]).optional(),
   })

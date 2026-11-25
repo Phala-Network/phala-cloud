@@ -1,5 +1,5 @@
 /**
- * Wire contract of `phala cvms init-scripts` against GET/PATCH/PUT init-scripts.
+ * Wire contract of `phala cvms init-scripts` against GET init-scripts and PATCH.
  */
 
 import {
@@ -154,9 +154,11 @@ afterEach(() => {
 function makeContext(): {
 	context: CommandContext;
 	failure: () => unknown;
+	guidance: () => string | undefined;
 	stdout: string[];
 } {
 	let failure: unknown;
+	let guidance: string | undefined;
 	const stdout: string[] = [];
 	const context = {
 		env: process.env,
@@ -173,15 +175,16 @@ function makeContext(): {
 		fail: (message: string) => {
 			failure = new Error(message);
 		},
-		failWithError: (error: unknown) => {
+		failWithError: (error: unknown, options?: { guidance?: string }) => {
 			failure = error;
+			guidance = options?.guidance;
 		},
 	} as unknown as CommandContext;
-	return { context, failure: () => failure, stdout };
+	return { context, failure: () => failure, guidance: () => guidance, stdout };
 }
 
 describe("phala cvms init-scripts", () => {
-	test("lists platform scripts", async () => {
+	test("lists the init scripts Phala Cloud provides", async () => {
 		const { context, failure } = makeContext();
 		const exitCode = await cvmsInitScriptsCommand.run(
 			{ json: true } as Parameters<typeof cvmsInitScriptsCommand.run>[0],
@@ -204,7 +207,7 @@ describe("phala cvms init-scripts", () => {
 		const { context, failure } = makeContext();
 		const exitCode = await cvmsInitScriptsCommand.run(
 			{
-				slug: "docker_cleanup",
+				name: "docker_cleanup",
 				state: "on",
 				confirmDataWipe: true,
 			} as Parameters<typeof cvmsInitScriptsCommand.run>[0],
@@ -218,7 +221,7 @@ describe("phala cvms init-scripts", () => {
 				method: "PATCH",
 				path: `/api/v1/cvms/${CVM_ID}`,
 				body: {
-					init_scripts: ["docker_cleanup", "env_merge"],
+					init_scripts: ["env_merge", "docker_cleanup"],
 					confirm_data_wipe: true,
 				},
 				headers: NO_ONCHAIN_HEADERS,
@@ -226,18 +229,12 @@ describe("phala cvms init-scripts", () => {
 		]);
 	});
 
-	test("turns runtime_tmpfs on in run order past an unselected unknown slug", async () => {
+	test("turns a name this CLI has no constant for on and passes it through", async () => {
 		respond = (method, path) =>
 			method === "GET" && path.endsWith("/init-scripts")
 				? Response.json({
 						items: [
 							...PLATFORM.items,
-							{
-								slug: "runtime_tmpfs",
-								selected: false,
-								selectable: true,
-								reason: null,
-							},
 							{
 								slug: "future_script",
 								selected: false,
@@ -251,9 +248,8 @@ describe("phala cvms init-scripts", () => {
 		const { context, failure } = makeContext();
 		const exitCode = await cvmsInitScriptsCommand.run(
 			{
-				slug: "runtime_tmpfs",
+				name: "future_script",
 				state: "on",
-				confirmDataWipe: true,
 			} as Parameters<typeof cvmsInitScriptsCommand.run>[0],
 			context,
 		);
@@ -264,16 +260,13 @@ describe("phala cvms init-scripts", () => {
 			{
 				method: "PATCH",
 				path: `/api/v1/cvms/${CVM_ID}`,
-				body: {
-					init_scripts: ["runtime_tmpfs", "env_merge"],
-					confirm_data_wipe: true,
-				},
+				body: { init_scripts: ["env_merge", "future_script"] },
 				headers: NO_ONCHAIN_HEADERS,
 			},
 		]);
 	});
 
-	test("refuses a slug change while an unknown slug is selected", async () => {
+	test("keeps an unknown selected name when another one changes", async () => {
 		respond = (method, path) =>
 			method === "GET" && path.endsWith("/init-scripts")
 				? Response.json({
@@ -292,49 +285,133 @@ describe("phala cvms init-scripts", () => {
 		const { context, failure } = makeContext();
 		const exitCode = await cvmsInitScriptsCommand.run(
 			{
-				slug: "runtime_tmpfs",
-				state: "on",
-				confirmDataWipe: true,
+				name: "env_merge",
+				state: "off",
 			} as Parameters<typeof cvmsInitScriptsCommand.run>[0],
 			context,
 		);
 
-		expect(exitCode).toBe(1);
-		expect(String(failure())).toContain("future_script");
-		expect(requests.filter((r) => r.method === "PATCH")).toEqual([]);
+		expect(failure()).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(requests.filter((r) => r.method === "PATCH")).toEqual([
+			{
+				method: "PATCH",
+				path: `/api/v1/cvms/${CVM_ID}`,
+				body: { init_scripts: ["future_script"] },
+				headers: NO_ONCHAIN_HEADERS,
+			},
+		]);
 	});
 
-	test("rejects runtime_tmpfs on without --confirm-data-wipe", async () => {
+	test("rejects a name the server did not list and prints the server's names", async () => {
 		const { context, failure } = makeContext();
 		const exitCode = await cvmsInitScriptsCommand.run(
 			{
-				slug: "runtime_tmpfs",
+				name: "docker_clenaup",
 				state: "on",
 			} as Parameters<typeof cvmsInitScriptsCommand.run>[0],
 			context,
 		);
 
 		expect(exitCode).toBe(1);
-		expect(String(failure())).toContain("--confirm-data-wipe");
-		expect(requests.filter((r) => r.method === "PATCH")).toEqual([]);
+		expect(String(failure())).toContain("docker_clenaup");
+		expect(String(failure())).toContain("docker_cleanup, env_merge");
+		expect(requests.filter((r) => r.method !== "GET")).toEqual([]);
 	});
 
-	test("rejects docker_cleanup on without --confirm-data-wipe", async () => {
+	test("does not send --confirm-data-wipe unless it was given", async () => {
 		const { context, failure } = makeContext();
 		const exitCode = await cvmsInitScriptsCommand.run(
 			{
-				slug: "docker_cleanup",
+				name: "docker_cleanup",
+				state: "on",
+			} as Parameters<typeof cvmsInitScriptsCommand.run>[0],
+			context,
+		);
+
+		expect(failure()).toBeUndefined();
+		expect(exitCode).toBe(0);
+		expect(requests.filter((r) => r.method === "PATCH")[0]?.body).toEqual({
+			init_scripts: ["env_merge", "docker_cleanup"],
+		});
+	});
+
+	test("points to --confirm-data-wipe when the server asks for it", async () => {
+		respond = (method) =>
+			method === "PATCH"
+				? Response.json(
+						{
+							error_code: "ERR-03-048",
+							message: "Turning this on erases data on every boot",
+						},
+						{ status: 400 },
+					)
+				: undefined;
+		const { context, failure, guidance } = makeContext();
+		const exitCode = await cvmsInitScriptsCommand.run(
+			{
+				name: "docker_cleanup",
 				state: "on",
 			} as Parameters<typeof cvmsInitScriptsCommand.run>[0],
 			context,
 		);
 
 		expect(exitCode).toBe(1);
-		expect(String(failure())).toContain("--confirm-data-wipe");
-		expect(requests.filter((r) => r.method === "PATCH")).toEqual([]);
+		expect(failure()).toBeDefined();
+		expect(guidance()).toContain("--confirm-data-wipe");
 	});
 
-	test("refuses to replace custom scripts without --yes", async () => {
+	test("adds no data-wipe hint to other server errors", async () => {
+		respond = (method) =>
+			method === "PATCH"
+				? Response.json(
+						{ error_code: "ERR-03-001", message: "Something else" },
+						{ status: 400 },
+					)
+				: undefined;
+		const { context, guidance } = makeContext();
+		const exitCode = await cvmsInitScriptsCommand.run(
+			{
+				name: "docker_cleanup",
+				state: "on",
+			} as Parameters<typeof cvmsInitScriptsCommand.run>[0],
+			context,
+		);
+
+		expect(exitCode).toBe(1);
+		expect(guidance()).toBeUndefined();
+	});
+
+	test("refuses to select a name the server marks as not selectable", async () => {
+		respond = (method, path) =>
+			method === "GET" && path.endsWith("/init-scripts")
+				? Response.json({
+						items: [
+							{
+								slug: "runtime_tmpfs",
+								selected: false,
+								selectable: false,
+								reason: "Needs dstack OS 0.6.x",
+							},
+						],
+						has_custom_scripts: false,
+					})
+				: undefined;
+		const { context, failure } = makeContext();
+		const exitCode = await cvmsInitScriptsCommand.run(
+			{
+				name: "runtime_tmpfs",
+				state: "on",
+			} as Parameters<typeof cvmsInitScriptsCommand.run>[0],
+			context,
+		);
+
+		expect(exitCode).toBe(1);
+		expect(String(failure())).toContain("Needs dstack OS 0.6.x");
+		expect(requests.filter((r) => r.method !== "GET")).toEqual([]);
+	});
+
+	test("refuses to replace scripts set by Phala Cloud support without --yes", async () => {
 		respond = (method, pathname) =>
 			method === "GET" && pathname.endsWith("/init-scripts")
 				? Response.json({ ...PLATFORM, has_custom_scripts: true })
@@ -342,7 +419,7 @@ describe("phala cvms init-scripts", () => {
 		const { context, failure } = makeContext();
 		const exitCode = await cvmsInitScriptsCommand.run(
 			{
-				slug: "env_merge",
+				name: "env_merge",
 				state: "off",
 			} as Parameters<typeof cvmsInitScriptsCommand.run>[0],
 			context,
@@ -353,84 +430,25 @@ describe("phala cvms init-scripts", () => {
 		expect(requests.filter((r) => r.method !== "GET")).toEqual([]);
 	});
 
-	test("hidden --file sends PUT scripts", async () => {
-		const scriptPath = path.join(tmpDir, "custom.sh");
-		await fs.writeFile(scriptPath, "echo custom\n");
-		const { context, failure } = makeContext();
-		const exitCode = await cvmsInitScriptsCommand.run(
-			{ file: [scriptPath] } as Parameters<
-				typeof cvmsInitScriptsCommand.run
-			>[0],
-			context,
-		);
-
-		expect(failure()).toBeUndefined();
-		expect(exitCode).toBe(0);
-		expect(requests.filter((r) => r.method === "PUT")).toEqual([
-			{
-				method: "PUT",
-				path: `/api/v1/cvms/${CVM_ID}/init-scripts`,
-				body: { scripts: ["echo custom\n"] },
-				headers: NO_ONCHAIN_HEADERS,
-			},
-		]);
-	});
-
-	test("rejects --file with a slug change", async () => {
-		const { context, failure } = makeContext();
-		const exitCode = await cvmsInitScriptsCommand.run(
-			{
-				file: ["custom.sh"],
-				slug: "docker_cleanup",
-				state: "on",
-			} as Parameters<typeof cvmsInitScriptsCommand.run>[0],
-			context,
-		);
-
-		expect(exitCode).toBe(1);
-		expect(String(failure())).toContain("cannot be combined");
-		expect(requests).toEqual([]);
-	});
-
-	test("hidden --file replaces custom scripts without --yes", async () => {
-		respond = (method, pathname) =>
-			method === "GET" && pathname.endsWith("/init-scripts")
-				? Response.json({ ...PLATFORM, has_custom_scripts: true })
-				: undefined;
-		const scriptPath = path.join(tmpDir, "replace.sh");
-		await fs.writeFile(scriptPath, "echo replace\n");
-		const { context, failure } = makeContext();
-		const exitCode = await cvmsInitScriptsCommand.run(
-			{ file: [scriptPath] } as Parameters<
-				typeof cvmsInitScriptsCommand.run
-			>[0],
-			context,
-		);
-
-		expect(failure()).toBeUndefined();
-		expect(exitCode).toBe(0);
-		expect(requests.some((r) => r.method === "PUT")).toBe(true);
-	});
-
 	test("--prepare-only prints the compose hash from phase 1", async () => {
-		respond = (method, pathname) =>
-			method === "PUT" && pathname.endsWith("/init-scripts")
+		respond = (method) =>
+			method === "PATCH"
 				? Response.json(HASH_REQUIRED, { status: 465 })
 				: undefined;
-		const scriptPath = path.join(tmpDir, "prepare.sh");
-		await fs.writeFile(scriptPath, "echo prepare\n");
 		const { context, failure, stdout } = makeContext();
 		const exitCode = await cvmsInitScriptsCommand.run(
-			{ file: [scriptPath], prepareOnly: true, json: true } as Parameters<
-				typeof cvmsInitScriptsCommand.run
-			>[0],
+			{
+				name: "docker_cleanup",
+				state: "on",
+				prepareOnly: true,
+				json: true,
+			} as Parameters<typeof cvmsInitScriptsCommand.run>[0],
 			context,
 		);
 
 		expect(failure()).toBeUndefined();
 		expect(exitCode).toBe(0);
 		expect(stdout.join("")).toContain("abc123");
-		expect(requests.filter((r) => r.method === "PATCH")).toEqual([]);
 	});
 
 	test("--compose-hash and --transaction-hash send phase 2 headers", async () => {

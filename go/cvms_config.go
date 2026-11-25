@@ -321,7 +321,7 @@ func (c *Client) UpdateCVMAnnotations(ctx context.Context, cvmID string, annotat
 	return &result, nil
 }
 
-// CVMInitScript describes one platform init script for a CVM.
+// CVMInitScript describes one init script provided by Phala Cloud for a CVM.
 type CVMInitScript struct {
 	Slug InitScriptSlug `json:"slug"`
 	// Selected reports whether the CVM's current compose runs the script.
@@ -333,12 +333,13 @@ type CVMInitScript struct {
 	Reason *string `json:"reason"`
 }
 
-// CVMInitScriptsResponse lists every platform init script, in run order.
+// CVMInitScriptsResponse lists every init script Phala Cloud provides, in the
+// order it runs them.
 type CVMInitScriptsResponse struct {
 	Items []CVMInitScript `json:"items"`
 }
 
-// GetCVMInitScripts returns which platform init scripts the CVM runs and which
+// GetCVMInitScripts returns which provided init scripts the CVM runs and which
 // it can select.
 func (c *Client) GetCVMInitScripts(ctx context.Context, cvmID string) (*CVMInitScriptsResponse, error) {
 	var result CVMInitScriptsResponse
