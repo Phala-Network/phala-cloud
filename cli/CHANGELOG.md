@@ -1,3 +1,35 @@
+## [1.2.9-beta.1](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.8...cli-v1.2.9-beta.1) (2026-11-25)
+
+### ⚠ BREAKING CHANGE
+
+- **cli:** --init-script no longer accepts file paths, and the hidden
+  --file option of phala cvms init-scripts is removed. Init scripts are the ones
+  Phala Cloud provides, selected by name.
+- **cli:** CLI: phala deploy without --image now requests a production OS image instead of a development one; name a development image with --image to keep the old result.
+
+### feat
+
+- **cli:** accept runtime_tmpfs init script ([c8edc58](https://github.com/Phala-Network/phala-cloud/commit/c8edc581053417131b1f938af401390f93c69c48))
+- **cli:** let the server own init script names ([d21bd7b](https://github.com/Phala-Network/phala-cloud/commit/d21bd7bf7a5ac0210878595bfaa921172b15ac79))
+- **cli:** pin draft apply and discard to reviewed entries ([09732ad](https://github.com/Phala-Network/phala-cloud/commit/09732ad2b28d1dbac68695102adcbd42e5b20517))
+- **cli:** support finality-aware deploys and drafts ([dd2785c](https://github.com/Phala-Network/phala-cloud/commit/dd2785cef7fbff33520a2cf26d91c5f32446df59))
+
+### fix
+
+- **cli:** ask for a production OS image when deploy names none ([261b223](https://github.com/Phala-Network/phala-cloud/commit/261b2237250706dcdec3791a3bda28c1e1e54674)), closes [#521](https://github.com/Phala-Network/phala-cloud/issues/521)
+- **cli:** clarify recovery after on-chain app registration ([beb92a7](https://github.com/Phala-Network/phala-cloud/commit/beb92a73d2bf89e0acdde437ca5c29c6c1aa2f01))
+- **cli:** follow KMS key finality codes during fresh deploys ([190ad54](https://github.com/Phala-Network/phala-cloud/commit/190ad54b5bccac92c17196f6adc32954c4678259))
+- **cli:** recover registered deploys and preserve wait readiness ([2a81b37](https://github.com/Phala-Network/phala-cloud/commit/2a81b372bf2742a49555b1650b2e31a95207fc0d))
+- **cli:** refuse init script changes while an unknown slug is selected ([29ead14](https://github.com/Phala-Network/phala-cloud/commit/29ead1472452b86fad099645b30acb737aa95c55))
+- **cli:** remove unused fast-glob dependency ([948daf4](https://github.com/Phala-Network/phala-cloud/commit/948daf4c3b21ffecef56d2cf675803559a84cbdd))
+- **cli:** report accepted finality without resubmitting ([a259f4f](https://github.com/Phala-Network/phala-cloud/commit/a259f4f9e39a9c803dbda086549cc32816d22471))
+- **cli:** use the command's auth options for every API request ([532d6d6](https://github.com/Phala-Network/phala-cloud/commit/532d6d629616cdcc004acaaae77ae2e0ea80de12)), closes [#522](https://github.com/Phala-Network/phala-cloud/issues/522)
+- **cli:** wait for finalized KMS encryption keys ([ea8aedb](https://github.com/Phala-Network/phala-cloud/commit/ea8aedb93e7dff77bf8477dde9d5ddac69d32931))
+- **deps:** adapt to execa 10, noble curves v2 and biome 2 markdown formatting ([c0e3f79](https://github.com/Phala-Network/phala-cloud/commit/c0e3f79e9f4b6e15d913d85d3d84ffa1eab02a52))
+
+### refactor
+
+- Revert "chore(deps): hold back @types/node, typescript and @biomejs/biome major bumps" ([0a3c6b1](https://github.com/Phala-Network/phala-cloud/commit/0a3c6b1946732590900c41ff5c4f527c77c7c6f5))
 ## [1.2.8](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.7...cli-v1.2.8) (2026-11-17)
 
 ### docs
