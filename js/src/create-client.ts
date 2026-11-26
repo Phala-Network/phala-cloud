@@ -206,6 +206,7 @@ import {
   updateOsImage,
   safeUpdateOsImage,
   type UpdateOsImageRequest,
+  type UpdateOsImageResponse,
 } from "./actions/cvms/update_os_image";
 import {
   getCvmState,
@@ -1640,14 +1641,14 @@ export interface Client<V extends ApiVersion = DefaultApiVersion>
     parameters: { schema: false },
   ): Promise<SafeResult<unknown>>;
 
-  updateOsImage(request: UpdateOsImageRequest): Promise<void>;
+  updateOsImage(request: UpdateOsImageRequest): Promise<UpdateOsImageResponse>;
   updateOsImage<T extends z.ZodTypeAny>(
     request: UpdateOsImageRequest,
     parameters: { schema: T },
   ): Promise<z.infer<T>>;
   updateOsImage(request: UpdateOsImageRequest, parameters: { schema: false }): Promise<unknown>;
 
-  safeUpdateOsImage(request: UpdateOsImageRequest): Promise<SafeResult<void>>;
+  safeUpdateOsImage(request: UpdateOsImageRequest): Promise<SafeResult<UpdateOsImageResponse>>;
   safeUpdateOsImage<T extends z.ZodTypeAny>(
     request: UpdateOsImageRequest,
     parameters: { schema: T },
