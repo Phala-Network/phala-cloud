@@ -91,6 +91,27 @@ func buildCVMListPath(opts *GetCVMListOptions) string {
 	for _, t := range opts.InstanceTypes {
 		q.Add("instance_types", t)
 	}
+	if opts.Search != nil {
+		q.Set("search", *opts.Search)
+	}
+	for _, status := range opts.Status {
+		q.Add("status", status)
+	}
+	if opts.BaseImage != nil {
+		q.Set("base_image", *opts.BaseImage)
+	}
+	if opts.KMSSlug != nil {
+		q.Set("kms_slug", *opts.KMSSlug)
+	}
+	if opts.KMSType != nil {
+		q.Set("kms_type", *opts.KMSType)
+	}
+	if opts.Node != nil {
+		q.Set("node", *opts.Node)
+	}
+	if opts.Region != nil {
+		q.Set("region", *opts.Region)
+	}
 	if encoded := q.Encode(); encoded != "" {
 		path += "?" + encoded
 	}

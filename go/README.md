@@ -81,6 +81,8 @@ client, err := phala.NewClient(
 )
 ```
 
+`WithAPIVersion` must be `YYYY-MM-DD`. Go types follow the default version (`2026-11-11`) and the pinned `*V20260121` methods. Other well-formed dates are sent as-is; the server ignores unknown versions and answers with the latest shapes.
+
 The default User-Agent is `phala-cloud-sdk-go/<version> go/<go version>`. `DefaultUserAgent()` returns that value so wrappers can prepend their own product token. `WithUserAgent` replaces it. A `User-Agent` set with `WithHeader` wins over both.
 
 ## Does the SDK follow redirects?
@@ -449,6 +451,8 @@ PHALA_CLOUD_E2E_API_KEY=your-key go test -tags e2e -v -timeout 30m ./e2e/
 - `ProvisionCVMRequest.InitScripts` is now `[]InitScriptSlug`. Replace `&ProvisionInitScripts{EnvMerge: true}` with `[]phala.InitScriptSlug{phala.InitScriptEnvMerge}`.
 - `ProvisionComposeUpdateRequest` embeds `ComposeFile` and adds `UpdateEnvVars` and `ConfirmDataWipe`. Set compose fields on `ComposeFile` (a composite literal of the request type cannot name promoted fields). Pass the `ComposeFile` from `GetCVMComposeFile` so unknown keys round-trip.
 - Remove these unread create fields from `ProvisionCVMRequest`: `KMSType` (use `KMS`), `Encrypted` (no replacement; send `EncryptedEnv`), `SecureTime` (`ComposeFile.SecureTime`), `SSHAuthorizedKeys` (`SSHKeyIDs`), `CustomAppID` (`AppID`), `StorageFS` (`ComposeFile.StorageFS`).
+- `PatchCVMRequest.ShutdownTimeout` is now `Patch[int]`. Use `PatchValue(60)` to set it and `PatchNull[int]()` to restore the platform default.
+- `CreateAppInstance` returns `*ReplicaVM` (top-level `teepod_id`, `vcpu`, `memory`, `disk_size`, `finality_wait`), not `*CVMInfo`. `CreateAppInstanceV20260121` returns `*ReplicaVMV20260121`.
 - `GetComposeHash` and `GetComposeHashFromMap` now drop null `storage_discard`, `event_log_version`, `snapshotter` and `verity_volumes` and always emit `tproxy_enabled` (defaulting to `gateway_enabled`), as the API does. A compose without `tproxy_enabled` hashes differently than before.
 
 ## License

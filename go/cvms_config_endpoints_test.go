@@ -9,6 +9,39 @@ import (
 	"testing"
 )
 
+func TestGetCVMInfoDecodesSSHFinalityAndNodeID(t *testing.T) {
+	client, _ := recordingServer(t, http.StatusOK, `{
+		"id":"cvm-1",
+		"name":"app",
+		"status":"running",
+		"resource":{},
+		"enabled_ssh_access":true,
+		"node_info":{"object_type":"node","id":7,"node_id":42},
+		"kms_info":{"block_tag":"finalized","finality_eta_seconds":12},
+		"finality_wait":{"operation":"update","correlation_id":"corr-2","phase":"applying","stage":"applying","transaction":null,"finality":{"block_tag":null,"policy_block_number":null,"blocks_remaining":null,"eta_seconds":null}},
+		"finality_failure":{"operation":"update","correlation_id":"corr-old","failure_reason":"timeout","failed_at":"2026-01-02T00:00:00Z"}
+	}`)
+	got, err := client.GetCVMInfo(context.Background(), "cvm-1")
+	if err != nil {
+		t.Fatalf("GetCVMInfo: %v", err)
+	}
+	if !got.EnabledSSHAccess {
+		t.Fatal("EnabledSSHAccess = false, want true")
+	}
+	if got.NodeInfo == nil || got.NodeInfo.NodeID == nil || *got.NodeInfo.NodeID != 42 {
+		t.Fatalf("node_id = %+v", got.NodeInfo)
+	}
+	if got.KMSInfo == nil || got.KMSInfo.BlockTag == nil || *got.KMSInfo.BlockTag != "finalized" || got.KMSInfo.FinalityETASeconds == nil || *got.KMSInfo.FinalityETASeconds != 12 {
+		t.Fatalf("kms_info = %+v", got.KMSInfo)
+	}
+	if got.FinalityWait == nil || got.FinalityWait.CorrelationID != "corr-2" {
+		t.Fatalf("finality_wait = %+v", got.FinalityWait)
+	}
+	if got.FinalityFailure == nil || got.FinalityFailure.FailureReason != "timeout" {
+		t.Fatalf("finality_failure = %+v", got.FinalityFailure)
+	}
+}
+
 func TestGetCVMAnnotations(t *testing.T) {
 	client, seen := recordingServer(t, http.StatusOK, `{"annotations":{"tier":"fast"}}`)
 	got, err := client.GetCVMAnnotations(context.Background(), "cvm-1")

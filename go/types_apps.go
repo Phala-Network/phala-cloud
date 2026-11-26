@@ -4,13 +4,64 @@ package phala
 type CreateAppInstanceRequest struct {
 	Name *string `json:"name,omitempty"`
 	// Node is the physical node name. Omit it to inherit the template instance's placement.
-	Node              *string `json:"node,omitempty"`
-	DockerComposeFile *string `json:"docker_compose_file,omitempty"`
-	PreLaunchScript   *string `json:"pre_launch_script,omitempty"`
-	EncryptedEnv      *string `json:"encrypted_env,omitempty"`
-	ComposeHash       *string `json:"compose_hash,omitempty"`
-	Token             *string `json:"token,omitempty"`
-	TransactionHash   *string `json:"transaction_hash,omitempty"`
+	Node              *string  `json:"node,omitempty"`
+	DockerComposeFile *string  `json:"docker_compose_file,omitempty"`
+	PreLaunchScript   *string  `json:"pre_launch_script,omitempty"`
+	EncryptedEnv      *string  `json:"encrypted_env,omitempty"`
+	ComposeHash       *string  `json:"compose_hash,omitempty"`
+	Token             *string  `json:"token,omitempty"`
+	TransactionHash   *string  `json:"transaction_hash,omitempty"`
+	OSImage           *string  `json:"os_image,omitempty"`
+	KMSURLs           []string `json:"kms_urls,omitzero"`
+	GatewayURLs       []string `json:"gateway_urls,omitzero"`
+}
+
+// ReplicaVM is POST /apps/{id}/instances (and replica create) response: a VM plus optional finality_wait.
+type ReplicaVM struct {
+	ID                 string                 `json:"id"`
+	Name               string                 `json:"name"`
+	Status             string                 `json:"status"`
+	TeepodID           int                    `json:"teepod_id"`
+	AppID              string                 `json:"app_id"`
+	VMUUID             *string                `json:"vm_uuid,omitempty"`
+	InstanceID         *string                `json:"instance_id,omitempty"`
+	AppURL             *string                `json:"app_url,omitempty"`
+	BaseImage          *string                `json:"base_image,omitempty"`
+	VCPU               int                    `json:"vcpu"`
+	Memory             int                    `json:"memory"`
+	DiskSize           int                    `json:"disk_size"`
+	ManifestVersion    *int                   `json:"manifest_version,omitempty"`
+	Version            *string                `json:"version,omitempty"`
+	Runner             *string                `json:"runner,omitempty"`
+	DockerComposeFile  *string                `json:"docker_compose_file,omitempty"`
+	Features           []string               `json:"features,omitempty"`
+	CreatedAt          string                 `json:"created_at"`
+	EncryptedEnvPubkey *string                `json:"encrypted_env_pubkey,omitempty"`
+	FinalityWait       *CVMFinalityWaitStatus `json:"finality_wait,omitempty"`
+}
+
+// ReplicaVMV20260121 is the replica create response before hashed CVM IDs.
+type ReplicaVMV20260121 struct {
+	ID                 int                    `json:"id"`
+	Name               string                 `json:"name"`
+	Status             string                 `json:"status"`
+	TeepodID           int                    `json:"teepod_id"`
+	AppID              string                 `json:"app_id"`
+	VMUUID             *string                `json:"vm_uuid,omitempty"`
+	InstanceID         *string                `json:"instance_id,omitempty"`
+	AppURL             *string                `json:"app_url,omitempty"`
+	BaseImage          *string                `json:"base_image,omitempty"`
+	VCPU               int                    `json:"vcpu"`
+	Memory             int                    `json:"memory"`
+	DiskSize           int                    `json:"disk_size"`
+	ManifestVersion    *int                   `json:"manifest_version,omitempty"`
+	Version            *string                `json:"version,omitempty"`
+	Runner             *string                `json:"runner,omitempty"`
+	DockerComposeFile  *string                `json:"docker_compose_file,omitempty"`
+	Features           []string               `json:"features,omitempty"`
+	CreatedAt          string                 `json:"created_at"`
+	EncryptedEnvPubkey *string                `json:"encrypted_env_pubkey,omitempty"`
+	FinalityWait       *CVMFinalityWaitStatus `json:"finality_wait,omitempty"`
 }
 
 // AppInfoFields contains fields shared by versioned app response schemas.

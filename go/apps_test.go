@@ -133,6 +133,49 @@ func TestCreateAppInstance(t *testing.T) {
 	}
 }
 
+func TestCreateAppInstanceDecodesReplicaVM(t *testing.T) {
+	client, _ := recordingServer(t, http.StatusOK, `{
+		"id":"cvm-456",
+		"name":"instance-1",
+		"status":"starting",
+		"teepod_id":11,
+		"app_id":"app-123",
+		"vcpu":2,
+		"memory":4096,
+		"disk_size":40,
+		"created_at":"2026-01-01T00:00:00Z",
+		"finality_wait":{"operation":"create","correlation_id":"corr-1","phase":"awaiting_finality","stage":"submitted","transaction":null,"finality":{"block_tag":"safe","policy_block_number":1,"blocks_remaining":2,"eta_seconds":30}}
+	}`)
+	got, err := client.CreateAppInstance(context.Background(), "app-123", &CreateAppInstanceRequest{})
+	if err != nil {
+		t.Fatalf("CreateAppInstance: %v", err)
+	}
+	if got.TeepodID != 11 || got.VCPU != 2 || got.Memory != 4096 || got.DiskSize != 40 {
+		t.Fatalf("replica fields = %+v", got)
+	}
+	if got.FinalityWait == nil || got.FinalityWait.CorrelationID != "corr-1" {
+		t.Fatalf("finality_wait = %+v", got.FinalityWait)
+	}
+}
+
+func TestCreateAppInstanceSendsOSImageAndURLs(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusOK, `{"id":"cvm-456","name":"instance-1","resource":{"instance_type":"cpu-2"},"status":"running"}`)
+	osImage := "dstack-0.5.5"
+	_, err := client.CreateAppInstance(context.Background(), "app-123", &CreateAppInstanceRequest{
+		OSImage:     &osImage,
+		KMSURLs:     []string{"https://kms.example"},
+		GatewayURLs: []string{"https://gw.example"},
+	})
+	if err != nil {
+		t.Fatalf("CreateAppInstance: %v", err)
+	}
+	assertBody(t, (*seen)[0].body, `{
+		"os_image": "dstack-0.5.5",
+		"kms_urls": ["https://kms.example"],
+		"gateway_urls": ["https://gw.example"]
+	}`)
+}
+
 // TestRedeployAppRevision covers the SDK method used by the Terraform
 // provider's members-mode update path: redeploy a revision across a set
 // of vm_uuids by POSTing /apps/{id}/revisions/{rev}/redeploy.

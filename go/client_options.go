@@ -29,7 +29,10 @@ func WithBaseURL(url string) Option {
 	return func(c *Client) { c.baseURL = url }
 }
 
-// WithAPIVersion sets the API version header value.
+// WithAPIVersion sets the API version header. It must be YYYY-MM-DD.
+// Go types follow the default version (2026-11-11) and the pinned
+// *V20260121 methods. Other well-formed dates are sent as-is; the server
+// ignores unknown versions and answers with the latest shapes.
 func WithAPIVersion(v string) Option {
 	return func(c *Client) { c.apiVersion = v }
 }

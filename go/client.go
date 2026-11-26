@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 )
 
 // Client is the Phala Cloud API client.
@@ -42,6 +43,8 @@ func (c *Client) withVersion(version string) *Client {
 // GetAppEnvEncryptPubKey and GetManagedInitScripts. Authenticated endpoints
 // then fail with a 401 *APIError.
 // Base URL is resolved from options or the PHALA_CLOUD_API_PREFIX environment variable.
+// WithAPIVersion must be YYYY-MM-DD. Types follow the default version and the
+// pinned *V20260121 methods; other well-formed dates are sent as-is.
 func NewClient(opts ...Option) (*Client, error) {
 	c := &Client{
 		baseURL:    DefaultBaseURL,
@@ -75,6 +78,9 @@ func NewClient(opts ...Option) (*Client, error) {
 
 	if c.maxRetries < 0 {
 		return nil, fmt.Errorf("phala: max retries must be non-negative")
+	}
+	if _, err := time.Parse("2006-01-02", c.apiVersion); err != nil {
+		return nil, fmt.Errorf("phala: API version must be YYYY-MM-DD")
 	}
 
 	c.baseURL = strings.TrimRight(c.baseURL, "/")

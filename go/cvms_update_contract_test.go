@@ -71,7 +71,7 @@ func TestPatchCVMSendsOnlyFieldsTheAPIAccepts(t *testing.T) {
 		},
 		InstanceType:    String("h200.small"),
 		Image:           &image,
-		ShutdownTimeout: Int(60),
+		ShutdownTimeout: PatchValue(60),
 		AllowForceStop:  Bool(true),
 	})
 	if err != nil {
@@ -293,6 +293,38 @@ func TestPatchCVM465FormatsAppID(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPatchCVMResponseDecodesFinalityWait(t *testing.T) {
+	client, _ := recordingServer(t, http.StatusAccepted, `{"status":"in_progress","message":"accepted","correlation_id":"corr-3","finality_wait":{"operation":"update","correlation_id":"corr-3","phase":"awaiting_finality","stage":"submitted","transaction":null,"finality":{"block_tag":"latest","policy_block_number":9,"blocks_remaining":1,"eta_seconds":5}}}`)
+	got, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{PublicLogs: Bool(true)})
+	if err != nil {
+		t.Fatalf("PatchCVM: %v", err)
+	}
+	if got.FinalityWait == nil || got.FinalityWait.CorrelationID != "corr-3" {
+		t.Fatalf("finality_wait = %+v", got.FinalityWait)
+	}
+}
+
+func TestPatchCVMSendsGuestAgentGatewayAccess(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusAccepted, acceptedUpdate)
+	closed := "closed"
+	if _, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{
+		GuestAgentGatewayAccess: &closed,
+	}); err != nil {
+		t.Fatalf("PatchCVM: %v", err)
+	}
+	assertBody(t, (*seen)[0].body, `{"guest_agent_gateway_access": "closed"}`)
+}
+
+func TestPatchCVMSendsNullShutdownTimeout(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusAccepted, acceptedUpdate)
+	if _, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{
+		ShutdownTimeout: PatchNull[int](),
+	}); err != nil {
+		t.Fatalf("PatchCVM: %v", err)
+	}
+	assertBody(t, (*seen)[0].body, `{"shutdown_timeout": null}`)
 }
 
 func TestPatchCVMSendsTheComposeMergePatch(t *testing.T) {

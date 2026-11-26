@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 )
 
@@ -39,6 +40,51 @@ func TestUpdateCVMListed(t *testing.T) {
 
 	if err := client.UpdateCVMListed(context.Background(), "cvm-123", true); err != nil {
 		t.Fatalf("UpdateCVMListed: %v", err)
+	}
+}
+
+func TestGetCVMListSendsFilters(t *testing.T) {
+	var query string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" || r.URL.Path != "/cvms/paginated" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		query = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[],"total":0,"page":1,"page_size":30}`))
+	}))
+	defer srv.Close()
+	client, err := NewClient(WithAPIKey("k"), WithBaseURL(srv.URL), WithMaxRetries(0))
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	_, err = client.GetCVMList(context.Background(), &GetCVMListOptions{
+		Search:    String("web"),
+		Status:    []string{"running", "stopped"},
+		BaseImage: String("dstack-0.5.5"),
+		KMSSlug:   String("phala"),
+		KMSType:   String("PHALA"),
+		Node:      String("usw5"),
+		Region:    String("us-west"),
+	})
+	if err != nil {
+		t.Fatalf("GetCVMList: %v", err)
+	}
+	got, err := url.ParseQuery(query)
+	if err != nil {
+		t.Fatalf("ParseQuery: %v", err)
+	}
+	if got.Get("search") != "web" {
+		t.Fatalf("search = %q", got.Get("search"))
+	}
+	if statuses := got["status"]; len(statuses) != 2 || statuses[0] != "running" || statuses[1] != "stopped" {
+		t.Fatalf("status = %v", statuses)
+	}
+	if got.Get("base_image") != "dstack-0.5.5" || got.Get("kms_slug") != "phala" || got.Get("kms_type") != "PHALA" {
+		t.Fatalf("filters = %v", got)
+	}
+	if got.Get("node") != "usw5" || got.Get("region") != "us-west" {
+		t.Fatalf("placement filters = %v", got)
 	}
 }
 
@@ -87,6 +133,27 @@ func TestReplicateCVMForwardsOSImage(t *testing.T) {
 	if _, ok := body["os_image"]; ok {
 		t.Fatal("os_image present in the body when unset, want it omitted")
 	}
+}
+
+func TestReplicateCVMSendsEncryptedEnvAndURLs(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusOK, `{"id":"cvm_ykL5lbAn","name":"cvm-1","status":"starting"}`)
+	env := "deadbeef"
+	hash := "aa"
+	_, err := client.ReplicateCVM(context.Background(), "cvm-123", &ReplicateCVMOptions{
+		EncryptedEnv: &env,
+		ComposeHash:  &hash,
+		KMSURLs:      []string{"https://kms.example"},
+		GatewayURLs:  []string{"https://gw.example"},
+	})
+	if err != nil {
+		t.Fatalf("ReplicateCVM: %v", err)
+	}
+	assertBody(t, (*seen)[0].body, `{
+		"encrypted_env": "deadbeef",
+		"compose_hash": "aa",
+		"kms_urls": ["https://kms.example"],
+		"gateway_urls": ["https://gw.example"]
+	}`)
 }
 
 // TestProvisionComposeUpdateComposeUnchanged covers the no-op signal returned
