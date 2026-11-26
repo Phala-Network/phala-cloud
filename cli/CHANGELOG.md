@@ -1,3 +1,5 @@
+## [1.2.9](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.9-beta.4...cli-v1.2.9) (2026-11-26)
+
 ## [1.2.9-beta.4](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.9-beta.3...cli-v1.2.9-beta.4) (2026-11-26)
 
 ## [1.2.9-beta.3](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.9-beta.2...cli-v1.2.9-beta.3) (2026-11-26)
