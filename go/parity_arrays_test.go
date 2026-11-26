@@ -14,10 +14,12 @@ func TestOtherOptionalArraysSerializeEmpty(t *testing.T) {
 		encode      func() ([]byte, error)
 	}{
 		{"compose allowed", "allowed_envs", func() ([]byte, error) { return json.Marshal(ComposeFile{AllowedEnvs: []string{}}) }},
-		{"provision compose allowed", "allowed_envs", func() ([]byte, error) { return json.Marshal(ProvisionComposeUpdateRequest{AllowedEnvs: []string{}}) }},
+		{"provision compose allowed", "allowed_envs", func() ([]byte, error) {
+			return json.Marshal(ProvisionComposeUpdateRequest{ComposeFile: ComposeFile{AllowedEnvs: []string{}}})
+		}},
 		{"compose commit env", "env_keys", func() ([]byte, error) { return json.Marshal(CommitComposeUpdateRequest{EnvKeys: []string{}}) }},
 		{"provision commit env", "env_keys", func() ([]byte, error) { return json.Marshal(CommitCVMProvisionRequest{EnvKeys: []string{}}) }},
-		{"provision ssh", "ssh_authorized_keys", func() ([]byte, error) { return json.Marshal(ProvisionCVMRequest{SSHAuthorizedKeys: []string{}}) }},
+		{"provision ssh", "ssh_key_ids", func() ([]byte, error) { return json.Marshal(ProvisionCVMRequest{SSHKeyIDs: []string{}}) }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

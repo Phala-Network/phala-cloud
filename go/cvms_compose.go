@@ -1,6 +1,9 @@
 package phala
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+)
 
 // GetCVMComposeFile returns the compose file for a CVM.
 func (c *Client) GetCVMComposeFile(ctx context.Context, cvmID string) (*ComposeFile, error) {
@@ -25,21 +28,58 @@ func (c *Client) GetCVMPreLaunchScript(ctx context.Context, cvmID string) (strin
 	return result, err
 }
 
-// ProvisionComposeUpdateRequest is the request for provisioning a compose file update.
+// ProvisionComposeUpdateRequest is the body of POST /cvms/{id}/compose_file/provision.
+// It is the app compose returned by GetCVMComposeFile, plus UpdateEnvVars and
+// ConfirmDataWipe, serialized flat as the server reads it. Set compose fields
+// on ComposeFile; a composite literal of this type cannot name promoted
+// fields. Unknown compose keys stay in ComposeFile.Extra so a
+// read-modify-write does not drop them.
 type ProvisionComposeUpdateRequest struct {
-	Name              string   `json:"name"`
-	DockerComposeFile string   `json:"docker_compose_file"`
-	GatewayEnabled    *bool    `json:"gateway_enabled,omitempty"`
-	PreLaunchScript   *string  `json:"pre_launch_script,omitempty"`
-	AllowedEnvs       []string `json:"allowed_envs,omitzero"`
-	PublicLogs        *bool    `json:"public_logs,omitempty"`
-	PublicSysinfo     *bool    `json:"public_sysinfo,omitempty"`
-	PublicTcbinfo     *bool    `json:"public_tcbinfo,omitempty"`
-	SecureTime        *bool    `json:"secure_time,omitempty"`
-	UpdateEnvVars     *bool    `json:"update_env_vars,omitempty"`
+	ComposeFile
+	UpdateEnvVars *bool `json:"update_env_vars,omitempty"`
 	// ConfirmDataWipe confirms turning on docker_cleanup, runtime_tmpfs or
 	// requirements.ephemeral_data_disk, which erase data on every boot.
 	ConfirmDataWipe bool `json:"confirm_data_wipe,omitempty"`
+}
+
+func (r ProvisionComposeUpdateRequest) MarshalJSON() ([]byte, error) {
+	base, err := json.Marshal(r.ComposeFile)
+	if err != nil {
+		return nil, err
+	}
+	extra := map[string]json.RawMessage{}
+	if r.UpdateEnvVars != nil {
+		value, err := json.Marshal(r.UpdateEnvVars)
+		if err != nil {
+			return nil, err
+		}
+		extra["update_env_vars"] = value
+	}
+	if r.ConfirmDataWipe {
+		extra["confirm_data_wipe"] = []byte("true")
+	}
+	return mergeJSONObject(base, extra)
+}
+
+func (r *ProvisionComposeUpdateRequest) UnmarshalJSON(data []byte) error {
+	if err := json.Unmarshal(data, &r.ComposeFile); err != nil {
+		return err
+	}
+	var side struct {
+		UpdateEnvVars   *bool `json:"update_env_vars"`
+		ConfirmDataWipe bool  `json:"confirm_data_wipe"`
+	}
+	if err := json.Unmarshal(data, &side); err != nil {
+		return err
+	}
+	r.UpdateEnvVars = side.UpdateEnvVars
+	r.ConfirmDataWipe = side.ConfirmDataWipe
+	delete(r.Extra, "update_env_vars")
+	delete(r.Extra, "confirm_data_wipe")
+	if len(r.Extra) == 0 {
+		r.Extra = nil
+	}
+	return nil
 }
 
 // ProvisionCVMComposeFileUpdate provisions a compose file update.

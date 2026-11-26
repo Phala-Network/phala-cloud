@@ -224,6 +224,20 @@ resp, err := client.PatchCVM(ctx, "cvm-id", &phala.PatchCVMRequest{
 
 To gate CVMs with a launch token, set `LaunchToken` or `GenerateLaunchToken` on create (the commit response carries a newly issued token once). To rotate, call `SetAppLaunchToken`, then set each CVM's `Requirements.LaunchTokenHash` to the returned hash before it restarts; `ClearAppLaunchToken` removes the token after every CVM dropped the hash. Phala Cloud and the node operator can read the token, so it protects only against parties who know the public compose.
 
+A compose-file update takes the whole app compose at the top level. Read it with `GetCVMComposeFile`, change the fields you need, and send it back with `ConfirmDataWipe` when turning on `docker_cleanup`, `runtime_tmpfs` or `requirements.ephemeral_data_disk`. Unknown compose keys stay on `ComposeFile.Extra` so the round trip does not drop them.
+
+```go
+compose, err := client.GetCVMComposeFile(ctx, "cvm-id")
+if err != nil {
+	log.Fatal(err)
+}
+compose.Requirements = &phala.ComposeRequirements{EphemeralDataDisk: phala.Bool(true)}
+_, err = client.ProvisionCVMComposeFileUpdate(ctx, "cvm-id", &phala.ProvisionComposeUpdateRequest{
+	ComposeFile:     *compose,
+	ConfirmDataWipe: true,
+})
+```
+
 `GetComposeHashFromMapForOSImage(compose, "0.6.0")` hashes a compose the way Phala Cloud does for that OS image, including the OS-dependent `manifest_version` and `init_script` format.
 
 ### Watch CVM State (SSE)
@@ -433,6 +447,8 @@ PHALA_CLOUD_E2E_API_KEY=your-key go test -tags e2e -v -timeout 30m ./e2e/
 - `UpdateCVMVisibility` now calls `PATCH /cvms/{id}` and returns `*CVMUpdateResponse` (`Message`, `CorrelationID`, `Status`). The `CVMVisibility` type is removed. All three visibility fields are optional; a request with none of them set is rejected by the API with HTTP 400.
 - `UpdateResourcesRequest.AllowRestart` is deprecated and no longer sent; the API ignores it.
 - `ProvisionCVMRequest.InitScripts` is now `[]InitScriptSlug`. Replace `&ProvisionInitScripts{EnvMerge: true}` with `[]phala.InitScriptSlug{phala.InitScriptEnvMerge}`.
+- `ProvisionComposeUpdateRequest` embeds `ComposeFile` and adds `UpdateEnvVars` and `ConfirmDataWipe`. Set compose fields on `ComposeFile` (a composite literal of the request type cannot name promoted fields). Pass the `ComposeFile` from `GetCVMComposeFile` so unknown keys round-trip.
+- Remove these unread create fields from `ProvisionCVMRequest`: `KMSType` (use `KMS`), `Encrypted` (no replacement; send `EncryptedEnv`), `SecureTime` (`ComposeFile.SecureTime`), `SSHAuthorizedKeys` (`SSHKeyIDs`), `CustomAppID` (`AppID`), `StorageFS` (`ComposeFile.StorageFS`).
 - `GetComposeHash` and `GetComposeHashFromMap` now drop null `storage_discard`, `event_log_version`, `snapshotter` and `verity_volumes` and always emit `tproxy_enabled` (defaulting to `gateway_enabled`), as the API does. A compose without `tproxy_enabled` hashes differently than before.
 
 ## License

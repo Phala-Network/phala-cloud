@@ -3,6 +3,7 @@ package phala
 import (
 	"context"
 	"net/http"
+	"reflect"
 	"testing"
 )
 
@@ -57,6 +58,15 @@ func TestProvisionCVMSendsACallerLaunchTokenAndRunner(t *testing.T) {
 		"compose_file": {"name": "my-app", "docker_compose_file": "services: {}", "runner": "nerdctl-compose"},
 		"launch_token": "0123456789abcdef0123456789abcdef"
 	}`)
+}
+
+func TestProvisionCVMRequestOmitsFieldsTheCreateAPIDoesNotRead(t *testing.T) {
+	typ := reflect.TypeOf(ProvisionCVMRequest{})
+	for _, name := range []string{"KMSType", "Encrypted", "SecureTime", "SSHAuthorizedKeys", "CustomAppID", "StorageFS"} {
+		if _, ok := typ.FieldByName(name); ok {
+			t.Errorf("ProvisionCVMRequest still has %s, which POST /cvms does not read", name)
+		}
+	}
 }
 
 func TestCommitCVMProvisionReturnsTheIssuedLaunchToken(t *testing.T) {
