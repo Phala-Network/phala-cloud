@@ -61,7 +61,11 @@ describe("schema sync", () => {
   it("sends a null shutdown_timeout so the platform default can be restored", async () => {
     const client = { patch: vi.fn().mockResolvedValue({ correlation_id: "c" }) } as unknown as Client;
     await patchCvm(client, { id: "cvm-1", shutdown_timeout: null });
-    expect(client.patch).toHaveBeenCalledWith("/cvms/cvm-1", { shutdown_timeout: null });
+    expect(client.patch).toHaveBeenCalledWith(
+      "/cvms/cvm-1",
+      { shutdown_timeout: null },
+      expect.anything(),
+    );
   });
 
   it("accepts guest_agent_gateway_access on provision and patch", () => {
