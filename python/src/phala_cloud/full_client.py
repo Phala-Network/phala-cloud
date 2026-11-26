@@ -732,7 +732,8 @@ class _ExtMixin:
         if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/os-image", path):
             return type(None)
         if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/compose_file", path):
-            return type(None)
+            # 202 with the accepted update, or no body on the direct path.
+            return InProgressResponse | None
 
         if m == "GET" and re.fullmatch(r"/cvms/[^/]+/state", path):
             return self._v20260121_model(CvmInfoResponseV20260121, CvmInfoResponseV20260522)
