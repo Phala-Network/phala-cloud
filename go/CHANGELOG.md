@@ -1,3 +1,14 @@
+## [0.7.0-rc.2](https://github.com/Phala-Network/phala-cloud/compare/go/v0.7.0-rc.1...go/v0.7.0-rc.2) (2026-11-26)
+
+### ⚠ BREAKING CHANGE
+
+* **go:** CommitCVMComposeFileUpdate and UpdateOSImage return
+(*PatchCVMResponse, error) instead of error.
+
+### feat
+
+* **go:** return the accepted update from CommitCVMComposeFileUpdate and UpdateOSImage ([57b5f02](https://github.com/Phala-Network/phala-cloud/commit/57b5f026ea0cad38f8274e6c673526e802bd1227))
+* **go:** send transaction_hash when committing a compose file update ([09eb1d0](https://github.com/Phala-Network/phala-cloud/commit/09eb1d0bd79cf2575fdc690c4dd5f2829edbb82f))
 ## [0.7.0-rc.1](https://github.com/Phala-Network/phala-cloud/compare/go/v0.6.1-beta.2...go/v0.7.0-rc.1) (2026-11-26)
 
 ### ⚠ BREAKING CHANGE
