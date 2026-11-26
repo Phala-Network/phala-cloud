@@ -164,6 +164,8 @@ This changes the previous `encrypt_env_vars` behavior: code that awaited it must
 - `update_cvm_visibility` now calls `PATCH /cvms/{id}` instead of the deprecated `PATCH /cvms/{id}/visibility`. It returns `message`, `correlation_id` and `status` instead of the CVM record; call `get_cvm_info` if you need the record.
 - `update_cvm_resources` no longer sends `allow_restart`, which the API ignores. The field is deprecated.
 - `get_compose_hash` now drops null `storage_discard`, `event_log_version`, `snapshotter` and `verity_volumes` and always emits `tproxy_enabled` (defaulting to `gateway_enabled`), as the API does. A compose without `tproxy_enabled` hashes differently than before.
+- `create_app_instance` now returns `ReplicaVM` (top-level `teepod_id`, `vcpu`, `memory`, `disk_size`, `finality_wait`) instead of `CvmInfo`.
+- `get_app_list` now returns `dstack_apps` and `total_pages`. `get_app_info` is the full app record (`app_id`, `created_at`, `kms_type`, ...), not only `id` and `name`.
 
 ## Development
 

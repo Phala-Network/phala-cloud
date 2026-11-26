@@ -77,7 +77,9 @@ def test_patch_cvm_sends_instance_type_and_gpu_config_sync() -> None:
     assert (method, path) == ("PATCH", "/api/v1/cvms/cvm-1")
     assert body == {"instance_type": "h200.small", "gpus": _GPUS}
     assert "x-prepare-only" not in headers
-    assert result == {"requires_on_chain_hash": False, "correlation_id": "corr-1"}
+    assert result["requires_on_chain_hash"] is False
+    assert result["correlation_id"] == "corr-1"
+    assert result["status"] == "in_progress"
 
 
 @pytest.mark.asyncio

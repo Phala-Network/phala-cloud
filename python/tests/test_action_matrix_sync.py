@@ -374,7 +374,15 @@ def _mock_handler(request: httpx.Request) -> httpx.Response:
             }
         )
     if method == "GET" and path.startswith("/api/v1/apps/"):
-        return _json_response({"id": "a", "name": "app"})
+        return _json_response(
+            {
+                "id": "a",
+                "name": "app",
+                "app_id": "a",
+                "created_at": "2025-01-01T00:00:00Z",
+                "kms_type": "phala",
+            }
+        )
 
     if method == "POST" and path == "/api/v1/status/batch":
         return _json_response(

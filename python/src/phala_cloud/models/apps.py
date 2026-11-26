@@ -29,10 +29,10 @@ class DstackAppFullResponseV20260121(CloudModel):
 
 class DstackAppListResponseV20260121(CloudModel):
     dstack_apps: list[DstackAppFullResponseV20260121] = Field(default_factory=list)
-    page: int
-    page_size: int
-    total: int
-    total_pages: int
+    page: int = 1
+    page_size: int = 20
+    total: int = 0
+    total_pages: int = 0
 
 
 class DstackAppFullResponseV20260522(CloudModel):
@@ -51,10 +51,20 @@ class DstackAppFullResponseV20260522(CloudModel):
 
 class DstackAppListResponseV20260522(CloudModel):
     dstack_apps: list[DstackAppFullResponseV20260522] = Field(default_factory=list)
-    page: int
-    page_size: int
-    total: int
-    total_pages: int
+    page: int = 1
+    page_size: int = 20
+    total: int = 0
+    total_pages: int = 0
+
+
+class OidcProvenance(CloudModel):
+    repository: str
+    ref: str
+    sha: str
+    actor: str
+    workflow_ref: str
+    run_id: str | None = None
+    event_name: str | None = None
 
 
 class AppRevisionResponse(CloudModel):
@@ -68,6 +78,8 @@ class AppRevisionResponse(CloudModel):
     triggered_by: UserRef | None = None
     cvm: CvmRef | None = None
     workspace: WorkspaceRef | None = None
+    oidc_provenance: OidcProvenance | None = None
+    launch_ticket_status: str | None = None
 
 
 class AppRevisionDetailResponse(CloudModel):
@@ -84,6 +96,8 @@ class AppRevisionDetailResponse(CloudModel):
     triggered_by: UserRef | None = None
     cvm: CvmRef | None = None
     workspace: WorkspaceRef | None = None
+    oidc_provenance: OidcProvenance | None = None
+    launch_ticket_status: str | None = None
 
 
 class AppRevisionsResponse(CloudModel):
