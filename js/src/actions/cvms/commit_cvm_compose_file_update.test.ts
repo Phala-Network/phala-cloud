@@ -37,7 +37,7 @@ describe("commitCvmComposeFileUpdate", () => {
         compose_hash: mockCommitRequest.compose_hash,
         encrypted_env: mockCommitRequest.encrypted_env,
         env_keys: mockCommitRequest.env_keys,
-      });
+      }, { headers: {} });
       expect(result).toBeUndefined(); // void response
     });
 
@@ -57,7 +57,7 @@ describe("commitCvmComposeFileUpdate", () => {
         compose_hash: uuidRequest.compose_hash,
         encrypted_env: uuidRequest.encrypted_env,
         env_keys: uuidRequest.env_keys,
-      });
+      }, { headers: {} });
       expect(result).toBeUndefined();
     });
 
@@ -78,7 +78,7 @@ describe("commitCvmComposeFileUpdate", () => {
         compose_hash: request.compose_hash,
         encrypted_env: request.encrypted_env,
         env_keys: request.env_keys,
-      });
+      }, { headers: {} });
       expect(result).toBeUndefined();
     });
 
@@ -99,7 +99,7 @@ describe("commitCvmComposeFileUpdate", () => {
         compose_hash: instanceIdRequest.compose_hash,
         encrypted_env: instanceIdRequest.encrypted_env,
         env_keys: instanceIdRequest.env_keys,
-      });
+      }, { headers: {} });
       expect(result).toBeUndefined();
     });
   });
@@ -148,7 +148,7 @@ describe("commitCvmComposeFileUpdate", () => {
 
       expect(mockClient.patch).toHaveBeenCalledWith("/cvms/cvm-123/compose_file", {
         compose_hash: mockCommitRequest.compose_hash,
-      });
+      }, { headers: {} });
       expect(result).toBeUndefined();
     });
   });

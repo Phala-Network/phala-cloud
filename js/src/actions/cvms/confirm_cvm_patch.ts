@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  ConfirmFinalityReplacementSchema,
+  finalityReplacementHeaders,
+} from "../../types/cvm_finality";
 import { CvmIdObjectSchema, CvmIdSchema, refineCvmId } from "../../types/cvm_id";
 import { defineAction } from "../../utils/define-action";
 import {
@@ -47,6 +51,7 @@ export const ConfirmCvmPatchRequestSchema = refineCvmId(
   CvmIdObjectSchema.extend({
     composeHash: z.string().describe("Compose hash from patchCvm Phase 1 response"),
     transactionHash: z.string().describe("Transaction hash proving on-chain registration"),
+    confirmFinalityReplacement: ConfirmFinalityReplacementSchema,
   }),
 );
 
@@ -67,7 +72,10 @@ const { action: confirmCvmPatch, safeAction: safeConfirmCvmPatch } = defineActio
     `/cvms/${cvmId}`,
     {},
     {
-      headers: cvmUpdateCommitHeaders(parsed.composeHash, parsed.transactionHash),
+      headers: {
+        ...cvmUpdateCommitHeaders(parsed.composeHash, parsed.transactionHash),
+        ...finalityReplacementHeaders(parsed.confirmFinalityReplacement),
+      },
     },
   );
   return readCvmUpdateAcceptance(response);

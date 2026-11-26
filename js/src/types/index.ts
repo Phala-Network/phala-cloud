@@ -6,6 +6,7 @@ export * from "./cvm_info_v20251028";
 export * from "./cvm_info_v20260121";
 export * from "./cvm_id";
 export {
+  ConfirmFinalityReplacementSchema,
   CvmFinalityFailureSchema,
   CvmFinalityStageSchema,
   CvmFinalityWaitAcceptedSchema,
@@ -16,6 +17,9 @@ export {
   type CvmFinalityWait,
   type CvmFinalityWaitAccepted,
   type CvmFinalityWaitPhase,
+  type FinalityReplacementRequired,
+  finalityReplacementHeaders,
+  readFinalityReplacementRequired,
 } from "./cvm_finality";
 export * from "./common";
 export * from "./supported_chains";

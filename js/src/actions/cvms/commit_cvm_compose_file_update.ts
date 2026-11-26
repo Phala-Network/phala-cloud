@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { type Client } from "../../client";
-import { CvmFinalityWaitAcceptedSchema } from "../../types/cvm_finality";
+import {
+  ConfirmFinalityReplacementSchema,
+  CvmFinalityWaitAcceptedSchema,
+  finalityReplacementHeaders,
+} from "../../types/cvm_finality";
 import { defineAction } from "../../utils/define-action";
 
 /**
@@ -102,6 +106,7 @@ export const CommitCvmComposeFileUpdateRequestSchema = z
     encrypted_env: z.string().optional(),
     env_keys: z.array(z.string()).optional(),
     update_env_vars: z.boolean().optional().nullable(),
+    confirmFinalityReplacement: ConfirmFinalityReplacementSchema,
   })
   .refine(
     (data) => !!(data.id || data.uuid || data.app_id || data.instance_id),
@@ -114,6 +119,7 @@ export const CommitCvmComposeFileUpdateRequestSchema = z
     encrypted_env: data.encrypted_env,
     env_keys: data.env_keys,
     update_env_vars: data.update_env_vars ?? undefined,
+    confirmFinalityReplacement: data.confirmFinalityReplacement,
     _raw: data,
   }));
 
@@ -141,15 +147,19 @@ const { action: commitCvmComposeFileUpdate, safeAction: safeCommitCvmComposeFile
     async (client, request) => {
       const validatedRequest = CommitCvmComposeFileUpdateRequestSchema.parse(request);
 
-      return await client.patch(`/cvms/${validatedRequest.cvmId}/compose_file`, {
-        compose_hash: validatedRequest.compose_hash,
-        ...(validatedRequest.transaction_hash === undefined
-          ? {}
-          : { transaction_hash: validatedRequest.transaction_hash }),
-        encrypted_env: validatedRequest.encrypted_env,
-        env_keys: validatedRequest.env_keys,
-        update_env_vars: validatedRequest.update_env_vars,
-      });
+      return await client.patch(
+        `/cvms/${validatedRequest.cvmId}/compose_file`,
+        {
+          compose_hash: validatedRequest.compose_hash,
+          ...(validatedRequest.transaction_hash === undefined
+            ? {}
+            : { transaction_hash: validatedRequest.transaction_hash }),
+          encrypted_env: validatedRequest.encrypted_env,
+          env_keys: validatedRequest.env_keys,
+          update_env_vars: validatedRequest.update_env_vars,
+        },
+        { headers: finalityReplacementHeaders(validatedRequest.confirmFinalityReplacement) },
+      );
     },
   );
 

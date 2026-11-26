@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { CvmFinalityWaitAcceptedSchema } from "../../types/cvm_finality";
+import {
+  ConfirmFinalityReplacementSchema,
+  CvmFinalityWaitAcceptedSchema,
+  finalityReplacementHeaders,
+} from "../../types/cvm_finality";
 import { CvmIdObjectSchema, CvmIdSchema, refineCvmId } from "../../types/cvm_id";
 import { KmsInfoSchema } from "../../types/kms_info";
 import { defineAction } from "../../utils/define-action";
@@ -54,7 +58,7 @@ export const UpgradePreLaunchScriptRequestSchema = refineCvmId(
       .string()
       .optional()
       .describe("On-chain transaction hash for verification (Phase 2, contract-owned KMS only)"),
-    confirmFinalityReplacement: z.string().optional(),
+    confirmFinalityReplacement: ConfirmFinalityReplacementSchema,
   }),
 ).transform((data) => {
   const { cvmId } = CvmIdSchema.parse(data);
@@ -102,15 +106,14 @@ const { action: upgradePreLaunchScript, safeAction: safeUpgradePreLaunchScript }
 >(UpgradePreLaunchScriptResultSchema, async (client, request) => {
   const validated = UpgradePreLaunchScriptRequestSchema.parse(request);
 
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    ...finalityReplacementHeaders(validated.confirmFinalityReplacement),
+  };
   if (validated.request.compose_hash) {
     headers["X-Compose-Hash"] = validated.request.compose_hash;
   }
   if (validated.request.transaction_hash) {
     headers["X-Transaction-Hash"] = validated.request.transaction_hash;
-  }
-  if (validated.confirmFinalityReplacement !== undefined) {
-    headers["X-Confirm-Finality-Replacement"] = validated.confirmFinalityReplacement;
   }
 
   try {

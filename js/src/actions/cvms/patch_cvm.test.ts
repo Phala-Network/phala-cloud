@@ -95,7 +95,7 @@ describe("patchCvm", () => {
 
       expect(mockClient.patch).toHaveBeenCalledWith("/cvms/test-cvm-id", {
         pre_launch_script: "",
-      });
+      }, { headers: {} });
     });
 
     it("sends gpus in the backend GpuConfig shape and instance_type", async () => {
@@ -118,7 +118,7 @@ describe("patchCvm", () => {
           gpus: [{ slot: "0000:18:00.0", product_id: "10de:2335" }, { slot: "0000:2a:00.0" }],
           attach_mode: "listed",
         },
-      });
+      }, { headers: {} });
     });
 
     it("sends the compose merge patch, init_scripts and confirm_data_wipe", async () => {
@@ -151,7 +151,7 @@ describe("patchCvm", () => {
         },
         init_scripts: ["docker_cleanup"],
         confirm_data_wipe: true,
-      });
+      }, { headers: {} });
     });
 
     it("sends an init script name it does not know without rejecting it", async () => {
@@ -166,7 +166,7 @@ describe("patchCvm", () => {
 
       expect(mockClient.patch).toHaveBeenCalledWith("/cvms/test-cvm-id", {
         init_scripts: ["future_script", "docker_cleanup"],
-      });
+      }, { headers: {} });
     });
 
     it.each([{ restrict_mode: true }, { ports: [{ port: 443 }] }])(
@@ -180,7 +180,7 @@ describe("patchCvm", () => {
 
         expect(mockClient.patch).toHaveBeenCalledWith("/cvms/test-cvm-id", {
           compose: { port_policy },
-        });
+        }, { headers: {} });
       },
     );
 
@@ -223,6 +223,7 @@ describe("patchCvm", () => {
       expect(mockClient.patch).toHaveBeenCalledWith(
         "/cvms/test-cvm-id",
         expect.objectContaining({ docker_compose_file: "version: '3'" }),
+        { headers: {} },
       );
     });
 

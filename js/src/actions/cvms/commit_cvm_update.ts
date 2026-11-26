@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  ConfirmFinalityReplacementSchema,
+  finalityReplacementHeaders,
+} from "../../types/cvm_finality";
 import { CvmIdObjectSchema, CvmIdSchema, refineCvmId } from "../../types/cvm_id";
 import { defineAction } from "../../utils/define-action";
 import { CvmUpdateAcceptedFieldsSchema, readCvmUpdateAcceptance } from "./cvm_update_response";
@@ -44,6 +48,7 @@ export const CommitCvmUpdateRequestSchema = refineCvmId(
     token: z.string().describe("One-time commit token from prepare-only flow"),
     composeHash: z.string().describe("Compose hash from Phase 1 response"),
     transactionHash: z.string().describe("Transaction hash proving on-chain registration"),
+    confirmFinalityReplacement: ConfirmFinalityReplacementSchema,
   }),
 );
 
@@ -62,11 +67,15 @@ const { action: commitCvmUpdate, safeAction: safeCommitCvmUpdate } = defineActio
   const parsed = CommitCvmUpdateRequestSchema.parse(request);
   const { cvmId } = CvmIdSchema.parse(parsed);
 
-  const response = await client.post(`/cvms/${cvmId}/commit-update`, {
-    token: parsed.token,
-    compose_hash: parsed.composeHash,
-    transaction_hash: parsed.transactionHash,
-  });
+  const response = await client.post(
+    `/cvms/${cvmId}/commit-update`,
+    {
+      token: parsed.token,
+      compose_hash: parsed.composeHash,
+      transaction_hash: parsed.transactionHash,
+    },
+    { headers: finalityReplacementHeaders(parsed.confirmFinalityReplacement) },
+  );
   return readCvmUpdateAcceptance(response);
 });
 
