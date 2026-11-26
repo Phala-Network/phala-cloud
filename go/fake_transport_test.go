@@ -41,6 +41,7 @@ type fakeTransport struct {
 	script  []fakeReply
 	methods []string
 	paths   []string
+	queries []string
 }
 
 func (f *fakeTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -49,6 +50,7 @@ func (f *fakeTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	i := len(f.methods)
 	f.methods = append(f.methods, req.Method)
 	f.paths = append(f.paths, req.URL.Path)
+	f.queries = append(f.queries, req.URL.RawQuery)
 	if i >= len(f.script) {
 		i = len(f.script) - 1
 	}

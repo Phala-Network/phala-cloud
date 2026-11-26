@@ -143,6 +143,11 @@ func (c *Client) do(ctx context.Context, req *http.Request) (*http.Response, err
 
 // doJSON sends a JSON request and decodes the JSON response into result.
 func (c *Client) doJSON(ctx context.Context, method, path string, reqBody, result any) error {
+	return c.doJSONWithHeaders(ctx, method, path, nil, reqBody, result)
+}
+
+// doJSONWithHeaders is doJSON with extra request headers.
+func (c *Client) doJSONWithHeaders(ctx context.Context, method, path string, headers map[string]string, reqBody, result any) error {
 	var body io.Reader
 	if reqBody != nil {
 		b, err := json.Marshal(reqBody)
@@ -158,6 +163,9 @@ func (c *Client) doJSON(ctx context.Context, method, path string, reqBody, resul
 	}
 	if reqBody != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
 	}
 
 	resp, err := c.do(ctx, req)

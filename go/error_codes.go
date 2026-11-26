@@ -46,6 +46,11 @@ const (
 	ErrCvmAccessDenied      = "ERR-03-005"
 	ErrReplicaImageNotAvail = "ERR-03-006"
 	ErrCvmAppIdConflict     = "ERR-03-007"
+
+	// ErrFinalityReplacementRequired is a 412: the update would replace another
+	// update that is still waiting for finality. See
+	// APIError.FinalityReplacementRequired.
+	ErrFinalityReplacementRequired = "ERR-03-067"
 )
 
 // Module 04: Workspace

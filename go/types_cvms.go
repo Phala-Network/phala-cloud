@@ -710,6 +710,13 @@ type CommitCVMUpdateRequest struct {
 	Token           string `json:"token"`
 	ComposeHash     string `json:"compose_hash"`
 	TransactionHash string `json:"transaction_hash"`
+
+	// ConfirmFinalityReplacement sets X-Confirm-Finality-Replacement. Empty sends
+	// no header: a new update silently replaces a waiting one. Use
+	// ConfirmFinalityReplacementNone to get a 412 (see
+	// APIError.FinalityReplacementRequired) instead of replacing it, or the
+	// waiting update's correlation ID to confirm the replacement.
+	ConfirmFinalityReplacement string `json:"-"`
 }
 
 // CommitCVMUpdateResponse identifies the resulting update operation.
@@ -856,6 +863,13 @@ type PatchCVMRequest struct {
 	// hash-required response then carries a commit token for multisig
 	// approval (see CommitCVMUpdate).
 	PrepareOnly bool `json:"-"`
+
+	// ConfirmFinalityReplacement sets X-Confirm-Finality-Replacement. Empty sends
+	// no header: a new update silently replaces a waiting one. Use
+	// ConfirmFinalityReplacementNone to get a 412 (see
+	// APIError.FinalityReplacementRequired) instead of replacing it, or the
+	// waiting update's correlation ID to confirm the replacement.
+	ConfirmFinalityReplacement string `json:"-"`
 }
 
 // OnchainStatus reports whether the compose hash and device are already
@@ -922,6 +936,13 @@ type CVMFinalityFailure struct {
 type ConfirmCVMPatchRequest struct {
 	ComposeHash     string `json:"compose_hash"`
 	TransactionHash string `json:"transaction_hash"`
+
+	// ConfirmFinalityReplacement sets X-Confirm-Finality-Replacement. Empty sends
+	// no header: a new update silently replaces a waiting one. Use
+	// ConfirmFinalityReplacementNone to get a 412 (see
+	// APIError.FinalityReplacementRequired) instead of replacing it, or the
+	// waiting update's correlation ID to confirm the replacement.
+	ConfirmFinalityReplacement string `json:"-"`
 }
 
 // CVMAttestation represents CVM attestation data.

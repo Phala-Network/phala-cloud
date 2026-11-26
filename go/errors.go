@@ -128,6 +128,35 @@ func (e *APIError) ComposePrecondition() (*ComposeHashPreconditionResponse, bool
 	}, true
 }
 
+// IsFinalityReplacementRequired returns true if the error is a 412 ERR-03-067:
+// the update would replace another update that is still waiting for finality.
+func (e *APIError) IsFinalityReplacementRequired() bool {
+	return e.StatusCode == http.StatusPreconditionFailed && e.ErrorCode == ErrFinalityReplacementRequired
+}
+
+// FinalityReplacementRequired extracts the waiting update from a 412 ERR-03-067
+// error. It returns false when the error is another error or carries no
+// correlation ID.
+func (e *APIError) FinalityReplacementRequired() (*FinalityReplacementRequired, bool) {
+	if !e.IsFinalityReplacementRequired() {
+		return nil, false
+	}
+	var out FinalityReplacementRequired
+	for _, d := range e.Details {
+		v, _ := d.Value.(string)
+		switch d.Field {
+		case "correlation_id":
+			out.CorrelationID = v
+		case "stage":
+			out.Stage = v
+		}
+	}
+	if out.CorrelationID == "" {
+		return nil, false
+	}
+	return &out, true
+}
+
 // maxRetryAfter bounds the wait taken from a Retry-After header. The API's
 // rate limiter sends 60 seconds, so the bound leaves ample headroom while
 // keeping a malformed or hostile header from stalling a caller for hours.
