@@ -42,6 +42,10 @@ export const ReplicateCvmRequestSchema = placementRequest(
     CvmIdObjectSchema.extend({
       node: z.string().min(1).optional(),
       os_image: z.string().min(1).optional(),
+      encrypted_env: z.string().optional(),
+      compose_hash: z.string().optional(),
+      kms_urls: z.array(z.string()).optional(),
+      gateway_urls: z.array(z.string()).optional(),
     }),
   ),
 );
@@ -58,10 +62,14 @@ export async function replicateCvm<V extends ApiVersion>(
 ): Promise<VMForVersion<V>> {
   const parsed = ReplicateCvmRequestSchema.parse(request);
   const { cvmId } = CvmIdSchema.parse(parsed);
-  const { node, os_image } = parsed;
+  const { node, os_image, encrypted_env, compose_hash, kms_urls, gateway_urls } = parsed;
   const response = await client.post(`/cvms/${cvmId}/replicas`, {
-    node,
+    ...(node !== undefined ? { node } : {}),
     os_image,
+    ...(encrypted_env !== undefined ? { encrypted_env } : {}),
+    ...(compose_hash !== undefined ? { compose_hash } : {}),
+    ...(kms_urls !== undefined ? { kms_urls } : {}),
+    ...(gateway_urls !== undefined ? { gateway_urls } : {}),
   });
   return getVMSchemaForVersion(client.config.version).parse(response) as VMForVersion<V>;
 }

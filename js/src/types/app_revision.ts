@@ -1,6 +1,17 @@
 import { z } from "zod";
 import { UserRefSchema, WorkspaceRefSchema } from "./cvm_info_v20260121";
 
+export const OidcProvenanceSchema = z.object({
+  repository: z.string(),
+  ref: z.string(),
+  sha: z.string(),
+  actor: z.string(),
+  workflow_ref: z.string(),
+  run_id: z.string().nullable().optional(),
+  event_name: z.string().nullable().optional(),
+});
+export type OidcProvenance = z.infer<typeof OidcProvenanceSchema>;
+
 export const CvmRefSchema = z.object({
   object_type: z.literal("cvm"),
   id: z.string().nullable().optional(),
@@ -21,6 +32,8 @@ export const AppRevisionResponseSchema = z.object({
   triggered_by: UserRefSchema.nullable().optional(),
   cvm: CvmRefSchema.nullable().optional(),
   workspace: WorkspaceRefSchema.nullable().optional(),
+  oidc_provenance: OidcProvenanceSchema.nullable().optional(),
+  launch_ticket_status: z.string().nullable().optional(),
 });
 export type AppRevisionResponse = z.infer<typeof AppRevisionResponseSchema>;
 
@@ -41,6 +54,8 @@ export const AppRevisionDetailResponseSchema = z.object({
   triggered_by: UserRefSchema.nullable().optional(),
   cvm: CvmRefSchema.nullable().optional(),
   workspace: WorkspaceRefSchema.nullable().optional(),
+  oidc_provenance: OidcProvenanceSchema.nullable().optional(),
+  launch_ticket_status: z.string().nullable().optional(),
 });
 export type AppRevisionDetailResponse = z.infer<typeof AppRevisionDetailResponseSchema>;
 

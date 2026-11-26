@@ -19,6 +19,13 @@ export const GetCvmListRequestSchema = z
     page_size: z.number().int().min(1).optional(),
     family: z.enum(["all", "cpu", "gpu"]).optional(),
     instance_types: z.array(z.string()).optional(),
+    search: z.string().optional(),
+    status: z.array(z.string()).optional(),
+    base_image: z.string().optional(),
+    kms_slug: z.string().optional(),
+    kms_type: z.string().optional(),
+    node: z.string().optional(),
+    region: z.string().optional(),
   })
   .strict();
 

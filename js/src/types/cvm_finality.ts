@@ -56,3 +56,12 @@ export const CvmFinalityWaitAcceptedSchema = z.object({
   finality_wait: OptionalCvmFinalityWaitSchema,
 });
 export type CvmFinalityWaitAccepted = z.infer<typeof CvmFinalityWaitAcceptedSchema>;
+
+export const CvmFinalityFailureSchema = z.object({
+  operation: openEnum(["create", "update"]),
+  correlation_id: z.string(),
+  failure_reason: z.string(),
+  failed_at: z.string(),
+});
+export type CvmFinalityFailure = z.infer<typeof CvmFinalityFailureSchema>;
+export const OptionalCvmFinalityFailureSchema = CvmFinalityFailureSchema.nullish().catch(undefined);

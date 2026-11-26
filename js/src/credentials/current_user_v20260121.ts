@@ -4,8 +4,23 @@ import { z } from "zod";
  * Current user schema for API version 2026-01-21 (three-layer structure)
  */
 
+export const FeatureFlagSchema = z
+  .object({
+    name: z.string(),
+    enabled: z.boolean().default(true),
+    options: z.array(z.string()).nullable().optional(),
+    reason: z.string().nullable().optional(),
+    action_text: z.string().nullable().optional(),
+    action_url: z.string().nullable().optional(),
+    metadata: z.record(z.string(), z.unknown()).nullable().optional(),
+  })
+  .passthrough();
+
+export type FeatureFlag = z.infer<typeof FeatureFlagSchema>;
+
 export const UserInfoSchema = z
   .object({
+    id: z.string().optional(),
     username: z.string(),
     email: z.string(),
     role: z.enum(["admin", "user"]),
@@ -55,6 +70,7 @@ export const CurrentUserV20260121Schema = z
     user: UserInfoSchema,
     workspace: WorkspaceInfoSchema,
     credits: CreditsInfoSchema,
+    features: z.array(FeatureFlagSchema).optional(),
   })
   .passthrough();
 

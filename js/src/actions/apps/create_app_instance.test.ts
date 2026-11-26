@@ -8,6 +8,7 @@ describe("createAppInstance", () => {
   beforeEach(() => {
     mockClient = {
       post: vi.fn(),
+      config: { version: "2026-11-11" },
     } as unknown as Client;
   });
 

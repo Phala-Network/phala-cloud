@@ -6,10 +6,12 @@ export * from "./cvm_info_v20251028";
 export * from "./cvm_info_v20260121";
 export * from "./cvm_id";
 export {
+  CvmFinalityFailureSchema,
   CvmFinalityStageSchema,
   CvmFinalityWaitAcceptedSchema,
   CvmFinalityWaitPhaseSchema,
   CvmFinalityWaitSchema,
+  type CvmFinalityFailure,
   type CvmFinalityStage,
   type CvmFinalityWait,
   type CvmFinalityWaitAccepted,
