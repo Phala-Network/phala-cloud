@@ -122,7 +122,7 @@ export const LooseAppComposeSchema = z
     secure_time: z.boolean().optional(),
     port_policy: PortPolicySchema.optional(),
     storage_fs: z.enum(["ext4", "zfs"]).optional(),
-    swap_size: z.string().optional(),
+    swap_size: z.string().nullable().optional(),
     pre_launch_script: z.string().optional(),
     env_pubkey: z.string().optional(),
     salt: z.string().optional().nullable(),

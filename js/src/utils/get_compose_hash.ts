@@ -61,7 +61,7 @@ export interface AppCompose extends SortableObject {
   no_instance_id?: boolean;
   secure_time?: boolean;
   storage_fs?: string;
-  swap_size?: string;
+  swap_size?: string | null;
   bash_script?: string | null;
   pre_launch_script?: string | null;
   init_script?: string | string[];

@@ -150,6 +150,22 @@ describe("LooseAppComposeSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("accepts the compose from the CVM detail, which sends unset fields as null", () => {
+    const compose = {
+      docker_compose_file: "services: {}",
+      bash_script: null,
+      default_gateway_domain: null,
+      event_log_version: null,
+      requirements: null,
+      salt: null,
+      snapshotter: null,
+      storage_discard: null,
+      swap_size: null,
+      verity_volumes: null,
+    };
+    expect(LooseAppComposeSchema.parse(compose)).toEqual(compose);
+  });
+
   it("keeps the dstack 0.6 fields and the exact requirements key set", () => {
     const compose = {
       docker_compose_file: "services: {}",
