@@ -396,3 +396,60 @@ func TestPatchCVMSendsAnEmptyInitScriptSet(t *testing.T) {
 	}
 	assertBody(t, (*seen)[0].body, `{"init_scripts": [], "compose": {"requirements": null}}`)
 }
+
+const commitFinalityBody = `{"status":"in_progress","message":"accepted","correlation_id":"corr-7","finality_wait":{"operation":"update","correlation_id":"corr-7","phase":"awaiting_finality","stage":"submitted","transaction":null,"finality":{"block_tag":"latest","policy_block_number":9,"blocks_remaining":1,"eta_seconds":5}}}`
+
+func TestCommitCVMComposeFileUpdateReturnsAcceptedUpdate(t *testing.T) {
+	client, _ := recordingServer(t, http.StatusAccepted, commitFinalityBody)
+	got, err := client.CommitCVMComposeFileUpdate(context.Background(), "cvm-1", &CommitComposeUpdateRequest{ComposeHash: "h"})
+	if err != nil {
+		t.Fatalf("CommitCVMComposeFileUpdate: %v", err)
+	}
+	if got == nil || got.CorrelationID != "corr-7" || got.Status != "in_progress" {
+		t.Fatalf("response = %+v", got)
+	}
+	if got.FinalityWait == nil || got.FinalityCorrelationID() != "corr-7" {
+		t.Fatalf("finality_wait = %+v", got.FinalityWait)
+	}
+}
+
+func TestCommitCVMComposeFileUpdateEmptyBody(t *testing.T) {
+	client, _ := recordingServer(t, http.StatusAccepted, "")
+	got, err := client.CommitCVMComposeFileUpdate(context.Background(), "cvm-1", &CommitComposeUpdateRequest{ComposeHash: "h"})
+	if err != nil {
+		t.Fatalf("CommitCVMComposeFileUpdate: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("response = %+v, want nil", got)
+	}
+}
+
+func TestCommitCVMComposeFileUpdateTransactionHash(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusAccepted, commitFinalityBody)
+	if _, err := client.CommitCVMComposeFileUpdate(context.Background(), "cvm-1", &CommitComposeUpdateRequest{ComposeHash: "h", TransactionHash: "0xabc"}); err != nil {
+		t.Fatal(err)
+	}
+	assertBody(t, (*seen)[0].body, `{"compose_hash":"h","transaction_hash":"0xabc"}`)
+
+	client, seen = recordingServer(t, http.StatusAccepted, commitFinalityBody)
+	if _, err := client.CommitCVMComposeFileUpdate(context.Background(), "cvm-1", &CommitComposeUpdateRequest{ComposeHash: "h"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := (*seen)[0].body["transaction_hash"]; ok {
+		t.Fatalf("transaction_hash present in %s", (*seen)[0].rawBody)
+	}
+}
+
+func TestUpdateOSImageReturnsAcceptedUpdate(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusAccepted, `{"message":"accepted","correlation_id":"corr-8","status":"in_progress"}`)
+	got, err := client.UpdateOSImage(context.Background(), "cvm-1", &UpdateOSImageRequest{OSImageName: "img"})
+	if err != nil {
+		t.Fatalf("UpdateOSImage: %v", err)
+	}
+	if got == nil || got.CorrelationID != "corr-8" || got.Status != "in_progress" || got.Message != "accepted" {
+		t.Fatalf("response = %+v", got)
+	}
+	if (*seen)[0].path != "/cvms/cvm-1/os-image" {
+		t.Fatalf("path = %s", (*seen)[0].path)
+	}
+}

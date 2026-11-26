@@ -104,6 +104,12 @@ type CommitComposeUpdateRequest struct {
 	EnvKeys       []string `json:"env_keys,omitzero"`
 	UpdateEnvVars *bool    `json:"update_env_vars,omitempty"`
 
+	// TransactionHash is the hash of the on-chain transaction that registered
+	// ComposeHash, or the literal "already-registered" when the hash was
+	// registered earlier. Leave it empty when the CVM's KMS needs no on-chain
+	// registration.
+	TransactionHash string `json:"transaction_hash,omitempty"`
+
 	// ConfirmFinalityReplacement sets X-Confirm-Finality-Replacement. Empty sends
 	// no header: a new update silently replaces a waiting one. Use
 	// ConfirmFinalityReplacementNone to get a 412 (see
