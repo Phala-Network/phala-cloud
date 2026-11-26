@@ -1,3 +1,10 @@
+## [0.6.7-beta.3](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.7-beta.2...js-v0.6.7-beta.3) (2026-11-26)
+
+### feat
+
+- **js:** accept confirmFinalityReplacement in confirmCvmPatch ([5d48b95](https://github.com/Phala-Network/phala-cloud/commit/5d48b95697da310a12b467d05aa868483efdce31))
+- **js:** align CVM and app request fields with the API ([a204508](https://github.com/Phala-Network/phala-cloud/commit/a20450844c761284c8b0f636d43a63cb886a63c3))
+- **js:** confirm before replacing a pending on-chain update ([160ea24](https://github.com/Phala-Network/phala-cloud/commit/160ea245f4c6380c343812386ba0c8c086d8e9a8))
 ## [0.6.7-beta.2](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.7-beta.1...js-v0.6.7-beta.2) (2026-11-25)
 
 ### docs
