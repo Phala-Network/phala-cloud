@@ -3,7 +3,16 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, computed_field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictInt,
+    ValidationError,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 from .base import AliasModel, CloudModel, NodeSelectionRequest
 from .kms import KmsInfo
@@ -459,6 +468,40 @@ class CvmFinalityFailure(CloudModel):
     correlation_id: str
     failure_reason: str
     failed_at: str
+
+
+class CvmOperation(CloudModel):
+    """One operation of a CVM, as listed by GET /cvms/{id}/operations."""
+
+    correlation_id: str
+    operation_type: str
+    # Open string: known values are in_progress, completed, failed and cancelled.
+    status: str
+    finality_wait: CvmFinalityWaitStatus | None = None
+    failure_reason: str | None = None
+    error_message: str | None = None
+
+    @field_validator("finality_wait", mode="wrap")
+    @classmethod
+    def _ignore_invalid_finality_wait(cls, value: Any, handler: Any) -> Any:
+        # Progress data is optional: a malformed value must not hide the operation status.
+        try:
+            return handler(value)
+        except ValidationError:
+            return None
+
+    @model_validator(mode="after")
+    def _drop_foreign_finality_wait(self) -> CvmOperation:
+        wait = self.finality_wait
+        if wait is not None and wait.correlation_id != self.correlation_id:
+            self.finality_wait = None
+        return self
+
+
+class CvmOperationsPage(CloudModel):
+    items: list[CvmOperation]
+    next_cursor: str | None = None
+    total: int | None = None
 
 
 class ReplicaVM(CloudModel):

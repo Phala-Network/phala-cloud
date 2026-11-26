@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import re
 import ssl
 import time
 from collections.abc import AsyncGenerator, AsyncIterator, Iterator, Mapping
 from contextlib import asynccontextmanager, contextmanager
 from typing import Any, Literal, TypedDict, cast
+from urllib.parse import quote
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
@@ -56,6 +58,17 @@ from .action_responses import (
 from .client import AsyncPhalaCloud as _AsyncBase
 from .client import PhalaCloud as _SyncBase
 from .errors import ApiError, RequestError
+from .finality_wait import (
+    DEFAULT_FINALITY_POLL_INTERVAL,
+    DEFAULT_FINALITY_TIMEOUT,
+    check_wait_arguments,
+    find_operation,
+    is_transient,
+    plain,
+    retry_after_seconds,
+    terminal_error,
+    timeout_error,
+)
 from .logs import (
     CVM_LOGS_INFO_API_VERSION,
     CvmLogEntry,
@@ -89,6 +102,8 @@ from .models.cvms import (
     CvmInfoDetailV20261111,
     CvmInfoV20260121,
     CvmInfoV20260522,
+    CvmOperation,
+    CvmOperationsPage,
     CvmStatus,
     InitScriptSlug,
     IsAllowedResultV20260121,
@@ -122,6 +137,10 @@ def _logs_api_headers(path: str) -> dict[str, str] | None:
     return {"X-Phala-Version": CVM_LOGS_INFO_API_VERSION}
 
 
+def _cvm_operations_path(cvm_id: str) -> str:
+    return f"/cvms/{quote(cvm_id, safe='')}/operations"
+
+
 class _WatchTransportError(RequestError):
     """A retryable transport failure while reading a watch stream."""
 
@@ -153,6 +172,24 @@ class _Hash465Details(TypedDict):
 
 class _AliasModel(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
+
+
+_CONFIRM_FINALITY_HEADER = "X-Confirm-Finality-Replacement"
+
+
+def _confirm_finality_headers(value: str | None) -> dict[str, str]:
+    """Header that confirms replacing an update still waiting for chain finality.
+
+    None sends nothing. "none" asks the server to refuse a replacement. Any other
+    value is the correlation ID of the waiting update, which confirms it.
+    """
+    return {} if value is None else {_CONFIRM_FINALITY_HEADER: value}
+
+
+class ConfirmFinalityReplacementMixin(BaseModel):
+    """Optional X-Confirm-Finality-Replacement header, kept out of the request body."""
+
+    confirm_finality_replacement: str | None = Field(default=None, exclude=True)
 
 
 class CvmIdRequest(BaseModel):
@@ -324,7 +361,7 @@ class RestartCvmRequest(CvmIdRequest):
     force: bool = False
 
 
-class UpgradePreLaunchScriptRequest(CvmIdRequest):
+class UpgradePreLaunchScriptRequest(ConfirmFinalityReplacementMixin, CvmIdRequest):
     """Phase 2 fields are only needed for contract-owned KMS (ETHEREUM/BASE).
 
     The first call returns precondition_required with a compose hash to
@@ -342,6 +379,7 @@ def _upgrade_pre_launch_script_headers(req: UpgradePreLaunchScriptRequest) -> di
         headers["X-Compose-Hash"] = req.compose_hash
     if req.transaction_hash:
         headers["X-Transaction-Hash"] = req.transaction_hash
+    headers.update(_confirm_finality_headers(req.confirm_finality_replacement))
     return headers
 
 
@@ -353,7 +391,7 @@ class ReplicateCvmRequest(NodeSelectionRequest, CvmIdRequest):
     gateway_urls: list[str] | None = None
 
 
-class UpdateResourcesRequest(CvmIdRequest):
+class UpdateResourcesRequest(ConfirmFinalityReplacementMixin, CvmIdRequest):
     vcpu: float | None = None
     memory: float | None = None
     disk_size: float | None = None
@@ -365,7 +403,7 @@ class UpdateResourcesRequest(CvmIdRequest):
     )
 
 
-class UpdateVisibilityRequest(CvmIdRequest):
+class UpdateVisibilityRequest(ConfirmFinalityReplacementMixin, CvmIdRequest):
     public_sysinfo: bool
     public_logs: bool
     public_tcbinfo: bool | None = None
@@ -424,7 +462,29 @@ class CvmSshKeysResponse(BaseModel):
     restart_required: bool
 
 
-class CommitCvmUpdateRequest(CvmIdRequest):
+class GetCvmOperationsRequest(CvmIdRequest):
+    cursor: str | None = None
+    limit: int | None = Field(default=None, ge=1, le=500)
+    start_time: str | None = None
+    end_time: str | None = None
+    operation_types: list[str] | None = None
+    correlation_id: str | None = None
+
+    def query(self) -> dict[str, Any]:
+        return self.model_dump(
+            include={
+                "cursor",
+                "limit",
+                "start_time",
+                "end_time",
+                "operation_types",
+                "correlation_id",
+            },
+            exclude_none=True,
+        )
+
+
+class CommitCvmUpdateRequest(ConfirmFinalityReplacementMixin, CvmIdRequest):
     token: str
     compose_hash: str | None = None
     transaction_hash: str | None = None
@@ -461,7 +521,7 @@ class GpuConfig(BaseModel):
     attach_mode: str | None = None
 
 
-class PatchCvmRequest(CvmIdRequest):
+class PatchCvmRequest(ConfirmFinalityReplacementMixin, CvmIdRequest):
     model_config = ConfigDict(populate_by_name=True)
 
     docker_compose_file: str | None = None
@@ -504,10 +564,13 @@ class PatchCvmRequest(CvmIdRequest):
         return body
 
     def headers(self) -> dict[str, str] | None:
-        return {"X-Prepare-Only": "true"} if self.prepare_only else None
+        headers = _confirm_finality_headers(self.confirm_finality_replacement)
+        if self.prepare_only:
+            headers["X-Prepare-Only"] = "true"
+        return headers or None
 
 
-class ConfirmCvmPatchRequest(CvmIdRequest):
+class ConfirmCvmPatchRequest(ConfirmFinalityReplacementMixin, CvmIdRequest):
     compose_hash: str = Field(alias="composeHash")
     transaction_hash: str = Field(alias="transactionHash")
 
@@ -1016,7 +1079,12 @@ class PhalaCloud(_SyncBase, _ExtMixin):
             "update_env_vars": req.get("update_env_vars"),
         }
         return self._loose_validate(
-            self.request("PATCH", f"/cvms/{cvm_id}/compose_file", json=body)
+            self.request(
+                "PATCH",
+                f"/cvms/{cvm_id}/compose_file",
+                json=body,
+                headers=_confirm_finality_headers(req.get("confirm_finality_replacement")),
+            )
         )
 
     def safe_commit_cvm_compose_file_update(self, request: Mapping[str, Any]) -> SafeResult[Any]:
@@ -1032,7 +1100,14 @@ class PhalaCloud(_SyncBase, _ExtMixin):
             "transaction_hash": req.get("transaction_hash"),
         }
         try:
-            return self._loose_validate(self.request("PATCH", f"/cvms/{cvm_id}/envs", json=body))
+            return self._loose_validate(
+                self.request(
+                    "PATCH",
+                    f"/cvms/{cvm_id}/envs",
+                    json=body,
+                    headers=_confirm_finality_headers(req.get("confirm_finality_replacement")),
+                )
+            )
         except Exception as exc:
             fields = self._extract_465_fields(exc)
             if fields is not None:
@@ -1050,6 +1125,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
             headers["X-Compose-Hash"] = str(req["compose_hash"])
         if req.get("transaction_hash"):
             headers["X-Transaction-Hash"] = str(req["transaction_hash"])
+        headers.update(_confirm_finality_headers(req.get("confirm_finality_replacement")))
         try:
             return self._loose_validate(
                 self.request(
@@ -1076,6 +1152,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
             headers["X-Compose-Hash"] = str(req["compose_hash"])
         if req.get("transaction_hash"):
             headers["X-Transaction-Hash"] = str(req["transaction_hash"])
+        headers.update(_confirm_finality_headers(req.get("confirm_finality_replacement")))
         try:
             return self._loose_validate(
                 self.request(
@@ -1228,7 +1305,12 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         body.pop("instance_id", None)
         body.pop("cvm_id", None)
         body.pop("cvmId", None)
-        return self.request("PATCH", f"/cvms/{req.resolved}", json=body)
+        return self.request(
+            "PATCH",
+            f"/cvms/{req.resolved}",
+            json=body,
+            headers=_confirm_finality_headers(req.confirm_finality_replacement),
+        )
 
     def safe_update_cvm_resources(
         self, request: UpdateResourcesRequest | Mapping[str, Any]
@@ -1240,7 +1322,14 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         body = req.model_dump(
             include={"public_sysinfo", "public_logs", "public_tcbinfo"}, exclude_none=True
         )
-        return self._loose_validate(self.request("PATCH", f"/cvms/{req.resolved}", json=body))
+        return self._loose_validate(
+            self.request(
+                "PATCH",
+                f"/cvms/{req.resolved}",
+                json=body,
+                headers=_confirm_finality_headers(req.confirm_finality_replacement),
+            )
+        )
 
     def safe_update_cvm_visibility(
         self, request: UpdateVisibilityRequest | Mapping[str, Any]
@@ -1302,6 +1391,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
                 headers={
                     "X-Compose-Hash": req.compose_hash,
                     "X-Transaction-Hash": req.transaction_hash,
+                    **_confirm_finality_headers(req.confirm_finality_replacement),
                 },
             )
         )
@@ -1455,7 +1545,12 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         body = req.model_dump(
             include={"token", "compose_hash", "transaction_hash"}, exclude_none=True
         )
-        response = self.post(f"/cvms/{req.resolved}/commit-update", json=body)
+        response = self.request(
+            "POST",
+            f"/cvms/{req.resolved}/commit-update",
+            json=body,
+            headers=_confirm_finality_headers(req.confirm_finality_replacement),
+        )
         return CommitCvmUpdateResult.model_validate(
             response.model_dump() if isinstance(response, BaseModel) else response
         )
@@ -1476,6 +1571,69 @@ class PhalaCloud(_SyncBase, _ExtMixin):
         self, request: CvmIdRequest | Mapping[str, Any]
     ) -> SafeResult[CvmSshKeysResponse]:
         return self.safe(self.get_cvm_ssh_keys, request)
+
+    def get_cvm_operations(
+        self, request: GetCvmOperationsRequest | Mapping[str, Any]
+    ) -> CvmOperationsPage:
+        req = GetCvmOperationsRequest.model_validate(request)
+        data = self.get(_cvm_operations_path(req.resolved), params=req.query())
+        return self._validate(CvmOperationsPage, plain(data))
+
+    def safe_get_cvm_operations(
+        self, request: GetCvmOperationsRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmOperationsPage]:
+        return self.safe(self.get_cvm_operations, request)
+
+    def wait_for_cvm_finality(
+        self,
+        cvm_id: str,
+        correlation_id: str,
+        *,
+        timeout: float = DEFAULT_FINALITY_TIMEOUT,
+        poll_interval: float = DEFAULT_FINALITY_POLL_INTERVAL,
+    ) -> CvmOperation:
+        """Wait until the operation completes; see the README for the errors it raises."""
+        check_wait_arguments(correlation_id, timeout, poll_interval)
+        deadline = time.monotonic() + timeout
+        path = _cvm_operations_path(cvm_id)
+        last_transient: Exception | None = None
+        while True:
+            if time.monotonic() >= deadline:
+                raise timeout_error(correlation_id, timeout, last_transient)
+            retry_after = 0.0
+            operation: CvmOperation | None = None
+            try:
+                data = self.get(path, params={"correlation_id": correlation_id})
+                operation = find_operation(data, correlation_id)
+            except (ApiError, RequestError) as exc:
+                if not is_transient(exc):
+                    raise
+                last_transient = exc
+                retry_after = retry_after_seconds(exc)
+            if operation is not None:
+                error = terminal_error(operation)
+                if error is not None:
+                    raise error
+                if operation.status == "completed":
+                    return operation
+            delay = max(poll_interval, retry_after)
+            self._sleep(max(0.0, min(delay, deadline - time.monotonic())))
+
+    def safe_wait_for_cvm_finality(
+        self,
+        cvm_id: str,
+        correlation_id: str,
+        *,
+        timeout: float = DEFAULT_FINALITY_TIMEOUT,
+        poll_interval: float = DEFAULT_FINALITY_POLL_INTERVAL,
+    ) -> SafeResult[CvmOperation]:
+        return self.safe(
+            self.wait_for_cvm_finality,
+            cvm_id,
+            correlation_id,
+            timeout=timeout,
+            poll_interval=poll_interval,
+        )
 
     def update_cvm_ssh_keys(
         self, request: UpdateCvmSshKeysRequest | Mapping[str, Any]
@@ -2081,7 +2239,12 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
             "update_env_vars": req.get("update_env_vars"),
         }
         return self._loose_validate(
-            await self.request("PATCH", f"/cvms/{cvm_id}/compose_file", json=body)
+            await self.request(
+                "PATCH",
+                f"/cvms/{cvm_id}/compose_file",
+                json=body,
+                headers=_confirm_finality_headers(req.get("confirm_finality_replacement")),
+            )
         )
 
     async def safe_commit_cvm_compose_file_update(
@@ -2100,7 +2263,12 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         }
         try:
             return self._loose_validate(
-                await self.request("PATCH", f"/cvms/{cvm_id}/envs", json=body)
+                await self.request(
+                    "PATCH",
+                    f"/cvms/{cvm_id}/envs",
+                    json=body,
+                    headers=_confirm_finality_headers(req.get("confirm_finality_replacement")),
+                )
             )
         except Exception as exc:
             fields = self._extract_465_fields(exc)
@@ -2119,6 +2287,7 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
             headers["X-Compose-Hash"] = str(req["compose_hash"])
         if req.get("transaction_hash"):
             headers["X-Transaction-Hash"] = str(req["transaction_hash"])
+        headers.update(_confirm_finality_headers(req.get("confirm_finality_replacement")))
         try:
             return self._loose_validate(
                 await self.request(
@@ -2145,6 +2314,7 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
             headers["X-Compose-Hash"] = str(req["compose_hash"])
         if req.get("transaction_hash"):
             headers["X-Transaction-Hash"] = str(req["transaction_hash"])
+        headers.update(_confirm_finality_headers(req.get("confirm_finality_replacement")))
         try:
             return self._loose_validate(
                 await self.request(
@@ -2303,7 +2473,12 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         body = req.model_dump(exclude_none=True)
         for k in ["id", "uuid", "app_id", "instance_id", "cvm_id", "cvmId"]:
             body.pop(k, None)
-        return await self.request("PATCH", f"/cvms/{req.resolved}", json=body)
+        return await self.request(
+            "PATCH",
+            f"/cvms/{req.resolved}",
+            json=body,
+            headers=_confirm_finality_headers(req.confirm_finality_replacement),
+        )
 
     async def safe_update_cvm_resources(
         self, request: UpdateResourcesRequest | Mapping[str, Any]
@@ -2317,7 +2492,14 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         body = req.model_dump(
             include={"public_sysinfo", "public_logs", "public_tcbinfo"}, exclude_none=True
         )
-        return self._loose_validate(await self.request("PATCH", f"/cvms/{req.resolved}", json=body))
+        return self._loose_validate(
+            await self.request(
+                "PATCH",
+                f"/cvms/{req.resolved}",
+                json=body,
+                headers=_confirm_finality_headers(req.confirm_finality_replacement),
+            )
+        )
 
     async def safe_update_cvm_visibility(
         self, request: UpdateVisibilityRequest | Mapping[str, Any]
@@ -2381,6 +2563,7 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
                 headers={
                     "X-Compose-Hash": req.compose_hash,
                     "X-Transaction-Hash": req.transaction_hash,
+                    **_confirm_finality_headers(req.confirm_finality_replacement),
                 },
             )
         )
@@ -2488,8 +2671,6 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         raise RequestError(f"{message}: {details}" if details else message) from last_transport
 
     async def _sleep(self, seconds: float) -> None:
-        import asyncio
-
         await asyncio.sleep(seconds)
 
     async def get_kms_info(self, request: KmsInfoRequest | Mapping[str, Any]) -> Any:
@@ -2545,7 +2726,12 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         body = req.model_dump(
             include={"token", "compose_hash", "transaction_hash"}, exclude_none=True
         )
-        response = await self.post(f"/cvms/{req.resolved}/commit-update", json=body)
+        response = await self.request(
+            "POST",
+            f"/cvms/{req.resolved}/commit-update",
+            json=body,
+            headers=_confirm_finality_headers(req.confirm_finality_replacement),
+        )
         return CommitCvmUpdateResult.model_validate(
             response.model_dump() if isinstance(response, BaseModel) else response
         )
@@ -2568,6 +2754,75 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
         self, request: CvmIdRequest | Mapping[str, Any]
     ) -> SafeResult[CvmSshKeysResponse]:
         return await self.safe(self.get_cvm_ssh_keys, request)
+
+    async def get_cvm_operations(
+        self, request: GetCvmOperationsRequest | Mapping[str, Any]
+    ) -> CvmOperationsPage:
+        req = GetCvmOperationsRequest.model_validate(request)
+        data = await self.get(_cvm_operations_path(req.resolved), params=req.query())
+        return self._validate(CvmOperationsPage, plain(data))
+
+    async def safe_get_cvm_operations(
+        self, request: GetCvmOperationsRequest | Mapping[str, Any]
+    ) -> SafeResult[CvmOperationsPage]:
+        return await self.safe(self.get_cvm_operations, request)
+
+    async def wait_for_cvm_finality(
+        self,
+        cvm_id: str,
+        correlation_id: str,
+        *,
+        timeout: float = DEFAULT_FINALITY_TIMEOUT,
+        poll_interval: float = DEFAULT_FINALITY_POLL_INTERVAL,
+    ) -> CvmOperation:
+        """Wait until the operation completes; see the README for the errors it raises."""
+        check_wait_arguments(correlation_id, timeout, poll_interval)
+        deadline = time.monotonic() + timeout
+        path = _cvm_operations_path(cvm_id)
+        last_transient: Exception | None = None
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise timeout_error(correlation_id, timeout, last_transient)
+            retry_after = 0.0
+            operation: CvmOperation | None = None
+            try:
+                # The deadline also bounds a request that is still in flight.
+                data = await asyncio.wait_for(
+                    self.get(path, params={"correlation_id": correlation_id}), remaining
+                )
+                operation = find_operation(data, correlation_id)
+            except asyncio.TimeoutError:
+                raise timeout_error(correlation_id, timeout, last_transient) from None
+            except (ApiError, RequestError) as exc:
+                if not is_transient(exc):
+                    raise
+                last_transient = exc
+                retry_after = retry_after_seconds(exc)
+            if operation is not None:
+                error = terminal_error(operation)
+                if error is not None:
+                    raise error
+                if operation.status == "completed":
+                    return operation
+            delay = max(poll_interval, retry_after)
+            await self._sleep(max(0.0, min(delay, deadline - time.monotonic())))
+
+    async def safe_wait_for_cvm_finality(
+        self,
+        cvm_id: str,
+        correlation_id: str,
+        *,
+        timeout: float = DEFAULT_FINALITY_TIMEOUT,
+        poll_interval: float = DEFAULT_FINALITY_POLL_INTERVAL,
+    ) -> SafeResult[CvmOperation]:
+        return await self.safe(
+            self.wait_for_cvm_finality,
+            cvm_id,
+            correlation_id,
+            timeout=timeout,
+            poll_interval=poll_interval,
+        )
 
     async def update_cvm_ssh_keys(
         self, request: UpdateCvmSshKeysRequest | Mapping[str, Any]

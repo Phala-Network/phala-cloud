@@ -13,15 +13,20 @@ if TYPE_CHECKING:
         CvmIdRequest,
         CvmInfoResult,
         CvmSshKeysResponse,
+        GetCvmOperationsRequest,
         PhalaCloud,
         UpdateCvmSshKeysRequest,
     )
-    from .models.cvms import CvmGpuStatus
+    from .models.cvms import CvmGpuStatus, CvmOperation, CvmOperationsPage
     from .result import SafeResult
 
 __all__ = [
     "get_cvm_ssh_keys",
     "safe_get_cvm_ssh_keys",
+    "get_cvm_operations",
+    "safe_get_cvm_operations",
+    "wait_for_cvm_finality",
+    "safe_wait_for_cvm_finality",
     "update_cvm_ssh_keys",
     "safe_update_cvm_ssh_keys",
     "commit_cvm_update",
@@ -214,6 +219,100 @@ def safe_get_cvm_ssh_keys(
     client: PhalaCloud | AsyncPhalaCloud, request: CvmIdRequest | Mapping[str, object]
 ) -> SafeResult[CvmSshKeysResponse] | Awaitable[SafeResult[CvmSshKeysResponse]]:
     return client.safe_get_cvm_ssh_keys(request)
+
+
+@overload
+def get_cvm_operations(
+    client: PhalaCloud, request: GetCvmOperationsRequest | Mapping[str, object]
+) -> CvmOperationsPage: ...
+
+
+@overload
+def get_cvm_operations(
+    client: AsyncPhalaCloud, request: GetCvmOperationsRequest | Mapping[str, object]
+) -> Awaitable[CvmOperationsPage]: ...
+
+
+def get_cvm_operations(
+    client: PhalaCloud | AsyncPhalaCloud,
+    request: GetCvmOperationsRequest | Mapping[str, object],
+) -> CvmOperationsPage | Awaitable[CvmOperationsPage]:
+    return client.get_cvm_operations(request)
+
+
+@overload
+def safe_get_cvm_operations(
+    client: PhalaCloud, request: GetCvmOperationsRequest | Mapping[str, object]
+) -> SafeResult[CvmOperationsPage]: ...
+
+
+@overload
+def safe_get_cvm_operations(
+    client: AsyncPhalaCloud, request: GetCvmOperationsRequest | Mapping[str, object]
+) -> Awaitable[SafeResult[CvmOperationsPage]]: ...
+
+
+def safe_get_cvm_operations(
+    client: PhalaCloud | AsyncPhalaCloud,
+    request: GetCvmOperationsRequest | Mapping[str, object],
+) -> SafeResult[CvmOperationsPage] | Awaitable[SafeResult[CvmOperationsPage]]:
+    return client.safe_get_cvm_operations(request)
+
+
+@overload
+def wait_for_cvm_finality(
+    client: PhalaCloud,
+    cvm_id: str,
+    correlation_id: str,
+    *,
+    timeout: float = ...,
+    poll_interval: float = ...,
+) -> CvmOperation: ...
+
+
+@overload
+def wait_for_cvm_finality(
+    client: AsyncPhalaCloud,
+    cvm_id: str,
+    correlation_id: str,
+    *,
+    timeout: float = ...,
+    poll_interval: float = ...,
+) -> Awaitable[CvmOperation]: ...
+
+
+def wait_for_cvm_finality(
+    client: PhalaCloud | AsyncPhalaCloud, cvm_id: str, correlation_id: str, **options: float
+) -> CvmOperation | Awaitable[CvmOperation]:
+    return client.wait_for_cvm_finality(cvm_id, correlation_id, **options)
+
+
+@overload
+def safe_wait_for_cvm_finality(
+    client: PhalaCloud,
+    cvm_id: str,
+    correlation_id: str,
+    *,
+    timeout: float = ...,
+    poll_interval: float = ...,
+) -> SafeResult[CvmOperation]: ...
+
+
+@overload
+def safe_wait_for_cvm_finality(
+    client: AsyncPhalaCloud,
+    cvm_id: str,
+    correlation_id: str,
+    *,
+    timeout: float = ...,
+    poll_interval: float = ...,
+) -> Awaitable[SafeResult[CvmOperation]]: ...
+
+
+def safe_wait_for_cvm_finality(
+    client: PhalaCloud | AsyncPhalaCloud, cvm_id: str, correlation_id: str, **options: float
+) -> SafeResult[CvmOperation] | Awaitable[SafeResult[CvmOperation]]:
+    return client.safe_wait_for_cvm_finality(cvm_id, correlation_id, **options)
 
 
 @overload
