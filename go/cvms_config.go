@@ -2,7 +2,9 @@ package phala
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 )
 
 // CVMSSHKeyEntry describes an SSH key authorized on a CVM.
@@ -125,11 +127,21 @@ type UpdateOSImageRequest struct {
 	OSImageName string `json:"os_image_name"`
 }
 
-// UpdateOSImage updates the OS image for a CVM.
-func (c *Client) UpdateOSImage(ctx context.Context, cvmID string, req *UpdateOSImageRequest) error {
-	return c.doWithRetry(ctx, func() error {
-		return c.doJSON(ctx, "PATCH", cvmPath(cvmID, "os-image"), req, nil)
+// UpdateOSImage updates the OS image for a CVM. The returned response carries
+// the accepted update's correlation ID and status. It is nil when the server
+// accepted the update with an empty body.
+func (c *Client) UpdateOSImage(ctx context.Context, cvmID string, req *UpdateOSImageRequest) (*PatchCVMResponse, error) {
+	var result PatchCVMResponse
+	err := c.doWithRetry(ctx, func() error {
+		return c.doJSON(ctx, "PATCH", cvmPath(cvmID, "os-image"), req, &result)
 	})
+	if errors.Is(err, io.EOF) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
 }
 
 // RefreshInstanceIDResponseFields contains shared instance ID refresh fields.
