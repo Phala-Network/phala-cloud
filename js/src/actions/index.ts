@@ -609,6 +609,7 @@ export {
   safeUpdateOsImage,
   UpdateOsImageRequestSchema,
   type UpdateOsImageRequest,
+  type UpdateOsImageResponse,
 } from "./cvms/update_os_image";
 
 export {

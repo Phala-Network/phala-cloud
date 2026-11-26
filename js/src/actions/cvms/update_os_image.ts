@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  CvmFinalityWaitAcceptedSchema,
+  type CvmFinalityWaitAccepted,
+} from "../../types/cvm_finality";
 import { CvmIdSchema, CvmIdObjectSchema, refineCvmId } from "../../types/cvm_id";
 import { defineAction } from "../../utils/define-action";
 
@@ -9,18 +13,19 @@ import { defineAction } from "../../utils/define-action";
  * The CVM will be shut down, the OS image updated, and then restarted.
  * This operation may take several minutes to complete.
  *
- * Returns 202 Accepted as the operation runs asynchronously.
+ * Returns the accepted response (HTTP 202) with `status`, `message` and the
+ * `correlation_id` that identifies the running operation.
  *
  * @example
  * ```typescript
  * import { createClient, updateOsImage } from '@phala/cloud'
  *
  * const client = createClient();
- * await updateOsImage(client, {
+ * const accepted = await updateOsImage(client, {
  *   id: 'my-cvm-id',
  *   os_image_name: 'prod-0.3.5'
  * });
- * console.log('OS image update initiated');
+ * console.log(`OS image update accepted: ${accepted.correlation_id}`);
  * ```
  */
 
@@ -32,16 +37,17 @@ export const UpdateOsImageRequestSchema = refineCvmId(
 
 export type UpdateOsImageRequest = z.infer<typeof UpdateOsImageRequestSchema>;
 
-// PATCH /cvms/{id}/os-image returns 202 Accepted with no body
+export type UpdateOsImageResponse = CvmFinalityWaitAccepted;
+
+// PATCH /cvms/{id}/os-image returns 202 Accepted with { message, correlation_id, status }
 const { action: updateOsImage, safeAction: safeUpdateOsImage } = defineAction<
   UpdateOsImageRequest,
-  z.ZodVoid
->(z.void(), async (client, request) => {
+  typeof CvmFinalityWaitAcceptedSchema
+>(CvmFinalityWaitAcceptedSchema, async (client, request) => {
   const parsed = UpdateOsImageRequestSchema.parse(request);
   const { cvmId } = CvmIdSchema.parse(parsed);
   const { os_image_name } = parsed;
-  await client.patch(`/cvms/${cvmId}/os-image`, { os_image_name });
-  return undefined;
+  return await client.patch(`/cvms/${cvmId}/os-image`, { os_image_name });
 });
 
 export { updateOsImage, safeUpdateOsImage };
