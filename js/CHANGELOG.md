@@ -1,3 +1,8 @@
+## [0.6.7](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.7-beta.4...js-v0.6.7) (2026-11-26)
+
+### fix
+
+- **js:** accept a null swap_size in app compose ([6ffa673](https://github.com/Phala-Network/phala-cloud/commit/6ffa6734733a0c9fcbd448243676d20915b5618c))
 ## [0.6.7-beta.4](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.7-beta.3...js-v0.6.7-beta.4) (2026-11-26)
 
 ### fix
