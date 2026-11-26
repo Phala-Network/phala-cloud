@@ -107,6 +107,8 @@ Pass the CVM ID and the one-time token to `commit_cvm_update`. `compose_hash` an
 
 On an Ethereum or Base KMS, Phala Cloud accepts an update or a create, waits for chain finality, and only then applies it. The response carries `correlation_id` (and `finality_wait` with progress). Pass the CVM ID and that `correlation_id` to `wait_for_cvm_finality`. It polls until the operation completes and returns it.
 
+`commit_cvm_compose_file_update` returns that `correlation_id` too, and accepts `transaction_hash` (the registration transaction hash, or `"already-registered"`).
+
 ```python
 operation = client.wait_for_cvm_finality("my-cvm", correlation_id, timeout=1800, poll_interval=15)
 ```

@@ -1079,6 +1079,8 @@ class PhalaCloud(_SyncBase, _ExtMixin):
             "env_keys": req.get("env_keys"),
             "update_env_vars": req.get("update_env_vars"),
         }
+        if req.get("transaction_hash") is not None:
+            body["transaction_hash"] = req["transaction_hash"]
         return self._loose_validate(
             self.request(
                 "PATCH",
@@ -2239,6 +2241,8 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
             "env_keys": req.get("env_keys"),
             "update_env_vars": req.get("update_env_vars"),
         }
+        if req.get("transaction_hash") is not None:
+            body["transaction_hash"] = req["transaction_hash"]
         return self._loose_validate(
             await self.request(
                 "PATCH",
