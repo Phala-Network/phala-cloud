@@ -596,7 +596,8 @@ async function fetchUpdateTarget(
 	client: CliApiClient,
 	id: string,
 ): Promise<UpdateTarget> {
-	const result = await safeGetCvmInfo(client, { id });
+	// The detail omits compose_file unless asked; the update reads its runner and dev box.
+	const result = await safeGetCvmInfo(client, { id, include_compose: true });
 	if (!result.success) throw result.error;
 
 	const cvm = result.data;

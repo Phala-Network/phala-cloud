@@ -499,7 +499,7 @@ describe("phala deploy update finality", () => {
 			expect(
 				cvmRequests.map(({ method, path, search }) => [method, path, search]),
 			).toEqual([
-				["GET", `/api/v1/cvms/${CVM_ID}`, ""],
+				["GET", `/api/v1/cvms/${CVM_ID}`, "?include_compose=true"],
 				["PATCH", `/api/v1/cvms/${CVM_ID}`, ""],
 				["GET", `/api/v1/cvms/${VM_UUID}/operations`, scopedQuery],
 				["GET", `/api/v1/cvms/${VM_UUID}`, ""],
@@ -915,12 +915,15 @@ describe("phala deploy --cvm-id", () => {
 	test("keeps a dev box the record does not know about, then records it", async () => {
 		// A CVM deployed from another machine, or before the CLI kept a record,
 		// still reads as a dev box from the server's compose.
-		respond = (method, urlPath) =>
+		// Like the server, return compose_file only when the request asks for it.
+		respond = (method, urlPath, query) =>
 			method === "GET" && /^\/api\/v1\/cvms\/[^/]+$/.test(urlPath)
 				? Response.json(
-						cvmInfo({
-							compose_file: { docker_compose_file: DEPLOYED_DEV_BOX },
-						}),
+						cvmInfo(
+							query.get("include_compose") === "true"
+								? { compose_file: { docker_compose_file: DEPLOYED_DEV_BOX } }
+								: {},
+						),
 					)
 				: undefined;
 
