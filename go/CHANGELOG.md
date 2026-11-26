@@ -1,3 +1,8 @@
+## [0.7.0](https://github.com/Phala-Network/phala-cloud/compare/go/v0.7.0-rc.2...go/v0.7.0) (2026-11-26)
+
+### fix
+
+* **go:** return nil for a null update response body ([499258a](https://github.com/Phala-Network/phala-cloud/commit/499258ac8c64629912696caf9a94b77d4c036372))
 ## [0.7.0-rc.2](https://github.com/Phala-Network/phala-cloud/compare/go/v0.7.0-rc.1...go/v0.7.0-rc.2) (2026-11-26)
 
 ### ⚠ BREAKING CHANGE
