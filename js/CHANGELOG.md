@@ -1,3 +1,8 @@
+## [0.6.8](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.7...js-v0.6.8) (2026-11-26)
+
+### fix
+
+- **js:** make confirmFinalityReplacement optional on the compose commit request ([3a1655c](https://github.com/Phala-Network/phala-cloud/commit/3a1655cad5085495cedd5e4f499c73224ece17a1))
 ## [0.6.7](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.7-beta.4...js-v0.6.7) (2026-11-26)
 
 ### fix
