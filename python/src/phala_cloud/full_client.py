@@ -730,7 +730,7 @@ class _ExtMixin:
         ):
             return InProgressResponse | ComposeHashPreconditionResponse
         if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/os-image", path):
-            return type(None)
+            return InProgressResponse | None
         if m == "PATCH" and re.fullmatch(r"/cvms/[^/]+/compose_file", path):
             # 202 with the accepted update, or no body on the direct path.
             return InProgressResponse | None
@@ -1350,16 +1350,17 @@ class PhalaCloud(_SyncBase, _ExtMixin):
     ) -> SafeResult[Any]:
         return self.safe(self.get_available_os_images, request)
 
-    def update_os_image(self, request: UpdateOsImageRequest | Mapping[str, Any]) -> None:
+    def update_os_image(
+        self, request: UpdateOsImageRequest | Mapping[str, Any]
+    ) -> InProgressResponse | None:
         req = UpdateOsImageRequest.model_validate(request)
-        self.request(
+        return self.request(
             "PATCH", f"/cvms/{req.resolved}/os-image", json={"os_image_name": req.os_image_name}
         )
-        return None
 
     def safe_update_os_image(
         self, request: UpdateOsImageRequest | Mapping[str, Any]
-    ) -> SafeResult[None]:
+    ) -> SafeResult[InProgressResponse | None]:
         return self.safe(self.update_os_image, request)
 
     def patch_cvm(self, request: PatchCvmRequest | Mapping[str, Any]) -> dict[str, Any]:
@@ -2522,16 +2523,17 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
     ) -> SafeResult[Any]:
         return await self.safe(self.get_available_os_images, request)
 
-    async def update_os_image(self, request: UpdateOsImageRequest | Mapping[str, Any]) -> None:
+    async def update_os_image(
+        self, request: UpdateOsImageRequest | Mapping[str, Any]
+    ) -> InProgressResponse | None:
         req = UpdateOsImageRequest.model_validate(request)
-        await self.request(
+        return await self.request(
             "PATCH", f"/cvms/{req.resolved}/os-image", json={"os_image_name": req.os_image_name}
         )
-        return None
 
     async def safe_update_os_image(
         self, request: UpdateOsImageRequest | Mapping[str, Any]
-    ) -> SafeResult[None]:
+    ) -> SafeResult[InProgressResponse | None]:
         return await self.safe(self.update_os_image, request)
 
     async def patch_cvm(self, request: PatchCvmRequest | Mapping[str, Any]) -> dict[str, Any]:
