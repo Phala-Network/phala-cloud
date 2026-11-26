@@ -1,3 +1,22 @@
+## [0.7.0-rc.1](https://github.com/Phala-Network/phala-cloud/compare/go/v0.6.1-beta.2...go/v0.7.0-rc.1) (2026-11-26)
+
+### ⚠ BREAKING CHANGE
+
+* **go:** send the full app compose on compose update and drop unread create fields
+
+### feat
+
+* **go:** confirm before replacing a pending on-chain update ([702d5b7](https://github.com/Phala-Network/phala-cloud/commit/702d5b7f774813006d272cb3f0659ff1055a0712))
+* **go:** decode replica VM, CVM finality, auth features and version dates ([9dc18fe](https://github.com/Phala-Network/phala-cloud/commit/9dc18fe0224a8165e5c3dfc92d41c9f1f159e7ee))
+* **go:** send admin init_script and a null shutdown_timeout on CVM patch ([bfdbe84](https://github.com/Phala-Network/phala-cloud/commit/bfdbe84e269548358062eb0add31eda2eb55beec))
+* **go:** send app instance OS image and URL overrides the API reads ([167490f](https://github.com/Phala-Network/phala-cloud/commit/167490f8d521adecf7da8a006bc18666bb4b14a1))
+* **go:** send CVM list, commit, patch, replicate and provision fields the API reads ([938740d](https://github.com/Phala-Network/phala-cloud/commit/938740d5e705b9a86c8c274e88c9a513e19fde8c))
+* **go:** send the full app compose on compose update and drop unread create fields ([3dc3b29](https://github.com/Phala-Network/phala-cloud/commit/3dc3b29ea7fcb8eb2beecdbb6426a47bb416530e))
+* **go:** wait for on-chain finality of CVM operations ([17baf93](https://github.com/Phala-Network/phala-cloud/commit/17baf930b0ab989647edd25016de85276176be86))
+
+### fix
+
+* **go:** drop raw init_script from PatchCVMRequest ([f0f1494](https://github.com/Phala-Network/phala-cloud/commit/f0f14945f4a11e7fb661b3bce0a58b7133ac8b72))
 ## [0.6.1-beta.2](https://github.com/Phala-Network/phala-cloud/compare/go/v0.6.1-beta.1...go/v0.6.1-beta.2) (2026-11-25)
 
 ### feat
