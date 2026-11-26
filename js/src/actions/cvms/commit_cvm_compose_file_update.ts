@@ -128,17 +128,9 @@ export const CommitCvmComposeFileUpdateSchema = z.unknown().transform((value) =>
   return accepted.success && accepted.data.correlation_id.trim() ? accepted.data : undefined;
 });
 
-export type CommitCvmComposeFileUpdateRequest = Omit<
-  z.infer<typeof CommitCvmComposeFileUpdateRequestSchema>,
-  "cvmId" | "_raw" | "update_env_vars" | "transaction_hash"
-> & {
-  transaction_hash?: string;
-  id?: string;
-  uuid?: string;
-  app_id?: string;
-  instance_id?: string;
-  update_env_vars?: boolean | null;
-};
+export type CommitCvmComposeFileUpdateRequest = z.input<
+  typeof CommitCvmComposeFileUpdateRequestSchema
+>;
 export type CommitCvmComposeFileUpdate = z.infer<typeof CommitCvmComposeFileUpdateSchema>;
 
 const { action: commitCvmComposeFileUpdate, safeAction: safeCommitCvmComposeFileUpdate } =
