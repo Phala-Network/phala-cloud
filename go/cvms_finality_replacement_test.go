@@ -51,7 +51,8 @@ var finalityCalls = []struct {
 		return err
 	}},
 	{"CommitCVMComposeFileUpdate", "PATCH", "/cvms/cvm-1/compose_file", func(c *Client, v string) error {
-		return c.CommitCVMComposeFileUpdate(context.Background(), "cvm-1", &CommitComposeUpdateRequest{ComposeHash: "h", ConfirmFinalityReplacement: v})
+		_, err := c.CommitCVMComposeFileUpdate(context.Background(), "cvm-1", &CommitComposeUpdateRequest{ComposeHash: "h", ConfirmFinalityReplacement: v})
+		return err
 	}},
 	{"UpdateCVMEnvs", "PATCH", "/cvms/cvm-1/envs", func(c *Client, v string) error {
 		_, err := c.UpdateCVMEnvs(context.Background(), "cvm-1", &UpdateEnvsRequest{EncryptedEnv: "e", ConfirmFinalityReplacement: v})

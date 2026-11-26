@@ -888,6 +888,7 @@ type PatchCVMResponse struct {
 	RequiresOnChainHash bool                   `json:"requires_on_chain_hash"`
 	CorrelationID       string                 `json:"correlation_id,omitempty"`
 	Status              string                 `json:"status,omitempty"`
+	Message             string                 `json:"message,omitempty"`
 	ComposeHash         string                 `json:"compose_hash,omitempty"`
 	AppID               string                 `json:"app_id,omitempty"`
 	DeviceID            string                 `json:"device_id,omitempty"`

@@ -3,7 +3,9 @@ package phala
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 )
 
 // GetCVMComposeFile returns the compose file for a CVM.
@@ -110,14 +112,25 @@ type CommitComposeUpdateRequest struct {
 	ConfirmFinalityReplacement string `json:"-"`
 }
 
-// CommitCVMComposeFileUpdate commits a compose file update.
-func (c *Client) CommitCVMComposeFileUpdate(ctx context.Context, cvmID string, req *CommitComposeUpdateRequest) error {
+// CommitCVMComposeFileUpdate commits a compose file update. The returned
+// response carries the correlation ID to pass to WaitForCVMFinality (see
+// PatchCVMResponse.FinalityCorrelationID). It is nil when the server accepted
+// the update with an empty body.
+func (c *Client) CommitCVMComposeFileUpdate(ctx context.Context, cvmID string, req *CommitComposeUpdateRequest) (*PatchCVMResponse, error) {
 	if req == nil {
-		return fmt.Errorf("phala: commit compose update request is required")
+		return nil, fmt.Errorf("phala: commit compose update request is required")
 	}
-	return c.doWithRetry(ctx, func() error {
-		return c.doJSONWithHeaders(ctx, "PATCH", cvmPath(cvmID, "compose_file"), withConfirmFinalityReplacement(nil, req.ConfirmFinalityReplacement), req, nil)
+	var result PatchCVMResponse
+	err := c.doWithRetry(ctx, func() error {
+		return c.doJSONWithHeaders(ctx, "PATCH", cvmPath(cvmID, "compose_file"), withConfirmFinalityReplacement(nil, req.ConfirmFinalityReplacement), req, &result)
 	})
+	if errors.Is(err, io.EOF) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
 }
 
 // ComposeUpdateOptions holds optional headers for compose update operations.
