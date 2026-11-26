@@ -1,3 +1,23 @@
+## [0.4.6](https://github.com/Phala-Network/phala-cloud/compare/python-v0.4.5...python-v0.4.6) (2026-11-26)
+
+### docs
+
+* **python:** explain choosing init scripts and checking their bytes ([79f0703](https://github.com/Phala-Network/phala-cloud/commit/79f07035e11ec13731259b1f7471295c7ce8d219))
+
+### feat
+
+* **python:** add runtime_tmpfs init script slug ([7cdd337](https://github.com/Phala-Network/phala-cloud/commit/7cdd337262e0a0fa9f27aae12273e24f0d63e2df))
+* **python:** align CVM and app request fields with the API ([e361793](https://github.com/Phala-Network/phala-cloud/commit/e36179318bdd47fcfc5ab4efd2e688efb6c01fc1))
+* **python:** confirm before replacing a pending on-chain update ([0faa193](https://github.com/Phala-Network/phala-cloud/commit/0faa1939096115fe4cd858c7f0f35dca9d932bb6))
+* **python:** fill init-script catalog, custom-script flag and compose wipe confirm ([1e0c85f](https://github.com/Phala-Network/phala-cloud/commit/1e0c85f63049fdcd7ee80e7f9646501252417f12))
+* **python:** let the server own init script names ([30e4d11](https://github.com/Phala-Network/phala-cloud/commit/30e4d11dc5b8f9bb70512e2a57ca09961f758262))
+* **python:** send transaction_hash when committing a compose file update ([cf2d639](https://github.com/Phala-Network/phala-cloud/commit/cf2d639b625e027a5420ea78977df0bfb3faca30))
+* **python:** wait for on-chain finality of CVM operations ([0dcc3df](https://github.com/Phala-Network/phala-cloud/commit/0dcc3dfc805d674c58c526f3e973a252adb93191))
+
+### fix
+
+* **python:** return the accepted update from commit_cvm_compose_file_update ([84751c9](https://github.com/Phala-Network/phala-cloud/commit/84751c9aeab63452fd71726cb1b252a69d3e4bb0))
+* **python:** return the accepted update from update_os_image ([9264c88](https://github.com/Phala-Network/phala-cloud/commit/9264c888e218f96aad58c469f7b3724c765e81f3))
 ## [0.4.6b4](https://github.com/Phala-Network/phala-cloud/compare/python-v0.4.5...python-v0.4.6b4) (2026-11-26)
 
 ### docs
