@@ -1,3 +1,8 @@
+## [1.2.9-beta.3](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.9-beta.2...cli-v1.2.9-beta.3) (2026-11-26)
+
+### fix
+
+- **cli:** ask for the compose when deploy updates a CVM ([89c5041](https://github.com/Phala-Network/phala-cloud/commit/89c504172c7682d7eba7677b50904dae3c5d8976))
 ## [1.2.9-beta.2](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.9-beta.1...cli-v1.2.9-beta.2) (2026-11-25)
 
 ## [1.2.9-beta.1](https://github.com/Phala-Network/phala-cloud/compare/cli-v1.2.8...cli-v1.2.9-beta.1) (2026-11-25)
