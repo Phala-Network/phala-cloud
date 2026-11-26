@@ -169,7 +169,7 @@ Leave the option out to keep the default: the new update replaces the waiting on
 
 These actions accept `confirmFinalityReplacement`: `patchCvm`, `updateCvmEnvs`,
 `updateDockerCompose`, `updatePreLaunchScript`, `upgradePreLaunchScript`,
-`commitCvmComposeFileUpdate`, `applyCvmDraft` and `commitCvmUpdate`.
+`commitCvmComposeFileUpdate`, `applyCvmDraft`, `commitCvmUpdate` and `confirmCvmPatch`.
 
 ### How do I choose init scripts for a CVM?
 

@@ -3,6 +3,7 @@ import { createClient } from "../../index";
 import { readFinalityReplacementRequired } from "../../types/cvm_finality";
 import { commitCvmComposeFileUpdate } from "./commit_cvm_compose_file_update";
 import { commitCvmUpdate } from "./commit_cvm_update";
+import { confirmCvmPatch } from "./confirm_cvm_patch";
 import { applyCvmDraft } from "./cvm_draft";
 import { patchCvm, safePatchCvm } from "./patch_cvm";
 import { updateCvmEnvs } from "./update_cvm_envs";
@@ -117,6 +118,8 @@ describe("other update actions", () => {
       applyCvmDraft(c, { id: cvmId, confirmFinalityReplacement: v })],
     ["commitCvmUpdate", `/cvms/${cvmId}/commit-update`, (c, v) =>
       commitCvmUpdate(c, { id: cvmId, token: "t", composeHash: hash, transactionHash: "0x1", confirmFinalityReplacement: v })],
+    ["confirmCvmPatch", `/cvms/${cvmId}`, (c, v) =>
+      confirmCvmPatch(c, { id: cvmId, composeHash: hash, transactionHash: "0x1", confirmFinalityReplacement: v })],
     ["upgradePreLaunchScript", `/cvms/${cvmId}/pre-launch-script/upgrade-to-latest-official`, (c, v) =>
       upgradePreLaunchScript(c, { id: cvmId, confirmFinalityReplacement: v })],
   ];
