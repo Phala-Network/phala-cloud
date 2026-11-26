@@ -121,12 +121,13 @@ type CommitComposeUpdateRequest struct {
 // CommitCVMComposeFileUpdate commits a compose file update. The returned
 // response carries the correlation ID to pass to WaitForCVMFinality (see
 // PatchCVMResponse.FinalityCorrelationID). It is nil when the server accepted
-// the update with an empty body.
+// the update with an empty or null body.
 func (c *Client) CommitCVMComposeFileUpdate(ctx context.Context, cvmID string, req *CommitComposeUpdateRequest) (*PatchCVMResponse, error) {
 	if req == nil {
 		return nil, fmt.Errorf("phala: commit compose update request is required")
 	}
-	var result PatchCVMResponse
+	// A pointer stays nil when the body is JSON null.
+	var result *PatchCVMResponse
 	err := c.doWithRetry(ctx, func() error {
 		return c.doJSONWithHeaders(ctx, "PATCH", cvmPath(cvmID, "compose_file"), withConfirmFinalityReplacement(nil, req.ConfirmFinalityReplacement), req, &result)
 	})
@@ -136,7 +137,7 @@ func (c *Client) CommitCVMComposeFileUpdate(ctx context.Context, cvmID string, r
 	if err != nil {
 		return nil, err
 	}
-	return &result, nil
+	return result, nil
 }
 
 // ComposeUpdateOptions holds optional headers for compose update operations.

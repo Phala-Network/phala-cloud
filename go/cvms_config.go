@@ -129,9 +129,10 @@ type UpdateOSImageRequest struct {
 
 // UpdateOSImage updates the OS image for a CVM. The returned response carries
 // the accepted update's correlation ID and status. It is nil when the server
-// accepted the update with an empty body.
+// accepted the update with an empty or null body.
 func (c *Client) UpdateOSImage(ctx context.Context, cvmID string, req *UpdateOSImageRequest) (*PatchCVMResponse, error) {
-	var result PatchCVMResponse
+	// A pointer stays nil when the body is JSON null.
+	var result *PatchCVMResponse
 	err := c.doWithRetry(ctx, func() error {
 		return c.doJSON(ctx, "PATCH", cvmPath(cvmID, "os-image"), req, &result)
 	})
@@ -141,7 +142,7 @@ func (c *Client) UpdateOSImage(ctx context.Context, cvmID string, req *UpdateOSI
 	if err != nil {
 		return nil, err
 	}
-	return &result, nil
+	return result, nil
 }
 
 // RefreshInstanceIDResponseFields contains shared instance ID refresh fields.

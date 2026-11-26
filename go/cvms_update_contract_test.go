@@ -413,14 +413,26 @@ func TestCommitCVMComposeFileUpdateReturnsAcceptedUpdate(t *testing.T) {
 	}
 }
 
-func TestCommitCVMComposeFileUpdateEmptyBody(t *testing.T) {
-	client, _ := recordingServer(t, http.StatusAccepted, "")
-	got, err := client.CommitCVMComposeFileUpdate(context.Background(), "cvm-1", &CommitComposeUpdateRequest{ComposeHash: "h"})
-	if err != nil {
-		t.Fatalf("CommitCVMComposeFileUpdate: %v", err)
+func TestUpdateCallsReturnNilForAnEmptyOrNullBody(t *testing.T) {
+	calls := map[string]func(*Client) (*PatchCVMResponse, error){
+		"CommitCVMComposeFileUpdate": func(c *Client) (*PatchCVMResponse, error) {
+			return c.CommitCVMComposeFileUpdate(context.Background(), "cvm-1", &CommitComposeUpdateRequest{ComposeHash: "h"})
+		},
+		"UpdateOSImage": func(c *Client) (*PatchCVMResponse, error) {
+			return c.UpdateOSImage(context.Background(), "cvm-1", &UpdateOSImageRequest{OSImageName: "img"})
+		},
 	}
-	if got != nil {
-		t.Fatalf("response = %+v, want nil", got)
+	for name, call := range calls {
+		for _, body := range []string{"", "null"} {
+			client, _ := recordingServer(t, http.StatusAccepted, body)
+			got, err := call(client)
+			if err != nil {
+				t.Fatalf("%s with body %q: %v", name, body, err)
+			}
+			if got != nil {
+				t.Fatalf("%s with body %q = %+v, want nil", name, body, got)
+			}
+		}
 	}
 }
 
