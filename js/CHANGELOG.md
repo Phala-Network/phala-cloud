@@ -1,3 +1,8 @@
+## [0.6.7-beta.4](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.7-beta.3...js-v0.6.7-beta.4) (2026-11-26)
+
+### fix
+
+- **js:** return the accepted update from updateOsImage ([f7adc7a](https://github.com/Phala-Network/phala-cloud/commit/f7adc7ae126e167c8fe07ad34fe0ea91d7082154))
 ## [0.6.7-beta.3](https://github.com/Phala-Network/phala-cloud/compare/js-v0.6.7-beta.2...js-v0.6.7-beta.3) (2026-11-26)
 
 ### feat
