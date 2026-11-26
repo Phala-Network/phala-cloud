@@ -128,7 +128,9 @@ export const CommitCvmComposeFileUpdateSchema = z.unknown().transform((value) =>
   return accepted.success && accepted.data.correlation_id.trim() ? accepted.data : undefined;
 });
 
-export type CommitCvmComposeFileUpdateRequest = z.input<typeof CommitCvmComposeFileUpdateRequestSchema>;
+export type CommitCvmComposeFileUpdateRequest = z.input<
+  typeof CommitCvmComposeFileUpdateRequestSchema
+>;
 export type CommitCvmComposeFileUpdate = z.infer<typeof CommitCvmComposeFileUpdateSchema>;
 
 const { action: commitCvmComposeFileUpdate, safeAction: safeCommitCvmComposeFileUpdate } =
