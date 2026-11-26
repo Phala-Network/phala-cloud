@@ -233,7 +233,7 @@ export const ProvisionCvmRequestSchema = z
         no_instance_id: z.boolean().optional(),
         secure_time: z.boolean().optional(),
         storage_fs: z.enum(["ext4", "zfs"]).optional(),
-        swap_size: z.string().optional(),
+        swap_size: z.string().nullable().optional(),
         port_policy: PortPolicySchema.optional(),
         // docker-compose by default; bash and nerdctl-compose need the
         // compose_advanced feature flag.
