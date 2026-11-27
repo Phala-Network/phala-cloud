@@ -68,6 +68,37 @@ describe("schema sync", () => {
     );
   });
 
+  it.each([
+    ["in_progress", [8080, 8090]],
+    ["no_change", []],
+    ["in_progress", undefined],
+  ] as const)("sends the expected hash and preserves warnings for %s", async (status, ports) => {
+    const client = {
+      patch: vi.fn().mockResolvedValue({
+        status,
+        correlation_id: "c",
+        ...(ports === undefined ? {} : { port_policy_unlisted_ports: ports }),
+      }),
+    } as unknown as Client;
+    const result = await patchCvm(client, {
+      id: "cvm-1",
+      expected_compose_hash: "observed-hash",
+      compose: { port_policy: { restrict_mode: true, ports: [] } },
+    });
+
+    expect(client.patch).toHaveBeenCalledWith(
+      "/cvms/cvm-1",
+      {
+        expected_compose_hash: "observed-hash",
+        compose: { port_policy: { restrict_mode: true, ports: [] } },
+      },
+      expect.anything(),
+    );
+    expect(result.requiresOnChainHash).toBe(false);
+    if (result.requiresOnChainHash) throw new Error("Expected an accepted update");
+    expect(result.portPolicyUnlistedPorts).toEqual(ports);
+  });
+
   it("accepts guest_agent_gateway_access on provision and patch", () => {
     expect(
       ProvisionCvmRequestSchema.parse({

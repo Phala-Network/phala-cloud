@@ -193,6 +193,8 @@ export const CvmPatchBodySchema = z.object({
   shutdown_timeout: z.number().nullable().optional(),
   allow_force_stop: z.boolean().optional(),
   guest_agent_gateway_access: z.literal("closed").optional(),
+  // Rejects a change if this is no longer the CVM's stored compose hash.
+  expected_compose_hash: z.string().optional(),
 });
 
 export const PatchCvmRequestSchema = refineCvmId(
