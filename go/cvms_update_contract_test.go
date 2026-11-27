@@ -306,6 +306,21 @@ func TestPatchCVMResponseDecodesFinalityWait(t *testing.T) {
 	}
 }
 
+func TestPatchCVMExpectedComposeHashAndPortWarnings(t *testing.T) {
+	client, seen := recordingServer(t, http.StatusAccepted, `{"status":"in_progress","correlation_id":"corr-1","port_policy_unlisted_ports":[8080,8090]}`)
+	got, err := client.PatchCVM(context.Background(), "cvm-1", &PatchCVMRequest{
+		ExpectedComposeHash: String("observed-hash"),
+		PublicLogs:          Bool(true),
+	})
+	if err != nil {
+		t.Fatalf("PatchCVM: %v", err)
+	}
+	assertBody(t, (*seen)[0].body, `{"expected_compose_hash":"observed-hash","public_logs":true}`)
+	if ports := got.PortPolicyUnlistedPorts; len(ports) != 2 || ports[0] != 8080 || ports[1] != 8090 {
+		t.Fatalf("PortPolicyUnlistedPorts = %v, want [8080 8090]", ports)
+	}
+}
+
 func TestPatchCVMSendsGuestAgentGatewayAccess(t *testing.T) {
 	client, seen := recordingServer(t, http.StatusAccepted, acceptedUpdate)
 	closed := "closed"
