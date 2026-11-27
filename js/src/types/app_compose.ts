@@ -28,8 +28,9 @@ export function validateComposePayloadSize(
 
 /**
  * Gateway port policy (dstack >= 0.5.9): which guest ports the gateway forwards,
- * and whether each one uses the PROXY protocol. Omitted fields take the
- * backend defaults: no ports, restrict_mode false, pp false.
+ * and whether each one uses the PROXY protocol. A new explicit policy defaults
+ * to no ports and restrict_mode false. PATCH merges by key: omitting
+ * restrict_mode keeps its current value. A port entry defaults pp to false.
  */
 export const PortPolicySchema = z.object({
   ports: z

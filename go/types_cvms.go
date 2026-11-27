@@ -672,6 +672,9 @@ type CVMActionResponseFields struct {
 	Name          string `json:"name,omitempty"`
 	Status        string `json:"status,omitempty"`
 	CorrelationID string `json:"correlation_id,omitempty"`
+	// PortPolicyUnlistedPorts lists published ports absent from a restrictive
+	// gateway policy after a CVM patch, including on-chain confirmation.
+	PortPolicyUnlistedPorts []int `json:"port_policy_unlisted_ports,omitzero"`
 }
 
 // CVMActionResponseV20260121 is a lifecycle action response before hashed CVM IDs.
@@ -831,6 +834,8 @@ type PatchCVMRequest struct {
 	// GuestAgentGatewayAccess confirms blocking gateway access to port 8090.
 	// Send "closed".
 	GuestAgentGatewayAccess *string `json:"guest_agent_gateway_access,omitempty"`
+	// ExpectedComposeHash rejects a change if this is no longer the CVM's stored compose hash.
+	ExpectedComposeHash *string `json:"expected_compose_hash,omitempty"`
 	// InitScripts replaces, by name, the init scripts provided by Phala Cloud
 	// that the CVM runs. The server validates the names and fixes the order. nil leaves them
 	// unchanged; an empty non-nil slice removes them all.
@@ -898,6 +903,8 @@ type PatchCVMResponse struct {
 	APICommitURL        string                 `json:"api_commit_url,omitempty"`
 	OnchainStatus       *OnchainStatus         `json:"onchain_status,omitempty"`
 	FinalityWait        *CVMFinalityWaitStatus `json:"finality_wait,omitempty"`
+	// PortPolicyUnlistedPorts lists published ports absent from a restrictive gateway policy.
+	PortPolicyUnlistedPorts []int `json:"port_policy_unlisted_ports,omitzero"`
 }
 
 // CVMFinalityWaitStatus is Phala Cloud's view of an accepted on-chain operation.

@@ -8,12 +8,14 @@ const CvmUpdateAcceptanceWireSchema = z.object({
   status: z.string().optional(),
   correlation_id: z.string().nullish(),
   finality_wait: OptionalCvmFinalityWaitSchema,
+  port_policy_unlisted_ports: z.array(z.number().int()).optional(),
 });
 
 export const CvmUpdateAcceptedFieldsSchema = z.object({
   correlationId: z.string(),
   status: z.string().optional(),
   finalityWait: CvmFinalityWaitSchema.optional(),
+  portPolicyUnlistedPorts: z.array(z.number().int()).optional(),
 });
 
 export const CvmUpdateHashRequiredSchema = z.object({
@@ -40,6 +42,9 @@ export function readCvmUpdateAcceptance(response: unknown) {
     correlationId: wire.correlation_id ?? "",
     ...(wire.status === undefined ? {} : { status: wire.status }),
     ...(wire.finality_wait ? { finalityWait: wire.finality_wait } : {}),
+    ...(wire.port_policy_unlisted_ports === undefined
+      ? {}
+      : { portPolicyUnlistedPorts: wire.port_policy_unlisted_ports }),
   };
 }
 
