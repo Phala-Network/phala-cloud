@@ -94,6 +94,30 @@ async def test_patch_cvm_sends_instance_type_and_gpu_config_async() -> None:
     assert body == {"instance_type": "h200.small", "gpus": _GPUS}
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("use_async", [False, True])
+@pytest.mark.parametrize("ports", [[8080, 8090], [], None])
+async def test_patch_cvm_sends_expected_hash_and_preserves_port_warnings(
+    use_async: bool, ports: list[int] | None
+) -> None:
+    payload = dict(_ACCEPTED)
+    if ports is not None:
+        payload["port_policy_unlisted_ports"] = ports
+    recorder = _Recorder(payload=payload)
+    patch = {
+        "expected_compose_hash": "observed-hash",
+        "compose": {"port_policy": {"restrict_mode": True, "ports": []}},
+    }
+
+    if use_async:
+        result = await _async_client(recorder).patch_cvm({"id": "cvm-1", **patch})
+    else:
+        result = _sync_client(recorder).patch_cvm({"id": "cvm-1", **patch})
+
+    assert recorder.last[2] == patch
+    assert result.get("port_policy_unlisted_ports") == ports
+
+
 def test_patch_cvm_rejects_a_gpu_config_the_api_does_not_accept() -> None:
     recorder = _Recorder()
     with pytest.raises(ValidationError):

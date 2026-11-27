@@ -541,6 +541,8 @@ class PatchCvmRequest(ConfirmFinalityReplacementMixin, CvmIdRequest):
     shutdown_timeout: int | None = None
     allow_force_stop: bool | None = None
     guest_agent_gateway_access: Literal["closed"] | None = None
+    # Rejects a change if this is no longer the CVM's stored compose hash.
+    expected_compose_hash: str | None = None
     # JSON Merge Patch of the app compose; only the fields set on it are sent.
     compose: ComposePatch | None = None
     # Init scripts provided by Phala Cloud that this CVM runs, by name, replacing
@@ -660,10 +662,19 @@ class _ExtMixin:
             correlation_id = str(getattr(data, "correlation_id", "") or "")
             payload = getattr(data, "model_dump", lambda: {})()
         result = {"requires_on_chain_hash": False, "correlation_id": correlation_id}
-        for key in ("status", "finality_wait", "message"):
+        for key in ("status", "finality_wait", "message", "port_policy_unlisted_ports"):
             if key in payload:
                 result[key] = payload[key]
         return result
+
+    @classmethod
+    def _confirmed_cvm_patch(cls, data: Any) -> dict[str, Any]:
+        accepted = cls._accepted_cvm_update(data)
+        return {
+            key: accepted[key]
+            for key in ("correlation_id", "port_policy_unlisted_ports")
+            if key in accepted
+        }
 
     def _model_for_response(self, method: str, path: str, version: str | None = None) -> Any | None:
         m = method.upper()
@@ -1399,12 +1410,7 @@ class PhalaCloud(_SyncBase, _ExtMixin):
                 },
             )
         )
-        correlation_id = ""
-        if isinstance(data, dict):
-            correlation_id = data.get("correlation_id", "")
-        elif data is not None:
-            correlation_id = str(getattr(data, "correlation_id", ""))
-        return {"correlation_id": correlation_id}
+        return self._confirmed_cvm_patch(data)
 
     def safe_confirm_cvm_patch(
         self, request: ConfirmCvmPatchRequest | Mapping[str, Any]
@@ -2574,12 +2580,7 @@ class AsyncPhalaCloud(_AsyncBase, _ExtMixin):
                 },
             )
         )
-        correlation_id = ""
-        if isinstance(data, dict):
-            correlation_id = data.get("correlation_id", "")
-        elif data is not None:
-            correlation_id = str(getattr(data, "correlation_id", ""))
-        return {"correlation_id": correlation_id}
+        return self._confirmed_cvm_patch(data)
 
     async def safe_confirm_cvm_patch(
         self, request: ConfirmCvmPatchRequest | Mapping[str, Any]
