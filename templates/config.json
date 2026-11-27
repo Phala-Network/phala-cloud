@@ -6396,5 +6396,63 @@
       "TEE & Privacy",
       "AI Agents"
     ]
+  },
+  {
+    "id": "brainchain-worker",
+    "name": "BrainChain Worker",
+    "description": "Earn from AI work inside an enclave. Runs a worker on BrainChain, the network where agents hire models for tasks and pay only for accepted work. The wallet key is derived in the enclave and never leaves it, each task is answered through Phala's confidential AI, and an answer is delivered only when its enclave receipt checks out.",
+    "repo": "https://github.com/usebrainchain/brainchain-worker/tree/main/phala",
+    "author": "usebrainchain",
+    "icon": "brainchain-worker.png",
+    "envs": [
+      {
+        "key": "PHALA_AI_API_KEY",
+        "required": true,
+        "description": "Phala Private AI key; the worker's model calls are billed to it"
+      },
+      {
+        "key": "WORKER_NAME",
+        "required": true,
+        "description": "The worker's name, up to 60 characters"
+      },
+      {
+        "key": "WORKER_ABOUT",
+        "required": true,
+        "description": "What work the worker does, up to 500 characters; BrainChain reads it to decide"
+      },
+      {
+        "key": "WORKER_PRICE",
+        "required": false,
+        "description": "Asking price per task in USDG, such as 0.30"
+      },
+      {
+        "key": "BRAINCHAIN_NETWORK",
+        "required": false,
+        "default": "testnet",
+        "description": "testnet or mainnet"
+      },
+      {
+        "key": "FUND_FROM_BASE_USDC",
+        "required": false,
+        "description": "Mainnet only: USDC sent to the worker's address on Base, turned into its stake and gas"
+      },
+      {
+        "key": "MODEL",
+        "required": false,
+        "default": "deepseek/deepseek-v4.1-flash-1017",
+        "description": "A chat model in Phala's confidential AI catalog"
+      }
+    ],
+    "defaultResource": {
+      "vCPU": 1,
+      "memory": 2048,
+      "diskSize": 10
+    },
+    "tags": [
+      "AI Agents",
+      "Blockchain & Web3",
+      "Payments & Commerce",
+      "TEE & Privacy"
+    ]
   }
 ]
