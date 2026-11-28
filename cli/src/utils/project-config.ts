@@ -7,7 +7,12 @@ import {
 	CvmIdSchema,
 	SUPPORTED_API_VERSIONS,
 } from "@phala/cloud";
+import {
+	gatewayPortPolicySchema,
+	PORT_POLICY_TOML_EXAMPLE,
+} from "@/src/lib/port-policy";
 import { logger } from "./logger";
+import { formatZodIssues } from "./validation";
 
 // Project configuration schema - for validating phala.toml file content
 // Extends CvmIdObjectSchema but does NOT require CVM ID fields (allows gateway-only config)
@@ -19,6 +24,7 @@ export const ProjectConfigSchema = CvmIdObjectSchema.extend({
 	// Deploy configuration
 	compose_file: z.string().optional(),
 	env_file: z.string().optional(),
+	port_policy: gatewayPortPolicySchema.optional(),
 	// Privacy settings
 	public_logs: z.boolean().optional(),
 	public_sysinfo: z.boolean().optional(),
@@ -49,15 +55,15 @@ const CONFIG_FILE_NAME = "phala.toml";
 /**
  * Get the path to phala.toml in the current working directory
  */
-function getProjectConfigPath(): string {
-	return path.join(process.cwd(), CONFIG_FILE_NAME);
+function getProjectConfigPath(cwd = process.cwd()): string {
+	return path.join(cwd, CONFIG_FILE_NAME);
 }
 
 /**
  * Check if phala.toml exists in the current directory
  */
-export function projectConfigExists(): boolean {
-	return fs.existsSync(getProjectConfigPath());
+export function projectConfigExists(cwd?: string): boolean {
+	return fs.existsSync(getProjectConfigPath(cwd));
 }
 
 /**
@@ -65,8 +71,8 @@ export function projectConfigExists(): boolean {
  * Extracts and normalizes cvm_id during loading
  * @throws Error if file doesn't exist or validation fails
  */
-export function loadProjectConfig(): RuntimeProjectConfig {
-	const configPath = getProjectConfigPath();
+export function loadProjectConfig(cwd?: string): RuntimeProjectConfig {
+	const configPath = getProjectConfigPath(cwd);
 
 	if (!fs.existsSync(configPath)) {
 		throw new Error(
@@ -96,10 +102,13 @@ export function loadProjectConfig(): RuntimeProjectConfig {
 		return validated;
 	} catch (error) {
 		if (error instanceof z.ZodError) {
-			const issues = error.issues
-				.map((i) => `  - ${i.path.join(".")}: ${i.message}`)
-				.join("\n");
-			throw new Error(`Invalid project configuration:\n${issues}`);
+			const issues = formatZodIssues(error);
+			const example = error.issues.some(
+				(issue) => issue.path[0] === "port_policy",
+			)
+				? `\nExample:\n${PORT_POLICY_TOML_EXAMPLE}`
+				: "";
+			throw new Error(`Invalid ${CONFIG_FILE_NAME}:\n${issues}${example}`);
 		}
 		throw new Error(
 			`Failed to parse ${CONFIG_FILE_NAME}: ${error instanceof Error ? error.message : String(error)}`,
@@ -114,20 +123,28 @@ export function saveProjectConfig(config: ProjectConfig): void {
 	const configPath = getProjectConfigPath();
 
 	try {
-		// Validate before saving
-		const validated = ProjectConfigSchema.parse(config);
-
-		// Convert to TOML format
-		const tomlContent = toml.stringify(validated as toml.JsonMap);
+		// Relinking changes the target, not the policy. Validate the table but
+		// keep its entry order and any omitted pp values when writing it back.
+		const existingPolicy = fs.existsSync(configPath)
+			? toml.parse(fs.readFileSync(configPath, "utf8")).port_policy
+			: undefined;
+		const validated = ProjectConfigSchema.parse(
+			existingPolicy === undefined
+				? config
+				: { ...config, port_policy: existingPolicy },
+		);
+		const saved =
+			existingPolicy === undefined
+				? validated
+				: { ...validated, port_policy: existingPolicy };
+		const tomlContent = toml.stringify(saved as toml.JsonMap);
 
 		// Write to file
 		fs.writeFileSync(configPath, tomlContent, "utf8");
 		logger.success(`Project configuration saved to ${CONFIG_FILE_NAME}`);
 	} catch (error) {
 		if (error instanceof z.ZodError) {
-			const issues = error.issues
-				.map((i) => `  - ${i.path.join(".")}: ${i.message}`)
-				.join("\n");
+			const issues = formatZodIssues(error);
 			throw new Error(`Invalid configuration:\n${issues}`);
 		}
 		throw new Error(
@@ -141,11 +158,11 @@ export function saveProjectConfig(config: ProjectConfig): void {
  * Returns empty config object if file doesn't exist
  * This is safe to call without checking if file exists first
  */
-export function getProjectConfig(): RuntimeProjectConfig {
-	if (!projectConfigExists()) {
+export function getProjectConfig(cwd?: string): RuntimeProjectConfig {
+	if (!projectConfigExists(cwd)) {
 		return {};
 	}
-	return loadProjectConfig();
+	return loadProjectConfig(cwd);
 }
 
 /**

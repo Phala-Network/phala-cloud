@@ -67,10 +67,11 @@ export async function getCvmNetwork(
 
 /**
  * Presents a list of CVMs to the user and allows them to select one
- * @returns The selected CVM app ID or undefined if no CVMs exist
+ * @returns The selected identifier, or undefined if there is no matching CVM
  */
 export async function selectCvm(
 	context: AuthContextLike,
+	options?: { requireVmUuid: boolean },
 ): Promise<string | undefined> {
 	const listSpinner = logger.startSpinner("Fetching available CVMs");
 	const client = await getClient(context);
@@ -89,10 +90,13 @@ export async function selectCvm(
 		return undefined;
 	}
 
-	const choices = items.map((cvm) => ({
-		name: `${cvm.name} (${cvm.app_id ?? cvm.id}) - ${cvm.status}`,
-		value: cvm.app_id ?? cvm.id,
-	}));
+	const choices = items.flatMap((cvm) => {
+		const id = options?.requireVmUuid ? cvm.vm_uuid : (cvm.app_id ?? cvm.id);
+		return id
+			? [{ name: `${cvm.name} (${id}) - ${cvm.status}`, value: id }]
+			: [];
+	});
+	if (choices.length === 0) return undefined;
 
 	const { selectedCvm } = await inquirer.prompt([
 		{

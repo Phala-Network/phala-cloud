@@ -20,6 +20,7 @@ import { logoutCommand } from "./commands/logout";
 import { kmsCommands } from "./commands/kms";
 import { nodesCommands } from "./commands/nodes";
 import { osImagesCommand } from "./commands/os-images";
+import { portPolicyCommands } from "./commands/port-policy";
 import { simulatorCommands } from "./commands/simulator";
 import { statusCommand } from "./commands/status";
 import {
@@ -76,6 +77,9 @@ const registry = new CommandRegistry();
 
 // Top-level commands
 registry.registerCommand(deployCommand);
+registry.registerGroup(portPolicyCommands.group);
+for (const command of portPolicyCommands.commands)
+	registry.registerCommand(command);
 registry.registerCommand(appsCommand);
 registry.registerGroup(instancesGroup);
 registry.registerCommand(instancesLsCommand);

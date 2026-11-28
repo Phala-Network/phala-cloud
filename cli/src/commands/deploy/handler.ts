@@ -96,6 +96,20 @@ import {
 	rememberDevOsMode,
 } from "./dev-os-selection";
 import { runTwoPhaseComposeUpdate } from "@/src/lib/on-chain-update";
+import {
+	type GatewayPortPolicy,
+	GUEST_AGENT_PORT,
+	gatewayClosures,
+	gatewayPolicyEquivalent,
+	gatewayPortIsBlocked,
+	readDeclaredPortPolicy,
+	unlistedPortWarnings,
+} from "@/src/lib/port-policy";
+import {
+	canConfirmInteractively,
+	confirmGatewayClosures,
+	portPolicyErrorGuidance,
+} from "@/src/lib/port-policy-confirmation";
 import type { DeployCommandInput } from "./command";
 import {
 	createRecoveryError,
@@ -167,6 +181,7 @@ interface Options {
 	ephemeralDataDisk?: boolean;
 	gateway?: boolean;
 	confirmDataWipe?: boolean;
+	portPolicy?: GatewayPortPolicy;
 	[key: string]: unknown;
 }
 
@@ -310,6 +325,7 @@ export function buildUpdatePatchBody(
 	composeContent: string,
 	preLaunchScriptContent?: string,
 	currentRunner?: string,
+	currentPolicy?: GatewayPortPolicy,
 ): Record<string, unknown> {
 	const patchBody: Record<string, unknown> = { id: options.uuid };
 
@@ -361,6 +377,14 @@ export function buildUpdatePatchBody(
 			...(compose.requirements as Record<string, unknown> | undefined),
 			launch_token_hash: options.launchTokenHash || null,
 		};
+	}
+	if (options.portPolicy) {
+		if (!gatewayPolicyEquivalent(currentPolicy, options.portPolicy)) {
+			compose.port_policy = options.portPolicy;
+		}
+		if (gatewayPortIsBlocked(options.portPolicy, GUEST_AGENT_PORT)) {
+			patchBody.guest_agent_gateway_access = "closed";
+		}
 	}
 	if (Object.keys(compose).length > 0) {
 		patchBody.compose = compose;
@@ -1150,6 +1174,7 @@ function buildComposeFile(
 		public_tcbinfo: privacySettings.publicTcbinfo,
 		secure_time: privacySettings.secureTime,
 		...composeFieldsFromOptions(options),
+		...(options.portPolicy ? { port_policy: options.portPolicy } : {}),
 	};
 	// The bash runner runs a script instead of Docker Compose YAML.
 	if (options.runner === "bash") {
@@ -1214,6 +1239,9 @@ export const buildProvisionPayload = (
 				listed: privacySettings.listed,
 			};
 
+	if (gatewayPortIsBlocked(options.portPolicy, GUEST_AGENT_PORT)) {
+		payload.guest_agent_gateway_access = "closed";
+	}
 	if (options.initScript !== undefined && options.initScript.length > 0) {
 		payload.init_scripts = options.initScript;
 	}
@@ -1772,6 +1800,7 @@ const updateCvm = async (
 	context: CommandContext,
 	preLaunchScriptContent: string | undefined,
 	target: UpdateTarget,
+	currentPolicy?: GatewayPortPolicy,
 ): Promise<boolean> => {
 	// biome-ignore lint/suspicious/noExplicitAny: type inference issue with @phala/cloud library
 	const cvm = target.cvm as any;
@@ -1790,6 +1819,7 @@ const updateCvm = async (
 		docker_compose_yml,
 		preLaunchScriptContent,
 		cvm.compose_file?.runner,
+		currentPolicy,
 	);
 	if (envs && envs.length > 0) {
 		patchBody.allowed_envs = envs.map((env) => env.key);
@@ -1813,7 +1843,13 @@ const updateCvm = async (
 	}
 
 	// --prepare-only on a CVM that doesn't require on-chain hash
-	if (validatedOptions.prepareOnly && !result.requiresOnChainHash) {
+	if (validatedOptions.prepareOnly && result.requiresOnChainHash === false) {
+		for (const warning of unlistedPortWarnings(
+			result.portPolicyUnlistedPorts,
+			target.vmUuid,
+		)) {
+			context.stderr.write(`${warning}\n`);
+		}
 		const msg =
 			"--prepare-only has no effect on this CVM: it does not use on-chain KMS. The update was applied directly.";
 		if (validatedOptions.json !== false) {
@@ -1823,6 +1859,7 @@ const updateCvm = async (
 						success: true,
 						prepare_only: false,
 						message: msg,
+						port_policy_unlisted_ports: result.portPolicyUnlistedPorts,
 						...composeFileUpdatedField(validatedOptions),
 					},
 					null,
@@ -1864,6 +1901,11 @@ const updateCvm = async (
 						`Compose hash not found on-chain. Contract: ${cvm.app_id}`,
 					);
 				}
+				if (
+					portPolicyErrorGuidance(confirmResult.error, validatedOptions.uuid)
+				) {
+					throw confirmResult.error;
+				}
 				throw new Error(
 					`Failed to confirm CVM update after on-chain registration: ${errMsg}`,
 				);
@@ -1890,6 +1932,12 @@ const updateCvm = async (
 	if (!("correlationId" in outcome)) {
 		// --prepare-only on an on-chain CVM: registered, not applied yet.
 		return false;
+	}
+	for (const warning of unlistedPortWarnings(
+		outcome.portPolicyUnlistedPorts,
+		target.vmUuid,
+	)) {
+		context.stderr.write(`${warning}\n`);
 	}
 	const correlationId = getCvmOperationId(outcome.correlationId);
 	const acceptance = readFinalityAcceptance(
@@ -1977,6 +2025,7 @@ const updateCvm = async (
 					name: cvm.name,
 					app_id: cvm.app_id,
 					dashboard_url: `${CLOUD_URL}/dashboard/cvms/${cvm.vm_uuid}`,
+					port_policy_unlisted_ports: outcome.portPolicyUnlistedPorts,
 					...(trackedOperation
 						? {
 								status: pending
@@ -2323,6 +2372,12 @@ export async function runDeploy(
 ): Promise<number> {
 	try {
 		validatePreLaunchScriptOptions(input);
+		const portPolicy = context.projectConfig.port_policy;
+		if (portPolicy && input.appCompose) {
+			throw new Error(
+				"Do not combine [port_policy] in phala.toml with --app-compose. Choose one place to declare the policy.",
+			);
+		}
 		// Reject create-only flags before --commit handling, file reads or any
 		// prompt, so an invalid update fails first.
 		if (context.cvmId) {
@@ -2377,6 +2432,22 @@ export async function runDeploy(
 		const updateTarget = uuid
 			? await fetchUpdateTarget(client, uuid)
 			: undefined;
+		let currentPolicy: GatewayPortPolicy | undefined;
+		if (portPolicy) {
+			if (updateTarget) {
+				const cvm = readMapping(updateTarget.cvm);
+				if (!cvm?.vm_uuid)
+					throw new Error("Phala Cloud did not return the CVM's VM UUID.");
+				currentPolicy = readDeclaredPortPolicy(cvm.compose_file);
+			}
+			const confirmed = await confirmGatewayClosures(
+				context,
+				gatewayClosures(currentPolicy, portPolicy, updateTarget === undefined),
+				input.confirmClose ?? [],
+				canConfirmInteractively(context, input.json),
+			);
+			if (!confirmed) return 1;
+		}
 
 		// The dev OS mode decides the payload: below dstack 0.6 it picks the dev
 		// image, on 0.6 and newer it adds the dev box service to the compose.
@@ -2391,7 +2462,7 @@ export async function runDeploy(
 			devOsPlan?.image !== undefined && devOsPlan.image !== input.image
 				? devOsPlan.image
 				: undefined;
-		const deployInput: Options = { ...input };
+		const deployInput: Options = { ...input, portPolicy };
 		if (devOsImage) deployInput.image = devOsImage;
 		if (devOsPlan?.defaulted && devOsImage) {
 			logger.info(
@@ -2523,7 +2594,7 @@ export async function runDeploy(
 			const applied = await updateCvm(
 				{
 					...deployInput,
-					uuid: updateTarget.id,
+					uuid: portPolicy ? updateTarget.vmUuid : updateTarget.id,
 				},
 				docker_compose_yml,
 				envs,
@@ -2532,6 +2603,7 @@ export async function runDeploy(
 				context,
 				preLaunchScriptContent,
 				updateTarget,
+				currentPolicy,
 			);
 			// Only an applied update changes what a later update should do.
 			if (applied) {
@@ -2559,11 +2631,16 @@ export async function runDeploy(
 		context.failWithError(addComposeFanOutHint(error, isUpdate), {
 			operation: isUpdate ? "CVM update" : "CVM deployment",
 			debug: input.debug,
-			guidance: isUpdate
-				? isDataWipeConfirmError(error)
-					? DATA_WIPE_CONFIRM_GUIDANCE
-					: "Check the CVM status before retrying. Include the Request ID when contacting support."
-				: "Include the Request ID when contacting support.",
+			guidance:
+				portPolicyErrorGuidance(
+					error,
+					input.cvmId ?? context.projectConfig.cvm_id,
+				) ??
+				(isUpdate
+					? isDataWipeConfirmError(error)
+						? DATA_WIPE_CONFIRM_GUIDANCE
+						: "Check the CVM status before retrying. Include the Request ID when contacting support."
+					: "Include the Request ID when contacting support."),
 		});
 		return 1;
 	}

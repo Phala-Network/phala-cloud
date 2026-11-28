@@ -336,7 +336,11 @@ afterEach(() => {
 	rpcCalls = [];
 });
 
-async function deploy(input: Record<string, unknown>, argv: string[] = []) {
+async function deploy(
+	input: Record<string, unknown>,
+	argv: string[] = [],
+	projectConfig: CommandContext["projectConfig"] = {},
+) {
 	let failure: unknown;
 	const context = {
 		env: {
@@ -346,7 +350,7 @@ async function deploy(input: Record<string, unknown>, argv: string[] = []) {
 			PHALA_CLOUD_REQUESTS_PER_MINUTE: "60000",
 		},
 		rawFlags: parseCommandArguments(argv, deployCommandMeta.options).flags,
-		projectConfig: {},
+		projectConfig,
 		globalOptions: { timeout: 1 },
 		cvmId: undefined,
 		stdout: {
@@ -382,6 +386,35 @@ function prepareRequest(): Recorded {
 	expect(prepare).toHaveLength(1);
 	return prepare[0] as Recorded;
 }
+
+describe("phala deploy create with a project port policy", () => {
+	test("embeds the policy and submits closed access only after confirmation", async () => {
+		const portPolicy = {
+			restrict_mode: true,
+			ports: [{ port: 8080, pp: false }],
+		};
+		const config = { port_policy: portPolicy };
+		const input = { compose: composePath };
+		const declined = await deploy(input, [], config);
+
+		expect(declined.exitCode).toBe(1);
+		expect(String(declined.failure)).toContain("--confirm-close 8090");
+		expect(requests.some(({ method }) => method === "POST")).toBe(false);
+
+		const accepted = await deploy(
+			{ ...input, confirmClose: ["8090"] },
+			[],
+			config,
+		);
+
+		expect(accepted.failure).toBeUndefined();
+		expect(accepted.exitCode).toBe(0);
+		expect(prepareRequest().body).toMatchObject({
+			guest_agent_gateway_access: "closed",
+			compose_file: { port_policy: portPolicy },
+		});
+	});
+});
 
 describe("phala deploy on-chain create finality", () => {
 	const rpcUrl = () => `http://127.0.0.1:${server.port}/mock-rpc`;

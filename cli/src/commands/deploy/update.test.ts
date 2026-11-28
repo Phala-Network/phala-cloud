@@ -19,7 +19,11 @@ import {
 import os from "node:os";
 import path from "node:path";
 import fs from "fs-extra";
-import type { CommandContext } from "@/src/core/types";
+import toml from "@iarna/toml";
+import inquirer from "inquirer";
+import { z } from "zod";
+import { cvmIdOption, interactiveOption } from "@/src/core/common-flags";
+import type { CommandContext, CommandDefinition } from "@/src/core/types";
 
 // Other test files replace @phala/cloud and @/src/lib/client with
 // mock.module, and bun keeps module mocks for the rest of the process. Load
@@ -39,14 +43,18 @@ const { forgetDevOsMode, recallDevOsMode, rememberDevOsMode } = await import(
 	"./dev-os-selection"
 );
 const { deployCommand } = await import("./index");
+const { linkCommand } = await import("../link");
 const { dispatchCommand } = await import("@/src/core/dispatcher");
 const { CommandRegistry } = await import("@/src/core/registry");
+const { portPolicyCommands } = await import("../port-policy");
 
 type Recorded = {
 	method: string;
 	path: string;
 	search: string;
 	authorization: string | null;
+	composeHash: string | null;
+	transactionHash: string | null;
 	body: Record<string, unknown> | undefined;
 };
 
@@ -170,6 +178,8 @@ beforeAll(async () => {
 				path: url.pathname,
 				search: url.search,
 				authorization: req.headers.get("authorization"),
+				composeHash: req.headers.get("x-compose-hash"),
+				transactionHash: req.headers.get("x-transaction-hash"),
 				body: text ? JSON.parse(text) : undefined,
 			});
 			const overridden = respond?.(req.method, url.pathname, url.searchParams);
@@ -221,6 +231,7 @@ afterAll(async () => {
 // starts from the original.
 beforeEach(async () => {
 	await fs.writeFile(composePath, COMPOSE);
+	await fs.remove(path.join(tmpDir, "phala.toml"));
 });
 
 afterEach(() => {
@@ -288,9 +299,15 @@ async function runCli(
 	auth: Record<string, string | undefined> = {
 		PHALA_CLOUD_API_KEY: "test-key",
 	},
+	options?: { terminal?: boolean; command?: CommandDefinition },
 ) {
 	const registry = new CommandRegistry();
 	registry.registerCommand(deployCommand);
+	registry.registerCommand(linkCommand);
+	if (options?.command) registry.registerCommand(options.command);
+	registry.registerGroup(portPolicyCommands.group);
+	for (const command of portPolicyCommands.commands)
+		registry.registerCommand(command);
 	let stdout = "";
 	let stderr = "";
 	const output = (append: (chunk: string) => void) =>
@@ -299,7 +316,7 @@ async function runCli(
 				append(chunk);
 				return true;
 			},
-			isTTY: false,
+			isTTY: options?.terminal === true,
 		}) as unknown as NodeJS.WriteStream;
 	const code = await dispatchCommand({
 		registry,
@@ -324,10 +341,554 @@ async function runCli(
 		stderr: output((chunk) => {
 			stderr += chunk;
 		}),
-		stdin: process.stdin,
+		stdin: options?.terminal
+			? ({ isTTY: true } as NodeJS.ReadStream)
+			: process.stdin,
 	});
 	return { code, stdout, stderr };
 }
+
+describe("phala port-policy wire contract", () => {
+	const uuid = "550e8400e29b41d4a716446655440000";
+	const secondUuid = "550e8400e29b41d4a716446655440001";
+	const base = "4e".repeat(32);
+	const appId = "fd".repeat(20);
+	const command = (action: string, ...args: string[]) =>
+		runCli(["port-policy", action, "--cvm-id", CVM_ID, "--json", ...args]);
+	const storedPolicy = {
+		restrict_mode: true,
+		ports: [{ port: 8090 }, { port: 22 }, { port: 8443, pp: true }],
+	};
+	const instance = (vmUuid: string, policy: object = storedPolicy) =>
+		cvmInfo({
+			vm_uuid: vmUuid,
+			app_id: appId,
+			compose_hash: base,
+			status: "stopped",
+			compose_file: { name: "my-app", port_policy: policy },
+		});
+	const accept = () =>
+		Response.json(
+			{ ...UPDATE_ACCEPTANCE, port_policy_unlisted_ports: [8081] },
+			{ status: 202 },
+		);
+	const read = (method: string) =>
+		method === "GET" ? Response.json(instance(uuid)) : undefined;
+
+	test("show app reads the compose once per instance and reports drift", async () => {
+		respond = (_method, pathname) => {
+			if (pathname === `/api/v1/apps/${appId}/cvms`)
+				return Response.json([instance(uuid), instance(secondUuid)]);
+			if (pathname.endsWith(uuid)) return Response.json(instance(uuid));
+			return Response.json(
+				instance(secondUuid, { restrict_mode: false, ports: [] }),
+			);
+		};
+		const result = await runCli([
+			"port-policy",
+			"show",
+			"--app-id",
+			appId,
+			"--json",
+		]);
+
+		expect(result.code).toBe(0);
+		expect(result.stdout).toContain('"policy_consistent": false');
+		expect(result.stdout).toContain(base);
+		expect(
+			requests.map(({ method, path, search }) => [method, path, search]),
+		).toEqual([
+			["GET", `/api/v1/apps/${appId}/cvms`, ""],
+			["GET", `/api/v1/cvms/${uuid}`, "?include_compose=true"],
+			["GET", `/api/v1/cvms/${secondUuid}`, "?include_compose=true"],
+		]);
+	});
+
+	test("interactive policy selection reads the chosen VM, while the default picker passes an app ID", async () => {
+		const cvms = "/api/v1/cvms";
+		const list = `${cvms}/paginated`;
+		respond = (_method, pathname) => {
+			if (pathname === list)
+				return Response.json({
+					items: [instance(uuid), instance(secondUuid)],
+					total: 2,
+					page: 1,
+					page_size: 20,
+					pages: 1,
+				});
+			if (pathname.endsWith(secondUuid))
+				return Response.json(instance(secondUuid));
+			return Response.json({ message: "Not found" }, { status: 404 });
+		};
+		const chooseSecondCvm = (async ([question]: [
+			{ choices: { value: string }[] },
+		]) => ({
+			selectedCvm: question.choices[1]?.value,
+		})) as unknown as typeof inquirer.prompt;
+		const prompt = spyOn(inquirer, "prompt").mockImplementation(
+			chooseSecondCvm,
+		);
+		try {
+			const selected = await runCli(
+				["port-policy", "show", "--interactive"],
+				undefined,
+				{ terminal: true },
+			);
+
+			expect(selected.code).toBe(0);
+			expect(selected.stdout).toContain(`VM UUID: ${secondUuid}`);
+			expect(requests.map(({ path }) => path)).toEqual([
+				list,
+				`${cvms}/${secondUuid}`,
+			]);
+			requests = [];
+
+			const legacy: CommandDefinition = {
+				path: ["legacy-picker"],
+				meta: {
+					name: "legacy-picker",
+					description:
+						"Read the identifier received from the default CVM picker",
+					stability: "stable",
+					options: [cvmIdOption, interactiveOption],
+				},
+				schema: z.object({}),
+				run: (_input, context) => {
+					context.stdout.write(JSON.stringify(context.cvmId));
+					return 0;
+				},
+			};
+			const existing = await runCli(
+				["legacy-picker", "--interactive"],
+				undefined,
+				{ terminal: true, command: legacy },
+			);
+			expect(existing.code).toBe(0);
+			expect(JSON.parse(existing.stdout)).toEqual({ app_id: appId });
+			expect(requests.map(({ path }) => path)).toEqual([list]);
+		} finally {
+			prompt.mockRestore();
+		}
+	});
+
+	test("allow targets the resolved UUID and sends the stored hash with the full policy", async () => {
+		respond = (method) => read(method) ?? accept();
+
+		const result = await command("allow", "8080", "8443", "--yes");
+
+		expect(result.code).toBe(0);
+		expect(result.stdout).toContain(UPDATE_CORRELATION_ID);
+		expect(result.stderr).toContain("phala port-policy allow 8081");
+		expect(requests.map(({ method }) => method)).toEqual(["GET", "PATCH"]);
+		expect(updateRequest()).toMatchObject({
+			path: `/api/v1/cvms/${uuid}`,
+			body: {
+				expected_compose_hash: base,
+				compose: {
+					port_policy: {
+						restrict_mode: true,
+						ports: [
+							{ port: 8090, pp: false },
+							{ port: 22, pp: false },
+							{ port: 8443, pp: true },
+							{ port: 8080, pp: false },
+						],
+					},
+				},
+			},
+		});
+		expect(updateRequest().body).not.toHaveProperty(
+			"guest_agent_gateway_access",
+		);
+	});
+
+	test("an equivalent change sends no PATCH", async () => {
+		respond = read;
+
+		const result = await command("allow", "8443");
+
+		expect(result.code).toBe(0);
+		expect(result.stdout).toContain('"status": "no_change"');
+		expect(requests.map(({ method }) => method)).toEqual(["GET"]);
+	});
+
+	test.each([
+		{ action: "deny", args: ["8090"], confirmation: "8090" },
+		{ action: "deny", args: ["22"], confirmation: "22" },
+		{
+			action: "replace",
+			args: ["--deny-all", "--confirm-close", "8090", "--confirm-close", "22"],
+			confirmation: "all",
+		},
+	])(
+		"refuses to send a PATCH without confirmation for $confirmation",
+		async ({ action, args, confirmation }) => {
+			respond = (method) => read(method) ?? accept();
+			const outcome = await command(action, ...args, "--yes");
+
+			expect(outcome.code).toBe(1);
+			expect(outcome.stdout).toContain(`--confirm-close ${confirmation}`);
+			expect(requests.map(({ method }) => method)).toEqual(["GET"]);
+		},
+	);
+
+	test("one all-ports confirmation covers closing every port and explains the loss of access", async () => {
+		respond = (method) => read(method) ?? accept();
+
+		const accepted = await command(
+			"replace",
+			"--deny-all",
+			"--yes",
+			"--confirm-close",
+			"all",
+		);
+
+		expect(accepted.code).toBe(0);
+		expect(accepted.stderr).toContain("logs, status, or attestation data");
+		expect(updateRequest().body).toMatchObject({
+			guest_agent_gateway_access: "closed",
+			compose: { port_policy: { restrict_mode: true, ports: [] } },
+		});
+	});
+
+	test("all-ports confirmation also covers individually closed ports", async () => {
+		respond = (method) => read(method) ?? accept();
+
+		const accepted = await command(
+			"replace",
+			"--restrict",
+			"--port",
+			"8443",
+			"--yes",
+			"--confirm-close",
+			"all",
+		);
+
+		expect(accepted.code).toBe(0);
+		expect(updateRequest().body?.guest_agent_gateway_access).toBe("closed");
+	});
+
+	test("prints readable issue paths for invalid replacement files without sending a PATCH", async () => {
+		const file = path.join(tmpDir, "invalid-policy.json");
+		await fs.writeFile(
+			file,
+			JSON.stringify({
+				restrict_mode: true,
+				ports: [{ port: 70000, extra: true }],
+			}),
+		);
+		respond = (method) => read(method) ?? accept();
+
+		const result = await command("replace", "--file", file, "--yes");
+
+		expect(result.code).toBe(1);
+		const { error } = JSON.parse(result.stdout);
+		expect(error).toContain('ports.0: Unrecognized key: "extra"');
+		expect(error).toContain("ports.0.port:");
+		expect(error).not.toContain('"unrecognized_keys"');
+		expect(requests.map(({ method }) => method)).toEqual(["GET"]);
+	});
+
+	test("an ambiguous App ID only reads; a stale change tells the user to read again", async () => {
+		respond = () =>
+			Response.json(
+				{ error_code: "ERR-03-010", message: "Multiple instances" },
+				{ status: 409 },
+			);
+		const ambiguous = await runCli([
+			"port-policy",
+			"allow",
+			"8080",
+			"--cvm-id",
+			appId,
+			"--yes",
+		]);
+		expect(ambiguous.code).toBe(1);
+		expect(ambiguous.stderr).toContain(`phala instances ls --app-id ${appId}`);
+		expect(requests.length).toBeGreaterThan(0);
+		expect(requests.every(({ method }) => method === "GET")).toBe(true);
+		requests = [];
+
+		respond = (method) =>
+			read(method) ??
+			Response.json(
+				{ error_code: "ERR-03-072", message: "Compose hash changed" },
+				{ status: 409 },
+			);
+		const stale = await runCli([
+			"port-policy",
+			"allow",
+			"8080",
+			"--cvm-id",
+			CVM_ID,
+			"--yes",
+		]);
+		expect(stale.code).toBe(1);
+		expect(stale.stderr).toContain(`phala port-policy show --cvm-id ${uuid}`);
+		expect(requests.map(({ method }) => method)).toEqual(["GET", "PATCH"]);
+	});
+
+	test("warns if a linked deploy would restore the TOML policy, without writing to it", async () => {
+		const tomlPath = path.join(tmpDir, "phala.toml");
+		const contents = `uuid = "${uuid}"\n[port_policy]\nrestrict_mode = true\nports = [{ port = 8090 }, { port = 22 }]\n`;
+		await fs.writeFile(tomlPath, contents);
+		respond = (method) => read(method) ?? accept();
+
+		const result = await runCli([
+			"port-policy",
+			"allow",
+			"8080",
+			"--yes",
+			"--json",
+		]);
+
+		expect(result.code).toBe(0);
+		expect(requests[0]?.path).toBe(`/api/v1/cvms/${uuid}`);
+		expect(result.stderr).toContain("will restore the policy in phala.toml");
+		expect(result.stderr).toContain("{ port = 8080 }");
+		expect(await fs.readFile(tomlPath, "utf8")).toBe(contents);
+	});
+
+	test("round-trips a show JSON policy through replace --file", async () => {
+		const policyFile = path.join(tmpDir, "policy.json");
+		respond = (method, pathname) => {
+			if (method === "PATCH") return accept();
+			return Response.json(
+				pathname.endsWith(secondUuid)
+					? instance(secondUuid, { restrict_mode: false, ports: [] })
+					: instance(uuid),
+			);
+		};
+		const shown = await command("show");
+		expect(shown.code).toBe(0);
+		const policy = JSON.parse(shown.stdout).port_policy;
+		await fs.writeFile(policyFile, JSON.stringify(policy));
+
+		const args = [
+			"port-policy",
+			"replace",
+			"--cvm-id",
+			secondUuid,
+			"--file",
+			policyFile,
+			"--json",
+		];
+		const declined = await runCli(args);
+		expect(declined.code).toBe(1);
+		expect(declined.stdout).toContain("--yes");
+		expect(requests.some(({ method }) => method === "PATCH")).toBe(false);
+
+		const accepted = await runCli([...args, "--yes"]);
+		expect(accepted.code).toBe(0);
+		expect(updateRequest()).toMatchObject({
+			path: `/api/v1/cvms/${secondUuid}`,
+			body: {
+				compose: {
+					port_policy: {
+						restrict_mode: true,
+						ports: [
+							{ port: 22, pp: false },
+							{ port: 8090, pp: false },
+							{ port: 8443, pp: true },
+						],
+					},
+				},
+			},
+		});
+	});
+
+	test("prepares and then confirms the saved update without sending a new policy", async () => {
+		respond = (method) =>
+			read(method) ?? Response.json(HASH_REQUIRED, { status: 465 });
+		const prepared = await command(
+			"replace",
+			"--restrict",
+			"--port",
+			"8090",
+			"--port",
+			"22",
+			"--port",
+			"8080",
+			"--yes",
+			"--prepare-only",
+		);
+
+		expect(prepared.code).toBe(0);
+		expect(prepared.stdout).toContain('"prepare_only": true');
+		expect(updateRequest().body?.expected_compose_hash).toBe(base);
+		requests = [];
+
+		respond = (method) => read(method) ?? accept();
+		const confirmed = await command(
+			"replace",
+			"--yes",
+			"--compose-hash",
+			"abc123",
+			"--transaction-hash",
+			UPDATE_TX,
+		);
+
+		expect(confirmed.code).toBe(0);
+		expect(confirmed.stderr).toContain("phala port-policy allow 8081");
+		expect(updateRequest()).toMatchObject({
+			path: `/api/v1/cvms/${uuid}`,
+			composeHash: "abc123",
+			transactionHash: UPDATE_TX,
+			body: {},
+		});
+	});
+});
+
+test("phala link rewrites the project target without changing the existing port policy table", async () => {
+	const configPath = path.join(tmpDir, "phala.toml");
+	await fs.writeFile(
+		configPath,
+		`name = "old-app"\n[port_policy]\nrestrict_mode = true\nports = [{ port = 8090, pp = false }, { port = 443 }, { port = 80, pp = true }]\n`,
+	);
+	const original = toml.parse(await fs.readFile(configPath, "utf8"));
+	respond = (_method, pathname) =>
+		pathname.endsWith("/auth/me")
+			? Response.json({
+					user: {
+						username: "tester",
+						email: "tester@example.com",
+						role: "user",
+						avatar: "",
+						email_verified: true,
+						totp_enabled: false,
+						has_backup_codes: false,
+						flag_has_password: false,
+					},
+					workspace: {
+						id: "test",
+						name: "Test",
+						slug: "test",
+						tier: "PRO",
+						role: "owner",
+					},
+					credits: {
+						balance: "0",
+						granted_balance: "0",
+						is_post_paid: false,
+						outstanding_amount: null,
+					},
+				})
+			: Response.json(cvmInfo());
+	const confirmOverwrite = (async () => ({
+		overwrite: true,
+	})) as unknown as typeof inquirer.prompt;
+	const prompt = spyOn(inquirer, "prompt").mockImplementation(confirmOverwrite);
+	const previousDir = process.cwd();
+	try {
+		process.chdir(tmpDir);
+		const result = await runCli(["link", CVM_ID]);
+		expect(result.code).toBe(0);
+		const written = toml.parse(await fs.readFile(configPath, "utf8"));
+		expect(written.name).toBe("my-app");
+		expect(written.app_id).toBe("abc");
+		expect(written.port_policy).toEqual(original.port_policy);
+	} finally {
+		process.chdir(previousDir);
+		prompt.mockRestore();
+	}
+});
+
+describe("phala deploy with a project port policy", () => {
+	const uuid = "550e8400e29b41d4a716446655440000";
+	const base = "8a".repeat(32);
+	const current = {
+		restrict_mode: true,
+		ports: [{ port: 8090 }, { port: 22 }],
+	};
+	const tomlPath = () => path.join(tmpDir, "phala.toml");
+	const input = () => ["deploy", "--compose", composePath, "--json"];
+	const configuredPolicy = (ports: string) =>
+		`id = "${CVM_ID}"\n[port_policy]\nrestrict_mode = true\nports = ${ports}\n`;
+	const setup = () => {
+		respond = (method, pathname) => {
+			if (method === "GET" && pathname === `/api/v1/cvms/${CVM_ID}`)
+				return Response.json(
+					cvmInfo({
+						vm_uuid: uuid,
+						compose_hash: base,
+						compose_file: { port_policy: current },
+					}),
+				);
+			if (method === "PATCH")
+				return Response.json(
+					{
+						status: "in_progress",
+						correlation_id: "corr-1",
+						port_policy_unlisted_ports: [8443],
+					},
+					{ status: 202 },
+				);
+			return undefined;
+		};
+	};
+
+	test("replaces both fields on the resolved UUID without an optimistic hash", async () => {
+		await fs.writeFile(
+			tomlPath(),
+			configuredPolicy("[{ port = 8080 }, { port = 22 }]"),
+		);
+		setup();
+		const missing = await runCli(input());
+		expect(missing.code).toBe(1);
+		expect(missing.stdout).toContain("--confirm-close 8090");
+		expect(requests.some(({ method }) => method === "PATCH")).toBe(false);
+
+		const sent = await runCli([...input(), "--confirm-close", "8090"]);
+		expect(sent.code).toBe(0);
+		expect(sent.stderr).toContain("phala port-policy allow 8443");
+		expect(updateRequest()).toMatchObject({
+			path: `/api/v1/cvms/${uuid}`,
+			body: {
+				guest_agent_gateway_access: "closed",
+				compose: {
+					port_policy: {
+						restrict_mode: true,
+						ports: [
+							{ port: 22, pp: false },
+							{ port: 8080, pp: false },
+						],
+					},
+				},
+			},
+		});
+		expect(updateRequest().body).not.toHaveProperty("expected_compose_hash");
+	});
+
+	test("omits a behaviorally unchanged policy from the patch", async () => {
+		await fs.writeFile(
+			tomlPath(),
+			configuredPolicy("[{ port = 22 }, { port = 8090 }]"),
+		);
+		setup();
+		expect((await runCli(input())).code).toBe(0);
+		expect(updateRequest().body?.compose ?? {}).not.toHaveProperty(
+			"port_policy",
+		);
+	});
+
+	test("invalid policy and --app-compose conflict both fail before any HTTP request", async () => {
+		await fs.writeFile(tomlPath(), configuredPolicy("[{ port = 65536 }]"));
+		const invalid = await runCli(input());
+		expect(invalid.code).toBe(1);
+		expect(JSON.stringify(invalid)).toContain("port_policy.ports.0.port");
+
+		await fs.writeFile(tomlPath(), configuredPolicy("[]"));
+		const conflict = await runCli([
+			"deploy",
+			"--app-compose",
+			"app-compose.json",
+			"--json",
+		]);
+		expect(conflict.code).toBe(1);
+		expect(conflict.stdout).toContain("Do not combine [port_policy]");
+		expect(requests).toEqual([]);
+	});
+});
 
 describe("phala deploy update finality", () => {
 	const args = () => ["deploy", "--cvm-id", CVM_ID, "--compose", composePath];
