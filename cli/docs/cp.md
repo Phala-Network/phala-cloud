@@ -31,7 +31,7 @@ SCP needs the CVM to serve SSH: a dev OS image (dstack 0.5 and older) or a
 ## Path Format
 
 - **Local path**: `./config.yml`, `/tmp/script.sh`
-- **Linked CVM**: `:~/config.yml` (uses `cvm_id` from `phala.toml`)
+- **Linked CVM**: `:~/config.yml` (uses the CVM in `phala.toml`; see [which CVM the CLI uses](./phala.toml.md#which-cvm-does-the-cli-use))
 - **Named CVM**: `my-app:~/logs/`, `app_abc123:/tmp/script.sh`
 
 ## HTTP Proxy

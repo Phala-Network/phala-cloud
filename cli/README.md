@@ -99,7 +99,7 @@ public_logs = true
 listed = false
 ```
 
-When `phala.toml` exists, commands like `deploy`, `logs`, `ssh`, and `cp` automatically use the configured CVM.
+When `phala.toml` exists, commands like `deploy`, `logs`, `ssh`, and `cp` automatically use the configured CVM. See the [`phala.toml` reference](docs/phala.toml.md) for all settings.
 
 ### Environment variables
 

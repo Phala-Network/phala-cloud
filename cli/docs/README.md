@@ -30,6 +30,7 @@ For installation and quick start, see the [README](../README.md).
 | [cvms](./cvms.md)         | Manage CVMs (start, stop, restart, delete, resize, ...) |
 | [link](./link.md)         | Link a local directory to a CVM                         |
 | [domains](./domains.md)   | Manage custom domains and the dstack-ingress sidecar    |
+| [port-policy](./port-policy.md) | Read or change a CVM's gateway port policy |
 | [nodes](./nodes.md)       | List TEE worker nodes                                   |
 | [ssh-keys](./ssh-keys.md) | Manage account SSH keys and per-CVM authorization       |
 
@@ -67,5 +68,5 @@ For installation and quick start, see the [README](../README.md).
 
 ## Configuration
 
-- Project config: `phala.toml` in working directory (see [deploy](./deploy.md))
+- Project config: [`phala.toml`](./phala.toml.md) in the working directory
 - Credentials: `~/.phala-cloud/`

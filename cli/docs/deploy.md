@@ -36,6 +36,7 @@ Do not run concurrent `phala deploy` commands with the same compose file in one 
 | `-r, --region <region>`      | auto-selected      | Preferred region (e.g., us-west, eu-central)                                                                                                                                                                                                                      |
 | `-e, --env <value>`          |                    | Environment variable (KEY=VALUE) or path to .env file. Repeatable                                                                                                                                                                                                 |
 | `--kms <type>`               | phala              | KMS type: phala, ethereum/eth, or base                                                                                                                                                                                                                            |
+| `--confirm-close <8090\|22\|all>` |               | Confirm that the `[port_policy]` table newly blocks port 8090, port 22, or every port. Repeatable. Needed when deploy cannot ask, such as in a script. See [Gateway port policy](#gateway-port-policy) |
 | `--wait`                     | false              | Wait for the deployment to finish and fail if it failed. New CVM: wait until it is running. Update (`--cvm-id`): wait until the CVM is running again, or stays stopped if it was not running before the update                                                    |
 | `--dev` (alias `--dev-os`)   | false              | Enable SSH access. Without `--image` it picks the newest dstack release; on dstack 0.6+ it adds a `dev-box` service and saves it to your local compose file, below 0.6 (with `--image`) it deploys the dev variant of that release. An update re-adds the dev box |
 | `--public-logs`              | true               | Make CVM logs publicly accessible                                                                                                                                                                                                                                 |
@@ -123,6 +124,33 @@ When creating a CVM with `--no-pre-launch-script`, deploy skips automatic local 
 ```bash
 $ phala deploy --no-pre-launch-script
 ```
+
+## Gateway port policy
+
+A port policy tells the gateway which guest ports of the CVM it may forward.
+Declare it in a top-level `[port_policy]` table in `phala.toml`:
+
+```toml
+[port_policy]
+restrict_mode = true
+ports = [{ port = 8090 }, { port = 8080 }]
+```
+
+Deploy sends the whole table, on create and on update. It does not merge it
+with the policy the CVM already has. If you leave the table out, an existing
+CVM keeps its policy and a new CVM gets the Phala Cloud default. Do not use the
+table together with `--app-compose`.
+
+Some changes need an extra confirmation: newly blocking port `8090`, newly
+blocking port `22` on an existing CVM, or blocking every port. In a terminal,
+the CLI asks. In a script, pass `--confirm-close 8090`, `--confirm-close 22`,
+or `--confirm-close all`. When the policy blocks every port, only
+`--confirm-close all` works, and it also covers `8090` and `22`.
+
+After an update, the CLI warns about each published port that the policy
+leaves closed. See [Gateway port policy](./port-policy.md) for what closing
+port `8090` or `22` does, and the [`phala.toml` reference](./phala.toml.md#port_policy)
+for the table format.
 
 ## Examples
 
