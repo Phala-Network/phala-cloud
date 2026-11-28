@@ -75,6 +75,11 @@ export interface CommandMeta {
 	readonly aliases?: readonly string[];
 	readonly arguments?: readonly CommandArgument[];
 	readonly options?: readonly CommandOption[];
+	/** Select a specific VM instead of an app, using a terminal. */
+	readonly interactiveCvmSelection?: {
+		readonly identifier: "uuid";
+		readonly skipWhenOption?: string;
+	};
 	readonly passThrough?: CommandPassThrough;
 	readonly examples?: readonly CommandExample[];
 }

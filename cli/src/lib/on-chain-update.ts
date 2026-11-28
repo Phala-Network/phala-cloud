@@ -16,6 +16,7 @@ type UpdateAcceptance = {
 	correlationId: string;
 	status?: string;
 	finalityWait?: CvmFinalityWait | null;
+	portPolicyUnlistedPorts?: number[];
 };
 
 export type OnChainPhase2 = (

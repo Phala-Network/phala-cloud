@@ -144,7 +144,6 @@ export async function dispatchCommand(
 	}
 
 	const commandArgv = argv.slice(consumed.length);
-	const projectConfig = getProjectConfig();
 
 	try {
 		const parsedArguments = parseCommandArguments(
@@ -177,6 +176,20 @@ export async function dispatchCommand(
 			return 0;
 		}
 
+		let projectConfig: ReturnType<typeof getProjectConfig>;
+		try {
+			projectConfig = getProjectConfig(cwd);
+		} catch (error) {
+			const envelope = normalizeCliError(error);
+			if (isInJsonMode()) {
+				stdout.write(
+					`${JSON.stringify(buildJsonCliError(envelope), null, 2)}\n`,
+				);
+			} else {
+				stderr.write(renderHumanCliError(envelope));
+			}
+			return 1;
+		}
 		const shouldRunUpdateCheck = !(
 			definition.path[0] === "self" && definition.path[1] === "update"
 		);
@@ -274,10 +287,27 @@ export async function dispatchCommand(
 				arg.name === "cvm_id",
 		);
 
-		if (isInteractive && commandAcceptsCvmId) {
-			const selected = await selectCvm({ env, projectConfig, globalOptions });
+		const selection = definition.meta.interactiveCvmSelection;
+		const requireVmUuid = selection?.identifier === "uuid";
+		const skipSelection =
+			selection?.skipWhenOption &&
+			schemaInput.options[selection.skipWhenOption];
+		if (isInteractive && commandAcceptsCvmId && !skipSelection) {
+			if (requireVmUuid && (!stdin.isTTY || !stderr.isTTY)) {
+				stderr.write(
+					"Interactive CVM selection needs a terminal. Pass --cvm-id instead.\n",
+				);
+				return 1;
+			}
+			const selected = await selectCvm(
+				{ env, projectConfig, globalOptions },
+				{ requireVmUuid },
+			);
 			if (selected) {
-				cvmId = { app_id: selected };
+				cvmId = requireVmUuid ? { uuid: selected } : { app_id: selected };
+			} else if (requireVmUuid) {
+				stderr.write("No CVM selected. Pass --cvm-id to select one.\n");
+				return 1;
 			}
 		}
 

@@ -7,6 +7,8 @@ import {
 	uuidOption,
 } from "@/src/core/common-flags";
 import type { CommandMeta } from "@/src/core/types";
+import { portClosureSchema } from "@/src/lib/port-policy";
+import { confirmPortClosureOption } from "@/src/lib/port-policy-confirmation";
 import {
 	DEFAULT_DISK_SIZE,
 	DEFAULT_MEMORY,
@@ -24,6 +26,7 @@ export const deployCommandMeta: CommandMeta = {
 		cvmIdOption,
 		uuidOption,
 		interactiveOption,
+		confirmPortClosureOption,
 		{
 			name: "debug",
 			description: "Enable debug logging",
@@ -557,6 +560,7 @@ export const deployCommandSchema = z
 		ephemeralDataDisk: z.boolean().optional(),
 		gateway: z.boolean().optional(),
 		confirmDataWipe: z.boolean().optional(),
+		confirmClose: z.array(portClosureSchema).optional(),
 	})
 	.superRefine((input, context) => {
 		if (input.noPreLaunchScript && input.preLaunchScript !== undefined) {
